@@ -9,6 +9,7 @@
     </div>
     <% if (error) { %><div class="alert alert-err"><%= error %></div><% } %>
     <form method="post" action="/admin3119Musa" class="form">
+      <% if (typeof csrfToken !== 'undefined' && csrfToken) { %><input type="hidden" name="_csrf" value="<%= csrfToken %>"><% } %>
       <label><span>Admin secret code</span>
         <input type="password" name="code" required autocomplete="off" autofocus>
       </label>

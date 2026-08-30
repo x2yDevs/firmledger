@@ -12,7 +12,7 @@ Stack: Node.js + Express · EJS server-rendered views · SQLite (WAL) · no fron
 
 | Area | What it does |
 |---|---|
-| Directory | Search + filters (type, category, country, verified), sort, pagination, list/grid view toggle, name suggest (`/suggest.json`) |
+| Directory | Search + filters (type, category, country, verified), sort, pagination, list/grid view toggle, name suggest (`/suggest.json`) — **fluid full-screen measure** on `/directory` and every `/directory/c/…` landing page: the card grid re-flows 1→5 columns with the window, the gutters stay equal on both sides, and nothing ever hugs one edge |
 | SEO landing pages | `/directory/c/<category>` and `/directory/c/<category>-in-<location>` — unique titles, JSON-LD `CollectionPage`+`ItemList`, breadcrumbs, `noindex` when empty, auto-sitemapped |
 | Listing profiles | JSON-LD `Organization` + `FAQPage`, OG/Twitter cards, confidence meter, FirmLedger Score breakdown, key people + socials, ecosystem groups, technology radar + hiring signals, FAQs, competitors, related lists, removal requests |
 | Wikipedia enrichment | One-click fetch resolves the real Wikipedia article + Wikidata entity — refuses to invent data when no genuine article exists |
@@ -32,7 +32,7 @@ Stack: Node.js + Express · EJS server-rendered views · SQLite (WAL) · no fron
 | Spam protection | IP allow/block lists, email-domain allow/block (empty allow list = all domains), tunable rate limits on login, register, listings, claims, newsletter, search, scrape, and API RPM |
 | Multi-SMTP failover | Same From address everywhere. Configure in `.env` (`SMTP_URL`, `SMTP2_URL`…) **and** Admin → Settings (Emitlo, Maileroo, Brevo, Mailjet, Mailtrap, SMTP2GO, Resend, AhaSend, SMTPfast, Forward Email, DNSExit, Zoho, custom). If a hop hits a sending limit the next hop is used automatically |
 | Content | Blog (posts flow to footer News, RSS, sitemap), `/docs`, `/privacy`, `/terms`, global `/search` (listings + posts + docs) |
-| Indexing | IndexNow push on approve/claim (+30 min re-ping) · sitemap index · robots.txt · RSS |
+| Indexing | IndexNow push on approve/claim (+30 min re-ping) · sitemap **index** + 4 sub-sitemaps with `lastmod` · canonical/OG/Twitter/JSON-LD on every page · RSS · **automatic `noindex` + blocked robots.txt whenever `BASE_URL` is not a public origin** (dev/staging can never leak into an index) |
 
 ---
 
@@ -66,6 +66,72 @@ Local smoke tour:
 - `/docs`, `/privacy`, `/terms`, `/blog`, `/search` — the built-in content
 
 Stop with `Ctrl+C`. Data persists in `data/` between runs.
+
+---
+
+## 2b. Layout & design conventions (worth 2 minutes before editing a view)
+
+There is no build step and no CSS framework: one stylesheet, **`public/css/app.css`**
+(~106 KB raw, ~23 KB gzipped), organised as an original base followed by numbered
+revision blocks — currently `r2, r19 … r23, r25 … r30`. Each block only *adds* rules for
+classes the views already use or introduces a new piece; nothing is renamed, so a block can
+be read as a changelog and deleted safely if you disagree with it.
+
+**Horizontal layout — pick a container, never a margin.**
+
+| Class | Measure | Use for |
+|---|---|---|
+| `.container` | 1200 px (1340 px on screens ≥1500 px), `margin-inline: auto` | almost every page band and section |
+| `.container-wide` | `min(var(--wide-max, 1760px), 100%)`, centred, gutters `clamp(18px, 3.2vw, 46px)` | the directory + `/directory/c/…` landing pages, and anything else that should use the whole screen |
+| `.container-narrow` | 800 px, centred | single-column flows: auth, claims, security, upgrade |
+| `.center-col` | no width of its own — only `margin-inline: auto` | an opt-in centring utility for a deliberately narrow block (a `side-card`, a form) inside a wide container |
+
+Because every one of those centres itself, a page is symmetric at 320 px and at 3440 px:
+there is no "left-hugging content with a dead right gutter" state, and no page needs a
+horizontal scrollbar. Grids inside them use `auto-fill` + `minmax()` (`.list-grid` →
+`minmax(min(100%, 268px), 1fr)`), so they gain columns instead of stretching or squeezing;
+grid children carry `min-width: 0` + `overflow-wrap: anywhere` so a long company name can
+never push the page sideways. Mobile-only centring overrides live in the
+`@media (max-width: 760px)` block.
+
+**Form fields have one shape.** Inside `<form class="form form-card">`:
+
+```ejs
+<div class="form-section">Group title</div>
+<label class="fl"><span>Caption <small>optional hint</small> <small class="count" data-count-for="field">0/80</small></span>
+  <input class="input" name="field" maxlength="80" data-count>
+</label>
+<div class="form-two">…two paired fields…</div>   <!-- .form-row for the same rhythm in admin panels -->
+<p class="form-note">…context under the group…</p>
+<div class="form-actions"><button class="btn btn-primary">Save</button><a class="btn btn-ghost" href="…">Cancel</a></div>
+```
+
+`.fl` puts the caption above the control, `data-count` + `.count` wire the live
+`0/N` counter in `public/js/main.js`, and `.form-two` / `.form-row` collapse to one column
+under ~640 px. Do not put `<p>` hints inside a `<label>`; do not disable paste in
+confirmation fields — retyping is the check, blocking the clipboard is not.
+
+**Two rules that have caused real bugs, so they are now policy:**
+
+1. **Every `<form method="post">` carries the CSRF field.** `csrfProtect` keys off the
+   session cookie, not the page, so a pre-auth form (login, register, forgot/reset,
+   removal request, admin gate) rendered for a *signed-in* visitor 403s without it.
+   Snippet: `<% if (typeof csrfToken !== 'undefined' && csrfToken) { %><input type="hidden" name="_csrf" value="<%= csrfToken %>"><% } %>`.
+   The repo convention is 117/117 POST forms carrying it — keep that number whole.
+2. **`<%= %>` escapes, so never put markup or entities inside it.**
+   `<%= x ? 'Upgrade &rsaquo;' : 'Manage &rsaquo;' %>` prints `Upgrade &amp;rsaquo;`;
+   write `<%= x ? 'Upgrade' : 'Manage' %> &rsaquo;` and keep the entity in the markup.
+   Use `<%- %>` only for HTML you built yourself (e.g. the search `hl()` highlight helper).
+
+**Caching.** `server.js` serves `/public` with a 7-day max-age and appends
+`?v=<%= assetV %>` from `ASSET_V`. Any commit that changes `public/css/app.css` or a file in
+`public/js/` must bump `ASSET_V` — that is the entire cache-invalidation strategy.
+
+**Panels and bands** (all defined, all used by the views): `.side-card`, `.form-card`,
+`.panel`, `.card`/`.card-body`, `.alert alert-ok|err|warn`, `.pill pill-approved|pending|rejected`,
+`.section-head`, `.empty-state`, `.page-head` + `.kicker` + `.h-display` + `.lede`, the dark
+`.band` / `.cta-band` closing sections with `.btn-light`, and `.search-hero` (which must be the
+`<form>` itself — never nested inside a `.form`, or `.form input[type=search]` out-specifies it).
 
 ---
 
@@ -298,6 +364,212 @@ The SQLite database, 20 official categories and the IndexNow key are generated o
 
 ---
 
+## 4a. Hosting on your own server or VPS (any provider)
+
+Section 4 is the free-VM runbook; this is the same thing written provider-neutral, for the
+VPS you already have (Hetzner, DigitalOcean, Vultr, Linode, AWS Lightsail, OVH, Contabo, a
+box under your desk). One process, one folder, no external database.
+
+**What the box needs**
+
+| Resource | Minimum | Comfortable |
+|---|---|---|
+| CPU / RAM | 1 vCPU / 1 GB (+ swap) | 2 vCPU / 2–4 GB |
+| Disk | 10 GB | 20+ GB — logos and DB live in `data/` |
+| OS | Ubuntu 22.04 / 24.04 LTS (Debian 12 works) | same |
+| Open inbound ports | 22, 80, 443 | same — keep **3000 closed** to the internet, the proxy fronts it |
+| Outbound | 443 (IndexNow, PayPal, SMTP-over-TLS providers) | add 25/587 only if you relay mail yourself |
+
+**1 · Hardening + runtime (Ubuntu 22.04/24.04)**
+
+```bash
+sudo apt update && sudo apt -y full-upgrade
+sudo apt -y install curl unzip ufw fail2ban
+sudo ufw allow OpenSSH && sudo ufw allow 80/tcp && sudo ufw allow 443/tcp && sudo ufw enable
+
+# 1 GB boxes: swap, or npm's native-build fallback can be OOM-killed
+if [ "$(free -m | awk '/^Mem:/{print $2}')" -lt 1500 ] && ! swapon --show | grep -q .; then
+  sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile \
+    && sudo swapon /swapfile && echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+fi
+
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && sudo apt -y install nodejs
+sudo timedatectl set-ntp true        # TOTP for the admin 2FA gate will not work with clock drift
+```
+
+**2 · App files, environment, service**
+
+```bash
+sudo mkdir -p /srv && sudo unzip firmledger.zip -d /srv/ && cd /srv/firmledger
+sudo npm ci --omit=dev               # no build step; better-sqlite3 + sharp use prebuilt binaries
+sudo install -d -m 750 /srv/firmledger/data /srv/backups
+sudo nano /srv/firmledger/.env       # PORT, BASE_URL, ADMIN_SECRET, SMTP_URL — see Section 4 Step 4
+sudo adduser --system --group --no-create-home firmledger || true
+sudo chown -R firmledger:firmledger /srv/firmledger /srv/backups
+
+sudo tee /etc/systemd/system/firmledger.service >/dev/null <<'UNIT'
+[Unit]
+Description=FirmLedger
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=firmledger
+WorkingDirectory=/srv/firmledger
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=3
+Environment=NODE_ENV=production
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/srv/firmledger/data /srv/backups
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+sudo systemctl daemon-reload && sudo systemctl enable --now firmledger
+curl -sI http://127.0.0.1:3000/ | head -1     # HTTP/1.1 200 → the app is up
+```
+
+**3 · HTTPS-terminating proxy — pick one**
+
+*Caddy (simplest, automatic renewals):* the config in Section 4 Step 6.
+
+*nginx + Let's Encrypt (what most admins already run):*
+
+```bash
+sudo apt -y install nginx certbot python3-certbot-nginx
+sudo tee /etc/nginx/sites-available/firmledger >/dev/null <<'NGX'
+server {
+  listen 80;
+  listen [::]:80;
+  server_name firmledger.co.ke www.firmledger.co.ke;
+
+  access_log /var/log/nginx/firmledger.access.log;
+  client_max_body_size 6m;          # logo uploads travel through here
+  gzip on; gzip_types text/css application/javascript image/svg+xml;
+
+  location / {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_http_version 1.1;
+    proxy_set_header Host              $host;
+    proxy_set_header X-Real-IP         $remote_addr;
+    proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;   # rate-limiting keys on the real client IP
+    proxy_read_timeout 60s;
+  }
+}
+NGX
+sudo ln -s /etc/nginx/sites-available/firmledger /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+sudo certbot --nginx -d firmledger.co.ke -d www.firmledger.co.ke   # redirect: yes
+```
+
+`trust proxy` is already enabled in `server.js`, so `X-Forwarded-For`/`X-Forwarded-Proto`
+are honoured — spam throttling, IP allow/block lists and the login lockout keep working
+behind nginx. Never `proxy_pass` to `0.0.0.0:3000`; use `127.0.0.1` and leave 3000 shut.
+
+**4 · Provider-specific gotchas that actually bite**
+
+| Provider | Watch out for |
+|---|---|
+| DigitalOcean, AWS Lightsail, Vultr, Oracle | **Outbound port 25 is blocked by default.** Use a submission provider over 465/587 (`SMTP_URL=smtps://…`) — don't try to relay directly. Lightsail also needs its own console firewall rules for 80/443 in addition to `ufw`. |
+| Hetzner Cloud | Firewall in the Cloud Console (not just `ufw`); ARM (Cax) and x86 (CX) both fine — `npm ci` pulls the right prebuilds. |
+| OVH | Anti-DDoS stays on; if you point a domain at the box, add the A record to the *OVH* DNS zone, and check `sudo iptables -L` for leftovers from old hostnames. |
+| Contabo / cheap x86 | 1 GB RAM boxes need the swap above; also enable the extra IPv4 only if you need reverse DNS for mail. |
+| Anything behind Cloudflare | Proxy the DNS record **after** the certificate exists (DNS-only first), set SSL mode to *Full (strict)*, and keep `BASE_URL` on the `https://` origin. |
+
+**5 · Updates, backups, restore, logs**
+
+```bash
+# Update (zero-downtime enough for this app: it restarts in well under a second)
+cd /srv/firmledger && sudo npm ci --omit=dev && sudo systemctl restart firmledger
+tail -20 /var/log/syslog | grep firmledger        # or: journalctl -u firmledger -n 50 --no-pager
+
+# Backup — one consistent snapshot, safe while traffic is live
+sudo -u firmledger sqlite3 /srv/firmledger/data/firmledger.db \
+  ".backup '/srv/backups/firmledger-$(date +%F).db'"
+sudo tar czf "/srv/backups/uploads-$(date +%F).tar.gz" -C /srv/firmledger/data .
+0 3 * * * test -f /srv/firmledger/data/firmledger.db && sudo -u firmledger sqlite3 /srv/firmledger/data/firmledger.db ".backup '/srv/backups/firmledger-\$(date +\%F).db'"
+
+# Restore onto a fresh box: stop the service, drop the DB in, start it
+sudo systemctl stop firmledger
+sudo cp /srv/backups/firmledger-2026-08-01.db /srv/firmledger/data/firmledger.db
+sudo chown firmledger:firmledger /srv/firmledger/data/* && sudo systemctl start firmledger
+curl -s https://firmledger.co.ke/ | grep -o '<title>[^<]*'      # sanity check
+```
+
+Copy `/srv/backups` off-box (rclone to any S3-compatible bucket, `restic`, or the free tier
+of your provider's object storage) — a backup on the same disk is not a backup. Admin →
+**Health** shows disk, DB size, memory, uptime and the last backup; **Users → Backup**
+exports the whole `data/` as a single `.firmledger` archive you can keep off-box.
+
+Also: Admin → **Protection** → maintenance mode serves a branded 503 while you migrate, which
+keeps search engines from recording a dead site during the move (503 = "come back later",
+so nothing is dropped from the index).
+
+---
+
+## 4b. Getting indexed — what the app does, what you do
+
+**Automatically, with no configuration:**
+
+| Mechanism | Where |
+|---|---|
+| Canonical URL, `<title>`, meta description, OG + Twitter cards, `theme-color` | every HTML page (`views/partials/top.ejs`) |
+| Structured data — `WebSite` + `SearchAction`, `Organization` + `FAQPage` on listing profiles, `CollectionPage` + `ItemList` on category/location pages, `Article` on blog posts, `TechArticle` on the API docs, `BreadcrumbList` on listings, blog, docs, API docs, `/about`, `/privacy`, `/terms` | per-route `meta.jsonld` / `meta.breadcrumbs`, emitted by `views/partials/top.ejs` |
+| `robots` meta — `index,follow,max-image-preview:large,max-snippet:-1` by default, `noindex,follow` where it should be | `views/partials/top.ejs` |
+| `sitemap.xml` **index** → `/sitemaps/static.xml`, `listings.xml`, `categories.xml`, `locations.xml` (only `status='approved'` listings; `lastmod` from `updated_at`) | `src/routes/public.js` |
+| `robots.txt` — allows the public site, disallows `/dashboard`, `/admin3119Musa`, `/login`, `/forgot`, `/search`, `/removal/`, `/claim`, and points at the sitemap | `src/routes/public.js` |
+| **IndexNow** push the moment a listing is approved or claimed, plus a re-ping 30 min later; key auto-generated and served at `/<key>.txt` | `src/lib/indexing.js` |
+| RSS/`feed.xml` (blog + new listings) for discovery and fast re-crawl | `src/routes/public.js` |
+| Empty category/location landing pages are `noindex,follow`, so they are never thin-indexed; `/directory?page=2` and `/directory/c/x?page=2` canonicalise back to page 1 on purpose (pagination and filters must not multiply in the index), and follow-links are still crawled | `src/routes/public.js` |
+| **Staging guard** — if `BASE_URL` is unset or points at `localhost`, a `.test/.local/.internal` name or a private IP, every response carries `X-Robots-Tag: noindex, follow` **and** `/robots.txt` becomes `Disallow: /`, so a dev or preview box can never leak into an index. The boot log tells you when this is active. Override: `FORCE_INDEXABLE=1`. | `server.js`, `src/lib/util.js` |
+
+**You do these five things once the domain is live:**
+
+1. **Fix `BASE_URL` before anything else.** Every canonical, OG URL, sitemap `<loc>`,
+   badge snippet and email link is built from it. `BASE_URL=http://localhost:3000` on a
+   public host means Google is told the canonical page lives on localhost — the site will
+   never rank. No trailing slash, `https://`, real domain.
+2. **Verify the site answers the way a crawler sees it:**
+
+   ```bash
+   curl -sI https://firmledger.co.ke/ | grep -i 'x-robots-tag' || echo "no X-Robots-Tag → indexable ✓"
+   curl -s https://firmledger.co.ke/robots.txt                  # Allow: / + Sitemap: line on your domain
+   curl -s https://firmledger.co.ke/sitemap.xml | head          # <sitemapindex> with 4 sub-sitemaps
+   curl -s https://firmledger.co.ke/sitemaps/listings.xml | grep -c '<loc>'   # > 0 once listings are approved
+   curl -s https://firmledger.co.ke/ | grep -o '<link rel="canonical"[^>]*>' # must be your https domain
+   curl -s -o /dev/null -w '%{http_code}\n' https://firmledger.co.ke/<indexnow-key>.txt   # 200
+   ```
+   If the first line prints anything at all, `BASE_URL` is still a dev value — fix it and restart.
+3. **Google Search Console** → add a *Domain* property → TXT record → **Sitemaps** →
+   submit `https://your-domain/sitemap.xml`. Bing Webmaster Tools → add the same sitemap
+   (claim it via the meta tag, Google file, or DNS); IndexNow starts working as soon as the
+   Bing property exists, which is why Bing/Yandex/DuckDuckGo pick pages up within hours while
+   Google takes days.
+4. **Give Google something to crawl first:** approve 5–10 real listings, then use *URL
+   Inspection → Request Indexing* on your homepage and two of them. Indexing follows links, so
+   make sure the footer/nav links (which the app renders) actually reach the pages you care about.
+5. **Watch it, don't force it:** the *Pages* report is the truth. `Crawled – currently not
+   indexed` = content quality/duplication, not a technical fault; `Disallowed` = you blocked
+   something you wanted; `Duplicate without user-selected canonical` = `BASE_URL`/proxy mismatch.
+
+**Deliberately not indexed** (and why): `/dashboard/*` and `/admin3119Musa/*` (both
+`noindex,nofollow` in-page **and** disallowed in `robots.txt` — belt and braces, because a
+logged-out crawler must never see them), `/login` and `/forgot` (no content, and they'd be
+duplicate shells), `/search` (query-space duplication: thousands of near-identical result
+pages), `/removal/*` (private forms), `/claim` and everything under it (so the token-carrying
+`/claim/verify/<id>` URLs can never be crawled). `/register` **is** indexed and listed in the
+static sitemap on purpose — it's the entry point people search for.
+`/newsletter/unsubscribe?token=…` carries a secret in the URL, so it is `noindex` by design.
+
+**Do not** add `Disallow: /` "temporarily" while testing in production, and do not
+`noindex` the homepage: the app already keeps the private half out of the index.
+
+---
+
 ## 4x. Production-readiness checklist — the last pass before launch
 
 The public site ships fully production-looking (no sandbox mentions anywhere visitors can see).
@@ -384,18 +656,29 @@ TXT  @  firmledger-verification=flv_…
 The badge renders live from the DB (verified → green "VERIFIED BUSINESS" state, unclaimed → "LISTED PROFILE"), with the FirmLedger monogram, in light or dark themes, and links back to the profile.
 
 ## 9. Honest SEO note
+Every page is complete server-rendered HTML — the directory, listing profiles, docs and legal
+pages need no JavaScript to render or to be crawled (a page is ~21–35 KB raw, ~6–9 KB gzipped,
+plus one 23 KB-gzipped stylesheet). That is the structural reason this app indexes well: what
+Googlebot fetches is what a human sees. There is no hydration step, no client route and no
+`noscript` fallback to maintain.
+
 No platform can guarantee a fixed indexing deadline — crawling is the search engine's decision. FirmLedger does the maximum possible the moment a listing is approved: IndexNow push (Bing/Yandex/DuckDuckGo, typically hours), refreshed sitemap + RSS, per-page structured data, and a re-ping 30 minutes later.
 
 ## 10. Troubleshooter
 
 | Symptom | Fix |
 |---|---|
+| Page looks shifted left, or a section stretches oddly on a big monitor | the block is missing its container class — `.container` / `.container-wide` / `.container-narrow` (or `.center-col` for a narrow card). Never fix it with a one-sided margin |
+| CSS change did not appear | `ASSET_V` in `server.js` was not bumped — static files are cached for 7 days by design |
+| Directory looks empty / `429` while load-testing | the spam throttle answered — that is protection working; raise the limit in Admin → Protection or wait a minute |
 | Gate rejects the admin code | `ADMIN_SECRET` in `.env` doesn't match — check for stray quotes/spaces, restart |
 | 2FA code never accepted | Server clock drift — run `timedatectl status`, enable NTP (`sudo timedatectl set-ntp true`) |
 | Claim verification says domain unreachable | The target website blocks the fetch or is down — verify manually from the server: `curl -I https://domain` |
 | Mail never arrives | Check `SMTP_URL` format and `data/outbox.log` — if entries are landing there, SMTP isn't configured |
 | IndexNow returns 4xx | Re-check `BASE_URL` matches the site's real public origin, and the key file `/<key>.txt` returns 200 |
 | Sitemap has localhost URLs | `BASE_URL` is unset — set it and restart |
+| Site refuses to get indexed, `X-Robots-Tag: noindex` in `curl -sI` | `BASE_URL` is a localhost/`.test`/private-IP value — set the real public https origin and restart (or `FORCE_INDEXABLE=1` for an intentionally odd host) |
+| `/robots.txt` says `Disallow: /` on production | same cause as above — the staging guard is active because `BASE_URL` doesn't look public |
 | "Payments are not configured" on upgrade | No PayPal credentials saved — paste your Client ID and Secret in Admin → Settings → Payments (or set `PAYPAL_CLIENT_ID`/`PAYPAL_CLIENT_SECRET`) |
 | Payment made but plan not active | Check the reference in Admin → Settings → Recent Pro payments; if still `initialized`, the buyer never returned from PayPal — ask them to finish checkout, or grant Pro manually from Admin → Users |
 

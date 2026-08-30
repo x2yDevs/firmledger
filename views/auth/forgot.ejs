@@ -13,6 +13,7 @@
     <% } else { %>
       <% if (errors.length) { %><div class="alert alert-err"><% errors.forEach(function (e) { %><div><%= e %></div><% }) %></div><% } %>
       <form method="post" action="/forgot" class="form">
+      <% if (typeof csrfToken !== 'undefined' && csrfToken) { %><input type="hidden" name="_csrf" value="<%= csrfToken %>"><% } %>
         <label><span>Email address</span>
           <input type="email" name="email" required autocomplete="email">
         </label>

@@ -12,6 +12,7 @@
     <% if (errors.length) { %><div class="alert alert-err"><% errors.forEach(function (e) { %><div><%= e %></div><% }) %></div><% } %>
 
     <form method="post" action="/register/verify" class="form">
+      <% if (typeof csrfToken !== 'undefined' && csrfToken) { %><input type="hidden" name="_csrf" value="<%= csrfToken %>"><% } %>
       <input type="hidden" name="email" value="<%= email %>">
       <label><span>Verification code</span>
         <input type="text" name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required autocomplete="one-time-code" autofocus
@@ -22,6 +23,7 @@
     </form>
 
     <form method="post" action="/register/verify/resend" class="form" style="margin-top:10px">
+      <% if (typeof csrfToken !== 'undefined' && csrfToken) { %><input type="hidden" name="_csrf" value="<%= csrfToken %>"><% } %>
       <input type="hidden" name="email" value="<%= email %>">
       <button class="btn btn-ghost btn-block" type="submit">Resend code</button>
     </form>

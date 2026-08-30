@@ -43,7 +43,7 @@ zip boots a full production-grade instance out of raw SQLite files.
 firmledger/
 ├── server.js                    ← boot, security headers, static, session, CSRF, locals, routes
 ├── package.json
-├── .env / .env.example          ← base URL, admin gate code, PayPal, SMTP, IndexNow
+├── .env / .env.example          ← base URL, admin gate code, PayPal, SMTP, IndexNow, indexing guard
 ├── README.md / README2.md / ERD.svg / ERD.md
 │
 ├── data/                        ← RUNTIME state, git-ignored, re-seeded on first boot
@@ -54,8 +54,10 @@ firmledger/
 │        └── support/            ← support-chat attachments (≤ 8 MB)
 │
 ├── public/
-│   ├── css/app.css              ← ONE stylesheet — design tokens, cards, chat, admin, forms
-│   ├── js/main.js               ← UI sprinkles (menu, copy-to-clipboard, pw-eye, pw-meter, dup-check)
+│   ├── css/app.css              ← ONE stylesheet (106 KB raw / 23 KB gzip): design tokens, cards, chat,
+│   │                                admin, forms, then additive numbered blocks r19 … r30
+│   ├── js/graph.js              ← relationship-graph renderer for listing profiles
+│   ├── js/main.js               ← UI sprinkles (menu, copy-to-clipboard, pw-eye, pw-meter, dup-check, counters)
 │   └── assets/                  ← logo SVG, favicon, OG card
 │
 ├── views/                       ← every page is EJS; each starts with partials/top and ends with partials/bottom
@@ -114,6 +116,10 @@ firmledger/
 
 ## 3 · The request lifecycle (every page)
 
+0. **Security + indexing headers** — `nosniff`, `SAMEORIGIN`, referrer/permissions policy, and
+   `X-Robots-Tag: noindex, follow` whenever `BASE_URL` is not a public origin
+   (`util.isPublicBaseUrl()`) — a dev or staging host can never be indexed. `/robots.txt` reads the
+   same flag and answers `Disallow: /` in that case; `FORCE_INDEXABLE=1` turns the guard off.
 1. **Static try** — `express.static` serves `/public` directly (7-day cache, versioned via `ASSET_V`).
 2. **Uploads** — `/uploads` serves files in `data/uploads` (30-day immutable).
 3. **`session.attach`** — loads/creates a session. Two cookies:
@@ -127,6 +133,51 @@ firmledger/
    `ICONS`, `nav`, `initials`, `ICONS`, `perksActive`, `isProUser`, `SITE_SOCIALS` to every view.
 6. **Route handlers** in `src/routes/` do their query + `res.render(view, …)`.
 7. **Views** open with `<%- include('partials/top') %>` (last part: `main#main`), end with `partials/bottom`.
+
+---
+
+## 3b · Layout model — how a page is sized, centred and kept honest
+
+**One stylesheet, no framework, no build.** `public/css/app.css` is the whole design system:
+tokens and base first, then additive numbered blocks (`r2`, `r19 … r30`) that each introduce or repair
+a group of classes. Views never invent a layout utility; they compose the containers below.
+
+| Layer | Behaviour |
+|---|---|
+| `.container` | `max-width: 1200px` — steps to `1340px` from a `1500px` viewport — `margin-inline: auto`, `padding-inline: clamp(20px, 4vw, 32px)` |
+| `.container-wide` | `max-width: min(var(--wide-max, 1760px), 100%)`, centred, `padding-inline: clamp(18px, 3.2vw, 46px)` — the directory and `/directory/c/…` landing pages, i.e. everything that should fill the screen. The ceiling is one variable: set `--wide-max` on `:root` (declared only as a fallback on the rule, so a `:root` value is never shadowed) |
+| `.container-narrow` | 800 px, centred — single-column flows (auth, claims, security, upgrade) |
+| `.center-col` | pure `margin-inline: auto` — opt-in centring for a deliberately narrow block (a `side-card`, a form) sitting inside a wide container |
+| `.section-tight` / `.page-pad` | vertical rhythm only; they never affect horizontal centring |
+
+Because centring lives on the container and every container centres itself, the layout is
+symmetric from 320 px to 3440 px and no page needs `overflow-x`. Column counts come from
+`auto-fill` + `minmax()`, so a grid gains columns on a wide screen rather than stretching cards
+(`.list-grid` → `repeat(auto-fill, minmax(min(100%, 268px), 1fr))` → 1/2/3/4/5 columns at
+≈ 320/600/900/1280/1600 px). Two defensive rules make that safe: grid children carry
+`min-width: 0`, and breakable text carries `overflow-wrap: anywhere` — otherwise one long
+company name or URL would push the whole page sideways. Fixed-column rows collapse explicitly
+(`.form-two`, `.form-row`, `.filters`, `.rows` → 1 or 2 up under 980/760/640/520 px).
+
+**Forms.** One markup shape site-wide: `<form class="form form-card">` → `.form-section` group
+titles → `<label class="fl"><span>Caption <small>hint</small> <small class="count" data-count-for="x">0/N</small></span><input class="input" name="x" data-count maxlength="N"></label>`
+→ `.form-two` / `.form-row` for paired fields → `.form-note` for context → `.form-actions` for the
+buttons. `public/js/main.js` binds the `data-count` counters and password meters from those
+attributes; nothing else styles a raw `<input>`.
+
+**Two invariants the views must keep** (both have produced real bugs):
+
+1. **`_csrf` on every POST form, including pre-auth ones.** `csrfProtect` in `src/lib/session.js`
+   reads the session cookie, not the template, so a login/register/forgot/reset/removal/admin-gate
+   form opened by a *signed-in* visitor without the hidden field is rejected with 403.
+2. **`<%= %>` escapes.** Entities and markup must live outside the expression
+   (`<%= label %> &rsaquo;`, never `<%= 'Label &rsaquo;' %>`); `<%- %>` is reserved for HTML the
+   server built and escaped itself (e.g. `hl()` in the search views).
+
+**Caching.** `express.static` serves `/public` with a 7-day `max-age`; the only invalidation
+mechanism is the `ASSET_V` string in `server.js`, exposed as `assetV` and appended as
+`/css/app.css?v=<%= assetV %>`. Bump it in the same commit as any `public/` change.
+
 
 ---
 
@@ -284,6 +335,27 @@ src/lib/newsletter.js
                → jobs table → listing page "Open positions" panel + public /jobs board
                (FEATURED JOB pill, verified tick, JSON-LD CollectionPage)
 ```
+### 4.9b Removal request (`/removal/:slug`)
+`GET/POST` in `src/routes/public.js`. Only `status='approved'` listings resolve — otherwise 404.
+The form takes `name`, `email` and `reason` (≥ 20, ≤ 2000 chars) plus a hidden `homepage`
+honeypot — a bot that fills it is silently bounced to `/listing/:slug` and nothing is stored.
+Short/invalid input re-renders with `errors` at 422. A valid request inserts into
+`removal_requests` and renders the centred "Request received" branch (`mode === 'done'`); the
+team picks it up in the admin **Removals** queue. The page is `noindex` and disallowed in
+`robots.txt`, and its form carries `_csrf` like every other POST form — before that field existed,
+signed-in members hitting this page were 403ed by `csrfProtect`.
+
+### 4.9c Account deletion request (`/dashboard/delete-account`)
+`GET` shows either the pending card (a `pending` row in `deletion_requests`) or the form;
+`POST` checks `reason` ≥ 10 chars, `confirm_name` case-insensitively against the profile name,
+`confirm_phrase` against `delete my account`, and refuses a second queued request — failures render
+422 with inline errors. Both fields are ordinary inputs (typing, autofill and pasting all work;
+the check is the re-typed value itself). On success a `pending` row is inserted, the member and the
+admin inbox each get a branded mail, and the member keeps full access until a moderator acts.
+Admin side: the **Users** page lists the queue (reason + improve note per row) with a
+**Delete account** action posting to `/admin3119Musa/users/:id/delete`, which runs the real
+deletion from §4.7 — sessions, tickets and personal data — and marks the request done.
+
 ### 4.10 Payments (Pro) — PayPal
 
 `src/lib/paypal.js`: server-side order create + capture against the PayPal API,
@@ -301,6 +373,8 @@ Plans seed in `plans` (30-day / monthly defaults exist to keep pricing real on f
 | `SMTP_URL` or `MAIL_*` | `.env` / admin settings | Live mail transport; missing → `data/outbox.log` |
 | `PAYPAL_*` | `.env` | PayPal keys + sandbox flag |
 | `SESSION_SECRET` | server state | Signs both session cookie flavors |
+| `FORCE_INDEXABLE` | `.env` | `1` opens a non-public `BASE_URL` (localhost / `.test` / private IP) to search engines; default keeps it out via `X-Robots-Tag` + `Disallow: /` |
+| `ASSET_V` | `server.js` | the single cache-buster for everything under `public/` — bump with any CSS/JS change |
 
 | Cookie | Table | Purpose |
 |---|---|---|

@@ -4,7 +4,7 @@
   <div class="container dash-head">
     <div>
       <h1>Dashboard</h1>
-      <p class="muted">Welcome back, <%= user.name %></p>
+      <p class="muted">Welcome back, <%= user.name %> · <%= user.email %></p>
     </div>
     <div style="display:flex;gap:10px;flex-wrap:wrap">
       <a href="/dashboard/notifications" class="btn btn-ghost">Notifications<% if (typeof userUnread !== 'undefined' && userUnread) { %> (<%= userUnread %>)<% } %></a>
@@ -13,11 +13,27 @@
   </div>
 </section>
 
+<%
+  /* Real, derived numbers — no extra queries beyond what the page already has. */
+  const nAppr = listings.filter(l => l.status === 'approved').length;
+  const nPend = listings.filter(l => l.status === 'pending').length;
+  const nClaimed = listings.filter(l => l.claimed).length;
+  const nOpenClaims = claims.filter(c => c.status === 'pending').length;
+%>
+
 <section class="section-tight">
   <div class="container">
 
+    <div class="stat-cards" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:1.6rem">
+      <div class="stat-card"><span class="stat-label">Listings</span><span class="stat-num"><%= listings.length %></span><a href="#dash-listings">Manage &rsaquo;</a></div>
+      <div class="stat-card"><span class="stat-label">Live</span><span class="stat-num"><%= nAppr %></span><span class="muted" style="font-size:12px"><%= nPend %> awaiting review</span></div>
+      <div class="stat-card"><span class="stat-label">Verified</span><span class="stat-num"><%= nClaimed %></span><span class="muted" style="font-size:12px">ownership confirmed</span></div>
+      <div class="stat-card"><span class="stat-label">Plan</span><span class="stat-num" style="font-size:1.25rem;padding-top:6px"><%= accountPro ? 'Pro' : 'Free' %></span><a href="/dashboard/upgrade"><%= accountPro ? 'Manage' : 'Upgrade' %> &rsaquo;</a></div>
+      <div class="stat-card"><span class="stat-label">Open claims</span><span class="stat-num"><%= nOpenClaims %></span><a href="#dash-claims"><%= nOpenClaims ? 'Resume' : 'Start' %> &rsaquo;</a></div>
+      <div class="stat-card"><span class="stat-label">Watchlist</span><span class="stat-num" style="font-size:1.25rem;padding-top:6px"><a href="/dashboard/watchlist" style="margin-top:0">Open &rsaquo;</a></span></div>
+    </div>
 
-    <div class="section-head"><h2>Your listings</h2></div>
+    <div class="section-head" id="dash-listings"><h2>Your listings</h2><a class="btn btn-ghost btn-sm" href="/dashboard/listings/new">+ Add listing</a></div>
     <% if (listings.length === 0) { %>
       <div class="empty-state">
         <h3>No listings yet</h3>
@@ -29,33 +45,38 @@
         <table class="table">
           <thead><tr><th>Listing</th><th>Plan</th><th>Status</th><th>Confidence</th><th>FirmLedger Score</th><th class="ta-right">Actions</th></tr></thead>
           <tbody>
-            <% listings.forEach(function (l) { %>
+            <% listings.forEach(function (l) {
+                 const sc = (typeof scores !== 'undefined' && scores[l.id]) || { score: 0, missing: [] };
+                 const hasPerks = !!(typeof plans !== 'undefined' && plans[l.id] && plans[l.id].perks);
+            %>
               <tr>
                 <td>
                   <span class="logo-tile logo-tile-sm"><%= l.name.slice(0, 1) %></span>
                   <strong><%= l.name %></strong>
                   <% if (l.claimed) { %><span class="tick" title="Verified owner">✓</span><% } %>
                   <% if (l.featured) { %><span class="pill pill-featured">Featured</span><% } %>
+                  <br><small class="muted"><%= listingLoc(l) %> · <%= typeLabel(l.type) %></small>
                 </td>
                 <td>
-                  <% if (plans[l.id] && plans[l.id].perks) { %>
+                  <% if (hasPerks) { %>
                     <span class="pill pill-pro" title="Blue tick, homepage Featured slot, premium badge…">PRO perks</span>
                   <% } else { %>
                     <span class="pill pill-free">FREE</span>
                   <% } %>
+                  <% if (l.plan === 'pro') { %><div class="score-hint">listing boost<%= l.plan_expires_at ? ' until ' + l.plan_expires_at : ' · lifetime' %></div><% } %>
                 </td>
                 <td><span class="pill pill-<%= l.status %>"><%= l.status %></span></td>
                 <td><span class="conf"><i style="width:<%= l.confidence %>%"></i></span> <span class="conf-num"><%= l.confidence %></span></td>
                 <td>
-                  <% const sc = scores[l.id]; %>
                   <span class="score-chip <%= sc.score >= 75 ? 'hi' : sc.score >= 45 ? 'mid' : 'lo' %>"><%= sc.score %><small>/100</small></span>
-                  <% if (sc.missing) { %><div class="score-hint"><%= sc.missing[1] %></div><% } %>
+                  <% if (sc.missing && sc.missing.length) { %><div class="score-hint"><%= sc.missing[1] %></div><% } %>
                 </td>
                 <td class="ta-right actions-cell">
                   <% if (l.status === 'approved') { %><a class="btn btn-ghost btn-xs" href="/listing/<%= l.slug %>">View</a><% } %>
                   <a class="btn btn-ghost btn-xs" href="/dashboard/listings/<%= l.id %>/edit">Edit</a>
-                  <% if (!accountPro) { %>
-                    <a class="btn btn-accent btn-xs" href="/dashboard/upgrade">Upgrade to Pro</a>
+                  <a class="btn btn-ghost btn-xs" href="/dashboard/listings/<%= l.id %>/jobs">Jobs</a>
+                  <% if (!hasPerks) { %>
+                    <a class="btn btn-accent btn-xs" href="/dashboard/listings/<%= l.id %>/upgrade">Upgrade</a>
                   <% } %>
                   <% if (l.website) { %>
                     <form method="post" action="/dashboard/listings/<%= l.id %>/refresh-tech" class="inline" title="Re-run technology detection on the homepage">
@@ -90,22 +111,71 @@
       </div>
     <% } %>
 
+    <% if (typeof former !== 'undefined' && former && former.length) { %>
+      <div class="section-head" style="margin-top:3rem"><h2>Records you submitted</h2></div>
+      <div class="side-card center-col" style="max-width:860px">
+        <p class="muted" style="margin-bottom:12px">Approved records you submitted that you no longer own. If one of them still carries listing-scoped Pro you paid for, you can ask us to move the remaining time onto a listing you own today.</p>
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Listing</th><th>Status</th><th>Plan on that record</th><th class="ta-right">Public page</th></tr></thead>
+            <tbody>
+              <% former.forEach(function (f) { const hasLp = listingProActive(f); %>
+                <tr>
+                  <td><span class="logo-tile logo-tile-sm"><%= f.name.slice(0, 1) %></span> <strong><%= f.name %></strong></td>
+                  <td><span class="pill pill-<%= f.status %>"><%= f.status %></span><% if (f.claimed) { %> <span class="pill pill-claimed">claimed</span><% } %></td>
+                  <td>
+                    <% if (hasLp) { %>
+                      <span class="pill pill-pro">PRO</span>
+                      <div class="score-hint"><%= f.plan_expires_at ? 'until ' + f.plan_expires_at : 'lifetime' %></div>
+                    <% } else { %><span class="muted" style="font-size:12.5px">no listing Pro</span><% } %>
+                  </td>
+                  <td class="ta-right actions-cell">
+                    <a class="btn btn-ghost btn-xs" href="/listing/<%= f.slug %>" target="_blank" rel="noopener">View</a>
+                    <% if (hasLp && listings.length) { %>
+                    <details class="inline dash-removal">
+                      <summary class="btn btn-ghost btn-xs">Request Pro transfer</summary>
+                      <form method="post" action="/dashboard/pro-transfer" class="form" style="margin-top:8px;min-width:260px">
+                        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                        <input type="hidden" name="from_listing_id" value="<%= f.id %>">
+                        <label class="fl"><span>Move remaining Pro onto</span>
+                          <select name="to_listing_id" required>
+                            <% listings.forEach(function (own) { %><option value="<%= own.id %>"><%= own.name %></option><% }) %>
+                          </select>
+                        </label>
+                        <label class="fl"><span>Note <small>optional</small></span>
+                          <input class="input" name="note" maxlength="400" placeholder="I paid for this listing before it was claimed…">
+                        </label>
+                        <button class="btn btn-accent btn-xs" type="submit">Ask admin</button>
+                      </form>
+                    </details>
+                    <% } %>
+                  </td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    <% } %>
+
     <div class="section-head" style="margin-top:3rem">
       <h2>Claim an existing record</h2>
     </div>
-    <div class="side-card" style="max-width:640px">
+    <div class="side-card center-col" style="max-width:640px">
       <p class="muted">Found your business already listed? Claim it by proving domain control — DNS record, meta tag, or the FirmLedger badge.</p>
       <% if (claimable.length) { %>
-      <form class="form" id="claimPickerForm" method="get" action="/claim/" onsubmit="event.preventDefault(); var s=document.getElementById('claimSlug'); if(s && s.value) location.href='/claim/'+s.value;">
+      <form id="claimPickerForm" method="get" action="/claim/" role="search" onsubmit="event.preventDefault(); var s=document.getElementById('claimSlug'); if(s && s.value) location.href='/claim/'+encodeURIComponent(s.value);" style="margin-top:12px">
         <input type="hidden" id="claimSlug" name="slug" value="">
-        <label style="margin:0"><span>Search unclaimed listings</span>
-          <div class="suggest-box">
-            <input class="input" type="search" id="claimQ" placeholder="Company, category or city…" autocomplete="off" maxlength="80">
+        <label style="margin:0;display:block"><span class="fld-cap">Search unclaimed listings</span>
+          <div class="suggest-box search-suggest">
+            <div class="search-hero">
+              <input class="input search-hero-in" type="search" id="claimQ" placeholder="Company, category or city…" autocomplete="off" maxlength="80" aria-label="Search unclaimed listings">
+              <button class="btn btn-gold" type="submit" id="claimGo" disabled>Start claim</button>
+            </div>
             <ul class="suggest-list" id="claimResults" hidden></ul>
           </div>
         </label>
         <p class="fine-print" id="claimPicked" style="margin-top:0">Start typing to find a record, then Start claim.</p>
-        <button class="btn btn-primary" type="submit" id="claimGo" disabled>Start claim</button>
       </form>
       <script>
       (function () {
@@ -115,25 +185,26 @@
         var go = document.getElementById('claimGo');
         var picked = document.getElementById('claimPicked');
         if (!q || !list) return;
-        var t = null;
-        function paint(rows) {
+        var t = null, rows = [], sel = -1;
+        function pick(i) {
+          var r = rows[i];
+          if (!r) return;
+          sel = i; paint();
+          slug.value = r.slug;
+          q.value = r.name;
+          go.disabled = false;
+          picked.textContent = 'Selected: ' + r.name + ' — Start claim to prove domain control.';
+          list.hidden = true;
+        }
+        function paint() {
           list.innerHTML = '';
-          if (!rows || !rows.length) {
-            list.hidden = true;
-            return;
-          }
-          rows.forEach(function (r) {
+          if (!rows || !rows.length) { list.hidden = true; return; }
+          rows.forEach(function (r, i) {
             var li = document.createElement('li');
-            li.innerHTML = '<span>' + r.name.replace(/</g,'') + '</span><span class="suggest-cat">' +
+            li.innerHTML = '<span>' + String(r.name || '').replace(/</g,'') + '</span><span class="suggest-cat">' +
               [r.category, r.city, r.country].filter(Boolean).join(' · ').replace(/</g,'') + '</span>';
-            li.addEventListener('mousedown', function (e) {
-              e.preventDefault();
-              slug.value = r.slug;
-              q.value = r.name;
-              go.disabled = false;
-              picked.textContent = 'Selected: ' + r.name + ' — Start claim to prove domain control.';
-              list.hidden = true;
-            });
+            if (i === sel) li.setAttribute('data-sel', '1');
+            li.addEventListener('mousedown', function (e) { e.preventDefault(); pick(i); });
             list.appendChild(li);
           });
           list.hidden = false;
@@ -142,7 +213,7 @@
           var v = q.value.trim();
           fetch('/dashboard/claimable.json?q=' + encodeURIComponent(v), { credentials: 'same-origin' })
             .then(function (r) { return r.json(); })
-            .then(function (d) { paint(d.listings || []); })
+            .then(function (d) { rows = d.listings || []; sel = -1; paint(); })
             .catch(function () { list.hidden = true; });
         }
         q.addEventListener('input', function () {
@@ -152,16 +223,24 @@
           t = setTimeout(fetchRows, 180);
         });
         q.addEventListener('focus', function () { if (!slug.value) fetchRows(); });
-        q.addEventListener('blur', function () { setTimeout(function () { list.hidden = true; }, 180); });
+        q.addEventListener('blur', function () { setTimeout(function () { list.hidden = true; sel = -1; }, 180); });
+        q.addEventListener('keydown', function (e) {
+          if (list.hidden || !rows.length) return;
+          if (e.key === 'ArrowDown') { e.preventDefault(); sel = Math.min(rows.length - 1, sel + 1); paint(); }
+          else if (e.key === 'ArrowUp') { e.preventDefault(); sel = Math.max(0, sel - 1); paint(); }
+          else if (e.key === 'Enter' && sel >= 0) { e.preventDefault(); pick(sel); }
+          else if (e.key === 'Escape') { list.hidden = true; sel = -1; }
+        });
       })();
       </script>
       <% } else { %>
       <p class="muted" style="font-size:13px;margin-top:8px">Every approved listing on FirmLedger is already claimed — nothing to claim right now.</p>
+      <a class="btn btn-ghost btn-sm" href="/dashboard/listings/new" style="margin-top:8px">Submit a new listing</a>
       <% } %>
     </div>
 
     <div class="section-head" style="margin-top:3rem"><h2>Your subscription</h2></div>
-    <div class="side-card" style="max-width:640px">
+    <div class="side-card center-col" style="max-width:640px">
       <div class="upgrade-status">
         <div class="us-title">
           <b><% if (accountPro) { %>FirmLedger Pro<span class="pill pill-pro" style="margin-left:8px">ACTIVE</span><% } else { %>Free plan<span class="pill pill-free" style="margin-left:8px">CURRENT</span><% } %></b>
@@ -172,6 +251,9 @@
           </span>
         </div>
       </div>
+      <% if (!accountPro && !paypalReady) { %>
+        <p class="fine-print" style="color:var(--warn)">Online payments are not configured on this deployment yet — the team can still grant Pro manually from the admin console.</p>
+      <% } %>
       <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap">
         <a class="btn <%= accountPro ? 'btn-ghost' : 'btn-accent' %>" href="/dashboard/upgrade"><%= accountPro ? 'Manage / extend your plan' : 'Upgrade to Pro' %></a>
         <a class="btn btn-ghost" href="/pricing" target="_blank" rel="noopener">Pricing</a>
@@ -239,7 +321,7 @@
         <% if (typeof pendingDeletion !== 'undefined' && pendingDeletion) { %>
           <p class="muted" style="font-size:.82rem;margin-bottom:10px">A request is already waiting (<%= fmtDate(pendingDeletion.created_at) %>).</p>
         <% } %>
-        <a class="btn btn-danger btn-sm" href="/dashboard/delete-account">Request deletion</a>
+        <a class="btn btn-danger btn-sm" href="/dashboard/delete-account"><%= pendingDeletion ? 'View deletion request' : 'Request deletion' %></a>
       </div>
       <div class="side-card">
         <h3 style="margin:0 0 10px">Watchlist</h3>
@@ -257,64 +339,18 @@
           <a class="btn btn-ghost btn-sm" href="/dashboard/api/playground">Playground</a>
         </div>
       </div>
+      <div class="side-card">
+        <h3 style="margin:0 0 10px">Digest &amp; notifications</h3>
+        <p class="muted" style="margin-bottom:14px">Email cadence for your watchlist and in-app inbox — everything is opt-out.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <a class="btn btn-ghost btn-sm" href="/dashboard/settings">Digest settings</a>
+          <a class="btn btn-ghost btn-sm" href="/dashboard/notifications">Inbox<% if (typeof userUnread !== 'undefined' && userUnread) { %> · <%= userUnread %> new<% } %></a>
+        </div>
+      </div>
     </div>
 
     <% if (claims.length) { %>
-      <div class="section-head" style="margin-top:3rem"><h2>Your verification requests</h2></div>
-      <div class="table-wrap">
-        <table class="table">
-          <thead><tr><th>Listing</th><th>Method</th><th>Domain</th><th>Status</th><th>Requested</th><th></th></tr></thead>
-          <tbody>
-            <% claims.forEach(function (c) { %>
-              <tr>
-                <td><a href="/listing/<%= c.listing_slug %>"><strong><%= c.listing_name %></strong></a></td>
-                <td><% if (c.method === 'dns') { %>DNS record<% } else if (c.method === 'meta') { %>Meta tag<% } else { %>Site badge<% } %></td>
-                <td><code><%= c.domain %></code></td>
-                <td><span class="pill pill-<%= c.status === 'verified' ? 'approved' : c.status === 'pending' ? 'pending' : 'rejected' %>"><%= c.status %></span></td>
-                <td class="muted"><%= fmtDate(c.created_at) %></td>
-                <td class="ta-right"><% if (c.status === 'pending') { %><a class="btn btn-ghost btn-xs" href="/claim/verify/<%= c.id %>">Resume verification</a><% } %></td>
-              </tr>
-            <% }) %>
-          </tbody>
-        </table>
-      </div>
-    <% } %>
-  </div>
-</section>
-
-<%- include('../partials/bottom') %>
-
-                      <button class="btn btn-danger btn-xs" type="submit">Send request</button>
-                    </form>
-                  </details>
-                  <% if (hasLp && listings.length) { %>
-                  <details class="inline dash-removal">
-                    <summary class="btn btn-ghost btn-xs">Request Pro transfer</summary>
-                    <form method="post" action="/dashboard/pro-transfer" class="form" style="margin-top:8px;min-width:260px">
-                      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                      <input type="hidden" name="from_listing_id" value="<%= f.id %>">
-                      <label class="fl"><span>Move remaining Pro onto</span>
-                        <select name="to_listing_id" required>
-                          <% listings.forEach(function (own) { %><option value="<%= own.id %>"><%= own.name %></option><% }) %>
-                        </select>
-                      </label>
-                      <label class="fl"><span>Note <small>optional</small></span>
-                        <input class="input" name="note" maxlength="400" placeholder="I paid for this listing before it was claimed…">
-                      </label>
-                      <button class="btn btn-accent btn-xs" type="submit">Ask admin</button>
-                    </form>
-                  </details>
-                  <% } %>
-                </td>
-              </tr>
-            <% }) %>
-          </tbody>
-        </table>
-      </div>
-    <% } %>
-
-    <% if (claims.length) { %>
-      <div class="section-head" style="margin-top:3rem"><h2>Your verification requests</h2></div>
+      <div class="section-head" style="margin-top:3rem" id="dash-claims"><h2>Your verification requests</h2></div>
       <div class="table-wrap">
         <table class="table">
           <thead><tr><th>Listing</th><th>Method</th><th>Domain</th><th>Status</th><th>Requested</th><th></th></tr></thead>

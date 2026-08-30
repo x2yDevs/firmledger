@@ -19,7 +19,7 @@ const session = require('./src/lib/session');
 const util = require('./src/lib/util');
 
 /* Bumped on every deploy that changes public/ assets — defeats the 7-day static cache. */
-const ASSET_V = '23';
+const ASSET_V = '27';
 
 const app = express();
 app.set('trust proxy', true);
@@ -30,12 +30,18 @@ app.use(compression());
 app.use(express.urlencoded({ extended: true, limit: '200kb' }));
 app.use(cookieParser());
 
+/* Search-index guard: a box that isn't reachable at its own BASE_URL (unset value,
+   localhost, .test, private IP) must never be indexed. Real deployments are untouched
+   — see src/lib/util.js isPublicBaseUrl(), or set FORCE_INDEXABLE=1 to opt back in. */
+const INDEXABLE = util.isPublicBaseUrl();
+
 /* Security headers (kept permissive enough for same-origin CSS/inline SVG) */
 app.use((req, res, next) => {
   res.set('X-Content-Type-Options', 'nosniff');
   res.set('X-Frame-Options', 'SAMEORIGIN');
   res.set('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  if (!INDEXABLE) res.set('X-Robots-Tag', 'noindex, follow');
   next();
 });
 
@@ -157,4 +163,8 @@ setTimeout(hourlyJobs, 90e3);
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`FirmLedger running on http://0.0.0.0:${PORT} — public base: ${util.siteUrl('/')}`);
+  if (!INDEXABLE) {
+    console.warn('⚠  BASE_URL is not a public origin — search engines are blocked with X-Robots-Tag: noindex and a "Disallow: /" robots.txt.');
+    console.warn('   Before launch set BASE_URL=https://your-domain (no trailing slash) in .env and restart. Set FORCE_INDEXABLE=1 to override.');
+  }
 });

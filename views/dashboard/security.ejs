@@ -91,7 +91,7 @@
 
         <h2 style="margin:1.4rem 0 .5rem;font-size:1.08rem">Step 2 — confirm with a code</h2>
         <p class="muted" style="margin:0 0 .9rem">Enter the 6-digit code currently showing in your app. We then generate your 10 recovery codes immediately.</p>
-        <form method="post" action="/dashboard/security/2fa/verify" class="form" style="max-width:340px">
+        <form method="post" action="/dashboard/security/2fa/verify" class="form center-col" style="max-width:340px">
           <input type="hidden" name="_csrf" value="<%= csrfToken %>">
           <label style="margin-bottom:.7rem"><span>6-digit code</span>
             <input type="text" name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required autofocus

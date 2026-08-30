@@ -7,7 +7,9 @@
       <h1>Choose a new password</h1>
     </div>
     <% if (errors.length) { %><div class="alert alert-err"><% errors.forEach(function (e) { %><div><%= e %></div><% }) %></div><% } %>
-    <form method="post" action="/reset/<%= token %>" class="form">
+    <form method="post" action="/reset/<%= token %>
+          <% if (typeof csrfToken !== 'undefined' && csrfToken) { %><input type="hidden" name="_csrf" value="<%= csrfToken %>"><% } %>
+" class="form">
       <label><span>New password <small class="muted">(min 8 characters)</small></span>
         <div class="pw-wrap"><input type="password" id="reset-password" name="password" required minlength="8" autocomplete="new-password" data-pw-input="reset-pw-meter"></div>
         <div class="pw-meter" id="reset-pw-meter" style="display:none"></div>

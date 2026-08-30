@@ -500,7 +500,7 @@ router.post('/admin3119Musa/listings/:id/plan', (req, res) => {
    listing the account owns. */
 router.post('/admin3119Musa/users/:id/plan', (req, res) => {
   const u = db.prepare('SELECT id, name, email FROM users WHERE id=?').get(req.params.id);
-  if (!u) return res.redirect('/admin3119Musa/users');
+  if (!u) return backToUsers(req, res, 'User not found.', 'err');
   const act = String(req.body.plan_action || '');
   if (act === 'grant' || act === 'lifetime') {
     const r = grantUserPro(u.id, act === 'lifetime' ? null : 30);
@@ -521,7 +521,7 @@ router.post('/admin3119Musa/users/:id/plan', (req, res) => {
       cta: { label: 'Explore the directory', url: su8('/directory') },
       note: `Access details: ${expiry ? `Pro renews until <b>${expiry}</b>` : '<b>Lifetime access</b> — no renewal required'}.`,
     }).catch(() => {});
-    return res.redirect('/admin3119Musa/users?ok=' + encodeURIComponent(what));
+    return backToUsers(req, res, what);
   }
   if (act === 'revoke') {
     revokeUserPro(u.id);
@@ -538,9 +538,9 @@ router.post('/admin3119Musa/users/:id/plan', (req, res) => {
       cta: { label: 'Upgrade to Pro', url: su9('/dashboard/upgrade') },
       note: 'This change was made by FirmLedger support. If you believe this is an error, reply to this email.',
     }).catch(() => {});
-    return res.redirect('/admin3119Musa/users?ok=' + encodeURIComponent(`Pro revoked — ${u.name} (${u.email}) is back on Free.`));
+    return backToUsers(req, res, `Pro revoked — ${u.name} (${u.email}) is back on Free.`);
   }
-  res.redirect('/admin3119Musa/users');
+  backToUsers(req, res, 'Choose a plan action first.', 'err');
 });
 
 /* ---- Admin listing editor (trust fields: sources, confidence, events) ---- */
@@ -763,24 +763,24 @@ router.get('/admin3119Musa/users/backup.firmledger', (req, res) => {
 /** POST — import a previously exported .firmledger file. */
 router.post('/admin3119Musa/users/import', backup.backupField('backup_file'), (req, res) => {
   if (!require('../lib/session').validCsrf(req)) return res.status(403).redirect('/admin3119Musa/users');
-  if (req.uploadError) return res.redirect('/admin3119Musa/users?err=' + encodeURIComponent(req.uploadError));
-  if (!req.file) return res.redirect('/admin3119Musa/users?err=' + encodeURIComponent('Choose a .firmledger file to import.'));
+  if (req.uploadError) return usersFail(req, res, req.uploadError);
+  if (!req.file) return usersFail(req, res, 'Choose a .firmledger file to import.');
   const fname = String(req.file.originalname || '').toLowerCase();
   if (!fname.endsWith('.firmledger') && !fname.endsWith('.json')) {
-    return res.redirect('/admin3119Musa/users?err=' + encodeURIComponent('That file is not a FirmLedger export — choose the .firmledger file you downloaded from the admin console.'));
+    return usersFail(req, res, 'That file is not a FirmLedger export — choose the .firmledger file you downloaded from the admin console.');
   }
   const r = backup.importUsers(req.file.buffer.toString('utf8'));
-  if (!r.ok) return res.redirect('/admin3119Musa/users?err=' + encodeURIComponent(r.error));
-  res.redirect('/admin3119Musa/users?ok=' + encodeURIComponent(
+  if (!r.ok) return usersFail(req, res, r.error);
+  backToUsers(req, res,
     `Import complete — ${r.created} created, ${r.updated} updated${r.skipped ? `, ${r.skipped} skipped (invalid rows)` : ''}.`
-  ));
+  );
 });
 
 /** POST — permanently delete a user + everything attributable to their account. */
 router.post('/admin3119Musa/users/:id/delete', (req, res) => {
   if (!require('../lib/session').validCsrf(req)) return res.status(403).redirect('/admin3119Musa/users');
   const u = db.prepare('SELECT * FROM users WHERE id=?').get(req.params.id);
-  if (!u) return res.redirect('/admin3119Musa/users?err=' + encodeURIComponent('User not found.'));
+  if (!u) return usersFail(req, res, 'User not found.');
   sendBranded(u.email, 'Your FirmLedger account has been deleted', {
     kicker: 'Account deleted',
     title: 'Your account has been deleted',
@@ -794,26 +794,43 @@ router.post('/admin3119Musa/users/:id/delete', (req, res) => {
   }).catch(() => {});
   db.prepare("UPDATE deletion_requests SET status='completed', resolved_at=datetime('now') WHERE user_id=? AND status='pending'").run(u.id);
   const r = backup.deleteUserCascade(Number(req.params.id));
-  if (!r.ok) return res.redirect('/admin3119Musa/users?err=' + encodeURIComponent(r.error));
-  res.redirect('/admin3119Musa/users?ok=' + encodeURIComponent(`${r.name} (${r.email}) was permanently deleted and emailed.`));
+  if (!r.ok) return usersFail(req, res, r.error);
+  backToUsers(req, res, `${r.name} (${r.email}) was permanently deleted and emailed.`);
 });
 
 /* ---------------- Users ---------------- */
+/** Redirect back to the users list, keeping the active search/filter alive. */
+function backToUsers(req, res, msg, kind) {
+  const keep = [];
+  const q = String((req.body && req.body.uq) || (req.query.q || '')).trim().slice(0, 80);
+  const f = String((req.body && req.body.uf) || (req.query.f || '')).trim();
+  if (q) keep.push('q=' + encodeURIComponent(q));
+  if (f) keep.push('f=' + encodeURIComponent(f));
+  if (msg) keep.push(`${kind || 'ok'}=` + encodeURIComponent(msg));
+  return res.redirect('/admin3119Musa/users' + (keep.length ? '?' + keep.join('&') : ''));
+}
+/** Error variant used by routes that only care about the failure message. */
+function usersFail(req, res, error) { return backToUsers(req, res, error, 'err'); }
+
+const USER_FILTERS = { pro: 'pro', free: 'free', suspended: 'suspended', active: 'active' };
+
 router.get('/admin3119Musa/users', (req, res) => {
   const q = String(req.query.q || '').trim().slice(0, 80);
-  let users;
-  if (q) {
-    const like = `%${q.replace(/[%_]/g, '')}%`;
-    users = db.prepare(
-      `SELECT u.*, (SELECT COUNT(*) FROM listings l WHERE l.owner_user_id = u.id) AS listing_count
-       FROM users u WHERE u.email LIKE ? OR u.name LIKE ? ORDER BY u.created_at DESC LIMIT 500`
-    ).all(like, like);
-  } else {
-    users = db.prepare(
-      `SELECT u.*, (SELECT COUNT(*) FROM listings l WHERE l.owner_user_id = u.id) AS listing_count
-       FROM users u ORDER BY u.created_at DESC LIMIT 500`
-    ).all();
-  }
+  const f = USER_FILTERS[String(req.query.f || '').trim()] || '';
+  const like = `%${q.replace(/[%_]/g, '')}%`;
+  const where = [];
+  const args = [];
+  if (q) { where.push('(u.email LIKE ? OR u.name LIKE ?)'); args.push(like, like); }
+  if (f === 'pro') where.push(`u.plan='pro' AND (u.plan_expires_at='' OR u.plan_expires_at IS NULL OR u.plan_expires_at >= date('now'))`);
+  if (f === 'free') where.push(`NOT (u.plan='pro' AND (u.plan_expires_at='' OR u.plan_expires_at IS NULL OR u.plan_expires_at >= date('now')))`);
+  if (f === 'suspended') where.push('u.suspended=1');
+  if (f === 'active') where.push('u.suspended=0');
+  const sqlWhere = where.length ? `WHERE ${where.join(' AND ')}` : '';
+  const users = db.prepare(
+    `SELECT u.*, (SELECT COUNT(*) FROM listings l WHERE l.owner_user_id = u.id) AS listing_count
+     FROM users u ${sqlWhere} ORDER BY u.created_at DESC LIMIT 500`
+  ).all(...args);
+  const totalUsers = db.prepare('SELECT COUNT(*) c FROM users').get().c;
   const deletionReqs = db.prepare(
     `SELECT d.*, u.email, u.name FROM deletion_requests d JOIN users u ON u.id = d.user_id
      WHERE d.status='pending' ORDER BY d.created_at DESC`
@@ -822,7 +839,7 @@ router.get('/admin3119Musa/users', (req, res) => {
     meta: { title: 'Users — FirmLedger Admin', description: '', robots: 'noindex,nofollow' },
     users, section: 'users',
     isProUser,
-    q,
+    q, f, totalUsers,
     deletionReqs,
     ok: req.query.ok || '', err: req.query.err || '',
   });
@@ -1049,7 +1066,7 @@ router.post('/admin3119Musa/removals/:id/remove-listing', (req, res) => {
 
 /* ---------------- User management ---------------- */
 router.get('/admin3119Musa/users/:id', (req, res, next) => {
-  const u = db.prepare('SELECT id, name, email, created_at, suspended FROM users WHERE id=?').get(req.params.id);
+  const u = db.prepare('SELECT * FROM users WHERE id=?').get(req.params.id);
   if (!u) return next();
   const listings = db.prepare(
     'SELECT id, slug, name, type, status, claimed, confidence, created_at FROM listings WHERE owner_user_id=? ORDER BY created_at DESC'
@@ -1058,9 +1075,32 @@ router.get('/admin3119Musa/users/:id', (req, res, next) => {
     `SELECT c.*, l.name AS listing_name FROM claims c LEFT JOIN listings l ON l.id=c.listing_id WHERE c.user_id=? ORDER BY c.created_at DESC`
   ).all(u.id);
   const sessions = db.prepare('SELECT COUNT(*) c FROM sessions WHERE user_id=?').get(u.id).c;
+  const tickets = db.prepare(
+    'SELECT id, ref, subject, category, status, created_at, updated_at FROM tickets WHERE user_id=? ORDER BY updated_at DESC LIMIT 10'
+  ).all(u.id);
+  const payments = db.prepare(
+    "SELECT id, reference, amount, currency, status, created_at, paid_at FROM payments WHERE user_id=? AND status='paid' ORDER BY COALESCE(paid_at, created_at) DESC LIMIT 10"
+  ).all(u.id);
+  const pendingDeletion = db.prepare(
+    "SELECT id, reason, created_at FROM deletion_requests WHERE user_id=? AND status='pending' ORDER BY id DESC LIMIT 1"
+  ).get(u.id);
+  const submitted = db.prepare(
+    'SELECT COUNT(*) c FROM listings WHERE submitter_user_id=?'
+  ).get(u.id).c;
+  const back = (() => {
+    const keep = [];
+    const q = String(req.query.q || '').trim().slice(0, 80);
+    const f = USER_FILTERS[String(req.query.f || '').trim()] || '';
+    if (q) keep.push('q=' + encodeURIComponent(q));
+    if (f) keep.push('f=' + encodeURIComponent(f));
+    return '/admin3119Musa/users' + (keep.length ? '?' + keep.join('&') : '');
+  })();
   res.render('admin/user-detail', {
     meta: { title: `${u.name} — FirmLedger Admin`, description: '', robots: 'noindex,nofollow' },
-    u, listings, claims, sessions, section: 'users',
+    u, listings, claims, sessions, tickets, payments, pendingDeletion, submitted, back,
+    q: String(req.query.q || '').trim().slice(0, 80),
+    f: String(req.query.f || '').trim(),
+    isProUser, section: 'users',
   });
 });
 
@@ -1083,7 +1123,7 @@ router.post('/admin3119Musa/users/:id/suspend', (req, res) => {
       note: 'Please reference your account email when contacting support so we can locate your record quickly.',
     }).catch(() => {});
   }
-  res.redirect('/admin3119Musa/users?ok=' + encodeURIComponent('User suspended — sessions revoked and sign-in blocked.'));
+  backToUsers(req, res, 'User suspended — sessions revoked and sign-in blocked.');
 });
 
 router.post('/admin3119Musa/users/:id/unsuspend', (req, res) => {
@@ -1104,7 +1144,7 @@ router.post('/admin3119Musa/users/:id/unsuspend', (req, res) => {
       note: 'Questions about your account? Contact <a href="mailto:support@firmledger.co.ke" style="color:#1D4ED8;">support@firmledger.co.ke</a>.',
     }).catch(() => {});
   }
-  res.redirect('/admin3119Musa/users?ok=' + encodeURIComponent('User reinstated — sessions allowed again.'));
+  backToUsers(req, res, 'User reinstated — sessions allowed again.');
 });
 
 /* ---------------- Blog / news ---------------- */
@@ -1494,7 +1534,7 @@ router.get('/admin3119Musa/search', (req, res) => {
       'SELECT id, name, email, suspended, created_at FROM users WHERE name LIKE ? OR email LIKE ? ORDER BY created_at DESC LIMIT 20'
     ).all(like, like),
     listings: db.prepare(
-      `SELECT id, slug, name, status, claimed, category, country, website FROM listings
+      `SELECT id, slug, name, status, claimed, category, country, city, website, logo_url FROM listings
        WHERE name LIKE ? OR slug LIKE ? OR website LIKE ? OR email LIKE ? ORDER BY updated_at DESC LIMIT 20`
     ).all(like, like, like, like),
     claims: db.prepare(
@@ -1543,7 +1583,7 @@ router.post('/admin3119Musa/notifications/read-all', (req, res) => {
 router.post('/admin3119Musa/users/:id/reset', (req, res) => {
   if (!require('../lib/session').validCsrf(req)) return res.status(403).redirect('/admin3119Musa/users');
   const u = db.prepare('SELECT * FROM users WHERE id=?').get(req.params.id);
-  if (!u) return res.redirect('/admin3119Musa/users?err=' + encodeURIComponent('User not found.'));
+  if (!u) return usersFail(req, res, 'User not found.');
   const token = randomToken(32);
   const expires = new Date(Date.now() + 60 * 60 * 1000).toISOString();
   db.prepare('DELETE FROM resets WHERE email=?').run(u.email);
@@ -1567,7 +1607,7 @@ router.post('/admin3119Musa/users/:id/reset', (req, res) => {
     body: 'An administrator emailed you a one-hour reset link.',
     url: '/login',
   });
-  res.redirect('/admin3119Musa/users?ok=' + encodeURIComponent(`Password reset emailed to ${u.email}.`));
+  backToUsers(req, res, `Password reset emailed to ${u.email}.`);
 });
 
 /* ================= Pro transfer approve/reject ================= */

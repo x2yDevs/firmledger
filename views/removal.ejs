@@ -1,58 +1,63 @@
 <%- include('partials/top') %>
 <link rel="canonical" href="<%= meta.canonical %>">
 
-<div class="page-top">
-  <div class="container container-narrow">
-    <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/">Home</a><a href="/listing/<%= l.slug %>"><%= l.name %></a><span aria-current="page">Request removal</span></nav>
-    <div class="listing-head" style="margin-bottom:0">
-      <div class="listing-info" style="text-align:center;align-items:center;display:flex;flex-direction:column">
-        <div class="default-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-        </div>
-        <h1>Request removal</h1>
-        <p class="listing-tagline" style="max-width:560px">Ask for the removal or correction of the record for <b><%= l.name %></b>. A moderator reviews every request; we never remove legitimately sourced public information without cause.</p>
-      </div>
+<section class="page-head">
+  <div class="container container-narrow" style="text-align:center">
+    <nav class="crumb" aria-label="Breadcrumb" style="justify-content:center">
+      <a href="/">Home</a><span class="sep">/</span><a href="/listing/<%= l.slug %>"><%= l.name %></a><span class="sep">/</span><span>Request removal</span>
+    </nav>
+    <p class="kicker kicker-center">Moderation</p>
+    <div class="logo-tile" aria-hidden="true" style="margin:0 auto 14px">
+      <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
     </div>
+    <h1>Request removal</h1>
+    <p class="lede center-col">Ask for the removal or correction of the record for <b><%= l.name %></b>. A moderator reviews every request; we never remove legitimately sourced public information without cause.</p>
   </div>
-</div>
+</section>
 
 <section class="section-tight">
   <div class="container container-narrow">
     <% if (mode === 'done') { %>
       <div class="panel" style="text-align:center;padding:3rem 2rem">
-        <div class="default-icon" style="margin:0 auto 18px">
-          <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        <div class="logo-tile" style="margin:0 auto 18px" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
         </div>
-        <h2 class="h-section" style="margin-top:0">Request received</h2>
-        <p class="muted" style="max-width:480px;margin:0 auto">Your request about <b><%= l.name %></b> has been logged and will be reviewed by a moderator. Decisions typically happen within a few business days and are shown in the public moderation log.</p>
+        <h2 class="h-display">Request received</h2>
+        <p class="muted center-col" style="max-width:480px;margin-top:12px">Your request about <b><%= l.name %></b> has been logged and will be reviewed by a moderator. Decisions typically happen within a few business days and are shown in the public moderation log.</p>
         <div class="form-actions" style="justify-content:center;margin-top:22px">
           <a class="btn btn-primary" href="/listing/<%= l.slug %>">Back to the record</a>
           <a class="btn btn-ghost" href="/directory">Back to the directory</a>
         </div>
       </div>
     <% } else { %>
-      <div class="panel" style="padding:2rem">
+      <div class="panel" style="padding:clamp(20px,3vw,30px)">
+        <div class="section-head" style="margin-bottom:18px">
+          <h2 style="font-size:1.15rem">Removal request</h2>
+          <span class="muted" style="font-size:12.5px">All fields required</span>
+        </div>
         <% if (errors.length) { %>
           <div class="alert alert-err">
             <ul style="margin:0;padding-left:1.1rem"><% errors.forEach(function (e) { %><li><%= e %></li><% }); %></ul>
           </div>
         <% } %>
         <form method="post" action="/removal/<%= l.slug %>" class="form" novalidate>
+          <% if (typeof csrfToken !== 'undefined' && csrfToken) { %><input type="hidden" name="_csrf" value="<%= csrfToken %>"><% } %>
           <div class="form-two">
-            <label><span>Your name *</span>
-              <input type="text" name="name" required maxlength="120" value="<%= form.name || '' %>" placeholder="e.g. Jane Mwangi">
+            <label class="fl"><span>Your name *</span>
+              <input class="input" type="text" name="name" required maxlength="120" value="<%= form.name || '' %>" placeholder="e.g. Jane Mwangi" autocomplete="name">
             </label>
-            <label><span>Your email *</span>
-              <input type="email" name="email" required maxlength="254" value="<%= form.email || '' %>" placeholder="you@company.com">
+            <label class="fl"><span>Your email *</span>
+              <input class="input" type="email" name="email" required maxlength="254" value="<%= form.email || '' %>" placeholder="you@company.com" autocomplete="email">
             </label>
           </div>
-          <label><span>Reason — why should this record be removed or corrected? *</span>
-            <textarea name="reason" rows="8" required minlength="20" maxlength="2000" placeholder="e.g. The company closed in March 2026; the website is down and the record implies it still operates. I am the co-founder."><%= form.reason || '' %></textarea>
+          <label class="fl"><span>Reason — why should this record be removed or corrected? *</span>
+            <textarea class="input" name="reason" rows="6" required minlength="20" maxlength="2000" placeholder="e.g. The company closed in March 2026; the website is down and the record implies it still operates. I am the co-founder."><%= form.reason || '' %></textarea>
           </label>
           <input type="text" name="homepage" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px;opacity:0;height:0;padding:0;border:none" aria-hidden="true">
           <p class="form-note">Removing the record only removes it from FirmLedger — the original sources it cites still exist. Filing a request does not guarantee removal: a moderator weighs the reason against the public interest in an accurate record.</p>
           <div class="form-actions">
-            <button class="btn btn-primary btn-lg btn-block" type="submit">Submit request</button>
+            <button class="btn btn-primary btn-lg" type="submit">Submit request</button>
+            <a class="btn btn-ghost btn-lg" href="/listing/<%= l.slug %>">Cancel</a>
           </div>
           <p class="fine-print" style="text-align:center;margin-top:14px">Prefer to fix the record instead? <a href="/claim/<%= l.slug %>">Claim this profile</a> — verification takes minutes.</p>
         </form>

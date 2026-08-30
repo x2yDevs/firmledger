@@ -1,55 +1,56 @@
 <%- include('../partials/top') %>
 
 <section class="page-head">
-  <div class="container">
-    <p class="kicker">Account</p>
+  <div class="container container-narrow" style="text-align:center">
+    <p class="kicker kicker-center">Account</p>
     <h1>Delete my account</h1>
-    <p class="lede">This is permanent. Listings you submitted stay on the public ledger as factual records, with your name removed as owner. Sessions, tickets and personal data are deleted when the request is completed.</p>
+    <p class="lede center-col">This is permanent. Listings you submitted stay on the public ledger as factual records, with your name removed as owner. Sessions, tickets and personal data are deleted when the request is completed.</p>
   </div>
 </section>
 
 <section class="section-tight">
   <div class="container container-narrow">
     <% if (pending) { %>
-      <div class="alert alert-warn">
-        A deletion request is already waiting on the team (sent <%= fmtDate(pending.created_at) %>). You will get an email when the account is removed. Changed your mind? Write to support@firmledger.co.ke quoting your email.
+      <div class="side-card center-col" style="max-width:720px;text-align:center;padding:clamp(24px,4vw,38px)">
+        <div class="logo-tile" style="margin:0 auto 14px" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        </div>
+        <h2 style="font-size:1.2rem;margin-bottom:8px">Request already waiting</h2>
+        <p class="muted" style="max-width:520px;margin:0 auto">A deletion request was sent <b><%= fmtDate(pending.created_at) %></b>. You will get an email when the account is removed. Changed your mind? Write to <a href="mailto:support@firmledger.co.ke">support@firmledger.co.ke</a> quoting your email.</p>
+        <div class="form-actions" style="justify-content:center;margin-top:20px">
+          <a class="btn btn-primary" href="/dashboard">Back to dashboard</a>
+          <a class="btn btn-ghost" href="/dashboard/support">Ask support</a>
+        </div>
       </div>
     <% } else { %>
       <% if (errors && errors.length) { %>
         <div class="alert alert-err"><strong>Can't send yet:</strong><% errors.forEach(function (e) { %><div>· <%= e %></div><% }) %></div>
       <% } %>
-      <form method="post" action="/dashboard/delete-account" class="form form-card" id="delAcctForm" autocomplete="off">
+      <form method="post" action="/dashboard/delete-account" class="form form-card center-col" id="delAcctForm" autocomplete="off" style="max-width:720px">
         <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-        <label><span>Why do you want to leave?</span>
-          <textarea name="reason" rows="4" required minlength="10" maxlength="800" placeholder="Tell us what didn't work…"><%= old.reason || '' %></textarea>
+        <div class="form-section">Tell us before you go</div>
+        <label class="fl"><span>Why do you want to leave? <small class="count" data-count-for="reason">0/800</small></span>
+          <textarea class="input" name="reason" rows="4" required minlength="10" maxlength="800" placeholder="Tell us what didn't work…" data-count><%= old.reason || '' %></textarea>
         </label>
-        <label><span>What could we have done better? <small>optional</small></span>
-          <textarea name="improve" rows="3" maxlength="800" placeholder="Anything we should change for the next person…"><%= old.improve || '' %></textarea>
+        <label class="fl"><span>What could we have done better? <small>optional</small></span>
+          <textarea class="input" name="improve" rows="3" maxlength="800" placeholder="Anything we should change for the next person…"></textarea>
         </label>
-        <label><span>Retype your account name — <b><%= user.name %></b></span>
-          <input class="input" name="confirm_name" required maxlength="80" value="<%= old.confirm_name || '' %>" autocomplete="off" autocapitalize="off" spellcheck="false">
-        </label>
-        <label><span>Type <b>delete my account</b> to confirm (copy-paste is disabled)</span>
-          <input class="input" name="confirm_phrase" id="delPhrase" required maxlength="40" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="delete my account">
-        </label>
-        <p class="fine-print">We email you and the team when the request is received, and we email you again when the account is actually deleted. This is not instant.</p>
+
+        <div class="form-section">Confirm it's you</div>
+        <div class="form-two">
+          <label class="fl"><span>Retype your account name <small>exactly as on your profile</small></span>
+            <input class="input" name="confirm_name" required maxlength="80" value="<%= old.confirm_name || '' %>" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="<%= user.name %>">
+          </label>
+          <label class="fl"><span>Type <b>delete my account</b> <small>lowercase, with the spaces</small></span>
+            <input class="input" name="confirm_phrase" required maxlength="40" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="delete my account">
+          </label>
+        </div>
+        <p class="form-note">Signed in as <b><%= user.email %></b> · profile name <b><%= user.name %></b>. We email you and the team when the request is received, and email you again when the account is actually deleted — this is not instant.</p>
         <div class="form-actions">
           <button class="btn btn-danger" type="submit">Send deletion request</button>
           <a class="btn btn-ghost" href="/dashboard">Cancel</a>
         </div>
       </form>
-      <script>
-      (function () {
-        var el = document.getElementById('delPhrase');
-        if (!el) return;
-        ['paste', 'drop', 'copy', 'cut'].forEach(function (ev) {
-          el.addEventListener(ev, function (e) { e.preventDefault(); });
-        });
-        el.addEventListener('keydown', function (e) {
-          if ((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V')) e.preventDefault();
-        });
-      })();
-      </script>
     <% } %>
   </div>
 </section>

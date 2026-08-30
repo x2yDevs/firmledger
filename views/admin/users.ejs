@@ -1,22 +1,69 @@
 <%- include('../partials/top') %>
 <%- include('../partials/adminnav') %>
 
+<%
+  const usersQuery = String(typeof q !== 'undefined' && q ? q : '');
+  const usersFilter = String(typeof f !== 'undefined' && f ? f : '');
+  /* Every action form carries the active view so the redirect lands back here. */
+  const keepView = () => `<input type="hidden" name="uq" value="${usersQuery.replace(/"/g, '&quot;')}"><input type="hidden" name="uf" value="${usersFilter.replace(/"/g, '&quot;')}">`;
+  /* Builds a console-users URL that keeps the active search/filter. */
+  const usersUrl = (params) => {
+    const merged = { q: usersQuery, f: usersFilter, ...(params || {}) };
+    const parts = Object.entries(merged)
+      .filter(([, v]) => v !== '' && v !== null && v !== undefined)
+      .map(([k, v]) => `${k}=${encodeURIComponent(v)}`);
+    return '/admin3119Musa/users' + (parts.length ? '?' + parts.join('&') : '');
+  };
+  /* Querystring carried onto detail links so "← All users" returns to the same view. */
+  const keepQs = usersUrl({}).replace('/admin3119Musa/users', '');
+  /* Highlight the searched fragment inside table cells (always HTML-escaped). */
+  const escAttr = (x) => String(x == null ? '' : x).replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+  const qTerm = usersQuery.trim();
+  const hl = (val) => {
+    const s = String(val == null ? '' : val);
+    if (!qTerm) return escAttr(s);
+    let parts;
+    try { parts = s.split(new RegExp('(' + qTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'ig')); }
+    catch { return escAttr(s); }
+    const low = qTerm.toLowerCase();
+    return parts.map((p) => (p.toLowerCase() === low ? `<mark>${escAttr(p)}</mark>` : escAttr(p))).join('');
+  };
+%>
+
 <section class="section-tight">
   <div class="container">
-    <div class="section-head"><h2>Registered users</h2></div>
-    <% if (typeof ok !== 'undefined' && ok) { %><div class="alert alert-ok"><%= ok %></div><% } %>
-    <% if (typeof err !== 'undefined' && err) { %><div class="alert alert-err"><%= err %></div><% } %>
-
-    <form class="form" method="get" action="/admin3119Musa/users" style="max-width:520px;margin-bottom:1.2rem">
-      <div class="search-hero">
-        <input class="input search-hero-in" type="search" name="q" value="<%= typeof q !== 'undefined' ? q : '' %>" placeholder="Search name or email…" maxlength="80">
-        <button class="btn btn-gold" type="submit">Search</button>
+    <div class="section-head">
+      <div>
+        <p class="klabel">Console users</p>
+        <h2>Registered users</h2>
+        <p class="muted" style="font-size:14px;margin-top:4px"><%= totalUsers %> account<%= totalUsers === 1 ? '' : 's' %> total<%= (usersQuery || usersFilter) ? ` · ${users.length} shown` : '' %>.</p>
       </div>
+      <span class="idx">USERS</span>
+    </div>
+
+    <form class="search-hero admin-search" method="get" action="/admin3119Musa/users" role="search">
+      <input class="input search-hero-in" type="search" name="q" value="<%= usersQuery %>" placeholder="Search name or email…" aria-label="Search users by name or email" maxlength="80" autocomplete="off">
+      <% if (usersFilter) { %><input type="hidden" name="f" value="<%= usersFilter %>"><% } %>
+      <button class="btn btn-gold" type="submit">Search</button>
+      <% if (usersQuery || usersFilter) { %><a class="btn btn-ghost admin-search-x" href="/admin3119Musa/users" title="Clear search and filter" aria-label="Clear search and filter">&times;</a><% } %>
     </form>
+
+    <div class="filter-tabs admin-filter-tabs">
+      <a href="<%= usersUrl({ f: '' }) %>" class="<%= !usersFilter ? 'active' : '' %>">All</a>
+      <a href="<%= usersUrl({ f: 'pro' }) %>" class="<%= usersFilter === 'pro' ? 'active' : '' %>">Pro</a>
+      <a href="<%= usersUrl({ f: 'free' }) %>" class="<%= usersFilter === 'free' ? 'active' : '' %>">Free</a>
+      <a href="<%= usersUrl({ f: 'suspended' }) %>" class="<%= usersFilter === 'suspended' ? 'active' : '' %>">Suspended</a>
+      <a href="<%= usersUrl({ f: 'active' }) %>" class="<%= usersFilter === 'active' ? 'active' : '' %>">Active</a>
+    </div>
 
     <% if (typeof deletionReqs !== 'undefined' && deletionReqs && deletionReqs.length) { %>
       <div class="side-card">
-        <h3>Pending account deletions</h3>
+        <div class="section-head" style="margin-bottom:10px">
+          <h3 style="margin:0">Pending account deletions <span class="pill pill-pending"><%= deletionReqs.length %></span></h3>
+          <a class="btn btn-ghost btn-xs" href="/admin3119Musa/users?f=suspended">Suspended accounts &rsaquo;</a>
+        </div>
         <p class="muted" style="margin-bottom:12px">Members asked to delete their account. Deleting emails them first, then permanently removes personal data.</p>
         <div class="table-wrap">
           <table class="table">
@@ -24,13 +71,14 @@
             <tbody>
               <% deletionReqs.forEach(function (d) { %>
                 <tr>
-                  <td><strong><%= d.name %></strong><br><small class="muted"><%= d.email %></small></td>
+                  <td><span class="avatar avatar-sm"><%= (d.name || 'U').slice(0, 1).toUpperCase() %></span> <strong><%- hl(d.name) %></strong><br><small class="muted"><%- hl(d.email) %></small></td>
                   <td><small><%= d.reason %></small><% if (d.improve) { %><div class="score-hint">Could improve: <%= d.improve %></div><% } %></td>
                   <td class="muted"><%= fmtDate(d.created_at) %></td>
-                  <td class="ta-right">
-                    <a class="btn btn-ghost btn-xs" href="/admin3119Musa/users/<%= d.user_id %>">View</a>
+                  <td class="ta-right actions-cell">
+                    <a class="btn btn-ghost btn-xs" href="/admin3119Musa/users/<%= d.user_id %><%= keepQs %>">View</a>
                     <form method="post" action="/admin3119Musa/users/<%= d.user_id %>/delete" class="inline" onsubmit="return confirm('Permanently delete <%= d.name %> (<%= d.email %>)? They will be emailed first. This cannot be undone.');">
                       <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                      <%- keepView() %>
                       <button class="btn btn-danger btn-xs" type="submit">Delete account</button>
                     </form>
                   </td>
@@ -42,7 +90,7 @@
       </div>
     <% } %>
 
-    <div class="backup-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:14px;margin-bottom:1.4rem">
+    <div class="backup-grid">
       <div class="side-card" style="margin:0">
         <h3 style="margin:0 0 6px">Backup &amp; export</h3>
         <p class="muted" style="margin-bottom:12px;font-size:0.86rem">Download every user and their details as a <code>.firmledger</code> file — aligned, auditable, importable. The full backup also carries their listings, claims, tickets and payments.</p>
@@ -57,7 +105,10 @@
         <p class="muted" style="margin-bottom:12px;font-size:0.86rem">Restore from a <code>.firmledger</code> export or backup. Existing emails are updated; new ones are created. Nothing is silently deleted.</p>
         <form method="post" action="/admin3119Musa/users/import" enctype="multipart/form-data" class="form" style="margin:0">
           <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-          <label class="fl"><span>Backup file</span><input class="input" type="file" name="backup_file" accept=".firmledger,.json" required style="font-size:0.85rem"></label>
+          <%- keepView() %>
+          <label class="fl"><span>Backup file <small>.firmledger or .json</small></span>
+            <input class="input" type="file" name="backup_file" accept=".firmledger,.json" required style="font-size:0.85rem">
+          </label>
           <button class="btn btn-primary btn-sm" type="submit">Import from .firmledger</button>
         </form>
       </div>
@@ -69,8 +120,8 @@
         <tbody>
           <% users.forEach(function (u) { %>
             <tr>
-              <td><span class="avatar avatar-sm"><%= (u.name || 'U').slice(0, 1).toUpperCase() %></span> <strong><%= u.name %></strong><br><small class="muted">joined <%= fmtDate(u.created_at) %></small></td>
-              <td><small class="muted"><%= u.email %></small></td>
+              <td><span class="avatar avatar-sm"><%= (u.name || 'U').slice(0, 1).toUpperCase() %></span> <strong><%- hl(u.name) %></strong><br><small class="muted">joined <%= fmtDate(u.created_at) %></small></td>
+              <td><small class="muted"><%- hl(u.email) %></small></td>
               <td><%= u.listing_count %></td>
               <td>
                 <% if (isProUser(u)) { %>
@@ -82,49 +133,60 @@
               </td>
               <td><% if (u.suspended) { %><span class="pill pill-rejected">suspended</span><% } else { %><span class="pill pill-approved">active</span><% } %></td>
               <td class="ta-right actions-cell">
-                <a class="btn btn-ghost btn-xs" href="/admin3119Musa/users/<%= u.id %>">View</a>
+                <a class="btn btn-ghost btn-xs" href="/admin3119Musa/users/<%= u.id %><%= keepQs %>">View</a>
                 <a class="btn btn-ghost btn-xs" href="/admin3119Musa/email?to=<%= encodeURIComponent(u.email) %>">Email</a>
                 <form method="post" action="/admin3119Musa/users/<%= u.id %>/reset" class="inline" onsubmit="return confirm('Email <%= u.email %> a one-hour password reset link?');">
                   <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <%- keepView() %>
                   <button class="btn btn-ghost btn-xs" type="submit">Reset password</button>
                 </form>
                 <% if (isProUser(u)) { %>
                 <form method="post" action="/admin3119Musa/users/<%= u.id %>/plan" class="inline" onsubmit="return confirm('Revoke FirmLedger Pro from this user? Listing perks and full-details access end immediately.');">
                   <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                   <input type="hidden" name="plan_action" value="revoke">
+                  <%- keepView() %>
                   <button class="btn btn-danger btn-xs" type="submit">Revoke Pro</button>
                 </form>
                 <% } else { %>
                 <form method="post" action="/admin3119Musa/users/<%= u.id %>/plan" class="inline">
                   <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                   <input type="hidden" name="plan_action" value="grant">
+                  <%- keepView() %>
                   <button class="btn btn-accent btn-xs" type="submit">Grant 30d</button>
                 </form>
                 <form method="post" action="/admin3119Musa/users/<%= u.id %>/plan" class="inline">
                   <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                   <input type="hidden" name="plan_action" value="lifetime">
+                  <%- keepView() %>
                   <button class="btn btn-ghost btn-xs" type="submit">Lifetime</button>
                 </form>
                 <% } %>
                 <% if (u.suspended) { %>
                 <form method="post" action="/admin3119Musa/users/<%= u.id %>/unsuspend" class="inline">
                   <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <%- keepView() %>
                   <button class="btn btn-ghost btn-xs" type="submit">Unsuspend</button>
                 </form>
                 <% } else { %>
                 <form method="post" action="/admin3119Musa/users/<%= u.id %>/suspend" class="inline" onsubmit="return confirm('Suspend this user? Sign-in is blocked and sessions revoked.');">
                   <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <%- keepView() %>
                   <button class="btn btn-danger btn-xs" type="submit">Suspend</button>
                 </form>
                 <% } %>
                 <form method="post" action="/admin3119Musa/users/<%= u.id %>/delete" class="inline" onsubmit="return confirm('Permanently delete <%= u.name %> (<%= u.email %>) and everything tied to this account — sessions, tickets, claims, payment history — removing them from sign-in? The ledgers (listings) stay. This cannot be undone.');">
                   <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <%- keepView() %>
                   <button class="btn btn-danger btn-xs" type="submit" style="background:#7F1D1D;border-color:#7F1D1D">Delete</button>
                 </form>
               </td>
             </tr>
           <% }) %>
-          <% if (!users.length) { %><tr><td colspan="6" class="muted" style="text-align:center;padding:2rem">No users yet.</td></tr><% } %>
+          <% if (!users.length) { %>
+            <tr><td colspan="6" class="muted" style="text-align:center;padding:2rem">
+              <% if (usersQuery || usersFilter) { %>No users match <% if (usersQuery) { %>“<%= usersQuery %>”<% } %><% if (usersFilter) { %><%= usersQuery ? ' with' : 'in' %> this filter<% } %>. <a href="/admin3119Musa/users">Clear</a><% } else { %>No users yet.<% } %>
+            </td></tr>
+          <% } %>
         </tbody>
       </table>
     </div>

@@ -5,7 +5,7 @@ const catLib = require('../lib/categories');
 const graphLib = require('../lib/graph');
 const { ICONS } = require('../lib/socialicons');
 const {
-  truncate, escXml, siteUrl, isEmail, slugify, fmtDate,
+  truncate, escXml, siteUrl, isEmail, slugify, fmtDate, isPublicBaseUrl,
 } = require('../lib/util');
 const { getIndexNowKey } = require('../lib/indexing');
 const nl = require('../lib/newsletter');
@@ -467,6 +467,17 @@ router.get('/api/docs', (req, res) => {
       title: 'API documentation — FirmLedger API v1',
       description: 'Authentication, rate limits, error catalogue and endpoint reference for the FirmLedger REST API — available with FirmLedger Pro.',
       canonical: siteUrl('/api/docs'),
+      breadcrumbs: [{ name: 'Home', url: siteUrl('/') }, { name: 'API', url: siteUrl('/api') }, { name: 'Documentation', url: siteUrl('/api/docs') }],
+      jsonld: {
+        '@context': 'https://schema.org',
+        '@type': 'TechArticle',
+        headline: 'FirmLedger REST API v1 — documentation',
+        description: 'Authentication, rate limits, error catalogue and endpoint reference for the FirmLedger REST API.',
+        url: siteUrl('/api/docs'),
+        proficiencyLevel: 'Intermediate',
+        dependencies: 'An HTTPS-capable client and a FirmLedger Pro API key.',
+        isPartOf: { '@type': 'WebSite', name: 'FirmLedger', url: siteUrl('/') },
+      },
     },
     limits: {
       READ_RPM: lim.READ_RPM, WRITE_RPM: lim.WRITE_RPM, GLOBAL_WRITE_RPM: lim.GLOBAL_WRITE_RPM,
@@ -497,6 +508,7 @@ router.get('/privacy', (req, res) => {
       title: 'Privacy Policy — FirmLedger',
       description: 'How FirmLedger collects, uses, stores and protects personal and business data across the directory, claim verification and accounts.',
       canonical: siteUrl('/privacy'),
+      breadcrumbs: [{ name: 'Home', url: siteUrl('/') }, { name: 'Privacy Policy', url: siteUrl('/privacy') }],
     },
   });
 });
@@ -507,6 +519,7 @@ router.get('/terms', (req, res) => {
       title: 'Terms of Use — FirmLedger',
       description: 'The terms governing use of the FirmLedger directory, listing submissions, ownership verification and related services.',
       canonical: siteUrl('/terms'),
+      breadcrumbs: [{ name: 'Home', url: siteUrl('/') }, { name: 'Terms of Use', url: siteUrl('/terms') }],
     },
   });
 });
@@ -690,6 +703,21 @@ router.get('/jobs', (req, res) => {
 
 /* ---------------- SEO endpoints ---------------- */
 router.get('/robots.txt', (req, res) => {
+  /* Dev/staging hosts (unset BASE_URL, localhost, .test, private IP) are never indexed.
+     Override with FORCE_INDEXABLE=1. */
+  if (!isPublicBaseUrl()) {
+    res.type('text/plain').send(
+      [
+        'User-agent: *',
+        'Disallow: /',
+        '',
+        `# This host is not configured as the public site yet (BASE_URL=${process.env.BASE_URL || 'unset'}).`,
+        '# Set BASE_URL to your public https origin in .env and restart to open the site to crawlers.',
+        '',
+      ].join('\n')
+    );
+    return;
+  }
   res.type('text/plain').send(
     [
       'User-agent: *',
@@ -759,7 +787,7 @@ router.get('/sitemaps/static.xml', (req, res) => {
     { loc: siteUrl('/terms'), changefreq: 'yearly', priority: '0.2' },
     { loc: siteUrl('/blog'), changefreq: 'weekly', priority: '0.6' },
     { loc: siteUrl('/jobs'), changefreq: 'daily', priority: '0.7' },
-    { loc: siteUrl('/claim'), changefreq: 'monthly', priority: '0.5' },
+    { loc: siteUrl('/api/docs'), changefreq: 'monthly', priority: '0.6' },
     { loc: siteUrl('/register'), changefreq: 'yearly', priority: '0.4' },
   ];
   for (const p of db.prepare("SELECT slug, updated_at, published_at, status FROM blog_posts WHERE status='published'").all()) {

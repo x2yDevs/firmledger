@@ -391,13 +391,38 @@ img.avatar { object-fit: contain; padding: 5px; background: var(--surface); bord
 
 /* ---------- admin ---------- */
 .admin-bar { background: var(--navy); }
-.admin-bar-in { display: flex; align-items: center; justify-content: space-between; }
-.admin-tabs { display: flex; gap: 4px; overflow-x: auto; }
-.admin-tabs a { color: #B9C6DC; font: 500 13px/1 var(--fb); padding: 15px 13px; white-space: nowrap; border-bottom: 2px solid transparent; }
+/* Tabs scroll, the lock button is pinned to the right and never squeezed out. */
+.admin-bar-in { display: flex; align-items: stretch; justify-content: space-between; gap: 12px; min-width: 0; }
+.admin-tabs { display: flex; gap: 4px; overflow-x: auto; flex: 1 1 auto; min-width: 0; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.22) transparent; }
+.admin-tabs a { display: inline-flex; align-items: center; color: #B9C6DC; font: 500 13px/1 var(--fb); padding: 15px 13px; white-space: nowrap; border-bottom: 2px solid transparent; }
 .admin-tabs a:hover, .admin-tabs a.active { color: #fff; }
 .admin-tabs a.active { border-bottom-color: #5B8CFF; }
 .admin-bar .btn-ghost { background: transparent; color: #B9C6DC; border-color: rgba(255,255,255,.25); }
 .admin-bar .btn-ghost:hover { border-color: #fff; color: #fff; }
+/* Lock console — its own slot, vertically centred against the tab row */
+.admin-logout { flex: 0 0 auto; margin: 0; display: flex; align-items: center; gap: 8px; padding-left: 12px; border-left: 1px solid rgba(255,255,255,.14); }
+.admin-logout .btn { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+.admin-logout .btn svg { opacity: .85; }
+@media (max-width: 760px) {
+  .admin-bar-in { flex-wrap: wrap; gap: 0; }
+  .admin-tabs { width: 100%; flex: 1 1 100%; }
+  .admin-logout { width: 100%; justify-content: flex-end; padding: 8px 0 10px; border-left: 0; border-top: 1px solid rgba(255,255,255,.12); }
+}
+
+/* ---------- console search / user search (admin) ---------- */
+.admin-search { max-width: 720px; margin: 0 auto 14px; }
+.admin-search .admin-search-x { flex: 0 0 auto; height: auto; padding: .55rem .75rem; border-radius: .375rem; font-size: 17px; line-height: 1; color: var(--muted); background: transparent; }
+.admin-search .admin-search-x:hover { color: var(--ink); border-color: var(--ink); }
+.admin-search + .admin-filter-tabs { margin: 0 0 22px; }
+mark { background: #FBF0CB; color: inherit; border-radius: 3px; padding: 0 1px; }
+.sg-more { margin: 8px 0 0; font: 500 12px/1 var(--fm); }
+.sg-more a { color: var(--accent2); }
+.backup-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 14px; margin-bottom: 1.4rem; }
+/* Standalone field caption — same type as .form label > span, usable outside .form */
+.fld-cap { display: block; font: 600 13px/1.4 var(--fb); margin-bottom: 8px; color: var(--ink); }
+.fld-cap small { color: var(--muted); font-weight: 400; }
+/* Suggestions dropdown below a .search-hero must clear the field instead of overlapping it */
+.suggest-box.search-suggest .suggest-list { top: calc(100% + 6px); }
 .stat-cards { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; }
 @media(max-width:980px) { .stat-cards { grid-template-columns: repeat(3, 1fr); } }
 @media(max-width:640px) { .stat-cards { grid-template-columns: 1fr 1fr; } }
@@ -1230,10 +1255,118 @@ img.logo-tile { object-fit: contain; padding: 4px; background: #fff; border: 1px
 }
 
 /* ================= r27: health / protection / promos / maintenance ================= */
+/* ================= r28: design-system pieces referenced by views but never defined ================= */
+
+/* Page eyebrow above a title — same type as .klabel, works on light and dark bands */
+.kicker { font: 500 11px/1 var(--fm); letter-spacing: .18em; text-transform: uppercase; color: var(--accent); display: inline-flex; align-items: center; gap: 10px; }
+.kicker::before { content: ""; width: 24px; height: 1px; background: var(--accent); }
+.kicker-center { justify-content: center; }
+.kicker-center::before { display: none; }
+
+/* Display headline used by hero / closing-CTA titles */
+.h-display { font-family: var(--fd); font-weight: 700; letter-spacing: -.022em; line-height: 1.06; }
+h2.h-display { font-size: clamp(1.9rem, 3.4vw, 2.7rem); }
+
+/* Closing band on /pricing and /api/docs — mirrors the .band treatment */
+.cta-band { background: var(--navy); color: #DCE4F0; border-block: 1px solid var(--hair); text-align: center; }
+.cta-band .container { padding-block: clamp(56px, 7vw, 88px); }
+.cta-band h2 { color: #fff; }
+.cta-band .lede { color: #9FB0C8; margin: 0 auto 2rem; }
+.cta-band .kicker, .cta-band .klabel { color: #8AB4F8; }
+.cta-band .kicker::before, .cta-band .klabel::before { background: #8AB4F8; }
+
+/* Light button for dark bands */
+.btn-light { background: #fff; color: var(--navy); border-color: #fff; }
+.btn-light:hover { background: var(--paper); border-color: var(--paper); color: var(--ink); transform: translateY(-1px); }
+.cta-band .btn-ghost { background: transparent; color: #DCE4F0; border-color: rgba(255,255,255,.4); }
+.cta-band .btn-ghost:hover { color: #fff; border-color: #fff; background: transparent; }
+
+/* Field wrapper used across dashboard + admin forms: caption sits above the control */
+.fl { display: block; margin-bottom: 16px; }
+.fl > span { display: block; font: 600 13px/1.4 var(--fb); margin-bottom: 8px; color: var(--ink); }
+.fl > span small { color: var(--muted); font-weight: 400; }
+.fl > .input, .fl > textarea, .fl > select { width: 100%; }
+
+/* Panels used by the security / support pages */
+.card { border: 1px solid var(--hair); border-radius: var(--r); background: var(--surface); }
+.card-body { padding: 22px; }
+
+/* ---------- centering: single-column content centres itself at every width ---------- */
+/* A page's own search field is a centred column, never left-hugging in a wide container.
+   Scoped to page bodies so the header search (a flex item) keeps its own placement. */
+.section-tight .search-hero, .page-pad .search-hero, .page-head .search-hero { margin-inline: auto; }
+.admin-search { margin-inline: auto; }
+/* Any deliberately narrow block opts in with .center-col */
+.center-col { margin-inline: auto; }
+
+/* Two labelled controls side by side (same rhythm as .form-two) */
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+.form-row > label { margin-bottom: 16px; }
+@media (max-width: 640px) { .form-row { grid-template-columns: 1fr; } }
+
+/* Enrollment QR block — centred, quiet frame, always scannable on the light card */
+.qr-card { text-align: center; }
+.qr-card .form-section { text-align: left; }
+.qr-img { display: block; margin: 6px auto 14px; width: 240px; max-width: 100%; height: auto; padding: 10px; background: #fff; border: 1px solid var(--hair); border-radius: 12px; }
+.qr-card .token-box { text-align: left; }
+
 .maint-hero { min-height: 58vh; }
 @media (max-width: 1100px) {
   .stat-cards[style*="repeat(5"] { grid-template-columns: repeat(3, 1fr) !important; }
 }
 @media (max-width: 640px) {
   .stat-cards[style*="repeat(5"] { grid-template-columns: 1fr 1fr !important; }
+}
+
+/* ================= r29: legal documents — one centred column on every screen ================= */
+/* /terms and /privacy used to hug the left edge of the 1200px container, leaving a wide empty
+   gutter on desktop. The whole document (heading row + body) now shares one centred measure at
+   every width; the existing <=760px rules keep the mobile treatment on top of it. */
+.legal-doc { max-width: 860px; margin-inline: auto; }
+.legal-doc .legal-body { max-width: 100%; }
+.legal-doc .sec-head { margin-bottom: clamp(20px, 3vw, 30px); }
+.legal-doc .sec-head .l { max-width: 100%; }
+
+/* ================= r30: directory + every page uses the screen it is on, centred, never squeezed ================= */
+/* Directory and category landing pages run edge-to-edge up to 1760px with symmetric gutters,
+   so a wide monitor shows more records instead of more empty margin. */
+.container-wide {
+  /* retune the ceiling once, globally: `:root { --wide-max: 2100px }` (or lower it for a tighter site).
+     Declared as a fallback here, not on this rule, so the :root value is never shadowed. */
+  max-width: min(var(--wide-max, 1760px), 100%);
+  margin-inline: auto;                   /* equal gutters, centred at every width */
+  padding-inline: clamp(18px, 3.2vw, 46px);
+}
+/* Large screens: the standard measure steps up too — still centred, gutters stay equal on both sides. */
+@media (min-width: 1500px) { .container { max-width: 1340px; } }
+
+/* Result cards re-flow by themselves: more columns on wide screens, never one stretched card at
+   tablet width, never a cramped one — and min(100%,268px) keeps phones free of sideways scroll. */
+.list-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 268px), 1fr)); gap: clamp(14px, 1.2vw, 20px); }
+.l-card { min-width: 0; }
+.l-top > div { min-width: 0; }
+.l-name { overflow-wrap: anywhere; }
+
+/* Filter row: keyword keeps the largest share, the selects shrink with the screen instead of
+   clipping; tablet gets a 2-up row and phones one control per line. */
+.filters { grid-template-columns: minmax(0, 1.7fr) repeat(4, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 980px) { .filters { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 520px) { .filters { grid-template-columns: 1fr; } }
+
+/* List view of the directory: tracks may shrink below their content, so a long company name can
+   never push the page sideways; every cell can break. */
+.rows-head, .row-line { grid-template-columns: minmax(180px, 2.2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, .85fr) minmax(0, .7fr); }
+.row-line > span { min-width: 0; overflow-wrap: anywhere; }
+
+/* Count bar + view toggle centre themselves on phones instead of splitting to opposite edges. */
+@media (max-width: 640px) {
+  .results-bar { justify-content: center; text-align: center; }
+  .results-bar .view-toggle { margin-inline: auto; }
+  .results-line { text-align: center; }
+}
+
+/* Three-up card rows used to jump straight from 3 columns to 1 on tablets — one 2-up step keeps
+   the measure balanced on both sides instead of a wide empty third. */
+@media (max-width: 1060px) and (min-width: 721px) {
+  .methods, .feature-grid, .api-notes { grid-template-columns: 1fr 1fr; }
 }

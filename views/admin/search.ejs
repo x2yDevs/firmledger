@@ -1,85 +1,156 @@
 <%- include('../partials/top') %>
 <%- include('../partials/adminnav') %>
 
+<%
+  /* Console search — same layout language as the public /search page:
+     .search-hero bar, .search-count line, .search-groups of .search-row results. */
+  const query = String(q || '');
+  const qlc = query.toLowerCase();
+  const escAttr = (x) => String(x == null ? '' : x).replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+  /* Highlight the matched term, always HTML-escaping every fragment. */
+  const hl = (val) => {
+    const s = String(val == null ? '' : val);
+    if (!qlc) return escAttr(s);
+    let parts;
+    try { parts = s.split(new RegExp('(' + query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'ig')); }
+    catch { return escAttr(s); }
+    return parts.map((p) => (p.toLowerCase() === qlc ? `<mark>${escAttr(p)}</mark>` : escAttr(p))).join('');
+  };
+  const r = results || { users: [], listings: [], claims: [], tickets: [], posts: [] };
+  const total = r.users.length + r.listings.length + r.claims.length + r.tickets.length + r.posts.length;
+  const searching = query.trim().length >= 2;
+  const loc = (l) => [l.city, l.country].filter(Boolean).join(', ') || '—';
+%>
+
 <section class="section-tight">
   <div class="container">
     <div class="section-head">
-      <h2>Search the console</h2>
+      <div>
+        <p class="klabel">Console search</p>
+        <h2>Search the console</h2>
+        <p class="muted" style="font-size:14px;margin-top:4px">One query across users, listings, claims, tickets and blog posts.</p>
+      </div>
+      <span class="idx">SEARCH</span>
     </div>
-    <form class="form" method="get" action="/admin3119Musa/search" style="max-width:640px;margin-bottom:1.6rem">
-      <label><span>Users, listings, claims, tickets, blog</span>
-        <div class="search-hero">
-          <input class="input search-hero-in" type="search" name="q" value="<%= q || '' %>" placeholder="Name, email, slug, ticket ref…" maxlength="80" autofocus>
-          <button class="btn btn-gold" type="submit">Search</button>
-        </div>
-      </label>
+
+    <form class="search-hero admin-search" method="get" action="/admin3119Musa/search" role="search">
+      <input class="input search-hero-in" type="search" name="q" value="<%= query %>" placeholder="Name, email, slug, ticket ref…" aria-label="Search the admin console" maxlength="80" autocomplete="off" autofocus>
+      <button class="btn btn-gold" type="submit">Search</button>
+      <% if (query) { %><a class="btn btn-ghost admin-search-x" href="/admin3119Musa/search" title="Clear the query" aria-label="Clear the query">&times;</a><% } %>
     </form>
 
-    <% if (!q || q.length < 2) { %>
-      <p class="muted">Type at least two characters.</p>
+    <% if (!searching) { %>
+      <p class="search-count"><%= query ? `“${query}” is too short — type at least two characters.` : 'Type at least two characters to search every area of the console — press / anywhere to jump here.' %></p>
+      <div class="search-groups">
+        <section class="search-group">
+          <h3>Jump to <span class="sg-n">6</span></h3>
+          <a class="search-row" href="/admin3119Musa/users"><span class="ph">U</span><span class="sr-t"><b>Users</b><small>Accounts, plans, suspensions, backups</small></span><span class="sr-arrow">&rsaquo;</span></a>
+          <a class="search-row" href="/admin3119Musa/listings"><span class="ph">L</span><span class="sr-t"><b>Listings</b><small>Moderation queue and every record</small></span><span class="sr-arrow">&rsaquo;</span></a>
+          <a class="search-row" href="/admin3119Musa/claims"><span class="ph">C</span><span class="sr-t"><b>Claims</b><small>Ownership verification requests</small></span><span class="sr-arrow">&rsaquo;</span></a>
+          <a class="search-row" href="/admin3119Musa/tickets"><span class="ph">T</span><span class="sr-t"><b>Tickets</b><small>Support conversations</small></span><span class="sr-arrow">&rsaquo;</span></a>
+          <a class="search-row" href="/admin3119Musa/blog"><span class="ph">B</span><span class="sr-t"><b>Blog</b><small>Published and draft posts</small></span><span class="sr-arrow">&rsaquo;</span></a>
+          <a class="search-row" href="/admin3119Musa/settings"><span class="ph">S</span><span class="sr-t"><b>Settings</b><small>Site, mail, payments, two-factor</small></span><span class="sr-arrow">&rsaquo;</span></a>
+        </section>
+      </div>
     <% } else { %>
-      <% const r = results; %>
-      <p class="search-count"><%= r.users.length + r.listings.length + r.claims.length + r.tickets.length + r.posts.length %> matches for “<%= q %>”</p>
+      <p class="search-count"><%= total %> match<%= total === 1 ? '' : 'es' %> for “<%= query %>” · up to 20 per area</p>
+
+      <% if (!total) { %>
+        <div class="empty-state">
+          <h3>Nothing matched “<%= query %>”</h3>
+          <p>Try a shorter fragment — an email prefix, a listing slug, or a ticket reference such as <code>FL-1042</code>.</p>
+          <a class="btn btn-ghost" href="/admin3119Musa/search">Start over</a>
+        </div>
+      <% } %>
 
       <div class="search-groups">
-        <div class="search-group">
+        <% if (r.users.length) { %>
+        <section class="search-group">
           <h3>Users <span class="sg-n"><%= r.users.length %></span></h3>
-          <% if (!r.users.length) { %><p class="muted">None.</p><% } %>
           <% r.users.forEach(function (u) { %>
             <a class="search-row" href="/admin3119Musa/users/<%= u.id %>">
-              <span class="ph"><%= (u.name || 'U').slice(0,1).toUpperCase() %></span>
-              <span class="sr-t"><b><%= u.name %></b><small><%= u.email %><%= u.suspended ? ' · suspended' : '' %></small></span>
-              <span class="sr-arrow">→</span>
+              <span class="ph"><%= initials(u.name) %></span>
+              <span class="sr-t"><b><%- hl(u.name) %></b><small><%- hl(u.email) %><%= u.suspended ? ' · suspended' : '' %></small></span>
+              <span class="sr-arrow">&rsaquo;</span>
             </a>
           <% }) %>
-        </div>
-        <div class="search-group">
+          <p class="sg-more"><a href="/admin3119Musa/users?q=<%= encodeURIComponent(query) %>">Open these in Users &rsaquo;</a></p>
+        </section>
+        <% } %>
+
+        <% if (r.listings.length) { %>
+        <section class="search-group">
           <h3>Listings <span class="sg-n"><%= r.listings.length %></span></h3>
-          <% if (!r.listings.length) { %><p class="muted">None.</p><% } %>
           <% r.listings.forEach(function (l) { %>
             <a class="search-row" href="/admin3119Musa/listings/<%= l.id %>/edit">
-              <span class="ph"><%= l.name.slice(0,1) %></span>
-              <span class="sr-t"><b><%= l.name %></b><small><%= l.status %><%= l.claimed ? ' · claimed' : '' %> · <%= l.category %></small></span>
-              <span class="sr-arrow">→</span>
+              <% if (l.logo_url) { %><img src="<%= l.logo_url %>" alt="" width="34" height="34" loading="lazy"><% } else { %><span class="ph"><%= initials(l.name) %></span><% } %>
+              <span class="sr-t"><b><%- hl(l.name) %></b><small><%= l.status %><%= l.claimed ? ' · claimed' : '' %> · <%= l.category %> · <%= loc(l) %></small></span>
+              <span class="sr-arrow">&rsaquo;</span>
             </a>
           <% }) %>
-        </div>
-        <div class="search-group">
+          <p class="sg-more"><a href="/admin3119Musa/listings?q=<%= encodeURIComponent(query) %>">Open these in Listings &rsaquo;</a></p>
+        </section>
+        <% } %>
+
+        <% if (r.claims.length) { %>
+        <section class="search-group">
           <h3>Claims <span class="sg-n"><%= r.claims.length %></span></h3>
-          <% if (!r.claims.length) { %><p class="muted">None.</p><% } %>
           <% r.claims.forEach(function (c) { %>
             <a class="search-row" href="/admin3119Musa/claims">
               <span class="ph">C</span>
-              <span class="sr-t"><b><%= c.listing_name %></b><small><%= c.user_email %> · <%= c.method %> · <%= c.status %></small></span>
-              <span class="sr-arrow">→</span>
+              <span class="sr-t"><b><%- hl(c.listing_name) %></b><small><%= c.user_email %> · <%= c.method %><%= c.domain ? ' · ' + c.domain : '' %> · <%= c.status %></small></span>
+              <span class="sr-arrow">&rsaquo;</span>
             </a>
           <% }) %>
-        </div>
-        <div class="search-group">
+        </section>
+        <% } %>
+
+        <% if (r.tickets.length) { %>
+        <section class="search-group">
           <h3>Tickets <span class="sg-n"><%= r.tickets.length %></span></h3>
-          <% if (!r.tickets.length) { %><p class="muted">None.</p><% } %>
           <% r.tickets.forEach(function (t) { %>
             <a class="search-row" href="/admin3119Musa/tickets/<%= t.id %>">
               <span class="ph">T</span>
-              <span class="sr-t"><b><%= t.subject %></b><small><%= t.ref %> · <%= t.user_email %> · <%= t.status %></small></span>
-              <span class="sr-arrow">→</span>
+              <span class="sr-t"><b><%- hl(t.subject) %></b><small><%- hl(t.ref) %> · <%= t.user_email %> · <%= t.status %></small></span>
+              <span class="sr-arrow">&rsaquo;</span>
             </a>
           <% }) %>
-        </div>
-        <div class="search-group">
+          <p class="sg-more"><a href="/admin3119Musa/tickets">All tickets &rsaquo;</a></p>
+        </section>
+        <% } %>
+
+        <% if (r.posts.length) { %>
+        <section class="search-group">
           <h3>Blog <span class="sg-n"><%= r.posts.length %></span></h3>
-          <% if (!r.posts.length) { %><p class="muted">None.</p><% } %>
           <% r.posts.forEach(function (p) { %>
             <a class="search-row" href="/admin3119Musa/blog/<%= p.id %>/edit">
               <span class="ph">B</span>
-              <span class="sr-t"><b><%= p.title %></b><small>/blog/<%= p.slug %> · <%= p.status %></small></span>
-              <span class="sr-arrow">→</span>
+              <span class="sr-t"><b><%- hl(p.title) %></b><small>/blog/<%- hl(p.slug) %> · <%= p.status %></small></span>
+              <span class="sr-arrow">&rsaquo;</span>
             </a>
           <% }) %>
-        </div>
+          <p class="sg-more"><a href="/admin3119Musa/blog">All posts &rsaquo;</a></p>
+        </section>
+        <% } %>
       </div>
     <% } %>
   </div>
 </section>
+
+<script>
+(function () {
+  /* "/" focuses the console search from anywhere; results refine as you type. */
+  var box = document.querySelector('.admin-search input[type="search"]');
+  if (!box) return;
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return;
+    var el = document.activeElement;
+    if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
+    e.preventDefault(); box.focus(); box.select();
+  });
+})();
+</script>
 
 <%- include('../partials/bottom') %>
