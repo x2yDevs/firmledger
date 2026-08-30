@@ -162,6 +162,25 @@ the request that triggered it.
 | `data/uploads/` | empty | 50 MB – 5 GB (logos + ticket files) |
 | Peak memory | ~150 MB Node heap + SQLite cache | ~300–500 MB |
 | CPU per request | near-zero for page reads | "listing auto-fill" runs remote image/HTML fetches — the heaviest task |
+| Front-end payload per visitor | **one stylesheet + one small script** | ~29 KB raw / ~6.9 KB gzip of HTML for the home page, 21–35 KB raw for listing/directory pages; `app.css` 106 KB raw → **23 KB gzip**, `main.js` 15 KB → 4.9 KB gzip, `graph.js` 5.3 KB (listing profiles only) |
+
+**There is no client-side framework and no build artifact**: pages are complete HTML from the
+EJS templates, so a cold visitor fetches HTML + CSS + ~20 KB of JS and nothing else. No CDN
+tier, no bundler cache, no source maps to serve. That also means crawler cost equals user cost —
+no second render pass on the search engine's side.
+
+**Static asset serving and cache policy** (`server.js`):
+
+| Path | Handler | Cache header |
+|---|---|---|
+| `/css/*`, `/js/*`, `/assets/*` | `express.static(public)` | `max-age=604800` (7 d) — invalidated only by the `ASSET_V` query string (`/css/app.css?v=<ASSET_V>`) |
+| `/uploads/*` (logos, ticket files) | `express.static(data/uploads)` | `max-age=2592000, immutable` (30 d) |
+| `*.svg` (badges, icons) | same static handler | `max-age=86400` (1 d) |
+| HTML, `/sitemap.xml`, `/feed.xml`, `/api/v1/*` | routers | no store cache — `compression` gzips them per request |
+
+So after a CSS or JS change you bump `ASSET_V` in `server.js` and restart; the old file falls out
+of use on the next page view without waiting for the 7 days. Behind Cloudflare/Nginx you may add a
+longer public cache for `/css`, `/js` and `/assets` — the versioned query string makes that safe.
 
 Logging: `console.log` to stdout (redirect to a file via systemd or `node server.js >
 /var/log/firmledger.log 2>&1`).
@@ -189,7 +208,9 @@ $ npm start
                                                    Restart=always
 ```
 
-Generate a free TLS cert via Caddy or Let's Encrypt. Set `BASE_URL=https://yourdomain`.
+Generate a free TLS cert via Caddy or Let's Encrypt. Set `BASE_URL=https://yourdomain` —
+it is also the switch that lets search engines in: with a localhost or private-IP value the app
+answers `X-Robots-Tag: noindex, follow` and `Disallow: /` on every response.
 
 **C. PaaS (Railway / Render / Fly / Heroku):** build = `npm ci`, start = `npm start`, attach a persistent volume for `data/` and the app bootstraps itself. Set env vars in the dashboard.
 

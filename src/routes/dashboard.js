@@ -1121,7 +1121,7 @@ router.post('/dashboard/delete-account', (req, res) => {
     errors.push('Retype your account name exactly as it appears on your profile.');
   }
   if (phrase.toLowerCase() !== 'delete my account') {
-    errors.push('Type “delete my account” in the confirmation box (copy-paste is disabled).');
+    errors.push('Type “delete my account” in the confirmation box — exactly those three words.');
   }
   const existing = db.prepare(
     "SELECT id FROM deletion_requests WHERE user_id=? AND status='pending'"

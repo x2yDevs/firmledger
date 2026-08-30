@@ -1326,3 +1326,47 @@ h2.h-display { font-size: clamp(1.9rem, 3.4vw, 2.7rem); }
 .legal-doc .legal-body { max-width: 100%; }
 .legal-doc .sec-head { margin-bottom: clamp(20px, 3vw, 30px); }
 .legal-doc .sec-head .l { max-width: 100%; }
+
+/* ================= r30: directory + every page uses the screen it is on, centred, never squeezed ================= */
+/* Directory and category landing pages run edge-to-edge up to 1760px with symmetric gutters,
+   so a wide monitor shows more records instead of more empty margin. */
+.container-wide {
+  /* retune the ceiling once, globally: `:root { --wide-max: 2100px }` (or lower it for a tighter site).
+     Declared as a fallback here, not on this rule, so the :root value is never shadowed. */
+  max-width: min(var(--wide-max, 1760px), 100%);
+  margin-inline: auto;                   /* equal gutters, centred at every width */
+  padding-inline: clamp(18px, 3.2vw, 46px);
+}
+/* Large screens: the standard measure steps up too — still centred, gutters stay equal on both sides. */
+@media (min-width: 1500px) { .container { max-width: 1340px; } }
+
+/* Result cards re-flow by themselves: more columns on wide screens, never one stretched card at
+   tablet width, never a cramped one — and min(100%,268px) keeps phones free of sideways scroll. */
+.list-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 268px), 1fr)); gap: clamp(14px, 1.2vw, 20px); }
+.l-card { min-width: 0; }
+.l-top > div { min-width: 0; }
+.l-name { overflow-wrap: anywhere; }
+
+/* Filter row: keyword keeps the largest share, the selects shrink with the screen instead of
+   clipping; tablet gets a 2-up row and phones one control per line. */
+.filters { grid-template-columns: minmax(0, 1.7fr) repeat(4, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 980px) { .filters { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 520px) { .filters { grid-template-columns: 1fr; } }
+
+/* List view of the directory: tracks may shrink below their content, so a long company name can
+   never push the page sideways; every cell can break. */
+.rows-head, .row-line { grid-template-columns: minmax(180px, 2.2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, .85fr) minmax(0, .7fr); }
+.row-line > span { min-width: 0; overflow-wrap: anywhere; }
+
+/* Count bar + view toggle centre themselves on phones instead of splitting to opposite edges. */
+@media (max-width: 640px) {
+  .results-bar { justify-content: center; text-align: center; }
+  .results-bar .view-toggle { margin-inline: auto; }
+  .results-line { text-align: center; }
+}
+
+/* Three-up card rows used to jump straight from 3 columns to 1 on tablets — one 2-up step keeps
+   the measure balanced on both sides instead of a wide empty third. */
+@media (max-width: 1060px) and (min-width: 721px) {
+  .methods, .feature-grid, .api-notes { grid-template-columns: 1fr 1fr; }
+}

@@ -12,7 +12,7 @@ Stack: Node.js + Express · EJS server-rendered views · SQLite (WAL) · no fron
 
 | Area | What it does |
 |---|---|
-| Directory | Search + filters (type, category, country, verified), sort, pagination, list/grid view toggle, name suggest (`/suggest.json`) |
+| Directory | Search + filters (type, category, country, verified), sort, pagination, list/grid view toggle, name suggest (`/suggest.json`) — **fluid full-screen measure** on `/directory` and every `/directory/c/…` landing page: the card grid re-flows 1→5 columns with the window, the gutters stay equal on both sides, and nothing ever hugs one edge |
 | SEO landing pages | `/directory/c/<category>` and `/directory/c/<category>-in-<location>` — unique titles, JSON-LD `CollectionPage`+`ItemList`, breadcrumbs, `noindex` when empty, auto-sitemapped |
 | Listing profiles | JSON-LD `Organization` + `FAQPage`, OG/Twitter cards, confidence meter, FirmLedger Score breakdown, key people + socials, ecosystem groups, technology radar + hiring signals, FAQs, competitors, related lists, removal requests |
 | Wikipedia enrichment | One-click fetch resolves the real Wikipedia article + Wikidata entity — refuses to invent data when no genuine article exists |
@@ -66,6 +66,72 @@ Local smoke tour:
 - `/docs`, `/privacy`, `/terms`, `/blog`, `/search` — the built-in content
 
 Stop with `Ctrl+C`. Data persists in `data/` between runs.
+
+---
+
+## 2b. Layout & design conventions (worth 2 minutes before editing a view)
+
+There is no build step and no CSS framework: one stylesheet, **`public/css/app.css`**
+(~106 KB raw, ~23 KB gzipped), organised as an original base followed by numbered
+revision blocks — currently `r2, r19 … r23, r25 … r30`. Each block only *adds* rules for
+classes the views already use or introduces a new piece; nothing is renamed, so a block can
+be read as a changelog and deleted safely if you disagree with it.
+
+**Horizontal layout — pick a container, never a margin.**
+
+| Class | Measure | Use for |
+|---|---|---|
+| `.container` | 1200 px (1340 px on screens ≥1500 px), `margin-inline: auto` | almost every page band and section |
+| `.container-wide` | `min(var(--wide-max, 1760px), 100%)`, centred, gutters `clamp(18px, 3.2vw, 46px)` | the directory + `/directory/c/…` landing pages, and anything else that should use the whole screen |
+| `.container-narrow` | 800 px, centred | single-column flows: auth, claims, security, upgrade |
+| `.center-col` | no width of its own — only `margin-inline: auto` | an opt-in centring utility for a deliberately narrow block (a `side-card`, a form) inside a wide container |
+
+Because every one of those centres itself, a page is symmetric at 320 px and at 3440 px:
+there is no "left-hugging content with a dead right gutter" state, and no page needs a
+horizontal scrollbar. Grids inside them use `auto-fill` + `minmax()` (`.list-grid` →
+`minmax(min(100%, 268px), 1fr)`), so they gain columns instead of stretching or squeezing;
+grid children carry `min-width: 0` + `overflow-wrap: anywhere` so a long company name can
+never push the page sideways. Mobile-only centring overrides live in the
+`@media (max-width: 760px)` block.
+
+**Form fields have one shape.** Inside `<form class="form form-card">`:
+
+```ejs
+<div class="form-section">Group title</div>
+<label class="fl"><span>Caption <small>optional hint</small> <small class="count" data-count-for="field">0/80</small></span>
+  <input class="input" name="field" maxlength="80" data-count>
+</label>
+<div class="form-two">…two paired fields…</div>   <!-- .form-row for the same rhythm in admin panels -->
+<p class="form-note">…context under the group…</p>
+<div class="form-actions"><button class="btn btn-primary">Save</button><a class="btn btn-ghost" href="…">Cancel</a></div>
+```
+
+`.fl` puts the caption above the control, `data-count` + `.count` wire the live
+`0/N` counter in `public/js/main.js`, and `.form-two` / `.form-row` collapse to one column
+under ~640 px. Do not put `<p>` hints inside a `<label>`; do not disable paste in
+confirmation fields — retyping is the check, blocking the clipboard is not.
+
+**Two rules that have caused real bugs, so they are now policy:**
+
+1. **Every `<form method="post">` carries the CSRF field.** `csrfProtect` keys off the
+   session cookie, not the page, so a pre-auth form (login, register, forgot/reset,
+   removal request, admin gate) rendered for a *signed-in* visitor 403s without it.
+   Snippet: `<% if (typeof csrfToken !== 'undefined' && csrfToken) { %><input type="hidden" name="_csrf" value="<%= csrfToken %>"><% } %>`.
+   The repo convention is 117/117 POST forms carrying it — keep that number whole.
+2. **`<%= %>` escapes, so never put markup or entities inside it.**
+   `<%= x ? 'Upgrade &rsaquo;' : 'Manage &rsaquo;' %>` prints `Upgrade &amp;rsaquo;`;
+   write `<%= x ? 'Upgrade' : 'Manage' %> &rsaquo;` and keep the entity in the markup.
+   Use `<%- %>` only for HTML you built yourself (e.g. the search `hl()` highlight helper).
+
+**Caching.** `server.js` serves `/public` with a 7-day max-age and appends
+`?v=<%= assetV %>` from `ASSET_V`. Any commit that changes `public/css/app.css` or a file in
+`public/js/` must bump `ASSET_V` — that is the entire cache-invalidation strategy.
+
+**Panels and bands** (all defined, all used by the views): `.side-card`, `.form-card`,
+`.panel`, `.card`/`.card-body`, `.alert alert-ok|err|warn`, `.pill pill-approved|pending|rejected`,
+`.section-head`, `.empty-state`, `.page-head` + `.kicker` + `.h-display` + `.lede`, the dark
+`.band` / `.cta-band` closing sections with `.btn-light`, and `.search-hero` (which must be the
+`<form>` itself — never nested inside a `.form`, or `.form input[type=search]` out-specifies it).
 
 ---
 
@@ -590,12 +656,21 @@ TXT  @  firmledger-verification=flv_…
 The badge renders live from the DB (verified → green "VERIFIED BUSINESS" state, unclaimed → "LISTED PROFILE"), with the FirmLedger monogram, in light or dark themes, and links back to the profile.
 
 ## 9. Honest SEO note
+Every page is complete server-rendered HTML — the directory, listing profiles, docs and legal
+pages need no JavaScript to render or to be crawled (a page is ~21–35 KB raw, ~6–9 KB gzipped,
+plus one 23 KB-gzipped stylesheet). That is the structural reason this app indexes well: what
+Googlebot fetches is what a human sees. There is no hydration step, no client route and no
+`noscript` fallback to maintain.
+
 No platform can guarantee a fixed indexing deadline — crawling is the search engine's decision. FirmLedger does the maximum possible the moment a listing is approved: IndexNow push (Bing/Yandex/DuckDuckGo, typically hours), refreshed sitemap + RSS, per-page structured data, and a re-ping 30 minutes later.
 
 ## 10. Troubleshooter
 
 | Symptom | Fix |
 |---|---|
+| Page looks shifted left, or a section stretches oddly on a big monitor | the block is missing its container class — `.container` / `.container-wide` / `.container-narrow` (or `.center-col` for a narrow card). Never fix it with a one-sided margin |
+| CSS change did not appear | `ASSET_V` in `server.js` was not bumped — static files are cached for 7 days by design |
+| Directory looks empty / `429` while load-testing | the spam throttle answered — that is protection working; raise the limit in Admin → Protection or wait a minute |
 | Gate rejects the admin code | `ADMIN_SECRET` in `.env` doesn't match — check for stray quotes/spaces, restart |
 | 2FA code never accepted | Server clock drift — run `timedatectl status`, enable NTP (`sudo timedatectl set-ntp true`) |
 | Claim verification says domain unreachable | The target website blocks the fetch or is down — verify manually from the server: `curl -I https://domain` |

@@ -1,5 +1,5 @@
 <%- include('partials/top') %>
-<div class="container">
+<div class="container container-wide">
   <nav class="crumb rv" aria-label="Breadcrumb">
     <a href="/">Home</a><span class="sep">/</span><a href="/directory">Directory</a><span class="sep">/</span><a href="/directory/c/<%= cat.slug %>"><%= cat.name %></a><% if (placeName) { %><span class="sep">/</span><span><%= placeName %></span><% } %>
   </nav>
@@ -23,7 +23,7 @@
 </div>
 
 <section class="section-tight" style="padding-top:26px">
-  <div class="container">
+  <div class="container container-wide">
     <% if (listings.length) { %>
     <div class="list-grid">
       <% listings.forEach(function(l){ %>
