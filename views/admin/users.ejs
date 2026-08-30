@@ -60,7 +60,10 @@
 
     <% if (typeof deletionReqs !== 'undefined' && deletionReqs && deletionReqs.length) { %>
       <div class="side-card">
-        <h3>Pending account deletions <span class="pill pill-pending"><%= deletionReqs.length %></span></h3>
+        <div class="section-head" style="margin-bottom:10px">
+          <h3 style="margin:0">Pending account deletions <span class="pill pill-pending"><%= deletionReqs.length %></span></h3>
+          <a class="btn btn-ghost btn-xs" href="/admin3119Musa/users?f=suspended">Suspended accounts &rsaquo;</a>
+        </div>
         <p class="muted" style="margin-bottom:12px">Members asked to delete their account. Deleting emails them first, then permanently removes personal data.</p>
         <div class="table-wrap">
           <table class="table">
@@ -68,7 +71,7 @@
             <tbody>
               <% deletionReqs.forEach(function (d) { %>
                 <tr>
-                  <td><strong><%= d.name %></strong><br><small class="muted"><%= d.email %></small></td>
+                  <td><span class="avatar avatar-sm"><%= (d.name || 'U').slice(0, 1).toUpperCase() %></span> <strong><%- hl(d.name) %></strong><br><small class="muted"><%- hl(d.email) %></small></td>
                   <td><small><%= d.reason %></small><% if (d.improve) { %><div class="score-hint">Could improve: <%= d.improve %></div><% } %></td>
                   <td class="muted"><%= fmtDate(d.created_at) %></td>
                   <td class="ta-right actions-cell">
@@ -103,7 +106,9 @@
         <form method="post" action="/admin3119Musa/users/import" enctype="multipart/form-data" class="form" style="margin:0">
           <input type="hidden" name="_csrf" value="<%= csrfToken %>">
           <%- keepView() %>
-          <label class="fl"><span>Backup file</span><input class="input" type="file" name="backup_file" accept=".firmledger,.json" required style="font-size:0.85rem"></label>
+          <label class="fl"><span>Backup file <small>.firmledger or .json</small></span>
+            <input class="input" type="file" name="backup_file" accept=".firmledger,.json" required style="font-size:0.85rem">
+          </label>
           <button class="btn btn-primary btn-sm" type="submit">Import from .firmledger</button>
         </form>
       </div>

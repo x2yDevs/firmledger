@@ -9,6 +9,7 @@
     </div>
     <% if (errors.length) { %><div class="alert alert-err"><% errors.forEach(function (e) { %><div><%= e %></div><% }) %></div><% } %>
     <form method="post" action="/register" class="form">
+      <% if (typeof csrfToken !== 'undefined' && csrfToken) { %><input type="hidden" name="_csrf" value="<%= csrfToken %>"><% } %>
       <label><span>Full name</span>
         <input type="text" name="name" required autocomplete="name" value="<%= old.name || '' %>">
       </label>

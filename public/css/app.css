@@ -410,7 +410,7 @@ img.avatar { object-fit: contain; padding: 5px; background: var(--surface); bord
 }
 
 /* ---------- console search / user search (admin) ---------- */
-.admin-search { max-width: 720px; margin: 0 0 14px; }
+.admin-search { max-width: 720px; margin: 0 auto 14px; }
 .admin-search .admin-search-x { flex: 0 0 auto; height: auto; padding: .55rem .75rem; border-radius: .375rem; font-size: 17px; line-height: 1; color: var(--muted); background: transparent; }
 .admin-search .admin-search-x:hover { color: var(--ink); border-color: var(--ink); }
 .admin-search + .admin-filter-tabs { margin: 0 0 22px; }
@@ -1255,6 +1255,61 @@ img.logo-tile { object-fit: contain; padding: 4px; background: #fff; border: 1px
 }
 
 /* ================= r27: health / protection / promos / maintenance ================= */
+/* ================= r28: design-system pieces referenced by views but never defined ================= */
+
+/* Page eyebrow above a title — same type as .klabel, works on light and dark bands */
+.kicker { font: 500 11px/1 var(--fm); letter-spacing: .18em; text-transform: uppercase; color: var(--accent); display: inline-flex; align-items: center; gap: 10px; }
+.kicker::before { content: ""; width: 24px; height: 1px; background: var(--accent); }
+.kicker-center { justify-content: center; }
+.kicker-center::before { display: none; }
+
+/* Display headline used by hero / closing-CTA titles */
+.h-display { font-family: var(--fd); font-weight: 700; letter-spacing: -.022em; line-height: 1.06; }
+h2.h-display { font-size: clamp(1.9rem, 3.4vw, 2.7rem); }
+
+/* Closing band on /pricing and /api/docs — mirrors the .band treatment */
+.cta-band { background: var(--navy); color: #DCE4F0; border-block: 1px solid var(--hair); text-align: center; }
+.cta-band .container { padding-block: clamp(56px, 7vw, 88px); }
+.cta-band h2 { color: #fff; }
+.cta-band .lede { color: #9FB0C8; margin: 0 auto 2rem; }
+.cta-band .kicker, .cta-band .klabel { color: #8AB4F8; }
+.cta-band .kicker::before, .cta-band .klabel::before { background: #8AB4F8; }
+
+/* Light button for dark bands */
+.btn-light { background: #fff; color: var(--navy); border-color: #fff; }
+.btn-light:hover { background: var(--paper); border-color: var(--paper); color: var(--ink); transform: translateY(-1px); }
+.cta-band .btn-ghost { background: transparent; color: #DCE4F0; border-color: rgba(255,255,255,.4); }
+.cta-band .btn-ghost:hover { color: #fff; border-color: #fff; background: transparent; }
+
+/* Field wrapper used across dashboard + admin forms: caption sits above the control */
+.fl { display: block; margin-bottom: 16px; }
+.fl > span { display: block; font: 600 13px/1.4 var(--fb); margin-bottom: 8px; color: var(--ink); }
+.fl > span small { color: var(--muted); font-weight: 400; }
+.fl > .input, .fl > textarea, .fl > select { width: 100%; }
+
+/* Panels used by the security / support pages */
+.card { border: 1px solid var(--hair); border-radius: var(--r); background: var(--surface); }
+.card-body { padding: 22px; }
+
+/* ---------- centering: single-column content centres itself at every width ---------- */
+/* A page's own search field is a centred column, never left-hugging in a wide container.
+   Scoped to page bodies so the header search (a flex item) keeps its own placement. */
+.section-tight .search-hero, .page-pad .search-hero, .page-head .search-hero { margin-inline: auto; }
+.admin-search { margin-inline: auto; }
+/* Any deliberately narrow block opts in with .center-col */
+.center-col { margin-inline: auto; }
+
+/* Two labelled controls side by side (same rhythm as .form-two) */
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+.form-row > label { margin-bottom: 16px; }
+@media (max-width: 640px) { .form-row { grid-template-columns: 1fr; } }
+
+/* Enrollment QR block — centred, quiet frame, always scannable on the light card */
+.qr-card { text-align: center; }
+.qr-card .form-section { text-align: left; }
+.qr-img { display: block; margin: 6px auto 14px; width: 240px; max-width: 100%; height: auto; padding: 10px; background: #fff; border: 1px solid var(--hair); border-radius: 12px; }
+.qr-card .token-box { text-align: left; }
+
 .maint-hero { min-height: 58vh; }
 @media (max-width: 1100px) {
   .stat-cards[style*="repeat(5"] { grid-template-columns: repeat(3, 1fr) !important; }

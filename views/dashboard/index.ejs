@@ -113,7 +113,7 @@
 
     <% if (typeof former !== 'undefined' && former && former.length) { %>
       <div class="section-head" style="margin-top:3rem"><h2>Records you submitted</h2></div>
-      <div class="side-card" style="max-width:860px">
+      <div class="side-card center-col" style="max-width:860px">
         <p class="muted" style="margin-bottom:12px">Approved records you submitted that you no longer own. If one of them still carries listing-scoped Pro you paid for, you can ask us to move the remaining time onto a listing you own today.</p>
         <div class="table-wrap">
           <table class="table">
@@ -161,7 +161,7 @@
     <div class="section-head" style="margin-top:3rem">
       <h2>Claim an existing record</h2>
     </div>
-    <div class="side-card" style="max-width:640px">
+    <div class="side-card center-col" style="max-width:640px">
       <p class="muted">Found your business already listed? Claim it by proving domain control — DNS record, meta tag, or the FirmLedger badge.</p>
       <% if (claimable.length) { %>
       <form id="claimPickerForm" method="get" action="/claim/" role="search" onsubmit="event.preventDefault(); var s=document.getElementById('claimSlug'); if(s && s.value) location.href='/claim/'+encodeURIComponent(s.value);" style="margin-top:12px">
@@ -240,7 +240,7 @@
     </div>
 
     <div class="section-head" style="margin-top:3rem"><h2>Your subscription</h2></div>
-    <div class="side-card" style="max-width:640px">
+    <div class="side-card center-col" style="max-width:640px">
       <div class="upgrade-status">
         <div class="us-title">
           <b><% if (accountPro) { %>FirmLedger Pro<span class="pill pill-pro" style="margin-left:8px">ACTIVE</span><% } else { %>Free plan<span class="pill pill-free" style="margin-left:8px">CURRENT</span><% } %></b>
