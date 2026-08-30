@@ -143,6 +143,9 @@ make **no outbound calls** at request time. Rendering stays fast even with no in
   (stored in the `settings` table) is > 6.5 days old, then sends the "new verified
   companies" email to all active subscribers. One boot-time timer at 90 s primes it.
   Optional: delete the interval and drive it from an external cron instead.
+- **Ticket auto-close** — the same hourly tick closes tickets marked Solved for more
+  than 7 days, and open tickets where the last admin reply had no user response for
+  more than 14 days.
 
 Everything else — image resizing, email sends, captures — happens synchronously on
 the request that triggered it.

@@ -1,0 +1,78 @@
+<%- include('../partials/top') %>
+<%- include('../partials/adminnav') %>
+
+<section class="section-tight">
+  <div class="container">
+    <div class="section-head">
+      <h2>System health</h2>
+      <span class="muted">Disk, database, memory, uptime and the last backup — live from this process.</span>
+    </div>
+    <% if (ok) { %><div class="alert alert-ok"><%= ok %></div><% } %>
+    <% if (err) { %><div class="alert alert-err"><%= err %></div><% } %>
+
+    <div class="stat-cards" style="grid-template-columns:repeat(5,1fr)">
+      <div class="stat-card"><span class="stat-num" style="font-size:1.35rem"><%= snap.uptime %></span><span class="stat-label">Process uptime</span></div>
+      <div class="stat-card"><span class="stat-num" style="font-size:1.35rem"><%= snap.memory.rssLabel %></span><span class="stat-label">Node RSS memory</span></div>
+      <div class="stat-card"><span class="stat-num" style="font-size:1.35rem"><%= snap.db.label %></span><span class="stat-label">SQLite database</span></div>
+      <div class="stat-card"><span class="stat-num" style="font-size:1.35rem"><%= snap.data.label %></span><span class="stat-label">data/ folder</span></div>
+      <div class="stat-card"><span class="stat-num" style="font-size:1.35rem"><%= snap.disk.usedPct %>%</span><span class="stat-label">Disk used</span></div>
+    </div>
+
+    <div class="form-card" style="margin-top:22px">
+      <h3 class="form-section">Runtime</h3>
+      <table class="facts">
+        <tr><th>Node</th><td><%= snap.node %> · pid <%= snap.pid %></td></tr>
+        <tr><th>Host</th><td><%= snap.hostname %> · <%= snap.platform %></td></tr>
+        <tr><th>Process uptime</th><td><%= snap.uptime %> (since <%= snap.startedAt.slice(0,16).replace('T',' ') %> UTC)</td></tr>
+        <tr><th>Host uptime</th><td><%= snap.hostUptime %></td></tr>
+        <tr><th>Heap</th><td><%= snap.memory.heapLabel %></td></tr>
+        <tr><th>System memory</th><td><%= snap.memory.systemLabel %></td></tr>
+      </table>
+    </div>
+
+    <div class="form-card">
+      <h3 class="form-section">Storage</h3>
+      <table class="facts">
+        <tr><th>Database</th><td><code><%= snap.db.path %></code> · <%= snap.db.label %></td></tr>
+        <tr><th>data/ (DB + uploads + outbox)</th><td><%= snap.data.label %></td></tr>
+        <tr><th>Disk</th><td><%= snap.disk.freeLabel %> free of <%= snap.disk.totalLabel %> (<%= snap.disk.usedPct %>% used)</td></tr>
+        <tr><th>Last backup</th><td>
+          <% if (snap.lastBackup) { %><b><%= snap.lastBackup.slice(0,16).replace('T',' ') %> UTC</b> · <%= snap.lastBackupAgo %> ago
+          <% } else { %><span class="pill pill-pending">never</span> — download one below<% } %>
+        </td></tr>
+      </table>
+      <div class="form-actions">
+        <a class="btn btn-primary" href="/admin3119Musa/health/backup.firmledger">Download full backup now</a>
+        <a class="btn btn-ghost" href="/admin3119Musa/users">User export lives on Users</a>
+      </div>
+      <p class="form-note">Downloading stamps “last backup” so this dashboard stays honest. Keep a copy off-box.</p>
+    </div>
+
+    <div class="form-card">
+      <h3 class="form-section">Mail hops</h3>
+      <% if (!snap.mail.configured) { %>
+        <p class="muted">No SMTP configured — mail is written to <code>data/outbox.log</code>. Add providers in <a href="/admin3119Musa/settings">Settings</a>.</p>
+      <% } else { %>
+        <p class="muted" style="margin-bottom:12px">From: <code><%= snap.mail.from %></code> — same sender on every hop. First hop that is under its limit wins.</p>
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>#</th><th>Hop</th><th>Host</th><th>Today</th><th>Last error</th></tr></thead>
+            <tbody>
+              <% (snap.mail.hops || []).forEach(function (h, i) { %>
+              <tr>
+                <td class="muted"><%= i + 1 %></td>
+                <td><b><%= h.label %></b><div class="score-hint"><%= h.source %></div></td>
+                <td class="mono" style="font-size:12px"><%= h.host %>:<%= h.port %></td>
+                <td><%= h.sent_today %><% if (h.daily_limit) { %> / <%= h.daily_limit %><% } %></td>
+                <td class="muted" style="font-size:12px"><%= h.last_error || '—' %></td>
+              </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+      <% } %>
+    </div>
+  </div>
+</section>
+
+<%- include('../partials/bottom') %>

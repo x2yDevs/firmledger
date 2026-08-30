@@ -6,14 +6,15 @@
     <h1 class="h-display">FirmLedger <em style="font-style:normal;color:var(--accent2)">API v1</em></h1>
     <p class="lede">REST access to the records you own — API-key authentication, predictable JSON, honest rate limits. <b>Available with FirmLedger Pro.</b></p>
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">
-      <a class="btn btn-primary" href="<%= user ? '/dashboard/api' : '/pricing' %>"><%= user ? 'Open your API console' : 'Get Pro &amp; an API key' %></a>
+      <% if (user) { %><a class="btn btn-primary" href="/dashboard/api">Open your API console</a><% } else { %><a class="btn btn-primary" href="/pricing">Get Pro &amp; an API key</a><% } %>
       <a class="btn btn-ghost" href="<%= user ? '/dashboard/api/playground' : '/login?next=/dashboard/api/playground' %>">Open the playground</a>
+      <a class="btn btn-accent" href="/pricing">See pricing</a>
     </div>
   </div>
 </section>
 
 <section class="section-tight">
-  <div class="container" style="display:grid;grid-template-columns:230px 1fr;gap:24px;align-items:start" class="docs-grid">
+  <div class="container docs-grid">
     <div class="side-card docs-toc" style="margin:0">
       <h3 style="margin:0 0 10px;font-size:.95rem">On this page</h3>
       <p style="display:flex;flex-direction:column;gap:8px;margin:0;font-size:13.5px">

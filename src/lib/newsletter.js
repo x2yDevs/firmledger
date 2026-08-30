@@ -80,12 +80,13 @@ function weeklyRoundup(windowDays = 7) {
   return { verified, fresh: fresh.filter((f) => !vSet.has(f.slug)) };
 }
 
-function roundUpHtml(rows, urlQuery) {
+function roundUpHtml(rows) {
   if (!rows.length) return '';
   return '<ul style="margin:6px 0 0;padding:0;list-style:none">' + rows.map((l) => {
     const place = [l.city, l.country].filter(Boolean).join(', ');
+    const href = siteUrl('/listing/' + l.slug);
     return `<li style="padding:7px 0;border-bottom:1px solid #ece9e2">
-      <a href="${siteUrl('/listing/' + l.slug + urlQuery)}" style="color:#0A1628;font-weight:700;text-decoration:none">${escHtml(l.name)}</a>
+      <a href="${href}" style="color:#0A1628;font-weight:700;text-decoration:none">${escHtml(l.name)}</a>
       <span style="color:#64748B;font-size:13px"> — ${escHtml(l.category)}${place ? ' · ' + escHtml(place) : ''}${l.claimed ? ' <span style="color:#1D4ED8">✓ verified</span>' : ''}</span>
       ${l.tagline ? `<div style="color:#3B4A5A;font-size:13px;margin-top:2px">${escHtml(l.tagline)}</div>` : ''}
     </li>`;
@@ -121,10 +122,10 @@ async function sendWeeklyDigest(force = false) {
     const unsubUrl = siteUrl(`/newsletter/unsubscribe?token=${s.token}`);
     const paragraphs = [];
     if (verified.length) {
-      paragraphs.push(`<b>${verified.length} new verified ${verified.length === 1 ? 'company' : 'companies'} ${cadence.whenLabel}</b>${roundUpHtml(verified, 'verified-week')}`);
+      paragraphs.push(`<b>${verified.length} new verified ${verified.length === 1 ? 'company' : 'companies'} ${cadence.whenLabel}</b>${roundUpHtml(verified)}`);
     }
     if (fresh.length) {
-      paragraphs.push(`<b>Recently added to the ledger</b>${roundUpHtml(fresh, 'fresh-week')}`);
+      paragraphs.push(`<b>Recently added to the ledger</b>${roundUpHtml(fresh)}`);
     }
     const rowLine = (l) => ` - ${l.name} — ${l.category}${(l.city || l.country) ? ' · ' + [l.city, l.country].filter(Boolean).join(', ') : ''}${l.claimed ? ' ✓ verified' : ''}: ${siteUrl('/listing/' + l.slug)}`;
     const textParts = [];
@@ -161,33 +162,23 @@ function watchCount(userId) {
   return db.prepare('SELECT COUNT(*) c FROM favorites WHERE user_id=?').get(userId).c;
 }
 
-/** Branded digest to every watcher after a listing meaningfully changes. */
 async function notifyWatchers(listingId, changes) {
   if (!changes || !changes.length) return;
   const l = db.prepare('SELECT id, name, slug, category, city, country FROM listings WHERE id=?').get(listingId);
   if (!l) return;
   const watchers = db.prepare(
-    `SELECT u.email, u.name FROM favorites f JOIN users u ON u.id = f.user_id AND u.suspended=0 WHERE f.listing_id=?`
+    `SELECT u.id, u.email, u.name FROM favorites f JOIN users u ON u.id = f.user_id AND u.suspended=0 WHERE f.listing_id=?`
   ).all(listingId);
   if (!watchers.length) return;
-  const place = [l.city, l.country].filter(Boolean).join(', ');
-  const listHtml = '<ul style="margin:6px 0 0;padding-left:18px">' +
-    changes.map((c) => `<li style="padding:2px 0">${c}</li>`).join('') + '</ul>';
+  const notify = require('./notify');
+  const summary = changes.map((c) => String(c).replace(/<[^>]+>/g, '')).slice(0, 4).join(' · ');
   for (const w of watchers) {
-    const changesPlain = changes.map((c) => c.replace(/<[^>]+>/g, ''));
-    await sendBranded(w.email, `${l.name} updated its record — your watchlist`, {
-      kicker: 'Watchlist update',
-      title: `${escHtml(l.name)} changed on the ledger`,
-      preheader: `A company on your FirmLedger watchlist updated its listing.`,
-      text: `${l.name} changed on the ledger\n\n${w.name ? w.name.split(' ')[0] : 'there'} — ${l.name} (${l.category}${place ? ' · ' + place : ''}), which you follow on your watchlist, just updated its record:\n\n${changesPlain.map((c) => ' - ' + c).join('\n')}\n\nYou can review the refreshed profile below. If the listing drifted from what it should be, use the removal link at the bottom of its page and our moderation team will look.\n\n${l.name}: ${siteUrl(`/listing/${l.slug}`)}\nManage your watchlist: ${siteUrl('/dashboard/watchlist')}`,
-      paragraphs: [
-        `${escHtml(w.name ? w.name.split(' ')[0] : 'there')} — <b>${escHtml(l.name)}</b> (${escHtml(l.category)}${place ? ' · ' + escHtml(place) : ''}), which you follow on your watchlist, just updated its record:`,
-        listHtml,
-        'You can review the refreshed profile below. If the listing drifted from what it should be, use the removal link at the bottom of its page and our moderation team will look.',
-      ],
-      cta: { label: `View ${escHtml(l.name)}`, url: siteUrl(`/listing/${l.slug}`) },
-      note: `Manage your full watchlist at <a href="${siteUrl('/dashboard/watchlist')}" style="color:#1D4ED8;">/dashboard/watchlist</a>.`,
-    }).catch(() => {});
+    notify.notifyUser(w.id, {
+      kind: 'watchlist',
+      title: `${l.name} updated its record`,
+      body: summary || 'A company on your watchlist changed its listing.',
+      url: `/listing/${l.slug}`,
+    });
   }
 }
 

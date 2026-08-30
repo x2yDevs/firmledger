@@ -149,6 +149,7 @@ function deleteUserCascade(userId) {
   const tx = db.transaction(() => {
     // Their listings come off their name — the business record stays in the ledger
     db.prepare('UPDATE listings SET owner_user_id = NULL, claimed = 0 WHERE owner_user_id = ?').run(userId);
+    db.prepare('UPDATE listings SET submitter_user_id = NULL WHERE submitter_user_id = ?').run(userId);
     // Personal data, gone for good
     db.prepare('DELETE FROM ticket_messages WHERE ticket_id IN (SELECT id FROM tickets WHERE user_id = ?)').run(userId);
     db.prepare('DELETE FROM tickets WHERE user_id = ?').run(userId);
@@ -158,6 +159,10 @@ function deleteUserCascade(userId) {
     db.prepare('DELETE FROM user_totp WHERE user_id = ?').run(userId);
     db.prepare('DELETE FROM claims WHERE user_id = ?').run(userId);
     db.prepare('DELETE FROM payments WHERE user_id = ?').run(userId);
+    db.prepare('DELETE FROM notifications WHERE user_id = ?').run(userId);
+    db.prepare('DELETE FROM deletion_requests WHERE user_id = ?').run(userId);
+    db.prepare('DELETE FROM pro_transfer_requests WHERE user_id = ?').run(userId);
+    db.prepare('DELETE FROM favorites WHERE user_id = ?').run(userId);
     db.prepare('DELETE FROM users WHERE id = ?').run(userId);
   });
   try { tx(); }

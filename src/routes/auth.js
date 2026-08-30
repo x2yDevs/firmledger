@@ -8,18 +8,9 @@ const {
   USER_COOKIE, createSession, destroySession, setSessionCookie,
 } = require('../lib/session');
 
-const router = express.Router();
+const spam = require('../lib/spam');
 
-/* Naive login throttling: 10 attempts / IP / 10 minutes */
-const attempts = new Map();
-function throttled(ip) {
-  const now = Date.now();
-  const rec = (attempts.get(ip) || []).filter((t) => now - t < 10 * 60 * 1000);
-  attempts.set(ip, rec);
-  if (rec.length >= 10) return true;
-  rec.push(now);
-  return false;
-}
+const router = express.Router();
 
 const page = (view, meta, data = {}) => (req, res) => res.render(view, { meta, ...data, errors: [], old: {} });
 
@@ -57,7 +48,7 @@ function sendOtpMailFix(email, name, code) {
   });
 }
 
-router.post('/register', (req, res) => {
+router.post('/register', spam.gate('register', { checkEmail: true }), (req, res) => {
   const name = (req.body.name || '').trim().slice(0, 80);
   const email = (req.body.email || '').trim().toLowerCase();
   const password = String(req.body.password || '');
@@ -160,13 +151,7 @@ router.get('/login', (req, res) => {
   });
 });
 
-router.post('/login', (req, res) => {
-  if (throttled(req.ip)) {
-    return res.status(429).render('auth/login', {
-      meta: { title: 'Sign in — FirmLedger', description: '', robots: 'noindex' },
-      errors: ['Too many attempts. Wait a few minutes and try again.'], old: {}, next: req.body.next || '',
-    });
-  }
+router.post('/login', spam.gate('login'), (req, res) => {
   const email = (req.body.email || '').trim().toLowerCase();
   const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
   if (!user || !passwords.verify(String(req.body.password || ''), user.password_hash)) {

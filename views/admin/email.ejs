@@ -23,13 +23,61 @@
             <option value="newsletter" <%= preset === 'newsletter' ? 'selected' : '' %>>Newsletter subscribers (digest list) (<%= counts.newsletter %>)</option>
             <option value="nl_guests" <%= preset === 'nl_guests' ? 'selected' : '' %>>Guest-only subscribers — emails without accounts (<%= counts.nl_guests %>)</option>
           </optgroup>
-          <optgroup label="Individual users">
+          <optgroup label="Individual users" id="mailUsers">
           <% users.forEach(function (u) { %>
           <option value="<%= u.email %>" <%= preset === u.email ? 'selected' : '' %>><%= u.name %> · <%= u.email %></option>
           <% }) %>
           </optgroup>
         </select>
       </label>
+      <label><span>Find a member</span>
+        <div class="suggest-box">
+          <input class="input" type="search" id="mailUserQ" placeholder="Search name or email…" autocomplete="off" maxlength="80">
+          <ul class="suggest-list" id="mailUserResults" hidden></ul>
+        </div>
+      </label>
+      <script>
+      (function () {
+        var q = document.getElementById('mailUserQ');
+        var list = document.getElementById('mailUserResults');
+        var sel = document.getElementById('mailTo');
+        if (!q || !list || !sel) return;
+        var t = null;
+        function pick(u) {
+          var exists = Array.prototype.some.call(sel.options, function (o) { return o.value === u.email; });
+          if (!exists) {
+            var opt = document.createElement('option');
+            opt.value = u.email;
+            opt.textContent = u.name + ' · ' + u.email;
+            document.getElementById('mailUsers').appendChild(opt);
+          }
+          sel.value = u.email;
+          q.value = u.name + ' · ' + u.email;
+          list.hidden = true;
+        }
+        function paint(rows) {
+          list.innerHTML = '';
+          if (!rows || !rows.length) { list.hidden = true; return; }
+          rows.forEach(function (u) {
+            var li = document.createElement('li');
+            li.innerHTML = '<span>' + String(u.name || '').replace(/</g,'') + '</span><span class="suggest-cat">' + String(u.email || '').replace(/</g,'') + '</span>';
+            li.addEventListener('mousedown', function (e) { e.preventDefault(); pick(u); });
+            list.appendChild(li);
+          });
+          list.hidden = false;
+        }
+        q.addEventListener('input', function () {
+          clearTimeout(t);
+          t = setTimeout(function () {
+            fetch('/admin3119Musa/email/users.json?q=' + encodeURIComponent(q.value.trim()), { credentials: 'same-origin' })
+              .then(function (r) { return r.json(); })
+              .then(function (d) { paint(d.users || []); })
+              .catch(function () { list.hidden = true; });
+          }, 180);
+        });
+        q.addEventListener('blur', function () { setTimeout(function () { list.hidden = true; }, 180); });
+      })();
+      </script>
       <label><span>Subject (prefixed with “[FirmLedger]”)</span>
         <input type="text" name="subject" maxlength="200" required placeholder="e.g. Claim your listing — verification now takes minutes" value="<%= typeof draft !== 'undefined' && draft ? draft.subject : '' %>">
       </label>

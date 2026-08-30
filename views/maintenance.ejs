@@ -1,0 +1,15 @@
+<%- include('partials/top') %>
+
+<section class="maint-hero">
+  <div class="container" style="text-align:center;padding:clamp(70px,10vw,130px) 20px">
+    <p class="klabel" style="justify-content:center">Temporarily offline</p>
+    <p class="error-code" style="font-size:clamp(2.2rem,5vw,3.4rem)"><%= m.title %></p>
+    <p class="lede" style="max-width:560px;margin:18px auto 0"><%= m.message %></p>
+    <% if (m.eta) { %>
+      <p class="muted" style="margin-top:18px">Expected back: <b style="color:var(--ink)"><%= m.eta %></b></p>
+    <% } %>
+    <p class="fine-print" style="display:block;margin-top:28px">Your listings, account and payments are untouched. This page will lift the moment the update finishes.</p>
+  </div>
+</section>
+
+<%- include('partials/bottom') %>

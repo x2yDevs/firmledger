@@ -20,13 +20,17 @@ Stack: Node.js + Express · EJS server-rendered views · SQLite (WAL) · no fron
 | Relationship graph | founder, investor, parent, subsidiary, product, service, partner — radial SVG graph + ecosystem groups, managed by owners and admins |
 | Verification | DNS TXT / HTML meta tag / homepage badge — live server-side checks, light & dark badge themes at `/badge/:slug.svg?theme=` |
 | Accounts | Email + password (PBKDF2-SHA512 600k), sessions in SQLite, CSRF protection, throttling, account settings + password change with session rotation |
-| Branded email notifications | Every sensitive action emails the member a **FirmLedger-branded HTML mail** (outbox log in dev, real SMTP in prod): welcome, password reset request, password changed, email changed (old + new address), payment receipt, Pro granted/revoked, listing approved/rejected, claim verified/rejected, account suspended/reinstated |
-| Dashboard | Own-listings table with scores + missing-field hints, plan column (Free/Pro), refresh-tech action, claim workflow, account settings |
+| Branded email notifications | **Sensitive** events still email the member a **FirmLedger-branded HTML mail** (outbox log in dev, real SMTP in prod): welcome, password reset, password/email/2FA changes, payment receipt, Pro granted/revoked, claim ownership transfer, account suspend/delete. Non-sensitive events (listing review, tickets, watchlist, digest of edits) land in the in-app notification bell instead |
+| Dashboard | Own-listings table with scores + missing-field hints, plan column (Free/Pro), refresh-tech (stays on dashboard), searchable claim picker, request-removal for owned/submitted listings, in-app notifications, delete-my-account request |
 | **FirmLedger Pro (account-scoped)** | One subscription unlocks **two things**. (1) **VIEWING**: every listing's full details — public website, email, phone, social links, events timeline, relationship graph. (2) **PERKS on listings you own**: blue verified tick on the company name (profile, search, directory, home), homepage Featured placement, premium (gold) embeddable company badge, priority admin verification & trust review. Guests and Free accounts see the basic profile only. Adding and editing listings is completely free — no paywalled fields. Time stacks; server verifies payments with PayPal before activating |
 | Payments | PayPal REST Orders — credentials in Admin → Settings → Payments (or `PAYPAL_CLIENT_ID`/`PAYPAL_CLIENT_SECRET`/`PAYPAL_MODE` env, which wins). Sandbox charges nothing. Server-side `/billing/callback` capture + verification (order id, exact amount, currency, reference) grants purchased time to the ACCOUNT, stacks on remaining time, emails a receipt, and writes to the `payments` ledger (dashboard + admin) |
 | Plan offers | Admin-managed in **Admin console → Plan offers**: monthly, yearly, or any custom named offer, with price, duration in days, sort order, show/hide, and safe delete (deactivates when payments are attached). /pricing and /dashboard/upgrade render whatever is active |
 | Pro grants | Admin can grant 30-day or lifetime Pro to any user, or revoke it, from **Admin → Users** (the grant emails the member). Admins can also boost a single listing record from Admin → Listings |
-| Admin console | Hidden URL `/admin3119Musa` + secret code **+ TOTP two-factor** (QR enrollment) — moderation, full listing editor, add listing, categories, claims re-check, removals, users (view/suspend/unsuspend/delete), email members (1 or all), blog CMS, settings |
+| Admin console | Hidden URL `/admin3119Musa` + secret code **+ TOTP two-factor** (QR enrollment) — global search, in-app inbox, listings search/filters + bulk approve/reject, full listing editor, add listing, categories, claims re-check (emails both claimant and previous submitter), removals, users (view/suspend/unsuspend/delete with email first, admin-initiated password reset), searchable email picker, blog CMS, settings, ticket auto-close, **Protection** (IP/domain lists + rate limits + maintenance mode), **Health** (disk, DB, memory, uptime, last backup), **Promos** |
+| Promo codes | Admin generates codes such as `LAUNCH20` (percent off, usage cap, expiry, optional plan lock). Members apply them on Dashboard → Upgrade; PayPal is charged the discounted amount. Notify members by email and/or in-app when a code is created |
+| Maintenance mode | Admin → Protection. Visitors see a branded “we’ll be back soon” page (HTTP 503); a signed-in admin keeps working. Optional email blast to account holders when turning it on |
+| Spam protection | IP allow/block lists, email-domain allow/block (empty allow list = all domains), tunable rate limits on login, register, listings, claims, newsletter, search, scrape, and API RPM |
+| Multi-SMTP failover | Same From address everywhere. Configure in `.env` (`SMTP_URL`, `SMTP2_URL`…) **and** Admin → Settings (Emitlo, Maileroo, Brevo, Mailjet, Mailtrap, SMTP2GO, Resend, AhaSend, SMTPfast, Forward Email, DNSExit, Zoho, custom). If a hop hits a sending limit the next hop is used automatically |
 | Content | Blog (posts flow to footer News, RSS, sitemap), `/docs`, `/privacy`, `/terms`, global `/search` (listings + posts + docs) |
 | Indexing | IndexNow push on approve/claim (+30 min re-ping) · sitemap index · robots.txt · RSS |
 
@@ -199,8 +203,10 @@ PORT=3000
 BASE_URL=https://firmledger.co.ke
 ADMIN_SECRET=pick-a-long-random-string-here
 MAIL_FROM=FirmLedger <no-reply@firmledger.co.ke>
-# SMTP — any provider (SES, Mailgun, Postmark, custom smtps):
+# SMTP — same From on every hop. Primary, then failover slots:
 SMTP_URL=smtps://USER:PASS@smtp.your-provider.com:465
+SMTP2_URL=
+SMTP3_URL=
 # PayPal — FirmLedger Pro payments (optional here; can also live in Admin → Settings)
 PAYPAL_CLIENT_ID=your_paypal_app_client_id
 PAYPAL_CLIENT_SECRET=your_paypal_app_secret
@@ -208,7 +214,8 @@ PAYPAL_MODE=live         # sandbox while testing, live for production
 ```
 Notes:
 - `BASE_URL` must be exact — verification tokens, badge snippets, canonical URLs, sitemaps and OG tags all derive from it.
-- Without `SMTP_URL`, all outgoing mail is written to `data/outbox.log` instead of being delivered.
+- Without any SMTP hop, outgoing mail is written to `data/outbox.log` instead of being delivered.
+- If the first hop hits a sending limit, `SMTP2_URL` / `SMTP3_URL` (and Admin → Settings providers) are tried automatically. The From address is the same on every hop.
 - The app reads `.env` automatically on boot (no extra tooling needed).
 
 ### Step 4b — Switch on FirmLedger Pro payments (PayPal)
@@ -326,7 +333,12 @@ top to bottom and FirmLedger is ready for real customers:
 
 | Task | Where |
 |---|---|
-| Moderate submissions | Admin → Listings (approve/reject/edit) |
+| Moderate submissions | Admin → Listings (search/filters, approve/reject/edit, bulk pending) |
+| Global search | Admin → Search (users, listings, claims, tickets, blog) |
+| In-app notifications | Header bell (user) · Admin → Inbox |
+| Reset a member's password | Admin → Users → Reset password (reuses `/reset/:token`) |
+| Delete a member | Admin → Users → Delete (emails them first) or honour a pending deletion request |
+| Ticket auto-close | Hourly timer: solved > 7 days, or no user reply > 14 days after last admin message |
 | Add a listing directly | Admin → Listings → **+ Add listing** (dup-guarded, IndexNow-pushed) |
 | Email one user | Admin → Users → Email (prefilled) — or Users → detail → Email |
 | Email everyone | Admin → Email → "All users" (uses SMTP when configured, otherwise outbox) |
@@ -337,6 +349,11 @@ top to bottom and FirmLedger is ready for real customers:
 | Rotate admin 2FA | Admin → Settings → Console security → Reset two-factor |
 | Rotate `ADMIN_SECRET` | edit `.env`, `systemctl restart firmledger` |
 | Manage Pro offers and prices | Admin → Plan offers (seeds Monthly $30/30d and Yearly $300/365d) |
+| Promo / discount codes | Admin → Promos — create `LAUNCH20`-style codes, cap uses, expiry, plan lock; notify by email or in-app |
+| Maintenance mode | Admin → Protection — custom holding page, optional email to users |
+| Spam / scrape controls | Admin → Protection — IP + email-domain lists and rate limits |
+| System health | Admin → Health — disk, DB size, Node memory, uptime, last backup |
+| Mail providers + failover | Admin → Settings → Email, or `SMTP_URL` / `SMTP2_URL` in `.env` |
 | Grant Pro without payment | Admin → Users → Grant 30d / Lifetime (emails the member) |
 | Grant/refund Pro manually | Admin → Listings → Grant Pro (30d) · Lifetime · Revoke Pro |
 
@@ -344,7 +361,7 @@ top to bottom and FirmLedger is ready for real customers:
 
 | Path | Contents |
 |---|---|
-| `data/firmledger.db` | SQLite database (users, listings, claims, sessions, settings, blog, mail log, `payments` Pro-payment ledger) |
+| `data/firmledger.db` | SQLite database (users, listings, claims, sessions, settings, blog, mail log, `payments`, `notifications`, `deletion_requests`, `pro_transfer_requests`, `spam_ip`, `spam_domain`, `smtp_accounts`, `promo_codes`, `promo_redemptions`) |
 | `data/uploads/logos/` | Uploaded logos (normalized 256×256), served at `/uploads/logos/…` |
 | `data/outbox.log` | Outbound mail when SMTP is not configured |
 

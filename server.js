@@ -19,7 +19,7 @@ const session = require('./src/lib/session');
 const util = require('./src/lib/util');
 
 /* Bumped on every deploy that changes public/ assets — defeats the 7-day static cache. */
-const ASSET_V = '20';
+const ASSET_V = '23';
 
 const app = express();
 app.set('trust proxy', true);
@@ -107,6 +107,10 @@ app.use('/api/v1', require('./src/routes/api'));
 
 app.use(session.csrfProtect);
 
+/* Maintenance holding page — after sessions so a signed-in admin still works. */
+app.use(require('./src/lib/maintenance').gate);
+app.use(require('./src/lib/spam').scrapeGate);
+
 /* Routes */
 app.use('/', require('./src/routes/public'));
 app.use('/', require('./src/routes/auth'));
@@ -114,6 +118,7 @@ app.use('/', require('./src/routes/dashboard'));
 app.use('/', require('./src/routes/billing'));
 app.use('/', require('./src/routes/claim'));
 app.use('/', require('./src/routes/admin'));
+app.use('/', require('./src/routes/adminops'));
 
 /* 404 */
 app.use((req, res) => {
@@ -139,10 +144,16 @@ app.use((err, req, res, next) => {
 
 const PORT = Number(process.env.PORT) || 3000;
 
-/* Weekly newsletter digest — checked hourly, fires when the last send is >6.5 days old. */
+/* Weekly newsletter digest — checked hourly, fires when the last send is >6.5 days old.
+   Ticket auto-close runs on the same hourly tick: solved >7d, unanswered admin replies >14d. */
 const newsletter = require('./src/lib/newsletter');
-setInterval(() => { newsletter.sendWeeklyDigest().catch(() => {}); }, 3600e3);
-setTimeout(() => { newsletter.sendWeeklyDigest().catch(() => {}); }, 90e3);
+const supportLib = require('./src/lib/support');
+function hourlyJobs() {
+  newsletter.sendWeeklyDigest().catch(() => {});
+  try { supportLib.autoCloseStale(); } catch (e) { console.error('[auto-close]', e.message); }
+}
+setInterval(hourlyJobs, 3600e3);
+setTimeout(hourlyJobs, 90e3);
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`FirmLedger running on http://0.0.0.0:${PORT} — public base: ${util.siteUrl('/')}`);

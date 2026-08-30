@@ -1,0 +1,141 @@
+<%- include('../partials/top') %>
+<%- include('../partials/adminnav') %>
+
+<section class="section-tight">
+  <div class="container">
+    <div class="section-head">
+      <h2>Protection</h2>
+      <span class="muted">IP lists, email-domain lists, rate limits, and the public holding page.</span>
+    </div>
+    <% if (ok) { %><div class="alert alert-ok"><%= ok %></div><% } %>
+    <% if (err) { %><div class="alert alert-err"><%= err %></div><% } %>
+
+    <div class="form-card">
+      <h3 class="form-section">Maintenance mode</h3>
+      <p class="muted">When on, every visitor except a signed-in admin sees a branded “we’ll be back soon” page. The console, static assets and you stay available so you can finish the update.</p>
+      <form class="form" method="post" action="/admin3119Musa/protection/maintenance">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <label class="check check-lg">
+          <input type="checkbox" name="maintenance_on" value="1" <%= maintenance.on ? 'checked' : '' %>>
+          <span><strong>Enable maintenance mode</strong><br><small class="muted">Public pages return HTTP 503 until you turn this off.</small></span>
+        </label>
+        <label><span>Headline</span><input type="text" name="maintenance_title" value="<%= maintenance.title %>" maxlength="120"></label>
+        <label><span>Message</span><textarea name="maintenance_message" rows="4"><%= maintenance.message %></textarea></label>
+        <label><span>Expected back (optional)</span><input type="text" name="maintenance_eta" value="<%= maintenance.eta %>" placeholder="this evening, 18:00 EAT" maxlength="80"></label>
+        <label class="check">
+          <input type="checkbox" name="email_users" value="1">
+          <span>Email every account holder when turning maintenance <b>on</b> (skipped if it was already on).</span>
+        </label>
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit">Save maintenance</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="form-card">
+      <h3 class="form-section">Rate limits</h3>
+      <p class="muted">Tunable ceilings against fake accounts, form spam and scrapers. A whitelisted IP skips every limit. Zero disables a bucket.</p>
+      <form class="form" method="post" action="/admin3119Musa/protection/limits">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <div class="grid-3">
+          <label><span>Login / 10 min</span><input type="number" name="spam_rl_login" min="0" max="10000" value="<%= limits.login %>"></label>
+          <label><span>Register / hour</span><input type="number" name="spam_rl_register" min="0" max="10000" value="<%= limits.register %>"></label>
+          <label><span>New listing / hour</span><input type="number" name="spam_rl_listing" min="0" max="10000" value="<%= limits.listing %>"></label>
+          <label><span>Claim / hour</span><input type="number" name="spam_rl_claim" min="0" max="10000" value="<%= limits.claim %>"></label>
+          <label><span>Newsletter / hour</span><input type="number" name="spam_rl_newsletter" min="0" max="10000" value="<%= limits.newsletter %>"></label>
+          <label><span>Search / minute</span><input type="number" name="spam_rl_search" min="0" max="10000" value="<%= limits.search %>"></label>
+          <label><span>Page scrape / minute</span><input type="number" name="spam_rl_scrape" min="0" max="100000" value="<%= limits.scrape %>"></label>
+          <label><span>API reads / minute</span><input type="number" name="api_read_rpm" min="0" max="10000" value="<%= limits.api_read_rpm %>"></label>
+          <label><span>API writes / minute</span><input type="number" name="api_write_rpm" min="0" max="10000" value="<%= limits.api_write_rpm %>"></label>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit">Save limits</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="acct-grid">
+      <div class="form-card">
+        <h3 class="form-section">IP allow / block</h3>
+        <p class="muted">Block stops the address entirely. Allow skips rate limits and domain checks (your office IP, a partner scraper).</p>
+        <form class="form" method="post" action="/admin3119Musa/protection/ip">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <label><span>IP</span><input type="text" name="value" placeholder="203.0.113.10" required></label>
+          <div class="grid-2">
+            <label><span>List</span>
+              <select name="kind">
+                <option value="block">Block</option>
+                <option value="allow">Allow (whitelist)</option>
+              </select>
+            </label>
+            <label><span>Note</span><input type="text" name="note" placeholder="office / botnet" maxlength="200"></label>
+          </div>
+          <div class="form-actions"><button class="btn btn-accent" type="submit">Add IP</button></div>
+        </form>
+        <div class="table-wrap" style="margin-top:14px">
+          <table class="table">
+            <thead><tr><th>IP</th><th>List</th><th>Note</th><th></th></tr></thead>
+            <tbody>
+              <% ips.forEach(function (r) { %>
+              <tr>
+                <td class="mono"><%= r.value %></td>
+                <td><span class="pill pill-<%= r.kind === 'allow' ? 'approved' : 'rejected' %>"><%= r.kind %></span></td>
+                <td class="muted"><%= r.note || '—' %></td>
+                <td class="ta-right">
+                  <form method="post" action="/admin3119Musa/protection/ip/<%= r.id %>/delete" class="inline">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                    <button class="btn btn-danger btn-xs" type="submit">Remove</button>
+                  </form>
+                </td>
+              </tr>
+              <% }) %>
+              <% if (!ips.length) { %><tr><td colspan="4" class="muted">No IP rules yet.</td></tr><% } %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="form-card">
+        <h3 class="form-section">Email domains</h3>
+        <p class="muted">Block disposable / spam domains. If the allow list is not empty, <b>only</b> those domains may register.</p>
+        <form class="form" method="post" action="/admin3119Musa/protection/domain">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <label><span>Domain</span><input type="text" name="value" placeholder="mailinator.com" required></label>
+          <div class="grid-2">
+            <label><span>List</span>
+              <select name="kind">
+                <option value="block">Block</option>
+                <option value="allow">Allow (whitelist)</option>
+              </select>
+            </label>
+            <label><span>Note</span><input type="text" name="note" placeholder="disposable" maxlength="200"></label>
+          </div>
+          <div class="form-actions"><button class="btn btn-accent" type="submit">Add domain</button></div>
+        </form>
+        <div class="table-wrap" style="margin-top:14px">
+          <table class="table">
+            <thead><tr><th>Domain</th><th>List</th><th>Note</th><th></th></tr></thead>
+            <tbody>
+              <% domains.forEach(function (r) { %>
+              <tr>
+                <td class="mono"><%= r.value %></td>
+                <td><span class="pill pill-<%= r.kind === 'allow' ? 'approved' : 'rejected' %>"><%= r.kind %></span></td>
+                <td class="muted"><%= r.note || '—' %></td>
+                <td class="ta-right">
+                  <form method="post" action="/admin3119Musa/protection/domain/<%= r.id %>/delete" class="inline">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                    <button class="btn btn-danger btn-xs" type="submit">Remove</button>
+                  </form>
+                </td>
+              </tr>
+              <% }) %>
+              <% if (!domains.length) { %><tr><td colspan="4" class="muted">No domain rules yet.</td></tr><% } %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<%- include('../partials/bottom') %>

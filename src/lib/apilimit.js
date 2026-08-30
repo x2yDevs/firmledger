@@ -45,9 +45,23 @@ function bucketFor(name) {
  * Check (and charge) one request. `name` is a bucket key (api key id or
  * playground user id). Returns { ok, remaining, resetInSec, limit, kind }.
  */
+function liveLimits() {
+  try {
+    const spam = require('./spam');
+    const l = spam.limits();
+    return {
+      read: Math.max(1, l.api_read_rpm || READ_RPM),
+      write: Math.max(1, l.api_write_rpm || WRITE_RPM),
+    };
+  } catch {
+    return { read: READ_RPM, write: WRITE_RPM };
+  }
+}
+
 function charge(name, isWrite, { commit = true } = {}) {
   const b = bucketFor(name);
-  const limit = isWrite ? WRITE_RPM : READ_RPM;
+  const live = liveLimits();
+  const limit = isWrite ? live.write : live.read;
   const used = isWrite ? b.writes : b.reads;
   const resetInSec = Math.max(1, Math.ceil((WINDOW_MS - (nowMs() - b.start)) / 1000));
   if (used >= limit) return { ok: false, remaining: 0, resetInSec, limit, kind: isWrite ? 'write' : 'read' };

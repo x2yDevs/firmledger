@@ -26,16 +26,38 @@
       </div>
     </div>
 
+    <h3 class="h-section" style="margin-top:2.2rem">Promo code</h3>
+    <form class="form" method="get" action="/dashboard/upgrade" style="max-width:420px;margin-top:10px">
+      <div class="fetch-row">
+        <label class="fetch-input"><span>Have a code?</span>
+          <input type="text" name="promo" value="<%= typeof promoCode !== 'undefined' ? promoCode : '' %>" placeholder="LAUNCH20" style="text-transform:uppercase" maxlength="32">
+        </label>
+        <button class="btn btn-ghost fetch-btn" type="submit">Apply</button>
+      </div>
+    </form>
+    <% if (typeof promoPreview !== 'undefined' && promoCode) { %>
+      <% if (promoPreview && promoPreview.ok) { %>
+        <div class="alert alert-ok"><b><%= promoCode %></b> — <%= promoPreview.percent %>% off applies at checkout.</div>
+      <% } else if (promoPreview && !promoPreview.ok) { %>
+        <div class="alert alert-err"><%= promoPreview.error %></div>
+      <% } %>
+    <% } %>
+
     <h3 class="h-section" style="margin-top:2.2rem">Choose an offer</h3>
     <div class="plan-grid" style="margin-top:14px">
       <% offers.forEach(function (p, i) { %>
       <div class="plan-card <%= i === 0 ? 'plan-pro' : '' %>">
         <% if (i === 0) { %><div class="plan-flag">POPULAR</div><% } %>
         <h3><%= p.name %></h3>
-        <p class="plan-price">$<%= (p.price_cents / 100).toFixed(2) %><small> · <%= p.currency %> · <%= p.duration_days %> days</small></p>
+        <% if (p.promo_ok && p.discount_cents) { %>
+          <p class="plan-price">$<%= (p.pay_cents / 100).toFixed(2) %><small> · <%= p.currency %> · <%= p.duration_days %> days</small></p>
+          <p class="muted" style="font-size:13px"><s>$<%= (p.price_cents / 100).toFixed(2) %></s> · <%= p.promo_pct %>% off with <b><%= promoCode %></b></p>
+        <% } else { %>
+          <p class="plan-price">$<%= ((p.pay_cents || p.price_cents) / 100).toFixed(2) %><small> · <%= p.currency %> · <%= p.duration_days %> days</small></p>
+        <% } %>
         <p class="muted" style="font-size:13.5px"><%= p.blurb || 'Full Pro access.' %></p>
         <% if (p.duration_days >= 90) { %>
-        <p class="fine-print" style="margin:.4rem 0 0;color:var(--ok)">≈ $<%= (p.price_cents / 100 / (p.duration_days / 30)).toFixed(2) %>/mo — vs monthly billing.</p>
+        <p class="fine-print" style="margin:.4rem 0 0;color:var(--ok)">≈ $<%= ((p.pay_cents || p.price_cents) / 100 / (p.duration_days / 30)).toFixed(2) %>/mo — vs monthly billing.</p>
         <% } %>
         <% if (!paypalReady) { %>
           <div class="alert alert-err" style="margin-top:10px">
@@ -45,9 +67,10 @@
           <form method="post" action="/dashboard/upgrade">
             <input type="hidden" name="_csrf" value="<%= csrfToken %>">
             <input type="hidden" name="plan_id" value="<%= p.id %>">
+            <input type="hidden" name="promo" value="<%= typeof promoCode !== 'undefined' ? promoCode : '' %>">
             <button class="btn btn-primary btn-block btn-lg" type="submit" style="margin-top:14px;display:flex;align-items:center;justify-content:center;gap:8px">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7.076 21.337H2.47a.641.641 0 0 1-.633-.74L4.944.901C4.986.627 5.229.432 5.515.432h7.892c2.224 0 3.932.582 5.078 1.723 1.159 1.155 1.582 2.77 1.264 4.807l-.015.104-.181 1.048a.648.648 0 0 0 .769.767c.928.164 1.674.5 2.221.997.664.604 1.06 1.452 1.176 2.513.116 1.069-.118 2.167-.7 3.265a7.24 7.24 0 0 1-1.979 2.2 8.105 8.105 0 0 1-2.68 1.372c-1.016.327-2.042.49-3.048.49H12.63a.648.648 0 0 0-.634.743l.666 4.186a.648.648 0 0 0 .642.547h5.473a.648.648 0 0 0 .621-.773l-.268-1.518-.03-.164a.648.648 0 0 1 .645-.778h.458c1.638 0 2.978-.39 3.99-1.16a5.134 5.134 0 0 0 1.895-2.693c.35-1.107.397-2.235.141-3.36-.7-3.075-3.355-4.166-6.732-4.166h-3.395a.648.648 0 0 0-.635.735L7.082 21.29a.643.643 0 0 1-.006.047z"/></svg>
-              Pay with PayPal — $<%= (p.price_cents / 100).toFixed(2) %>
+              Pay with PayPal — $<%= ((p.pay_cents || p.price_cents) / 100).toFixed(2) %>
             </button>
           </form>
         <% } %>

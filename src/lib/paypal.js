@@ -75,7 +75,8 @@ function decimal(cents) {
 }
 
 /* Create an order for one Pro plan. Returns { ok, id, approveUrl, error }. */
-async function createOrder({ reference, plan, returnUrl, cancelUrl, payerEmail = '' }) {
+async function createOrder({ reference, plan, returnUrl, cancelUrl, payerEmail = '', amountCents }) {
+  const cents = Number.isFinite(Number(amountCents)) ? Number(amountCents) : plan.price_cents;
   const r = await authed('/v2/checkout/orders', {
     method: 'POST',
     body: JSON.stringify({
@@ -83,7 +84,7 @@ async function createOrder({ reference, plan, returnUrl, cancelUrl, payerEmail =
       purchase_units: [{
         reference_id: reference,
         custom_id: reference,
-        amount: { currency_code: plan.currency, value: decimal(plan.price_cents) },
+        amount: { currency_code: plan.currency, value: decimal(cents) },
         description: `${plan.name} — FirmLedger subscription (${plan.duration_days} days)`.slice(0, 127),
       }],
       payer: payerEmail ? { email_address: payerEmail } : undefined,
@@ -105,7 +106,7 @@ async function createOrder({ reference, plan, returnUrl, cancelUrl, payerEmail =
 
 /* Capture an approved order, then verify the money server-side
    (status COMPLETED + exact amount + currency + our reference). */
-async function captureOrder(orderId, { reference, plan }) {
+async function captureOrder(orderId, { reference, plan, amountCents }) {
   const r = await authed(`/v2/checkout/orders/${encodeURIComponent(orderId)}/capture`, {
     method: 'POST',
     body: JSON.stringify({}),
@@ -116,9 +117,10 @@ async function captureOrder(orderId, { reference, plan }) {
   }
   const unit = (d.purchase_units || [])[0] || {};
   const capture = ((unit.payments || {}).captures || [])[0] || {};
+  const expected = Number.isFinite(Number(amountCents)) ? Number(amountCents) : plan.price_cents;
   const amountOk = d.status === 'COMPLETED' && capture.status === 'COMPLETED'
     && capture.amount
-    && decimal(plan.price_cents) === capture.amount.value
+    && decimal(expected) === capture.amount.value
     && (capture.amount.currency_code || '').toUpperCase() === plan.currency.toUpperCase();
   const refOk = !reference || capture.custom_id === reference || unit.reference_id === reference;
   const passed = amountOk && refOk;

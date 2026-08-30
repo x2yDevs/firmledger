@@ -200,10 +200,19 @@ function createListing(user, body) {
   duplicateGuard(f);
   const slug = uniqueSlug(f.name);
   const info = db.prepare(`INSERT INTO listings
-    (slug, name, tagline, description, type, category, website, email, phone, country, city, region, address, logo_url, founded, size, tags, socials, sources, status, featured, claimed, confidence, owner_user_id)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, '[]', 'pending', 0, 1, 0, ?)`)
-    .run(slug, f.name, f.tagline, f.description, f.type || 'company', f.category, f.website, f.email || '', f.phone || '', f.country, f.city || '', f.region || '', f.address || '', f.logo_url || '', f.founded || '', f.size || '', f.tags || '', f.socials || '{}', user.id);
+    (slug, name, tagline, description, type, category, website, email, phone, country, city, region, address, logo_url, founded, size, tags, socials, sources, status, featured, claimed, confidence, owner_user_id, submitter_user_id)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, '[]', 'pending', 0, 1, 0, ?, ?)`)
+    .run(slug, f.name, f.tagline, f.description, f.type || 'company', f.category, f.website, f.email || '', f.phone || '', f.country, f.city || '', f.region || '', f.address || '', f.logo_url || '', f.founded || '', f.size || '', f.tags || '', f.socials || '{}', user.id, user.id);
   const row = db.prepare('SELECT * FROM listings WHERE id=?').get(info.lastInsertRowid);
+  try {
+    const notify = require('./notify');
+    notify.notifyAdmin({
+      kind: 'listing',
+      title: `API listing pending — ${row.name}`,
+      body: `Submitted by ${user.email}`,
+      url: '/admin3119Musa/listings?status=pending',
+    });
+  } catch { /* notify is best-effort */ }
   return { status: 201, body: { data: serialize(row), meta: { note: 'Created with status "pending" — it goes live after the usual moderation pass, exactly like listings added from the dashboard.' } } };
 }
 
@@ -214,7 +223,8 @@ function updateListing(user, id, body) {
   const cols = FIELD_KEYS.filter((k) => Object.prototype.hasOwnProperty.call(f, k));
   const setSql = cols.map((c) => `${c}=?`).join(', ');
   const vals = cols.map((c) => f[c]);
-  db.prepare(`UPDATE listings SET ${setSql ? setSql + ',' : ''} updated_at=datetime('now') WHERE id=?`).run(...vals, row.id);
+  const nextStatus = (row.status === 'approved' || row.status === 'rejected') ? 'pending' : row.status;
+  db.prepare(`UPDATE listings SET ${setSql ? setSql + ',' : ''} status=?, updated_at=datetime('now') WHERE id=?`).run(...vals, nextStatus, row.id);
   const fresh = db.prepare('SELECT * FROM listings WHERE id=?').get(row.id);
   return { status: 200, body: { data: serialize(fresh), meta: { note: 'Updated. Metadata edits re-enter moderation review if the core record changed.' } } };
 }

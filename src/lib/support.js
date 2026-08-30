@@ -94,4 +94,54 @@ function markAdminSeen(ticketId) {
   db.prepare("UPDATE tickets SET admin_seen_at = datetime('now') WHERE id = ?").run(ticketId);
 }
 
-module.exports = { attachmentField, openTicket, reply, setStatus, markAdminSeen, CATEGORIES };
+/**
+ * Keep the queue clean:
+ *  - tickets marked Solved for more than 7 days → Closed
+ *  - open tickets where the last admin reply had no user response for > 14 days → Closed
+ * Returns the number of tickets closed.
+ */
+function autoCloseStale() {
+  const notify = require('./notify');
+  let closed = 0;
+  const solved = db.prepare(
+    `SELECT t.*, u.email AS user_email, u.name AS user_name
+     FROM tickets t JOIN users u ON u.id = t.user_id
+     WHERE t.status = 'solved'
+       AND t.closed_at <> ''
+       AND t.closed_at < datetime('now', '-7 days')`
+  ).all();
+  const stale = db.prepare(
+    `SELECT t.*, u.email AS user_email, u.name AS user_name
+     FROM tickets t JOIN users u ON u.id = t.user_id
+     WHERE t.status = 'open'
+       AND EXISTS (SELECT 1 FROM ticket_messages m WHERE m.ticket_id = t.id AND m.sender = 'admin')
+       AND COALESCE((SELECT MAX(created_at) FROM ticket_messages WHERE ticket_id = t.id AND sender = 'user'), '')
+           <= COALESCE((SELECT MAX(created_at) FROM ticket_messages WHERE ticket_id = t.id AND sender = 'admin'), '')
+       AND (SELECT MAX(created_at) FROM ticket_messages WHERE ticket_id = t.id AND sender = 'admin')
+           < datetime('now', '-14 days')`
+  ).all();
+  const seen = new Set();
+  for (const t of [...solved, ...stale]) {
+    if (seen.has(t.id)) continue;
+    seen.add(t.id);
+    setStatus(t.id, 'closed');
+    closed += 1;
+    notify.notifyUser(t.user_id, {
+      kind: 'ticket',
+      title: `Ticket ${t.ref} was auto-closed`,
+      body: t.status === 'solved'
+        ? 'It stayed resolved for more than 7 days with no further replies.'
+        : 'There was no reply from you for more than 14 days, so the ticket was closed to keep the queue clean.',
+      url: `/dashboard/support/${t.id}`,
+    });
+    notify.notifyAdmin({
+      kind: 'ticket',
+      title: `Auto-closed ticket ${t.ref}`,
+      body: `${t.subject} — ${t.user_email}`,
+      url: `/admin3119Musa/tickets/${t.id}`,
+    });
+  }
+  return closed;
+}
+
+module.exports = { attachmentField, openTicket, reply, setStatus, markAdminSeen, autoCloseStale, CATEGORIES };

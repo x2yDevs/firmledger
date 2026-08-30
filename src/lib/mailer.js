@@ -1,30 +1,42 @@
 /**
- * Outbound mail — REAL SENDING when SMTP is configured.
+ * Outbound mail — multi-provider SMTP with automatic failover.
  *
- * Configuration is resolved in this order (first match wins):
- *   1. SMTP_URL           smtp(s)://user:pass@host[:port]
- *   2. MAIL_HOST/MAIL_PORT/MAIL_USER/MAIL_PASS/MAIL_FROM env vars
- *   3. Admin → Settings (stored in the settings table: smtp_host, smtp_port,
- *      smtp_user, smtp_pass, smtp_from, smtp_secure)
+ * Same From address is used on every hop. Transports are tried in order:
+ *   1. SMTP_URL / MAIL_* env (primary)
+ *   2. SMTP2_URL … SMTP6_URL env failover slots
+ *   3. Legacy Admin → Settings smtp_host (if env is empty)
+ *   4. Admin → Settings mail accounts (smtp_accounts), by sort
  *
- * Nothing configured → messages are written to data/outbox.log so nothing is
- * lost (password resets still work for admins reading the log). A configured
- * transport is verified once and reported on boot; send failures are caught,
- * logged to the console with detail AND recorded in the outbox log so no
- * notice is ever silently dropped.
+ * When a hop hits a daily cap or a rate/quota/limit error, the next hop is
+ * used automatically. Failures still land in data/outbox.log.
  *
  *   sendMail(to, subject, text)        plain text
  *   sendBranded(to, subject, {...})    FirmLedger-branded HTML + text fallback
- *   sendTest(to, fromLabel)            admin test — verifies the live transport
+ *   sendTest(to)                       admin test through the live chain
  */
 const fs = require('fs');
 const path = require('path');
 
 const outboxPath = path.join(__dirname, '..', '..', 'data', 'outbox.log');
 
-/** Real FirmLedger logo for the email header — embedded as a CID attachment
- *  so it renders even with remote image loading off. */
-let logoAttachment = null; // computed lazily
+const PROVIDERS = [
+  { id: 'zoho', name: 'Zoho Mail', host: 'smtp.zoho.com', port: 465, secure: 1 },
+  { id: 'zoho_pro', name: 'Zoho Mail (smtppro)', host: 'smtppro.zoho.com', port: 465, secure: 1 },
+  { id: 'emitlo', name: 'Emitlo', host: 'smtp.emitlo.com', port: 587, secure: 0 },
+  { id: 'maileroo', name: 'Maileroo', host: 'smtp.maileroo.com', port: 587, secure: 0 },
+  { id: 'brevo', name: 'Brevo', host: 'smtp-relay.brevo.com', port: 587, secure: 0 },
+  { id: 'mailjet', name: 'Mailjet', host: 'in-v3.mailjet.com', port: 587, secure: 0 },
+  { id: 'mailtrap', name: 'Mailtrap', host: 'live.smtp.mailtrap.io', port: 587, secure: 0 },
+  { id: 'smtp2go', name: 'SMTP2GO', host: 'mail.smtp2go.com', port: 587, secure: 0 },
+  { id: 'resend', name: 'Resend', host: 'smtp.resend.com', port: 465, secure: 1 },
+  { id: 'ahasend', name: 'AhaSend', host: 'send.ahasend.com', port: 587, secure: 0 },
+  { id: 'smtpfast', name: 'SMTPfast', host: 'smtp.smtpfast.com', port: 587, secure: 0 },
+  { id: 'forwardemail', name: 'Forward Email', host: 'smtp.forwardemail.net', port: 465, secure: 1 },
+  { id: 'dnsexit', name: 'DNSExit', host: 'mail.dnsexit.com', port: 587, secure: 0 },
+  { id: 'custom', name: 'Custom SMTP', host: '', port: 587, secure: 0 },
+];
+
+let logoAttachment = null;
 function getLogoAttachment() {
   if (logoAttachment) return logoAttachment;
   try {
@@ -32,112 +44,174 @@ function getLogoAttachment() {
     const buf = fs.readFileSync(p);
     logoAttachment = [{ filename: 'firmledger-logo.png', content: buf, cid: 'firmledger-logo' }];
   } catch {
-    logoAttachment = []; // logo file missing — text-only header fallback
+    logoAttachment = [];
   }
   return logoAttachment;
 }
 
-/** Read a setting — lazy require to avoid a circular load with db.js. */
 function setting(name) {
-  try {
-    const { getSetting } = require('../db');
-    return getSetting(name, '');
-  } catch { return ''; }
+  try { return require('../db').getSetting(name, ''); } catch { return ''; }
+}
+function setSettingSafe(name, value) {
+  try { require('../db').setSetting(name, value); } catch { /* ignore */ }
 }
 
-/** Build the effective SMTP configuration. Empty object = not configured. */
-function smtpConfig() {
-  const url = process.env.SMTP_URL;
-  if (url) {
-    const m = url.match(/^smtps?:\/\/([^:]+):([^@]+)@([^:/]+)(?::(\d+))?/i);
-    if (!m) return { error: 'SMTP_URL is malformed — expected smtps://user:pass@host:port' };
-    return {
-      via: 'env SMTP_URL',
-      host: m[3], port: Number(m[4]) || (url.startsWith('smtps://') ? 465 : 587),
-      secure: url.startsWith('smtps://') || Number(m[4]) === 465,
-      user: decodeURIComponent(m[1]), pass: decodeURIComponent(m[2]),
-    };
-  }
-  const eh = process.env.MAIL_HOST;
-  if (eh) {
-    return {
-      via: 'env MAIL_*',
-      host: eh,
-      port: Number(process.env.MAIL_PORT) || 587,
-      secure: (process.env.MAIL_SECURE || '').toLowerCase() === '1' || (process.env.MAIL_SECURE || '').toLowerCase() === 'true' || Number(process.env.MAIL_PORT) === 465,
+function parseSmtpUrl(url, via) {
+  const m = String(url || '').match(/^smtps?:\/\/([^:]+):([^@]+)@([^:/]+)(?::(\d+))?/i);
+  if (!m) return null;
+  const secure = String(url).toLowerCase().startsWith('smtps://') || Number(m[4]) === 465;
+  return {
+    via, source: 'env', id: via,
+    host: m[3], port: Number(m[4]) || (secure ? 465 : 587), secure,
+    user: decodeURIComponent(m[1]), pass: decodeURIComponent(m[2]),
+    daily_limit: 0, label: via,
+  };
+}
+
+function envSlots() {
+  const out = [];
+  if (process.env.SMTP_URL) {
+    const p = parseSmtpUrl(process.env.SMTP_URL, 'env SMTP_URL');
+    if (p) out.push(p);
+  } else if (process.env.MAIL_HOST) {
+    const port = Number(process.env.MAIL_PORT) || 587;
+    const sec = (process.env.MAIL_SECURE || '').toLowerCase();
+    out.push({
+      via: 'env MAIL_*', source: 'env', id: 'env MAIL_*',
+      host: process.env.MAIL_HOST, port,
+      secure: sec === '1' || sec === 'true' || port === 465,
       user: process.env.MAIL_USER || '', pass: process.env.MAIL_PASS || '',
-    };
+      daily_limit: 0, label: 'MAIL_*',
+    });
   }
-  const h = setting('smtp_host');
-  if (h) {
-    const p = Number(setting('smtp_port')) || 587;
-    return {
-      via: 'admin settings',
-      host: h, port: p,
-      secure: setting('smtp_secure') === '1' || p === 465,
-      user: setting('smtp_user'), pass: setting('smtp_pass'),
-    };
+  for (let n = 2; n <= 6; n++) {
+    const u = process.env['SMTP' + n + '_URL'] || process.env['SMTP_URL_' + n];
+    if (!u) continue;
+    const p = parseSmtpUrl(u, 'env SMTP' + n + '_URL');
+    if (p) out.push(p);
   }
-  return {};
+  return out;
 }
 
-let transporter;      // undefined = not attempted, false = error, object = ready
-let transporterKey;   // fingerprint of the config used to build it
-function getTransporter() {
-  const key = JSON.stringify(smtpConfig());
-  if (key !== transporterKey) { transporter = undefined; transporterKey = key; }
-  if (transporter !== undefined) return transporter || null;
+function dbAccounts() {
   try {
-    const cfg = smtpConfig();
-    if (!cfg.host) { transporter = false; return null; }
-    const nodemailer = require('nodemailer');
-    transporter = nodemailer.createTransport({
-      host: cfg.host, port: cfg.port, secure: cfg.secure,
-      auth: cfg.user ? { user: cfg.user, pass: cfg.pass } : undefined,
-      connectionTimeout: 10000, greetingTimeout: 10000, socketTimeout: 15000,
-    });
-  } catch (e) {
-    console.warn('[mail] transporter init failed:', e.message);
-    transporter = false;
-    return null;
+    return require('../db').db.prepare(
+      'SELECT * FROM smtp_accounts WHERE active=1 ORDER BY sort ASC, id ASC'
+    ).all();
+  } catch { return []; }
+}
+
+function allAccountsRaw() {
+  try {
+    return require('../db').db.prepare('SELECT * FROM smtp_accounts ORDER BY sort ASC, id ASC').all();
+  } catch { return []; }
+}
+
+/** Ordered hop list used at send time. */
+function hops() {
+  const list = envSlots();
+  if (!list.length) {
+    const h = setting('smtp_host');
+    if (h) {
+      const p = Number(setting('smtp_port')) || 587;
+      list.push({
+        via: 'admin settings', source: 'settings', id: 'settings',
+        host: h, port: p,
+        secure: setting('smtp_secure') === '1' || p === 465,
+        user: setting('smtp_user'), pass: setting('smtp_pass'),
+        daily_limit: 0, label: 'Primary (settings)',
+      });
+    }
   }
-  return transporter;
+  for (const a of dbAccounts()) {
+    list.push({
+      via: a.label || a.provider, source: 'admin', id: a.id,
+      provider: a.provider, host: a.host, port: a.port, secure: Boolean(a.secure),
+      user: a.username, pass: a.password,
+      daily_limit: a.daily_limit || 0,
+      sent_today: a.sent_today || 0, sent_on: a.sent_on || '',
+      last_error: a.last_error || '', last_error_at: a.last_error_at || '',
+      label: a.label || a.provider,
+    });
+  }
+  return list.filter((h) => h.host);
 }
 
 function fromAddress() {
-  // Explicit wins: env, then Admin settings.
   if (process.env.MAIL_FROM) return process.env.MAIL_FROM;
   const f = setting('smtp_from');
   if (f) return f;
-  // Providers like Zoho / Gmail reject relay (553 "Sender is not allowed to
-  // relay emails") unless the From address matches the authenticated account —
-  // default the From to the SMTP login itself so Zoho accepts it.
-  try {
-    const user = (smtpConfig().user || '').trim();
-    if (user.includes('@')) return `FirmLedger <${user}>`;
-  } catch {}
+  const first = hops()[0];
+  if (first && first.user && String(first.user).includes('@')) return `FirmLedger <${first.user}>`;
   return 'FirmLedger <no-reply@firmledger.co.ke>';
 }
 
+const transportCache = new Map();
+function transporterFor(hop) {
+  const key = `${hop.host}:${hop.port}:${hop.user}`;
+  if (transportCache.has(key)) return transportCache.get(key);
+  try {
+    const nodemailer = require('nodemailer');
+    const t = nodemailer.createTransport({
+      host: hop.host, port: hop.port, secure: Boolean(hop.secure),
+      auth: hop.user ? { user: hop.user, pass: hop.pass } : undefined,
+      connectionTimeout: 10000, greetingTimeout: 10000, socketTimeout: 15000,
+    });
+    transportCache.set(key, t);
+    return t;
+  } catch (e) {
+    console.warn('[mail] transporter init failed:', hop.host, e.message);
+    return null;
+  }
+}
+
+function isLimitError(err) {
+  const msg = String((err && (err.response || err.message)) || err || '').toLowerCase();
+  const code = String((err && (err.responseCode || err.code)) || '');
+  if (['421', '450', '451', '452'].includes(code)) return true;
+  return /rate|quota|limit|throttl|too many|daily sending|sending limit|4\.7\.|5\.4\.5|try again later|temporarily deferred/.test(msg);
+}
+
+function todayStamp() { return new Date().toISOString().slice(0, 10); }
+
+function hopOverLimit(hop) {
+  if (!hop.daily_limit) return false;
+  if (hop.source !== 'admin') return false;
+  const today = todayStamp();
+  if (hop.sent_on !== today) return false;
+  return (hop.sent_today || 0) >= hop.daily_limit;
+}
+
+function markSent(hop) {
+  if (hop.source !== 'admin' || !hop.id) return;
+  try {
+    const { db } = require('../db');
+    const today = todayStamp();
+    const row = db.prepare('SELECT sent_today, sent_on FROM smtp_accounts WHERE id=?').get(hop.id);
+    const n = row && row.sent_on === today ? (row.sent_today || 0) + 1 : 1;
+    db.prepare("UPDATE smtp_accounts SET sent_today=?, sent_on=?, last_ok_at=datetime('now'), last_error='' WHERE id=?")
+      .run(n, today, hop.id);
+  } catch { /* ignore */ }
+}
+
+function markError(hop, err) {
+  if (hop.source !== 'admin' || !hop.id) return;
+  try {
+    require('../db').db.prepare("UPDATE smtp_accounts SET last_error=?, last_error_at=datetime('now') WHERE id=?")
+      .run(String(err || '').slice(0, 400), hop.id);
+  } catch { /* ignore */ }
+}
+
 const BRAND = {
-  navy: '#0A1628',
-  navy2: '#12203A',
-  accent: '#1D4ED8',
-  accentSoft: '#EFF4FF',
-  ink: '#1B2438',
-  muted: '#5B6478',
-  line: '#E3E8F2',
-  bg: '#F6F8FC',
-  ok: '#0E9F6E',
-  gold: '#D9A848',
-  url: 'https://firmledger.co.ke',
+  navy: '#0A1628', navy2: '#12203A', accent: '#1D4ED8', accentSoft: '#EFF4FF',
+  ink: '#1B2438', muted: '#5B6478', line: '#E3E8F2', bg: '#F6F8FC',
+  ok: '#0E9F6E', gold: '#D9A848', url: 'https://firmledger.co.ke',
 };
 
 function esc(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
-/** FirmLedger logo lockup for the email header — real brand mark + wordmark. */
 function logoHtml() {
   return `<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
     <td style="vertical-align:middle;">
@@ -149,10 +223,6 @@ function logoHtml() {
   </tr></table>`;
 }
 
-/**
- * Build a branded HTML email.
- * opts: preheader, title, paragraphs[], cta:{label,url}, note, alert, alertTone ('ok'|'warn'|'info')
- */
 function brandedHtml(opts = {}) {
   const pre = opts.preheader || '';
   const paras = (opts.paragraphs || []).map((p) =>
@@ -189,12 +259,10 @@ function brandedHtml(opts = {}) {
   <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:${BRAND.bg};">
     <tr><td style="padding:24px 12px;">
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" align="center" style="max-width:600px;width:100%;">
-        <!-- header -->
         <tr><td style="background:${BRAND.navy};border-radius:16px 16px 0 0;padding:20px 28px;">${logoHtml()}</td></tr>
         ${opts.kicker ? `<tr><td style="background:${BRAND.navy2};padding:0 28px 16px;">
             <span style="display:inline-block;padding:5px 12px;border:1px solid rgba(255,255,255,.25);border-radius:999px;font-family:Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:.12em;color:#ffffff;text-transform:uppercase;">${esc(opts.kicker)}</span>
           </td></tr>` : ''}
-        <!-- body card -->
         <tr><td style="background:#ffffff;padding:32px 28px 28px;border-left:1px solid ${BRAND.line};border-right:1px solid ${BRAND.line};">
           ${opts.title ? `<h1 style="margin:0 0 18px;font-family:Georgia,serif;font-size:24px;font-weight:700;line-height:1.3;color:${BRAND.navy};">${opts.title}</h1>` : ''}
           ${alert}
@@ -203,7 +271,6 @@ function brandedHtml(opts = {}) {
           ${cta}
           ${note}
         </td></tr>
-        <!-- footer -->
         <tr><td style="background:${BRAND.bg};border:1px solid ${BRAND.line};border-top:none;border-radius:0 0 16px 16px;padding:20px 28px;">
           <p style="margin:0;font-size:12px;line-height:1.6;color:${BRAND.muted};">
             Sent by <a href="${BRAND.url}" style="color:${BRAND.accent};text-decoration:none;font-weight:600;">FirmLedger</a> ·
@@ -219,7 +286,6 @@ function brandedHtml(opts = {}) {
 </body></html>`;
 }
 
-/** Derive a plain-text fallback from the branded payload. */
 function brandedText(opts = {}) {
   const lines = [];
   if (opts.title) { lines.push(opts.title.replace(/<[^>]+>/g, ''), ''); }
@@ -238,25 +304,50 @@ function logOutbox(to, msg, via, extra = '') {
   fs.appendFileSync(outboxPath, line);
 }
 
+async function sendVia(hop, to, msg) {
+  const t = transporterFor(hop);
+  if (!t) throw new Error('Could not build transport for ' + hop.host);
+  const payload = { from: fromAddress(), to, ...msg };
+  if (msg.html && msg.html.includes('cid:firmledger-logo')) payload.attachments = getLogoAttachment();
+  await t.sendMail(payload);
+}
+
 async function deliver(to, msg) {
-  const t = getTransporter();
-  if (!t) {
+  const chain = hops();
+  if (!chain.length) {
     logOutbox(to, msg, 'OUTBOX');
     console.log('[mail:outbox]', msg.subject, '→', to);
     return { delivered: false, logged: true };
   }
-  try {
-    const payload = { from: fromAddress(), to, ...msg };
-    if (msg.html && msg.html.includes('cid:firmledger-logo')) payload.attachments = getLogoAttachment();
-    await t.sendMail(payload);
-    logOutbox(to, msg, 'SENT');
-    console.log('[mail:sent]', msg.subject, '→', to);
-    return { delivered: true };
-  } catch (e) {
-    console.error('[mail:SEND-FAILED]', to, msg.subject, '—', e.message);
-    logOutbox(to, msg, 'FAILED', `error=${e.message}`);
-    return { delivered: false, error: e.message };
+  const errors = [];
+  for (const hop of chain) {
+    if (hopOverLimit(hop)) {
+      errors.push(`${hop.label}: daily limit reached`);
+      continue;
+    }
+    try {
+      await sendVia(hop, to, msg);
+      markSent(hop);
+      logOutbox(to, msg, 'SENT', `via=${hop.host}`);
+      console.log('[mail:sent]', msg.subject, '→', to, 'via', hop.host);
+      return { delivered: true, via: hop.host };
+    } catch (e) {
+      const m = e.message || String(e);
+      markError(hop, m);
+      errors.push(`${hop.label}: ${m}`);
+      if (isLimitError(e)) {
+        console.warn('[mail:failover]', hop.host, 'hit a limit — trying next hop');
+        continue;
+      }
+      // Connection/auth failures also fail over so a dead primary does not
+      // strand account/money mail. Non-limit errors still try the next hop.
+      console.warn('[mail:failover]', hop.host, m);
+    }
   }
+  const joined = errors.join(' | ');
+  console.error('[mail:SEND-FAILED]', to, msg.subject, '—', joined);
+  logOutbox(to, msg, 'FAILED', `error=${joined}`);
+  return { delivered: false, error: joined || 'All SMTP hops failed' };
 }
 
 async function sendMail(to, subject, text, html) {
@@ -267,18 +358,10 @@ async function sendBranded(to, subject, opts = {}) {
   return deliver(to, { subject, text: opts.text || brandedText(opts), html: brandedHtml(opts) });
 }
 
-/** Verify the live transport by sending a real test email. */
 async function sendTest(to) {
-  const cfg = smtpConfig();
-  if (!cfg.host) return { ok: false, error: 'No SMTP configuration found — none of SMTP_URL, MAIL_* env or Admin settings are set.' };
-  if (!cfg.user && !process.env.SMTP_URL) return { ok: false, error: 'SMTP host set but no username provided.' };
-  const t = getTransporter();
-  if (!t) return { ok: false, error: 'Could not build a mail transport — check the host/port/secure settings.' };
-  try {
-    await t.verify();
-  } catch (e) {
-    return { ok: false, error: `SMTP connection failed: ${e.message}` };
-  }
+  const chain = hops();
+  if (!chain.length) return { ok: false, error: 'No SMTP configuration found — add a provider in Admin → Settings or set SMTP_URL / SMTP2_URL in .env.' };
+  const hosts = chain.map((h) => `${h.host}:${h.port}`).join(' → ');
   const r = await sendBranded(to, 'FirmLedger test email', {
     kicker: 'Configuration check',
     title: 'SMTP is working',
@@ -286,14 +369,90 @@ async function sendTest(to) {
     alert: 'Your FirmLedger SMTP configuration is verified and this email was delivered through it.',
     alertTone: 'ok',
     paragraphs: [
-      `Transport: <b>${esc(cfg.host)}:${cfg.port}</b> (${cfg.secure ? 'TLS' : 'STARTTLS/plain'}) via <b>${cfg.via}</b>.`,
-      'All lifecycle emails — welcome, receipts, security notices and moderation updates — will now reach real inboxes with this branding.',
+      `From address (same on every hop): <b>${esc(fromAddress())}</b>.`,
+      `Failover chain: <b>${esc(hosts)}</b>. If the first hop hits a sending limit, the next one is used automatically.`,
     ],
     cta: { label: 'Open admin console', url: require('./util').siteUrl('/admin3119Musa/settings') },
     note: 'This is a one-off test triggered from your admin settings.',
   });
-  if (r.delivered) return { ok: true };
+  if (r.delivered) return { ok: true, via: r.via };
   return { ok: false, error: r.error || 'Unknown send failure' };
 }
 
-module.exports = { sendMail, sendBranded, sendTest, brandedHtml, mailConfigured: () => Boolean(smtpConfig().host) };
+function mailConfigured() { return hops().length > 0; }
+
+function accountStatus() {
+  return {
+    configured: mailConfigured(),
+    from: fromAddress(),
+    hops: hops().map((h) => ({
+      id: h.id, source: h.source, label: h.label, host: h.host, port: h.port,
+      provider: h.provider || '', daily_limit: h.daily_limit || 0,
+      sent_today: h.sent_on === todayStamp() ? (h.sent_today || 0) : 0,
+      last_error: h.last_error || '',
+    })),
+  };
+}
+
+function addAccount(body) {
+  const { db } = require('../db');
+  const provider = PROVIDERS.some((p) => p.id === body.provider) ? body.provider : 'custom';
+  const preset = PROVIDERS.find((p) => p.id === provider) || PROVIDERS[PROVIDERS.length - 1];
+  const host = String(body.host || preset.host || '').trim().slice(0, 200);
+  const port = Math.max(1, Math.min(65535, parseInt(body.port, 10) || preset.port || 587));
+  const secure = body.secure === '1' || body.secure === 1 || port === 465 ? 1 : 0;
+  const username = String(body.username || '').trim().slice(0, 200);
+  const password = String(body.password || '').trim().slice(0, 500);
+  const label = String(body.label || preset.name || provider).trim().slice(0, 80);
+  const daily = Math.max(0, parseInt(body.daily_limit, 10) || 0);
+  const sort = Math.max(0, parseInt(body.sort, 10) || 0);
+  if (!host) return { ok: false, error: 'SMTP host is required.' };
+  if (!username) return { ok: false, error: 'Username is required.' };
+  if (!password) return { ok: false, error: 'Password is required.' };
+  db.prepare(
+    `INSERT INTO smtp_accounts (provider, label, host, port, secure, username, password, daily_limit, active, sort)
+     VALUES (?,?,?,?,?,?,?,?,1,?)`
+  ).run(provider, label, host, port, secure, username, password, daily, sort);
+  transportCache.clear();
+  return { ok: true };
+}
+
+function updateAccount(id, body) {
+  const { db } = require('../db');
+  const row = db.prepare('SELECT * FROM smtp_accounts WHERE id=?').get(id);
+  if (!row) return { ok: false, error: 'Account not found.' };
+  const host = String(body.host || row.host).trim().slice(0, 200);
+  const port = Math.max(1, Math.min(65535, parseInt(body.port, 10) || row.port));
+  const secure = body.secure === undefined ? row.secure : (body.secure === '1' || body.secure === 1 ? 1 : 0);
+  const username = String(body.username || row.username).trim().slice(0, 200);
+  const password = String(body.password || '').trim() || row.password;
+  const label = String(body.label || row.label).trim().slice(0, 80);
+  const daily = body.daily_limit === undefined ? row.daily_limit : Math.max(0, parseInt(body.daily_limit, 10) || 0);
+  db.prepare(
+    'UPDATE smtp_accounts SET label=?, host=?, port=?, secure=?, username=?, password=?, daily_limit=? WHERE id=?'
+  ).run(label, host, port, secure, username, password, daily, id);
+  transportCache.clear();
+  return { ok: true };
+}
+
+function toggleAccount(id) {
+  const { db } = require('../db');
+  const row = db.prepare('SELECT active FROM smtp_accounts WHERE id=?').get(id);
+  if (!row) return;
+  db.prepare('UPDATE smtp_accounts SET active=? WHERE id=?').run(row.active ? 0 : 1, id);
+  transportCache.clear();
+}
+function deleteAccount(id) {
+  require('../db').db.prepare('DELETE FROM smtp_accounts WHERE id=?').run(id);
+  transportCache.clear();
+}
+
+function saveGlobalFrom(from) {
+  setSettingSafe('smtp_from', String(from || '').trim().slice(0, 200));
+}
+
+module.exports = {
+  sendMail, sendBranded, sendTest, brandedHtml, mailConfigured,
+  PROVIDERS, hops, fromAddress, accountStatus, allAccountsRaw,
+  addAccount, updateAccount, toggleAccount, deleteAccount, saveGlobalFrom,
+};

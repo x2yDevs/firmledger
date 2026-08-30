@@ -12,6 +12,8 @@ const nl = require('../lib/newsletter');
 const { allPlans, perksActive, canViewFull, PRO_USER_SQL, PRO_LISTING_SQL } = require('../lib/plans');
 const paypal = require('../lib/paypal');
 
+const spam = require('../lib/spam');
+
 const router = express.Router();
 const PER_PAGE = 12;
 
@@ -237,7 +239,7 @@ router.get('/directory/c/:rest([a-z0-9-]+)', (req, res, next) => {
 });
 
 /* ---------------- Search suggest (names API) ---------------- */
-router.get('/suggest.json', (req, res) => {
+router.get('/suggest.json', spam.gate('search'), (req, res) => {
   const q = (req.query.q || '').trim();
   if (q.length < 2) return res.json({ suggestions: [] });
   const rows = db.prepare(
@@ -559,7 +561,7 @@ router.get('/blog/:slug', (req, res, next) => {
 });
 
 /* ---------------- Global search ---------------- */
-router.get('/search', (req, res) => {
+router.get('/search', spam.gate('search'), (req, res) => {
   const q = String(req.query.q || '').trim().slice(0, 120);
   const out = { listings: [], posts: [], docs: [] };
   if (q) {
@@ -632,7 +634,7 @@ router.post('/removal/:slug', (req, res, next) => {
 });
 
 /* ---------------- Newsletter ---------------- */
-router.post('/newsletter/subscribe', (req, res) => {
+router.post('/newsletter/subscribe', spam.gate('newsletter', { checkEmail: true }), (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase();
   const r = nl.subscribe(email, req.user ? 'account' : 'footer');
   if (!r) return res.redirect('/?nl=' + encodeURIComponent('Enter a valid email address.') + '&nl_err=1');
