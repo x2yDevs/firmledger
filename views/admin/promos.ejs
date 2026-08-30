@@ -1,0 +1,80 @@
+<%- include('../partials/top') %>
+<%- include('../partials/adminnav') %>
+
+<section class="section-tight">
+  <div class="container">
+    <div class="section-head">
+      <h2>Promo codes</h2>
+      <span class="muted">Percent-off codes for FirmLedger Pro. Applied at checkout, verified server-side before PayPal.</span>
+    </div>
+    <% if (ok) { %><div class="alert alert-ok"><%= ok %></div><% } %>
+    <% if (err) { %><div class="alert alert-err"><%= err %></div><% } %>
+
+    <div class="form-card">
+      <h3 class="form-section">Create a code</h3>
+      <form class="form" method="post" action="/admin3119Musa/promos">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <div class="grid-3">
+          <label><span>Code</span><input type="text" name="code" placeholder="LAUNCH20" maxlength="32" required style="text-transform:uppercase"></label>
+          <label><span>Percent off</span><input type="number" name="percent" min="1" max="90" value="20" required></label>
+          <label><span>Max uses (0 = unlimited)</span><input type="number" name="max_uses" min="0" value="0"></label>
+        </div>
+        <div class="grid-2">
+          <label><span>Restrict to offer</span>
+            <select name="plan_id">
+              <option value="0">Any live offer</option>
+              <% plans.forEach(function (p) { %>
+                <option value="<%= p.id %>"><%= p.name %> — $<%= (p.price_cents/100).toFixed(2) %></option>
+              <% }) %>
+            </select>
+          </label>
+          <label><span>Expires (optional)</span><input type="date" name="expires_at"></label>
+        </div>
+        <label><span>Internal note</span><input type="text" name="note" maxlength="200" placeholder="Launch week — 20% off yearly"></label>
+        <label><span>Notify members</span>
+          <select name="notify">
+            <option value="none">Don’t notify</option>
+            <option value="inapp">In-app notification</option>
+            <option value="email">Email (account / money channel)</option>
+            <option value="both">Email and in-app</option>
+          </select>
+        </label>
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit">Create code</button>
+        </div>
+        <p class="form-note">Example: <code>LAUNCH20</code> at 20% off yearly. Members enter it on Dashboard → Upgrade. One redemption per account.</p>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Code</th><th>Off</th><th>Plan</th><th>Uses</th><th>Expires</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+          <% codes.forEach(function (c) { %>
+          <tr <%= c.active ? '' : 'style="opacity:.55"' %>>
+            <td><b class="mono"><%= c.code %></b><% if (c.note) { %><div class="score-hint"><%= c.note %></div><% } %></td>
+            <td><b><%= c.percent %>%</b></td>
+            <td class="muted"><%= c.plan_id ? ('#' + c.plan_id) : 'any' %></td>
+            <td><%= c.used_count %><% if (c.max_uses) { %> / <%= c.max_uses %><% } else { %> <span class="muted">∞</span><% } %></td>
+            <td class="muted"><%= c.expires_at || '—' %></td>
+            <td><span class="pill pill-<%= c.active ? 'approved' : 'pending' %>"><%= c.active ? 'live' : 'off' %></span></td>
+            <td class="ta-right" style="white-space:nowrap">
+              <form method="post" action="/admin3119Musa/promos/<%= c.id %>/toggle" class="inline">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                <button class="btn btn-ghost btn-xs" type="submit"><%= c.active ? 'Disable' : 'Enable' %></button>
+              </form>
+              <form method="post" action="/admin3119Musa/promos/<%= c.id %>/delete" class="inline" onsubmit="return confirm('Delete this code? Codes with payments are deactivated instead.');">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                <button class="btn btn-danger btn-xs" type="submit">Delete</button>
+              </form>
+            </td>
+          </tr>
+          <% }) %>
+          <% if (!codes.length) { %><tr><td colspan="7" class="muted">No codes yet — create LAUNCH20 above.</td></tr><% } %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<%- include('../partials/bottom') %>

@@ -147,28 +147,106 @@
     </div>
 
     <div class="form-card form">
-      <h3 class="form-section">Email — SMTP</h3>
-      <p class="muted">With SMTP configured, every FirmLedger email (welcome, receipts, security notices, moderation updates, admin blasts) is delivered to real inboxes with FirmLedger branding. Without it everything is written to <code>data/outbox.log</code> instead.</p>
-      <dl class="facts" style="margin-top:12px">
-        <div><dt>Status</dt><dd><% if (settings.smtp_configured) { %><span class="pill pill-approved">Configured ✓ — real emails will be sent</span><% } else { %><span class="pill pill-pending">Not configured</span> — mail is written to <code>data/outbox.log</code><% } %></dd></div>
-        <% if (settings.smtp_env) { %><div><dt>Source</dt><dd>Environment variables (<code>SMTP_URL</code> or <code>MAIL_*</code>) — these win over anything saved below.</dd></div><% } %>
-      </dl>
-      <% if (!settings.smtp_env) { %>
-      <form method="post" action="/admin3119Musa/settings" style="margin-top:16px">
+      <h3 class="form-section">Email — multi-provider SMTP</h3>
+      <p class="muted">Account, money and newsletter mail always uses the same From address. Add as many providers as you like (Emitlo, Maileroo, Brevo, Mailjet, Mailtrap, SMTP2GO, Resend, AhaSend, SMTPfast, Forward Email, DNSExit, Zoho, or custom). If one hop hits a sending limit, the next hop is used automatically. <code>SMTP_URL</code> / <code>SMTP2_URL</code>… in <code>.env</code> are tried first.</p>
+      <table class="facts" style="margin-top:12px">
+        <tr><th>Status</th><td><% if (typeof smtp_configured !== 'undefined' ? smtp_configured : settings.smtp_configured) { %><span class="pill pill-approved">Configured ✓</span><% } else { %><span class="pill pill-pending">Outbox only</span><% } %></td></tr>
+        <tr><th>From (everywhere)</th><td><code><%= typeof mailFrom !== 'undefined' ? mailFrom : (settings.smtp_from || 'FirmLedger &lt;no-reply@firmledger.co.ke&gt;') %></code></td></tr>
+      </table>
+      <form method="post" action="/admin3119Musa/mail/from" style="margin-top:14px">
         <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-        <div class="grid-3">
-          <label style="grid-column:span 2"><span>SMTP host *</span><input type="text" name="smtp_host" value="<%= settings.smtp_host %>" placeholder="smtppro.zoho.com · smtp.zoho.com · smtp.resend.com"></label>
-          <label><span>Port *</span><input type="number" name="smtp_port" value="<%= settings.smtp_port %>" min="1" max="65535" placeholder="465"></label>
-          <label style="grid-column:span 1"><span>Username *</span><input type="text" name="smtp_user" value="<%= settings.smtp_user %>" placeholder="you@yourdomain.com" autocomplete="off"></label>
-          <label style="grid-column:span 2"><span>Password / app password *</span><input type="password" name="smtp_pass" value="" autocomplete="new-password" placeholder="<%= settings.smtp_pass_set ? '•••••••• (saved — leave blank to keep)' : 'smtp password or app-specific password' %>"></label>
-        </div>
-        <label><span>From address (optional — must match the mail account on providers like Zoho, Gmail)</span><input type="text" name="smtp_from" value="<%= settings.smtp_from %>" placeholder="FirmLedger <you@yourdomain.com>"></label>
-        <label class="check" style="align-self:start"><input type="checkbox" name="smtp_secure" value="1" <%= settings.smtp_secure === '1' ? 'checked' : '' %>><span>Implicit TLS (port 465). Leave unchecked for STARTTLS on port 587.</span></label>
-        <div class="form-actions">
-          <button class="btn btn-accent" type="submit">Save SMTP settings</button>
-        </div>
-        <p class="form-note">Zoho quick setup: host <code>smtppro.zoho.com</code> (or <code>smtp.zoho.com</code> for free Zoho Mail), port <code>465</code>, TLS checked, username = your full Zoho email, password = your Zoho account password (or an app password if two-factor is on at <a href="https://accounts.zoho.com/home" target="_blank" rel="noopener">accounts.zoho.com</a> → Security → App Passwords). The From address must be that same Zoho address or 553 rejections appear — leave it blank and it auto-fills from your username.</p>
+        <label><span>From address used on every hop</span><input type="text" name="smtp_from" value="<%= settings.smtp_from %>" placeholder="FirmLedger &lt;no-reply@firmledger.co.ke&gt;"></label>
+        <div class="form-actions"><button class="btn btn-ghost btn-sm" type="submit">Save From</button></div>
       </form>
+
+      <% if (typeof mailHops !== 'undefined' && mailHops.length) { %>
+      <h4 class="form-section">Live failover chain</h4>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>#</th><th>Hop</th><th>Host</th><th>Source</th></tr></thead>
+          <tbody>
+            <% mailHops.forEach(function (h, i) { %>
+            <tr>
+              <td class="muted"><%= i + 1 %></td>
+              <td><b><%= h.label %></b></td>
+              <td class="mono" style="font-size:12px"><%= h.host %>:<%= h.port %></td>
+              <td class="muted"><%= h.source %></td>
+            </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+      <% } %>
+
+      <% if (typeof mailAccounts !== 'undefined' && mailAccounts.length) { %>
+      <h4 class="form-section">Saved providers</h4>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Provider</th><th>Host</th><th>Daily cap</th><th></th></tr></thead>
+          <tbody>
+            <% mailAccounts.forEach(function (a) { %>
+            <tr <%= a.active ? '' : 'style="opacity:.55"' %>>
+              <td><b><%= a.label || a.provider %></b><div class="score-hint"><%= a.username %></div></td>
+              <td class="mono" style="font-size:12px"><%= a.host %>:<%= a.port %></td>
+              <td><%= a.daily_limit ? (a.sent_today + ' / ' + a.daily_limit) : 'none' %></td>
+              <td class="ta-right" style="white-space:nowrap">
+                <form method="post" action="/admin3119Musa/mail/accounts/<%= a.id %>/toggle" class="inline">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <button class="btn btn-ghost btn-xs" type="submit"><%= a.active ? 'Pause' : 'Resume' %></button>
+                </form>
+                <form method="post" action="/admin3119Musa/mail/accounts/<%= a.id %>/delete" class="inline" onsubmit="return confirm('Remove this mail hop?');">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <button class="btn btn-danger btn-xs" type="submit">Remove</button>
+                </form>
+              </td>
+            </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+      <% } %>
+
+      <h4 class="form-section">Add a provider</h4>
+      <form method="post" action="/admin3119Musa/mail/accounts" id="smtp-add">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <div class="grid-2">
+          <label><span>Provider</span>
+            <select name="provider" id="smtp-provider">
+              <% (typeof providers !== 'undefined' ? providers : []).forEach(function (p) { %>
+                <option value="<%= p.id %>" data-host="<%= p.host %>" data-port="<%= p.port %>" data-secure="<%= p.secure %>"><%= p.name %></option>
+              <% }) %>
+            </select>
+          </label>
+          <label><span>Label</span><input type="text" name="label" placeholder="Brevo failover"></label>
+        </div>
+        <div class="grid-3">
+          <label style="grid-column:span 2"><span>Host</span><input type="text" name="host" id="smtp-host" placeholder="smtp-relay.brevo.com"></label>
+          <label><span>Port</span><input type="number" name="port" id="smtp-port" value="587" min="1" max="65535"></label>
+          <label><span>Username</span><input type="text" name="username" autocomplete="off"></label>
+          <label style="grid-column:span 2"><span>Password / API key</span><input type="password" name="password" autocomplete="new-password"></label>
+        </div>
+        <div class="grid-2">
+          <label><span>Daily send cap (0 = none)</span><input type="number" name="daily_limit" min="0" value="0"></label>
+          <label><span>Sort (lower = tried first among admin hops)</span><input type="number" name="sort" min="0" value="10"></label>
+        </div>
+        <label class="check"><input type="checkbox" name="secure" value="1" id="smtp-secure"><span>Implicit TLS (port 465)</span></label>
+        <div class="form-actions"><button class="btn btn-accent" type="submit">Add provider</button></div>
+      </form>
+      <% if (!settings.smtp_env) { %>
+      <form method="post" action="/admin3119Musa/settings" style="margin-top:22px">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <h4 class="form-section">Legacy primary (used when .env is empty)</h4>
+        <div class="grid-3">
+          <label style="grid-column:span 2"><span>SMTP host</span><input type="text" name="smtp_host" value="<%= settings.smtp_host %>" placeholder="smtppro.zoho.com"></label>
+          <label><span>Port</span><input type="number" name="smtp_port" value="<%= settings.smtp_port %>" min="1" max="65535"></label>
+          <label><span>Username</span><input type="text" name="smtp_user" value="<%= settings.smtp_user %>" autocomplete="off"></label>
+          <label style="grid-column:span 2"><span>Password</span><input type="password" name="smtp_pass" value="" autocomplete="new-password" placeholder="<%= settings.smtp_pass_set ? '•••••••• (saved — leave blank to keep)' : 'password' %>"></label>
+        </div>
+        <label class="check"><input type="checkbox" name="smtp_secure" value="1" <%= settings.smtp_secure === '1' ? 'checked' : '' %>><span>Implicit TLS (port 465)</span></label>
+        <div class="form-actions"><button class="btn btn-ghost" type="submit">Save legacy SMTP</button></div>
+      </form>
+      <% } else { %>
+      <p class="form-note">Primary hop is locked to <code>SMTP_URL</code> / <code>MAIL_*</code> in <code>.env</code>. Add failover hops above or as <code>SMTP2_URL</code>, <code>SMTP3_URL</code>…</p>
       <% } %>
       <form method="post" action="/admin3119Musa/settings/test-mail" style="margin-top:6px">
         <input type="hidden" name="_csrf" value="<%= csrfToken %>">
@@ -177,9 +255,25 @@
           <label class="fetch-input"><span>Send a test email to</span><input type="email" name="test_to" required placeholder="you@yourdomain.com"></label>
           <button class="btn btn-ghost fetch-btn" type="submit">Verify &amp; send test</button>
         </div>
-        <p class="form-note" style="margin-top:-4px">The test verifies the connection over the wire and sends a real branded email, so you can confirm deliverability before members depend on it. Check the inbox <em>and spam folder</em>.</p>
+        <p class="form-note" style="margin-top:-4px">Walks the failover chain. Check inbox <em>and spam</em>.</p>
       </form>
     </div>
+    <script>
+      (function () {
+        var sel = document.getElementById('smtp-provider');
+        if (!sel) return;
+        sel.addEventListener('change', function () {
+          var o = sel.options[sel.selectedIndex];
+          if (!o) return;
+          var h = document.getElementById('smtp-host');
+          var p = document.getElementById('smtp-port');
+          var s = document.getElementById('smtp-secure');
+          if (h && o.getAttribute('data-host')) h.value = o.getAttribute('data-host');
+          if (p && o.getAttribute('data-port')) p.value = o.getAttribute('data-port');
+          if (s) s.checked = o.getAttribute('data-secure') === '1';
+        });
+      })();
+    </script>
 
     <div class="form-card">
       <h3 class="form-section">Environment</h3>

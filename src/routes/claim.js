@@ -6,6 +6,10 @@ const { runCheck } = require('../lib/verify');
 const { submitForIndexing } = require('../lib/indexing');
 const { sendBranded } = require('../lib/mailer');
 const { escHtml } = require('../lib/util');
+const { finalizeVerifiedClaim } = require('../lib/claimflow');
+const notify = require('../lib/notify');
+
+const spam = require('../lib/spam');
 
 const router = express.Router();
 
@@ -47,7 +51,7 @@ router.get('/claim/:slug', (req, res) => {
   });
 });
 
-router.post('/claim/:slug', (req, res) => {
+router.post('/claim/:slug', spam.gate('claim'), (req, res) => {
   const l = db.prepare("SELECT * FROM listings WHERE slug = ? AND status='approved'").get(req.params.slug);
   if (!l || l.claimed) return res.redirect('/directory');
   const method = ['dns', 'meta', 'badge'].includes(req.body.method) ? req.body.method : 'meta';
@@ -105,14 +109,7 @@ router.post('/claim/verify/:id', async (req, res) => {
 
   const result = await runCheck(c.method, c.domain, c.token);
   if (result.ok) {
-    const now = new Date().toISOString();
-    db.prepare("UPDATE claims SET status='verified', verified_at=? WHERE id=?").run(now, c.id);
-    db.prepare(
-      "UPDATE listings SET claimed=1, owner_user_id=?, last_verified_at=?, confidence=MIN(97, confidence + 13), updated_at=datetime('now') WHERE id=?"
-    ).run(req.user.id, now, l.id);
-    // expire any other pending claims on this listing
-    db.prepare("UPDATE claims SET status='rejected' WHERE listing_id=? AND id<>? AND status='pending'").run(l.id, c.id);
-    submitForIndexing([`/listing/${l.slug}`]);
+    finalizeVerifiedClaim(c, l, req.user);
     return res.redirect('/dashboard?ok=' + encodeURIComponent(`Ownership verified — ${l.name} is now yours to manage.`));
   }
 

@@ -19,9 +19,11 @@ const { detectTech } = require('../lib/enrich');
 const { firmledgerScore } = require('../lib/score');
 const passwords = require('../lib/passwords');
 const { submitForIndexing } = require('../lib/indexing');
-const { isProUser, perksActive, allPlans } = require('../lib/plans');
+const { isProUser, perksActive, allPlans, isProListingActive } = require('../lib/plans');
 const nl = require('../lib/newsletter');
 const paypal = require('../lib/paypal');
+const notify = require('../lib/notify');
+const spam = require('../lib/spam');
 
 const router = express.Router();
 router.use('/dashboard', requireUser);
@@ -118,8 +120,17 @@ router.get('/dashboard', (req, res) => {
      WHERE c.user_id = ? ORDER BY c.created_at DESC`
   ).all(req.user.id);
   const claimable = db.prepare(
-    "SELECT slug, name FROM listings WHERE status='approved' AND claimed=0 ORDER BY name LIMIT 200"
+    "SELECT slug, name, category, city, country FROM listings WHERE status='approved' AND claimed=0 ORDER BY name LIMIT 400"
   ).all();
+  const former = db.prepare(
+    `SELECT id, slug, name, plan, plan_expires_at, claimed, status
+     FROM listings
+     WHERE submitter_user_id = ? AND (owner_user_id IS NULL OR owner_user_id <> ?)
+     ORDER BY updated_at DESC LIMIT 50`
+  ).all(req.user.id, req.user.id);
+  const pendingDeletion = db.prepare(
+    "SELECT id, status, created_at FROM deletion_requests WHERE user_id=? AND status='pending' ORDER BY id DESC LIMIT 1"
+  ).get(req.user.id);
   // real per-listing health scores
   const socialsOf = (l) => { try { return JSON.parse(l.socials || '{}'); } catch { return {}; } };
   const scores = {};
@@ -137,11 +148,13 @@ router.get('/dashboard', (req, res) => {
   for (const l of listings) plans[l.id] = { perks: perksActive(l) };
   res.render('dashboard/index', {
     meta: { title: 'Dashboard — FirmLedger', description: '', robots: 'noindex' },
-    listings, claims, claimable, scores, plans,
+    listings, claims, claimable, former, scores, plans,
     accountPro: isProUser(req.user),
     accountExpires: req.user.plan_expires_at || '',
     paypalReady: paypal.configured(),
     fa2On: user2fa.enabled(req.user.id),
+    pendingDeletion: pendingDeletion || null,
+    listingProActive: isProListingActive,
     ok: req.query.ok || req.query.okmsg || '', err: req.query.err || '',
   });
 });
@@ -233,7 +246,7 @@ router.get('/dashboard/listings/new', (req, res) => {
   });
 });
 
-router.post('/dashboard/listings/new', async (req, res) => {
+router.post('/dashboard/listings/new', spam.gate('listing'), async (req, res) => {
   if (!validCsrf(req)) return res.status(403).redirect('/dashboard/listings/new');
   const f = collectListingFields(req.body);
   const errors = validate(f);
@@ -267,11 +280,11 @@ router.post('/dashboard/listings/new', async (req, res) => {
 
   db.prepare(
     `INSERT INTO listings (slug, name, tagline, description, type, category, website, email, phone,
-      country, city, region, address, logo_url, founded, size, tags, socials, sources, status, confidence, owner_user_id)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      country, city, region, address, logo_url, founded, size, tags, socials, sources, status, confidence, owner_user_id, submitter_user_id)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
   ).run(slug, f.name, f.tagline, f.description, f.type, f.category, f.website, f.email, f.phone,
     f.country, f.city, f.region, f.address, f.logo_url, f.founded, f.size, f.tags, f.socials,
-    sourcesJson, status, confidence, req.user.id);
+    sourcesJson, status, confidence, req.user.id, req.user.id);
   const newId = db.prepare('SELECT id FROM listings WHERE slug = ?').get(slug).id;
 
   // Technology radar — real signatures detected from the public website (best effort, capped)
@@ -286,6 +299,19 @@ router.post('/dashboard/listings/new', async (req, res) => {
   if (status === 'approved') {
     const catSlug = catLib.all().find((c) => c.name === f.category)?.slug;
     submitForIndexing([`/listing/${slug}`, catSlug ? `/directory/c/${catSlug}` : null].filter(Boolean));
+  } else {
+    notify.notifyAdmin({
+      kind: 'listing',
+      title: `New listing pending — ${f.name}`,
+      body: `Submitted by ${req.user.email}`,
+      url: '/admin3119Musa/listings?status=pending',
+    });
+    notify.notifyUser(req.user.id, {
+      kind: 'listing',
+      title: `${f.name} is in review`,
+      body: 'Our team will publish it after moderation.',
+      url: '/dashboard',
+    });
   }
   res.redirect('/dashboard?ok=' + encodeURIComponent(
     status === 'approved'
@@ -314,12 +340,11 @@ router.get('/dashboard/listings/:id/edit', ownListing, (req, res) => {
   try { socials = JSON.parse(l.socials); } catch {}
   res.render('dashboard/form', {
     meta: { title: `Edit ${l.name} — FirmLedger`, description: '', robots: 'noindex' },
+    ...formLocals(req),
     l: { ...l, ...Object.fromEntries(Object.entries(socials).map(([k, v]) => [`social_${k}`, v])) },
     errors: [], action: `/dashboard/listings/${l.id}/edit`, editing: true,
     relations: graphLib.buildGraph(l).items,
     events: db.prepare('SELECT * FROM listing_events WHERE listing_id=? ORDER BY event_date ASC').all(l.id),
-    
-    ...formLocals(req),
   });
 });
 
@@ -335,11 +360,10 @@ router.post('/dashboard/listings/:id/edit', ownListing, async (req, res) => {
     return res.status(422).render('dashboard/form', {
       meta: { title: `Edit ${l.name} — FirmLedger`, description: '', robots: 'noindex' },
       ...formLocals(req),
-      l: { ...f, id: l.id, slug: l.slug, logo_url: l.logo_url }, errors, dupClaim: dup,
+      l: { ...l, ...f, id: l.id, slug: l.slug, logo_url: f.logo_url || l.logo_url }, errors, dupClaim: dup,
       action: `/dashboard/listings/${l.id}/edit`, editing: true,
       relations: graphLib.buildGraph(l).items,
       events: db.prepare('SELECT * FROM listing_events WHERE listing_id=? ORDER BY event_date ASC').all(l.id),
-      
     });
   }
 
@@ -354,10 +378,10 @@ router.post('/dashboard/listings/:id/edit', ownListing, async (req, res) => {
   const confidence = confidenceScore({
     ...f, claimed: l.claimed, last_verified_at: l.last_verified_at, sources: l.sources,
   });
-  // Edits to a claimed and approved listing return to the review queue — the
-  // owner can change existing details freely, but every change is re-moderated
-  // before it goes back public.
-  const needsReview = (l.claimed && l.status === 'approved') || l.status === 'rejected';
+  // Any edit of an existing live or rejected listing returns to the review
+  // queue — the owner can change existing details freely, but every change is
+  // re-moderated before it goes back public.
+  const needsReview = l.status === 'approved' || l.status === 'rejected';
   db.prepare(
     `UPDATE listings SET name=?, tagline=?, description=?, type=?, category=?, website=?, email=?, phone=?,
       country=?, city=?, region=?, address=?, logo_url=?, founded=?, size=?, tags=?, socials=?, confidence=?,
@@ -388,9 +412,23 @@ router.post('/dashboard/listings/:id/edit', ownListing, async (req, res) => {
   if (f.description !== l.description) watchChanges.push('Company description was rewritten');
   if (watchChanges.length) nl.notifyWatchers(l.id, watchChanges).catch(() => {});
 
+  if (needsReview) {
+    notify.notifyUser(req.user.id, {
+      kind: 'listing',
+      title: `${l.name} is back in review`,
+      body: 'Your edits were saved and will republish after moderation.',
+      url: `/dashboard/listings/${l.id}/edit`,
+    });
+    notify.notifyAdmin({
+      kind: 'listing',
+      title: `Edits pending — ${l.name}`,
+      body: `${req.user.email} updated an existing listing.`,
+      url: '/admin3119Musa/listings?status=pending',
+    });
+  }
   res.redirect(`/dashboard/listings/${l.id}/edit?ok=` + encodeURIComponent(
     needsReview
-      ? 'Changes saved — this claimed listing is back in the review queue and republishes after moderation.'
+      ? 'Changes saved — the listing is back in the review queue and republishes after moderation.'
       : 'Listing updated.'
   ));
 });
@@ -399,21 +437,34 @@ router.post('/dashboard/listings/:id/edit', ownListing, async (req, res) => {
 router.post('/dashboard/listings/:id/refresh-tech', ownListing, async (req, res) => {  const _oldTech = req.listing.tech || '[]';
 
   const l = req.listing;
-  if (!l.website) return res.redirect(`/dashboard/listings/${l.id}/edit?err=` + encodeURIComponent('Add a website first.'));
+  if (!l.website) return res.redirect('/dashboard?err=' + encodeURIComponent('Add a website first.'));
   const snap = await detectTech(l.website);
   db.prepare('UPDATE listings SET tech = ?, tech_checked_at = ?, hiring_url = ? WHERE id = ?')
     .run(JSON.stringify(snap.tech), new Date().toISOString().slice(0, 10), (snap.hiring && snap.hiring.url) || '', l.id);
   if (JSON.stringify(snap.tech) !== _oldTech && snap.tech.length) {
     nl.notifyWatchers(l.id, [`Technology stack refreshed — <b>${snap.tech.length}</b> technologies now detected (${snap.tech.slice(0, 6).map(escHtml).join(', ')}${snap.tech.length > 6 ? '…' : ''})`]).catch(() => {});
   }
-  res.redirect(`/dashboard/listings/${l.id}/edit?ok=` + encodeURIComponent(
+  res.redirect('/dashboard?ok=' + encodeURIComponent(
     snap.tech.length ? `Technology radar refreshed — ${snap.tech.length} technologies detected.` : 'Website scanned — no recognizable technologies detected yet.'
   ));
 });
 
 router.post('/dashboard/listings/:id/delete', ownListing, (req, res) => {
+  const name = req.listing.name;
   deleteLogo(req.listing.logo_url);
   db.prepare('DELETE FROM listings WHERE id = ?').run(req.listing.id);
+  notify.notifyAdmin({
+    kind: 'listing',
+    title: `Listing deleted — ${name}`,
+    body: `${req.user.email} permanently removed the listing.`,
+    url: '/admin3119Musa/listings',
+  });
+  notify.notifyUser(req.user.id, {
+    kind: 'listing',
+    title: `${name} was removed`,
+    body: 'The listing was permanently deleted from the ledger.',
+    url: '/dashboard',
+  });
   res.redirect('/dashboard?ok=' + encodeURIComponent('Listing permanently removed.'));
 });
 
@@ -614,33 +665,18 @@ router.post('/dashboard/support/new', requireUser, async (req, res) => {
     });
   }
   const { id, ref } = support.openTicket(req.user.id, subject, category, body, '', '');
-  // branded acknowledgement to the member
-  sendBranded(req.user.email, `Ticket ${ref} opened — we've got this`, {
-    kicker: 'Support ticket',
-    title: `We received <b>${escHtml(subject)}</b>`,
-    preheader: `Your support ticket ${ref} is open and in our queue.`,
-    alert: `Ticket <b>${ref}</b> is open. Your first reply is with us — moderation team usually answers within a few business hours.`,
-    alertTone: 'ok',
-    paragraphs: [
-      `Follow the live conversation and track status from your support area. You'll get an email the moment someone replies.`,
-    ],
-    cta: { label: 'Open your ticket', url: siteUrl(`/dashboard/support/${id}`) },
-    note: 'Tip: quote the exact error text — it makes resolutions faster.',
-  }).catch(() => {});
-  // notify the admin team that a ticket was raised
-  const adminTo = getSetting('admin_email', '') || process.env.ADMIN_NOTIFY_EMAIL || 'hello@firmledger.co.ke';
-  sendBranded(adminTo, `New support ticket ${ref} — ${subject}`, {
-    kicker: 'New support ticket',
-    title: `<b>${escHtml(req.user.name || 'A member')}</b> opened ticket ${ref}`,
-    preheader: `${category} · ${subject}`,
-    paragraphs: [
-      `<b>From:</b> ${escHtml(req.user.name || '')} &lt;${escHtml(req.user.email)}&gt;<br><b>Category:</b> ${escHtml(category)}<br><b>Subject:</b> ${escHtml(subject)}`,
-      body.length > 400 ? body.slice(0, 400) + '…' : body,
-    ],
-    cta: { label: 'Open in admin console', url: siteUrl(`/admin3119Musa/tickets/${id}`) },
-    note: 'Replies posted in the console are emailed to the member automatically.',
-    text: `New support ticket ${ref}\n\nFrom: ${req.user.name || ''} <${req.user.email}>\nCategory: ${category}\nSubject: ${subject}\n\n${body}\n\nOpen in admin console: ${siteUrl(`/admin3119Musa/tickets/${id}`)}`,
-  }).catch(() => {});
+  notify.notifyUser(req.user.id, {
+    kind: 'ticket',
+    title: `Ticket ${ref} opened`,
+    body: subject,
+    url: `/dashboard/support/${id}`,
+  });
+  notify.notifyAdmin({
+    kind: 'ticket',
+    title: `New ticket ${ref} — ${subject}`,
+    body: `${req.user.email} · ${category}`,
+    url: `/admin3119Musa/tickets/${id}`,
+  });
   res.redirect(`/dashboard/support/${id}?ok=` + encodeURIComponent(`Ticket ${ref} opened — our team will reply shortly.`));
 });
 
@@ -676,6 +712,12 @@ router.post('/dashboard/support/:id/reply', requireUser, loadMyTicket, (req, res
     });
   }
   support.reply(req.ticket.id, 'user', body, '', '');
+  notify.notifyAdmin({
+    kind: 'ticket',
+    title: `Reply on ${req.ticket.ref}`,
+    body: `${req.user.email}: ${body.slice(0, 140)}`,
+    url: `/admin3119Musa/tickets/${req.ticket.id}`,
+  });
   res.redirect(`/dashboard/support/${req.ticket.id}?ok=` + encodeURIComponent('Message sent — our team sees it live.'));
 });
 
@@ -947,6 +989,190 @@ router.post('/dashboard/api/playground', (req, res) => {
   }
   const ms = Number(process.hrtime.bigint() - t0) / 1e6;
   return render({ result: { status: outcome.status, headers, json: outcome.json, ms: Math.round(ms * 10) / 10 } });
+});
+
+/* ================= Claimable search (JSON) ================= */
+router.get('/dashboard/claimable.json', (req, res) => {
+  const q = String(req.query.q || '').trim().slice(0, 80);
+  if (q.length < 1) {
+    const rows = db.prepare(
+      "SELECT slug, name, category, city, country FROM listings WHERE status='approved' AND claimed=0 ORDER BY name LIMIT 40"
+    ).all();
+    return res.json({ listings: rows });
+  }
+  const like = `%${q.replace(/[%_]/g, '')}%`;
+  const rows = db.prepare(
+    `SELECT slug, name, category, city, country FROM listings
+     WHERE status='approved' AND claimed=0
+       AND (name LIKE ? OR category LIKE ? OR city LIKE ? OR country LIKE ?)
+     ORDER BY name LIMIT 40`
+  ).all(like, like, like, like);
+  res.json({ listings: rows });
+});
+
+/* ================= In-app notifications ================= */
+router.get('/dashboard/notifications', (req, res) => {
+  const items = notify.listUser(req.user.id);
+  res.render('dashboard/notifications', {
+    meta: { title: 'Notifications — FirmLedger', description: '', robots: 'noindex' },
+    items,
+    ok: req.query.ok || '',
+  });
+});
+
+router.post('/dashboard/notifications/:id/read', (req, res) => {
+  notify.markRead(Number(req.params.id), { userId: req.user.id });
+  const row = db.prepare('SELECT url FROM notifications WHERE id=? AND user_id=?').get(req.params.id, req.user.id);
+  const dest = row && row.url && String(row.url).startsWith('/') ? row.url : '/dashboard/notifications';
+  res.redirect(dest);
+});
+
+router.post('/dashboard/notifications/read-all', (req, res) => {
+  notify.markAllRead({ userId: req.user.id });
+  res.redirect('/dashboard/notifications?ok=' + encodeURIComponent('All notifications marked read.'));
+});
+
+/* ================= Listing removal request (dashboard) ================= */
+router.post('/dashboard/listings/:id/request-removal', (req, res) => {
+  const l = db.prepare('SELECT * FROM listings WHERE id=?').get(req.params.id);
+  if (!l) return res.redirect('/dashboard?err=' + encodeURIComponent('Listing not found.'));
+  const isOwner = l.owner_user_id === req.user.id;
+  const isSubmitter = l.submitter_user_id === req.user.id;
+  if (!isOwner && !isSubmitter) return res.redirect('/dashboard');
+  const reason = String(req.body.reason || '').trim().slice(0, 2000);
+  if (reason.length < 20) {
+    return res.redirect('/dashboard?err=' + encodeURIComponent('Give a reason of at least 20 characters for the removal request.'));
+  }
+  db.prepare('INSERT INTO removal_requests (listing_id, name, email, reason) VALUES (?,?,?,?)')
+    .run(l.id, req.user.name || '', req.user.email, reason);
+  notify.notifyAdmin({
+    kind: 'removal',
+    title: `Removal request — ${l.name}`,
+    body: `${req.user.email}: ${reason.slice(0, 180)}`,
+    url: '/admin3119Musa/removals',
+  });
+  notify.notifyUser(req.user.id, {
+    kind: 'removal',
+    title: `Removal request sent for ${l.name}`,
+    body: 'A moderator will review it. You will see the outcome here.',
+    url: `/listing/${l.slug}`,
+  });
+  res.redirect('/dashboard?ok=' + encodeURIComponent(`Removal request for “${l.name}” sent — a moderator will review it.`));
+});
+
+/* ================= Listing-scoped Pro transfer request ================= */
+router.post('/dashboard/pro-transfer', (req, res) => {
+  const fromId = Number(req.body.from_listing_id) || 0;
+  const toId = Number(req.body.to_listing_id) || 0;
+  const note = String(req.body.note || '').trim().slice(0, 400);
+  const from = db.prepare('SELECT * FROM listings WHERE id=?').get(fromId);
+  const to = db.prepare('SELECT * FROM listings WHERE id=?').get(toId);
+  if (!from || !to) return res.redirect('/dashboard?err=' + encodeURIComponent('Pick the listing that lost Pro and one of your current listings.'));
+  if (from.submitter_user_id !== req.user.id) return res.redirect('/dashboard');
+  if (to.owner_user_id !== req.user.id) {
+    return res.redirect('/dashboard?err=' + encodeURIComponent('You can only transfer remaining Pro time onto a listing you still own.'));
+  }
+  if (!isProListingActive(from)) {
+    return res.redirect('/dashboard?err=' + encodeURIComponent('That listing no longer has listing-scoped Pro time to transfer.'));
+  }
+  const open = db.prepare(
+    "SELECT id FROM pro_transfer_requests WHERE user_id=? AND from_listing_id=? AND status='pending'"
+  ).get(req.user.id, from.id);
+  if (open) return res.redirect('/dashboard?err=' + encodeURIComponent('A transfer request for that listing is already waiting on admin.'));
+  db.prepare(
+    'INSERT INTO pro_transfer_requests (user_id, from_listing_id, to_listing_id, note) VALUES (?,?,?,?)'
+  ).run(req.user.id, from.id, to.id, note);
+  notify.notifyAdmin({
+    kind: 'pro',
+    title: `Pro transfer request — ${from.name} → ${to.name}`,
+    body: `${req.user.email} asked to move remaining listing-scoped Pro.`,
+    url: '/admin3119Musa/listings',
+  });
+  notify.notifyUser(req.user.id, {
+    kind: 'pro',
+    title: 'Pro transfer request sent',
+    body: `Asked admin to move remaining Pro from ${from.name} onto ${to.name}.`,
+    url: '/dashboard',
+  });
+  res.redirect('/dashboard?ok=' + encodeURIComponent('Transfer request sent — admin will review remaining listing-scoped Pro time.'));
+});
+
+/* ================= Delete-my-account request ================= */
+router.get('/dashboard/delete-account', (req, res) => {
+  const pending = db.prepare(
+    "SELECT * FROM deletion_requests WHERE user_id=? AND status='pending' ORDER BY id DESC LIMIT 1"
+  ).get(req.user.id);
+  res.render('dashboard/delete-account', {
+    meta: { title: 'Delete my account — FirmLedger', description: '', robots: 'noindex' },
+    pending: pending || null,
+    errors: [],
+    old: {},
+  });
+});
+
+router.post('/dashboard/delete-account', (req, res) => {
+  const reason = String(req.body.reason || '').trim().slice(0, 800);
+  const improve = String(req.body.improve || '').trim().slice(0, 800);
+  const confirmName = String(req.body.confirm_name || '').trim();
+  const phrase = String(req.body.confirm_phrase || '').trim();
+  const errors = [];
+  if (reason.length < 10) errors.push('Tell us why you want to leave (at least 10 characters).');
+  if (confirmName.toLowerCase() !== String(req.user.name || '').trim().toLowerCase()) {
+    errors.push('Retype your account name exactly as it appears on your profile.');
+  }
+  if (phrase.toLowerCase() !== 'delete my account') {
+    errors.push('Type “delete my account” in the confirmation box (copy-paste is disabled).');
+  }
+  const existing = db.prepare(
+    "SELECT id FROM deletion_requests WHERE user_id=? AND status='pending'"
+  ).get(req.user.id);
+  if (existing) errors.push('A deletion request is already waiting on the team.');
+  if (errors.length) {
+    return res.status(422).render('dashboard/delete-account', {
+      meta: { title: 'Delete my account — FirmLedger', description: '', robots: 'noindex' },
+      pending: null, errors, old: { reason, improve, confirm_name: confirmName },
+    });
+  }
+  db.prepare(
+    'INSERT INTO deletion_requests (user_id, reason, improve, confirm_name) VALUES (?,?,?,?)'
+  ).run(req.user.id, reason, improve, confirmName);
+  sendBranded(req.user.email, 'Your FirmLedger account deletion request was received', {
+    kicker: 'Account deletion',
+    title: 'Deletion request received',
+    preheader: 'We received your request to delete your FirmLedger account.',
+    alert: 'Your request to delete your FirmLedger account has been received. A moderator will action it — this is not instant.',
+    alertTone: 'warn',
+    paragraphs: [
+      'You asked us to permanently delete your account. Listings you submitted stay on the public ledger as factual records (with your name removed as owner). Sessions, tickets and personal data are removed when the request is completed.',
+    ],
+    cta: { label: 'Open your dashboard', url: siteUrl('/dashboard') },
+    note: 'Changed your mind? Contact support@firmledger.co.ke before the request is processed.',
+  }).catch(() => {});
+  const adminTo = getSetting('admin_email', '') || process.env.ADMIN_NOTIFY_EMAIL || 'hello@firmledger.co.ke';
+  sendBranded(adminTo, `Account deletion request — ${req.user.email}`, {
+    kicker: 'Deletion request',
+    title: `${escHtml(req.user.name || req.user.email)} asked to delete their account`,
+    preheader: `${req.user.email} requested account deletion.`,
+    paragraphs: [
+      `<b>Email:</b> ${escHtml(req.user.email)}<br><b>Name:</b> ${escHtml(req.user.name || '')}`,
+      `<b>Why:</b> ${escHtml(reason)}`,
+      improve ? `<b>What we could do better:</b> ${escHtml(improve)}` : '',
+    ].filter(Boolean),
+    cta: { label: 'Open users console', url: siteUrl('/admin3119Musa/users') },
+  }).catch(() => {});
+  notify.notifyAdmin({
+    kind: 'account',
+    title: `Deletion request — ${req.user.email}`,
+    body: reason.slice(0, 180),
+    url: '/admin3119Musa/users',
+  });
+  notify.notifyUser(req.user.id, {
+    kind: 'account',
+    title: 'Deletion request sent',
+    body: 'The team has your request. You will get an email when the account is deleted.',
+    url: '/dashboard',
+  });
+  res.redirect('/dashboard?ok=' + encodeURIComponent('Deletion request sent — you will get an email confirming it, and another when the account is removed.'));
 });
 
 module.exports = router;

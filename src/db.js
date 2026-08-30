@@ -373,7 +373,118 @@ CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
 `);
 try { db.exec("ALTER TABLE reg_otps ADD COLUMN newsletter INTEGER NOT NULL DEFAULT 0"); } catch { /* column exists */ }
 
+/* Original submitter is preserved when a listing is claimed — owner_user_id
+   moves to the verified claimant, submitter_user_id stays put. */
+try { db.exec('ALTER TABLE listings ADD COLUMN submitter_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL'); } catch { /* column exists */ }
+try {
+  db.prepare(
+    'UPDATE listings SET submitter_user_id = owner_user_id WHERE submitter_user_id IS NULL AND owner_user_id IS NOT NULL'
+  ).run();
+} catch { /* ignore */ }
+
+db.exec(`
+CREATE TABLE IF NOT EXISTS notifications (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  audience TEXT NOT NULL DEFAULT 'user',
+  title TEXT NOT NULL DEFAULT '',
+  body TEXT NOT NULL DEFAULT '',
+  url TEXT NOT NULL DEFAULT '',
+  kind TEXT NOT NULL DEFAULT 'info',
+  read_at TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_notif_user ON notifications(audience, user_id, read_at);
+CREATE INDEX IF NOT EXISTS idx_notif_admin ON notifications(audience, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS deletion_requests (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  reason TEXT NOT NULL DEFAULT '',
+  improve TEXT NOT NULL DEFAULT '',
+  confirm_name TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'pending',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  resolved_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_delreq_user ON deletion_requests(user_id);
+CREATE INDEX IF NOT EXISTS idx_delreq_status ON deletion_requests(status);
+
+CREATE TABLE IF NOT EXISTS pro_transfer_requests (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  from_listing_id INTEGER NOT NULL REFERENCES listings(id) ON DELETE CASCADE,
+  to_listing_id INTEGER NOT NULL REFERENCES listings(id) ON DELETE CASCADE,
+  note TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'pending',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  resolved_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_protx_user ON pro_transfer_requests(user_id);
+`);
+
 require('./lib/blogseed').seedBlog(db);
+
+/* ---- Ops: spam lists, SMTP failover accounts, promo codes ---- */
+db.exec(`
+CREATE TABLE IF NOT EXISTS spam_ip (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  value TEXT NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'block',
+  note TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(value, kind)
+);
+CREATE TABLE IF NOT EXISTS spam_domain (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  value TEXT NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'block',
+  note TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(value, kind)
+);
+CREATE TABLE IF NOT EXISTS smtp_accounts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  provider TEXT NOT NULL DEFAULT 'custom',
+  label TEXT NOT NULL DEFAULT '',
+  host TEXT NOT NULL DEFAULT '',
+  port INTEGER NOT NULL DEFAULT 587,
+  secure INTEGER NOT NULL DEFAULT 0,
+  username TEXT NOT NULL DEFAULT '',
+  password TEXT NOT NULL DEFAULT '',
+  daily_limit INTEGER NOT NULL DEFAULT 0,
+  sent_today INTEGER NOT NULL DEFAULT 0,
+  sent_on TEXT NOT NULL DEFAULT '',
+  active INTEGER NOT NULL DEFAULT 1,
+  sort INTEGER NOT NULL DEFAULT 0,
+  last_error TEXT NOT NULL DEFAULT '',
+  last_error_at TEXT NOT NULL DEFAULT '',
+  last_ok_at TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS promo_codes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  code TEXT UNIQUE NOT NULL,
+  percent INTEGER NOT NULL DEFAULT 0,
+  plan_id INTEGER NOT NULL DEFAULT 0,
+  max_uses INTEGER NOT NULL DEFAULT 0,
+  used_count INTEGER NOT NULL DEFAULT 0,
+  expires_at TEXT NOT NULL DEFAULT '',
+  active INTEGER NOT NULL DEFAULT 1,
+  note TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS promo_redemptions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  promo_id INTEGER NOT NULL REFERENCES promo_codes(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  payment_id INTEGER,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(promo_id, user_id)
+);
+`);
+try { db.exec('ALTER TABLE payments ADD COLUMN promo_id INTEGER NOT NULL DEFAULT 0'); } catch { /* column exists */ }
+try { db.exec('ALTER TABLE payments ADD COLUMN discount_cents INTEGER NOT NULL DEFAULT 0'); } catch { /* column exists */ }
 
 /* Settings helpers */
 function getSetting(key, fallback = '') {

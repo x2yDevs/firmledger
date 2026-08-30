@@ -75,6 +75,14 @@ function attach(req, res, next) {
   res.locals.path = req.path;
   res.locals.q = req.query;
   res.locals.flash = { ok: req.query.ok || '', err: req.query.err || '' };
+  try {
+    const notify = require('./notify');
+    res.locals.userUnread = req.user ? notify.unreadUser(req.user.id) : 0;
+    res.locals.adminUnread = req.admin ? notify.unreadAdmin() : 0;
+  } catch {
+    res.locals.userUnread = 0;
+    res.locals.adminUnread = 0;
+  }
   next();
 }
 

@@ -6,7 +6,10 @@
       <h1>Dashboard</h1>
       <p class="muted">Welcome back, <%= user.name %></p>
     </div>
-    <a href="/dashboard/listings/new" class="btn btn-primary">+ Add listing</a>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <a href="/dashboard/notifications" class="btn btn-ghost">Notifications<% if (typeof userUnread !== 'undefined' && userUnread) { %> (<%= userUnread %>)<% } %></a>
+      <a href="/dashboard/listings/new" class="btn btn-primary">+ Add listing</a>
+    </div>
   </div>
 </section>
 
@@ -69,6 +72,16 @@
                     <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                     <button class="btn btn-danger btn-xs" type="submit">Delete</button>
                   </form>
+                  <details class="inline dash-removal">
+                    <summary class="btn btn-ghost btn-xs">Request removal</summary>
+                    <form method="post" action="/dashboard/listings/<%= l.id %>/request-removal" class="form" style="margin-top:8px;min-width:260px">
+                      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                      <label class="fl"><span>Why should this listing come off the ledger?</span>
+                        <textarea name="reason" rows="3" required minlength="20" maxlength="2000" placeholder="At least 20 characters…"></textarea>
+                      </label>
+                      <button class="btn btn-danger btn-xs" type="submit">Send request</button>
+                    </form>
+                  </details>
                 </td>
               </tr>
             <% }) %>
@@ -83,17 +96,65 @@
     <div class="side-card" style="max-width:640px">
       <p class="muted">Found your business already listed? Claim it by proving domain control — DNS record, meta tag, or the FirmLedger badge.</p>
       <% if (claimable.length) { %>
-      <form class="form" method="get" action="/claim/" onsubmit="event.preventDefault(); const s=this.querySelector('select'); if(s.value) location.href='/claim/'+s.value;">
-        <div class="claim-form-row">
-          <label style="flex:1;margin:0"><span style="font-weight:500;margin-bottom:8px">Listing to claim</span>
-            <select required>
-              <option value="">Select a listing to claim…</option>
-              <% claimable.forEach(function (c) { %><option value="<%= c.slug %>"><%= c.name %></option><% }) %>
-            </select>
-          </label>
-          <button class="btn btn-primary" type="submit" style="flex:none;margin-bottom:16px">Start claim</button>
-        </div>
+      <form class="form" id="claimPickerForm" method="get" action="/claim/" onsubmit="event.preventDefault(); var s=document.getElementById('claimSlug'); if(s && s.value) location.href='/claim/'+s.value;">
+        <input type="hidden" id="claimSlug" name="slug" value="">
+        <label style="margin:0"><span>Search unclaimed listings</span>
+          <div class="suggest-box">
+            <input class="input" type="search" id="claimQ" placeholder="Company, category or city…" autocomplete="off" maxlength="80">
+            <ul class="suggest-list" id="claimResults" hidden></ul>
+          </div>
+        </label>
+        <p class="fine-print" id="claimPicked" style="margin-top:0">Start typing to find a record, then Start claim.</p>
+        <button class="btn btn-primary" type="submit" id="claimGo" disabled>Start claim</button>
       </form>
+      <script>
+      (function () {
+        var q = document.getElementById('claimQ');
+        var list = document.getElementById('claimResults');
+        var slug = document.getElementById('claimSlug');
+        var go = document.getElementById('claimGo');
+        var picked = document.getElementById('claimPicked');
+        if (!q || !list) return;
+        var t = null;
+        function paint(rows) {
+          list.innerHTML = '';
+          if (!rows || !rows.length) {
+            list.hidden = true;
+            return;
+          }
+          rows.forEach(function (r) {
+            var li = document.createElement('li');
+            li.innerHTML = '<span>' + r.name.replace(/</g,'') + '</span><span class="suggest-cat">' +
+              [r.category, r.city, r.country].filter(Boolean).join(' · ').replace(/</g,'') + '</span>';
+            li.addEventListener('mousedown', function (e) {
+              e.preventDefault();
+              slug.value = r.slug;
+              q.value = r.name;
+              go.disabled = false;
+              picked.textContent = 'Selected: ' + r.name + ' — Start claim to prove domain control.';
+              list.hidden = true;
+            });
+            list.appendChild(li);
+          });
+          list.hidden = false;
+        }
+        function fetchRows() {
+          var v = q.value.trim();
+          fetch('/dashboard/claimable.json?q=' + encodeURIComponent(v), { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (d) { paint(d.listings || []); })
+            .catch(function () { list.hidden = true; });
+        }
+        q.addEventListener('input', function () {
+          slug.value = '';
+          go.disabled = true;
+          clearTimeout(t);
+          t = setTimeout(fetchRows, 180);
+        });
+        q.addEventListener('focus', function () { if (!slug.value) fetchRows(); });
+        q.addEventListener('blur', function () { setTimeout(function () { list.hidden = true; }, 180); });
+      })();
+      </script>
       <% } else { %>
       <p class="muted" style="font-size:13px;margin-top:8px">Every approved listing on FirmLedger is already claimed — nothing to claim right now.</p>
       <% } %>
@@ -171,7 +232,14 @@
         <h3 style="margin:0 0 10px">Support</h3>
         <p class="muted" style="margin-bottom:14px">Billing, listings, technical issues — chat live with the team and attach files.</p>
         <a class="btn btn-primary btn-sm" href="/dashboard/support">Open support</a>
-        <% if (typeof unread !== 'undefined' && unread && unread.length) { } %>
+      </div>
+      <div class="side-card">
+        <h3 style="margin:0 0 10px">Delete my account</h3>
+        <p class="muted" style="margin-bottom:14px">Ask the team to permanently remove your account. Listings you submitted stay on the ledger as factual records.</p>
+        <% if (typeof pendingDeletion !== 'undefined' && pendingDeletion) { %>
+          <p class="muted" style="font-size:.82rem;margin-bottom:10px">A request is already waiting (<%= fmtDate(pendingDeletion.created_at) %>).</p>
+        <% } %>
+        <a class="btn btn-danger btn-sm" href="/dashboard/delete-account">Request deletion</a>
       </div>
       <div class="side-card">
         <h3 style="margin:0 0 10px">Watchlist</h3>
@@ -190,6 +258,60 @@
         </div>
       </div>
     </div>
+
+    <% if (claims.length) { %>
+      <div class="section-head" style="margin-top:3rem"><h2>Your verification requests</h2></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Listing</th><th>Method</th><th>Domain</th><th>Status</th><th>Requested</th><th></th></tr></thead>
+          <tbody>
+            <% claims.forEach(function (c) { %>
+              <tr>
+                <td><a href="/listing/<%= c.listing_slug %>"><strong><%= c.listing_name %></strong></a></td>
+                <td><% if (c.method === 'dns') { %>DNS record<% } else if (c.method === 'meta') { %>Meta tag<% } else { %>Site badge<% } %></td>
+                <td><code><%= c.domain %></code></td>
+                <td><span class="pill pill-<%= c.status === 'verified' ? 'approved' : c.status === 'pending' ? 'pending' : 'rejected' %>"><%= c.status %></span></td>
+                <td class="muted"><%= fmtDate(c.created_at) %></td>
+                <td class="ta-right"><% if (c.status === 'pending') { %><a class="btn btn-ghost btn-xs" href="/claim/verify/<%= c.id %>">Resume verification</a><% } %></td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    <% } %>
+  </div>
+</section>
+
+<%- include('../partials/bottom') %>
+
+                      <button class="btn btn-danger btn-xs" type="submit">Send request</button>
+                    </form>
+                  </details>
+                  <% if (hasLp && listings.length) { %>
+                  <details class="inline dash-removal">
+                    <summary class="btn btn-ghost btn-xs">Request Pro transfer</summary>
+                    <form method="post" action="/dashboard/pro-transfer" class="form" style="margin-top:8px;min-width:260px">
+                      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                      <input type="hidden" name="from_listing_id" value="<%= f.id %>">
+                      <label class="fl"><span>Move remaining Pro onto</span>
+                        <select name="to_listing_id" required>
+                          <% listings.forEach(function (own) { %><option value="<%= own.id %>"><%= own.name %></option><% }) %>
+                        </select>
+                      </label>
+                      <label class="fl"><span>Note <small>optional</small></span>
+                        <input class="input" name="note" maxlength="400" placeholder="I paid for this listing before it was claimed…">
+                      </label>
+                      <button class="btn btn-accent btn-xs" type="submit">Ask admin</button>
+                    </form>
+                  </details>
+                  <% } %>
+                </td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    <% } %>
 
     <% if (claims.length) { %>
       <div class="section-head" style="margin-top:3rem"><h2>Your verification requests</h2></div>

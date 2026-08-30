@@ -1,0 +1,46 @@
+<%- include('../partials/top') %>
+
+<section class="page-head">
+  <div class="container dash-head">
+    <div>
+      <h1>Notifications</h1>
+      <p class="muted">Watchlist updates, listing review, tickets and account events — all in one place.</p>
+    </div>
+    <% if (items && items.length) { %>
+    <form method="post" action="/dashboard/notifications/read-all">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <button class="btn btn-ghost btn-sm" type="submit">Mark all read</button>
+    </form>
+    <% } %>
+  </div>
+</section>
+
+<section class="section-tight">
+  <div class="container container-narrow">
+    <% if (typeof ok !== 'undefined' && ok) { %><div class="alert alert-ok"><%= ok %></div><% } %>
+    <% if (!items.length) { %>
+      <div class="empty-state">
+        <h3>You're all caught up</h3>
+        <p>New listing reviews, ticket replies and watchlist changes will land here.</p>
+      </div>
+    <% } else { %>
+      <div class="notif-list">
+        <% items.forEach(function (n) { const unread = !n.read_at; %>
+          <form method="post" action="/dashboard/notifications/<%= n.id %>/read" class="notif-row<%= unread ? ' unread' : '' %>">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <button type="submit">
+              <span class="notif-dot<%= unread ? ' on' : '' %>" aria-hidden="true"></span>
+              <span class="notif-copy">
+                <b><%= n.title %></b>
+                <% if (n.body) { %><span class="muted"><%= n.body %></span><% } %>
+                <small class="muted"><%= fmtDate(n.created_at) %><% if (n.kind) { %> · <%= n.kind %><% } %></small>
+              </span>
+            </button>
+          </form>
+        <% }) %>
+      </div>
+    <% } %>
+  </div>
+</section>
+
+<%- include('../partials/bottom') %>

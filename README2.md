@@ -93,7 +93,10 @@ firmledger/
     │   ├── upload.js             ← logo uploads: multer disk, type/size validate, sharp normalize to 256×256 PNG
     │   ├── plans.js              ← Pro plan math: perksActive(l, u), isProUser, expiry enforcement
     │   ├── paypal.js             ← order create/capture/upgrade flows against PayPal sandbox/live
-    │   └── indexing.js           ← IndexNow submissions on new/updated listings
+    │   ├── indexing.js           ← IndexNow submissions on new/updated listings
+    │   ├── notify.js             ← in-app notifications (user + admin bells); unread = empty read_at
+    │   ├── claimflow.js          ← claim finalization: owner moves, submitter stays, both emailed
+    │   └── newsletter.js         ← digest, watchlist (in-app), jobs board
     │
     └── routes/
         ├── public.js             ← home, directory, listing page, search, sitemaps, RSS, blog, legal, API docs, 404
@@ -159,18 +162,19 @@ POST /register/verify/resend → new 6-digit code with fresh 15-min expiry
 | Meta tag | same claim page but an `<meta name="firmledger-verify" content="…">` on `/` | `verifyMeta(url, token)` — fetch home page, regex the `<head>` for `<meta name="firmledger-verify" content="$token">` |
 | Site badge | inline HTML badge (single-line `<div id="firmledger-badge" …>`) anywhere on homepage | `verifyBadge(url, token)` — fetch homepage DOM, look for the badge |
 
-All three write a `claims` row `status='verified'` on success, which:
+All three write a `claims` row `status='verified'` on success via `src/lib/claimflow.js`, which:
 
-1. sets the listing `claimed=1, owner_user_id=<user>, last_verified_at=now, confidence+=13`,
-2. emails the user a branded "Verification passed" confirmation,
-3. and the admin Claim area shows the fulfilled claim.
+1. sets the listing `claimed=1, owner_user_id=<claimant>, last_verified_at=now, confidence+=13` — `submitter_user_id` is **not** moved,
+2. listing-scoped Pro (`listings.plan`) stays on the record; account-scoped Pro never travels,
+3. emails **both** the new owner and the previous submitter (sensitive ownership change),
+4. previous submitter loses dashboard access; they can request admin to move remaining listing-Pro onto another listing they still own.
 
-### 4.3 Edit a *claimed & approved* listing → back into moderation
+### 4.3 Edit an existing listing → back into moderation
 
 In `dashboard.js`, `POST /dashboard/listings/:id/edit`:
 
 ```javascript
-const needsReview = (l.claimed && l.status === 'approved') || l.status === 'rejected';
+const needsReview = l.status === 'approved' || l.status === 'rejected';
 // … then UPDATE listings SET … status = needsReview ? 'pending' : l.status
 ```
 
@@ -218,7 +222,7 @@ setStatus(ticketId, 'open'|'solved'|'closed') →
 ```
 
 - Both sides poll `…/poll` JSON **every 4 s** comparing `updated_at`; mismatch → silently reload the thread.
-- User's emails fire on: open, admin reply, solve, close.
+- Tickets notify in-app (bell) on open, reply, solve, close. Hourly auto-close: solved > 7d → closed; open with last admin message unanswered > 14d → closed.
 - Admin filters come from SQL predicates (`new` = open + never-seen, `unread` = open + admin_seen_at < latest user message, open / solved / closed, all) with per-filter counts and row-unread styling with a pulsing unread dot.
 - Attachments: `multer` to `data/uploads/support`, type/size validated, shown as WhatsApp-style chips inside bubbles.
 
@@ -274,7 +278,7 @@ src/lib/newsletter.js
   Watchlist    POST /dashboard/watchlist/toggle (☆ Watch on any listing, login required)
                → favorites (UNIQUE(user_id,listing_id)) → /dashboard/watchlist (table)
                Pro: GET /dashboard/watchlist.csv → name/email/website/tech/… for CRM
-               notifyWatchers() fires a branded digest email when a watched listing
+               notifyWatchers() writes an in-app notification (not SMTP) when a watched listing
                changes (user edit diffs + tech-stack refresh).
   Jobs         GET/POST /dashboard/listings/:id/jobs (owner, Pro-gated, max 5 open)
                → jobs table → listing page "Open positions" panel + public /jobs board

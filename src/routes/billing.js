@@ -6,6 +6,7 @@ const paypal = require('../lib/paypal');
 const { allPlans, getPlan, isProUser, grantUserPro } = require('../lib/plans');
 const util = require('../lib/util');
 const { sendMail, sendBranded } = require('../lib/mailer');
+const promos = require('../lib/promos');
 
 const router = express.Router();
 
@@ -17,9 +18,18 @@ router.get('/dashboard/upgrade', requireUser, (req, res) => {
      LEFT JOIN plans pl ON pl.id = p.plan_id
      WHERE p.user_id = ? ORDER BY p.created_at DESC LIMIT 12`
   ).all(req.user.id);
+  const promoCode = promos.normalize(req.query.promo || '');
+  const priced = offers.map((p) => {
+    const applied = promoCode ? promos.preview(promoCode, p) : null;
+    if (applied && applied.ok) {
+      return { ...p, pay_cents: applied.amount, discount_cents: applied.discount, promo_ok: true, promo_pct: applied.percent };
+    }
+    return { ...p, pay_cents: p.price_cents, discount_cents: 0, promo_ok: false, promo_pct: 0 };
+  });
+  const promoPreview = promoCode ? promos.preview(promoCode, offers[0] || { price_cents: 0, id: 0 }) : null;
   res.render('dashboard/upgrade', {
     meta: { title: 'Upgrade to FirmLedger Pro', description: '', robots: 'noindex' },
-    offers,
+    offers: priced,
     payments,
     isPro: isProUser(req.user),
     planExpires: req.user.plan_expires_at || '',
@@ -27,6 +37,8 @@ router.get('/dashboard/upgrade', requireUser, (req, res) => {
     paypalMode: paypal.mode(),
     err: req.query.err || '',
     okmsg: req.query.okmsg || '',
+    promoCode,
+    promoPreview,
   });
 });
 
@@ -44,14 +56,26 @@ router.post('/dashboard/upgrade', requireUser, async (req, res) => {
   const plan = getPlan(req.body.plan_id);
   if (!plan || !plan.active) return back('That plan offer is no longer available — pick one of the current offers.');
 
+  let amount = plan.price_cents;
+  let discount = 0;
+  let promoId = 0;
+  const promoIn = String(req.body.promo || '').trim();
+  if (promoIn) {
+    const applied = promos.usableBy(req.user.id, promoIn, plan);
+    if (!applied.ok) return back(applied.error);
+    amount = applied.amount;
+    discount = applied.discount;
+    promoId = applied.promo.id;
+  }
+
   const reference = `FLPRO-${req.user.id}-${plan.id}-${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`;
   // Account-scoped payments carry no listing — listing_id stays NULL so the
   // FK to listings is satisfied. Any DB problem here is caught and reported
   // instead of crashing the server before PayPal is even touched.
   try {
     db.prepare(
-      'INSERT INTO payments (listing_id, user_id, plan_id, duration_days, reference, amount, currency, status, email) VALUES (NULL,?,?,?,?,?,?,?,?)'
-    ).run(req.user.id, plan.id, plan.duration_days, reference, plan.price_cents, plan.currency, 'initialized', req.user.email);
+      'INSERT INTO payments (listing_id, user_id, plan_id, duration_days, reference, amount, currency, status, email, promo_id, discount_cents) VALUES (NULL,?,?,?,?,?,?,?,?,?,?)'
+    ).run(req.user.id, plan.id, plan.duration_days, reference, amount, plan.currency, 'initialized', req.user.email, promoId, discount);
   } catch (e) {
     console.error('[billing] payment insert failed:', e.message);
     return back('Internal error starting your checkout — no charge was made. Please try again in a moment.');
@@ -59,7 +83,7 @@ router.post('/dashboard/upgrade', requireUser, async (req, res) => {
 
   try {
     const order = await paypal.createOrder({
-      reference, plan,
+      reference, plan, amountCents: amount,
       returnUrl: util.siteUrl(`/billing/callback?ref=${encodeURIComponent(reference)}`),
       cancelUrl: util.siteUrl(`/billing/cancel?ref=${encodeURIComponent(reference)}`),
       payerEmail: req.user.email,
@@ -90,7 +114,7 @@ router.get('/billing/cancel', requireUser, (req, res) => {
       kicker: 'Checkout update',
       title: 'Your upgrade checkout was cancelled',
       preheader: 'No charge was made — you can finish upgrading whenever you\'re ready.',
-      alert: `Your FirmLedger Pro checkout${plan ? ` (<b>${util.escHtml(plan.name)}</b> — ${plan.currency} ${paypal.decimal(plan.price_cents)})` : ''} was cancelled before payment. <b>No charge was made.</b>`,
+      alert: `Your FirmLedger Pro checkout${plan ? ` (<b>${util.escHtml(plan.name)}</b> — ${plan.currency} ${paypal.decimal(payment.amount || plan.price_cents)})` : ''} was cancelled before payment. <b>No charge was made.</b>`,
       alertTone: 'info',
       paragraphs: [
         'Nothing was charged and your account is unchanged. You can return and complete the upgrade at any time — Pro unlocks every listing\'s full details (email, phone, website, events, relationship graph) plus the verified tick, Featured placement and gold badge on listings you own.',
@@ -121,7 +145,7 @@ router.get('/billing/callback', requireUser, async (req, res) => {
   if (!plan) return fail('The plan attached to this payment is no longer available — contact support with reference ' + reference + '.');
 
   try {
-    const cap = await paypal.captureOrder(orderId, { reference, plan });
+    const cap = await paypal.captureOrder(orderId, { reference, plan, amountCents: payment.amount });
     if (!cap.ok) {
       db.prepare("UPDATE payments SET status = 'failed', order_id = ? WHERE reference = ?").run(orderId, reference);
       const payerHint = cap.payer && cap.payer.email ? ` (PayPal account ${cap.payer.email})` : '';
@@ -129,6 +153,9 @@ router.get('/billing/callback', requireUser, async (req, res) => {
     }
     db.prepare("UPDATE payments SET status = 'success', channel = ?, paid_at = ?, order_id = ? WHERE reference = ?")
       .run(cap.channel || 'paypal', cap.paidAt || new Date().toISOString(), orderId, reference);
+    if (payment.promo_id) {
+      try { promos.redeem(req.user.id, payment.promo_id, payment.id); } catch { /* already redeemed */ }
+    }
     const granted = grantUserPro(req.user.id, payment.duration_days || plan.duration_days);
 
     if (granted) {
@@ -137,7 +164,7 @@ router.get('/billing/callback', requireUser, async (req, res) => {
         kicker: 'Payment receipt',
         title: `Thank you${cap.payer.name ? `, ${util.escHtml(cap.payer.name)}` : ''} — Pro is active`,
         preheader: `Your FirmLedger Pro payment was confirmed.`,
-        alert: `<b>Plan:</b> ${util.escHtml(plan.name)} (${plan.duration_days} days) &nbsp;·&nbsp; <b>Amount:</b> ${plan.currency} ${paypal.decimal(plan.price_cents)} &nbsp;·&nbsp; <b>Active to:</b> ${till}`,
+        alert: `<b>Plan:</b> ${util.escHtml(plan.name)} (${plan.duration_days} days) &nbsp;·&nbsp; <b>Amount:</b> ${plan.currency} ${paypal.decimal(payment.amount)}${payment.discount_cents ? ` <span style="opacity:.8">(saved ${plan.currency} ${paypal.decimal(payment.discount_cents)})</span>` : ''} &nbsp;·&nbsp; <b>Active to:</b> ${till}`,
         alertTone: 'ok',
         paragraphs: [
           `Your payment was confirmed and FirmLedger Pro is live on your account${till ? ` until <b>${till}</b>` : ''}. Here are your details: reference <b>${util.escHtml(reference)}</b>, PayPal order <b>${util.escHtml(orderId)}</b>.`,

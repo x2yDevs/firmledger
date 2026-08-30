@@ -1,0 +1,57 @@
+<%- include('../partials/top') %>
+
+<section class="page-head">
+  <div class="container">
+    <p class="kicker">Account</p>
+    <h1>Delete my account</h1>
+    <p class="lede">This is permanent. Listings you submitted stay on the public ledger as factual records, with your name removed as owner. Sessions, tickets and personal data are deleted when the request is completed.</p>
+  </div>
+</section>
+
+<section class="section-tight">
+  <div class="container container-narrow">
+    <% if (pending) { %>
+      <div class="alert alert-warn">
+        A deletion request is already waiting on the team (sent <%= fmtDate(pending.created_at) %>). You will get an email when the account is removed. Changed your mind? Write to support@firmledger.co.ke quoting your email.
+      </div>
+    <% } else { %>
+      <% if (errors && errors.length) { %>
+        <div class="alert alert-err"><strong>Can't send yet:</strong><% errors.forEach(function (e) { %><div>· <%= e %></div><% }) %></div>
+      <% } %>
+      <form method="post" action="/dashboard/delete-account" class="form form-card" id="delAcctForm" autocomplete="off">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <label><span>Why do you want to leave?</span>
+          <textarea name="reason" rows="4" required minlength="10" maxlength="800" placeholder="Tell us what didn't work…"><%= old.reason || '' %></textarea>
+        </label>
+        <label><span>What could we have done better? <small>optional</small></span>
+          <textarea name="improve" rows="3" maxlength="800" placeholder="Anything we should change for the next person…"><%= old.improve || '' %></textarea>
+        </label>
+        <label><span>Retype your account name — <b><%= user.name %></b></span>
+          <input class="input" name="confirm_name" required maxlength="80" value="<%= old.confirm_name || '' %>" autocomplete="off" autocapitalize="off" spellcheck="false">
+        </label>
+        <label><span>Type <b>delete my account</b> to confirm (copy-paste is disabled)</span>
+          <input class="input" name="confirm_phrase" id="delPhrase" required maxlength="40" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="delete my account">
+        </label>
+        <p class="fine-print">We email you and the team when the request is received, and we email you again when the account is actually deleted. This is not instant.</p>
+        <div class="form-actions">
+          <button class="btn btn-danger" type="submit">Send deletion request</button>
+          <a class="btn btn-ghost" href="/dashboard">Cancel</a>
+        </div>
+      </form>
+      <script>
+      (function () {
+        var el = document.getElementById('delPhrase');
+        if (!el) return;
+        ['paste', 'drop', 'copy', 'cut'].forEach(function (ev) {
+          el.addEventListener(ev, function (e) { e.preventDefault(); });
+        });
+        el.addEventListener('keydown', function (e) {
+          if ((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V')) e.preventDefault();
+        });
+      })();
+      </script>
+    <% } %>
+  </div>
+</section>
+
+<%- include('../partials/bottom') %>

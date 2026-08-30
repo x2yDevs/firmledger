@@ -2,11 +2,16 @@
   <div class="container admin-bar-in">
     <nav class="admin-tabs" aria-label="Admin">
       <a href="/admin3119Musa/dashboard" class="<%= section === 'dashboard' ? 'active' : '' %>">Overview</a>
+      <a href="/admin3119Musa/search" class="<%= section === 'search' ? 'active' : '' %>">Search</a>
+      <a href="/admin3119Musa/notifications" class="<%= section === 'notifications' ? 'active' : '' %>">Inbox<% if (typeof adminUnread !== 'undefined' && adminUnread) { %> <span class="notif-badge sm" aria-hidden="true"></span><% } %></a>
       <a href="/admin3119Musa/listings" class="<%= section === 'listings' ? 'active' : '' %>">Listings</a>
       <a href="/admin3119Musa/categories" class="<%= section === 'categories' ? 'active' : '' %>">Categories</a>
       <a href="/admin3119Musa/claims" class="<%= section === 'claims' ? 'active' : '' %>">Claims</a>
       <a href="/admin3119Musa/users" class="<%= section === 'users' ? 'active' : '' %>">Users</a>
       <a href="/admin3119Musa/plans" class="<%= section === 'plans' ? 'active' : '' %>">Plan offers</a>
+      <a href="/admin3119Musa/promos" class="<%= section === 'promos' ? 'active' : '' %>">Promos</a>
+      <a href="/admin3119Musa/protection" class="<%= section === 'protection' ? 'active' : '' %>">Protection</a>
+      <a href="/admin3119Musa/health" class="<%= section === 'health' ? 'active' : '' %>">Health</a>
       <a href="/admin3119Musa/removals" class="<%= section === 'removals' ? 'active' : '' %>">Removals</a>
       <a href="/admin3119Musa/tickets" class="<%= section === 'tickets' ? 'active' : '' %>">Tickets</a>
       <a href="/admin3119Musa/email" class="<%= section === 'email' ? 'active' : '' %>">Email</a>

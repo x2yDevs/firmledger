@@ -13,6 +13,8 @@
       <div class="stat-card"><span class="stat-num"><%= stats.pendingRemovals %></span><span class="stat-label">Removal requests</span><a href="/admin3119Musa/removals">Resolve →</a></div>
       <div class="stat-card"><span class="stat-num"><%= stats.suspended %></span><span class="stat-label">Suspended users</span><a href="/admin3119Musa/users">Manage →</a></div>
       <div class="stat-card"><span class="stat-num"><%= stats.posts %></span><span class="stat-label">Blog posts</span><a href="/admin3119Musa/blog">Write →</a></div>
+      <div class="stat-card"><span class="stat-num"><%= stats.openTickets || 0 %></span><span class="stat-label">Open tickets</span><a href="/admin3119Musa/tickets?filter=open">Queue →</a></div>
+      <div class="stat-card"><span class="stat-num"><%= stats.pendingDeletions || 0 %></span><span class="stat-label">Deletion requests</span><a href="/admin3119Musa/users">Review →</a></div>
     </div>
 
     <div class="section-head" style="margin-top:2.5rem"><h2>Recent submissions</h2></div>

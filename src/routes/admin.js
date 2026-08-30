@@ -13,13 +13,15 @@ const { sendMail, sendBranded, sendTest, mailConfigured } = require('../lib/mail
 const { TYPES, CATEGORIES, SIZES, COUNTRIES } = require('../lib/taxonomy');
 const { runCheck } = require('../lib/verify');
 const { submitForIndexing, getIndexNowKey } = require('../lib/indexing');
-const { parseLines, normalizeUrl, slugify, domainOf, siteUrl, escHtml } = require('../lib/util');
+const { parseLines, normalizeUrl, slugify, domainOf, siteUrl, escHtml, randomToken } = require('../lib/util');
 const catLib = require('../lib/categories');
 const graphLib = require('../lib/graph');
 const { deleteLogo } = require('../lib/upload');
 const plans = require('../lib/plans');
 const paypal = require('../lib/paypal');
-const { allPlans, getPlan, grantUserPro, revokeUserPro, isProUser, grantsPro, PLANS } = plans;
+const { allPlans, getPlan, grantUserPro, revokeUserPro, isProUser } = plans;
+const notify = require('../lib/notify');
+const { finalizeVerifiedClaim } = require('../lib/claimflow');
 
 const router = express.Router();
 const adminmail2fa = require('../lib/adminmail2fa');
@@ -305,6 +307,8 @@ router.get('/admin3119Musa/dashboard', (req, res) => {
   stats.pendingRemovals = db.prepare("SELECT COUNT(*) c FROM removal_requests WHERE status='pending'").get().c;
   stats.posts = db.prepare('SELECT COUNT(*) c FROM blog_posts').get().c;
   stats.suspended = db.prepare('SELECT COUNT(*) c FROM users WHERE suspended=1').get().c;
+  stats.pendingDeletions = db.prepare("SELECT COUNT(*) c FROM deletion_requests WHERE status='pending'").get().c;
+  stats.openTickets = db.prepare("SELECT COUNT(*) c FROM tickets WHERE status='open'").get().c;
   const recent = db.prepare("SELECT * FROM listings ORDER BY created_at DESC LIMIT 8").all();
   res.render('admin/dashboard', {
     meta: { title: 'Admin — FirmLedger', description: '', robots: 'noindex,nofollow' },
@@ -315,18 +319,49 @@ router.get('/admin3119Musa/dashboard', (req, res) => {
 /* ---------------- Listings management ---------------- */
 router.get('/admin3119Musa/listings', (req, res) => {
   const status = ['pending', 'approved', 'rejected'].includes(req.query.status) ? req.query.status : '';
-  const where = status ? 'WHERE l.status = ?' : '';
-  const params = status ? [status] : [];
+  const q = String(req.query.q || '').trim().slice(0, 80);
+  const type = String(req.query.type || '').trim();
+  const category = String(req.query.category || '').trim();
+  const claimed = String(req.query.claimed || '').trim();
+  const planF = String(req.query.plan || '').trim();
+  const clauses = [];
+  const params = [];
+  if (status) { clauses.push('l.status = ?'); params.push(status); }
+  if (q) {
+    const like = `%${q.replace(/[%_]/g, '')}%`;
+    clauses.push('(l.name LIKE ? OR l.website LIKE ? OR l.slug LIKE ? OR u.email LIKE ? OR u.name LIKE ?)');
+    params.push(like, like, like, like, like);
+  }
+  if (type) { clauses.push('l.type = ?'); params.push(type); }
+  if (category) { clauses.push('l.category = ?'); params.push(category); }
+  if (claimed === '1') clauses.push('l.claimed = 1');
+  if (claimed === '0') clauses.push('l.claimed = 0');
+  if (planF === 'pro') clauses.push("(l.plan='pro' OR u.plan='pro')");
+  if (planF === 'free') clauses.push("(l.plan<>'pro' AND (u.plan IS NULL OR u.plan<>'pro'))");
+  const where = clauses.length ? 'WHERE ' + clauses.join(' AND ') : '';
   const listings = db.prepare(
     `SELECT l.*, u.email AS owner_email,
             u.plan AS owner_plan, u.plan_expires_at AS owner_plan_expires
      FROM listings l
      LEFT JOIN users u ON u.id = l.owner_user_id
-     ${where} ORDER BY CASE l.status WHEN 'pending' THEN 0 ELSE 1 END, l.created_at DESC LIMIT 300`
+     ${where} ORDER BY CASE l.status WHEN 'pending' THEN 0 ELSE 1 END, l.created_at DESC LIMIT 400`
   ).all(...params);
+  const transferReqs = db.prepare(
+    `SELECT r.*, u.email AS user_email, u.name AS user_name,
+            a.name AS from_name, a.slug AS from_slug, a.plan_expires_at AS from_expires,
+            b.name AS to_name, b.slug AS to_slug
+     FROM pro_transfer_requests r
+     JOIN users u ON u.id = r.user_id
+     JOIN listings a ON a.id = r.from_listing_id
+     JOIN listings b ON b.id = r.to_listing_id
+     WHERE r.status='pending' ORDER BY r.created_at DESC LIMIT 50`
+  ).all();
   res.render('admin/listings', {
     meta: { title: 'Listings — FirmLedger Admin', description: '', robots: 'noindex,nofollow' },
     listings, status, section: 'listings',
+    filters: { q, type, category, claimed, plan: planF, status },
+    TYPES, allCats: catLib.all(),
+    transferReqs,
     // Record-level Pro override (admin boost) for the Plan column; perks also
     // derive from the owner's account plan — shown via owner_plan on the view.
     planOf: (l) =>
@@ -349,22 +384,12 @@ router.post('/admin3119Musa/listings/:id/approve', (req, res) => {
     submitForIndexing([`/listing/${l.slug}`, catSlug ? `/directory/c/${catSlug}` : null].filter(Boolean));
   }
   if (firstApproval && l.owner_user_id) {
-    const owner = db.prepare('SELECT name, email FROM users WHERE id=?').get(l.owner_user_id);
-    if (owner) {
-      const { siteUrl: su2, escHtml: eh2 } = require('../lib/util');
-      sendBranded(owner.email, `Your listing is live — ${l.name}`, {
-        kicker: 'Listing approved',
-        title: `${eh2(l.name)} is live on FirmLedger`,
-        preheader: 'Your listing passed verification review and is now public in the directory.',
-        alert: `Your listing <b>${eh2(l.name)}</b> was reviewed and <b>approved</b>. It is now public in the directory and has been submitted to search engines.`,
-        alertTone: 'ok',
-        paragraphs: [
-          `What happens next: your record gains the <b>Verified</b> trust mark, appears in category browse and search, and starts building its public data trail. Keep your contact details current to make the most of it.`,
-        ],
-        cta: { label: 'View your listing', url: su2(`/listing/${l.slug}`) },
-        note: `Manage your listing anytime from <a href="${su2('/dashboard')}" style="color:#1D4ED8;">your dashboard</a>.`,
-      }).catch(() => {});
-    }
+    notify.notifyUser(l.owner_user_id, {
+      kind: 'listing',
+      title: `${l.name} is live`,
+      body: 'Your listing passed review and is now public in the directory.',
+      url: `/listing/${l.slug}`,
+    });
   }
   res.redirect(`/admin3119Musa/listings?ok=${encodeURIComponent(`${l.name} approved and pushed to search engines.`)}`);
 });
@@ -373,24 +398,60 @@ router.post('/admin3119Musa/listings/:id/reject', (req, res) => {
   const l = db.prepare('SELECT * FROM listings WHERE id=?').get(req.params.id);
   db.prepare("UPDATE listings SET status='rejected', updated_at=datetime('now') WHERE id=?").run(req.params.id);
   if (l && l.owner_user_id) {
-    const owner = db.prepare('SELECT name, email FROM users WHERE id=?').get(l.owner_user_id);
-    if (owner) {
-      const { siteUrl: su3, escHtml: eh3 } = require('../lib/util');
-      sendBranded(owner.email, `Listing update — ${l.name}`, {
-        kicker: 'Listing review',
-        title: `Your listing needs attention`,
-        preheader: `Your listing ${l.name} was not approved on FirmLedger.`,
-        alert: `Your listing <b>${eh3(l.name)}</b> was reviewed and unfortunately could not be approved at this time.`,
-        alertTone: 'warn',
-        paragraphs: [
-          `Common reasons include incomplete contact details, an unverifiable business address, or a duplicate record. You can update the listing and resubmit for review at any time — our team re-reviews submissions promptly.`,
-        ],
-        cta: { label: 'Review your listing', url: su3('/dashboard/listings') },
-        note: 'Questions? Reply to this email or write to <a href="mailto:support@firmledger.co.ke" style="color:#1D4ED8;">support@firmledger.co.ke</a> and our verification team will point you in the right direction.',
-      }).catch(() => {});
-    }
+    notify.notifyUser(l.owner_user_id, {
+      kind: 'listing',
+      title: `${l.name} was not approved`,
+      body: 'Update the listing and resubmit — common reasons are incomplete contact details or a duplicate record.',
+      url: `/dashboard/listings/${l.id}/edit`,
+    });
   }
   res.redirect('/admin3119Musa/listings?ok=' + encodeURIComponent('Listing rejected.'));
+});
+
+function listingIdsFromBody(body) {
+  const raw = body.ids;
+  const arr = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+  return [...new Set(arr.map((x) => Number(x)).filter((n) => n > 0))];
+}
+
+router.post('/admin3119Musa/listings/bulk', (req, res) => {
+  const ids = listingIdsFromBody(req.body);
+  const act = String(req.body.bulk_action || '');
+  if (!ids.length) return res.redirect('/admin3119Musa/listings?err=' + encodeURIComponent('Select at least one listing.'));
+  if (act !== 'approve' && act !== 'reject') {
+    return res.redirect('/admin3119Musa/listings?err=' + encodeURIComponent('Choose Approve or Reject.'));
+  }
+  let n = 0;
+  for (const id of ids) {
+    const l = db.prepare('SELECT * FROM listings WHERE id=?').get(id);
+    if (!l || l.status !== 'pending') continue;
+    if (act === 'approve') {
+      db.prepare("UPDATE listings SET status='approved', last_verified_at=?, updated_at=datetime('now') WHERE id=?")
+        .run(new Date().toISOString(), l.id);
+      const catSlug = (db.prepare('SELECT slug FROM categories WHERE name = ?').get(l.category) || {}).slug;
+      submitForIndexing([`/listing/${l.slug}`, catSlug ? `/directory/c/${catSlug}` : null].filter(Boolean));
+      if (l.owner_user_id) {
+        notify.notifyUser(l.owner_user_id, {
+          kind: 'listing', title: `${l.name} is live`,
+          body: 'Your listing passed review and is now public in the directory.',
+          url: `/listing/${l.slug}`,
+        });
+      }
+    } else {
+      db.prepare("UPDATE listings SET status='rejected', updated_at=datetime('now') WHERE id=?").run(l.id);
+      if (l.owner_user_id) {
+        notify.notifyUser(l.owner_user_id, {
+          kind: 'listing', title: `${l.name} was not approved`,
+          body: 'Update the listing and resubmit from your dashboard.',
+          url: `/dashboard/listings/${l.id}/edit`,
+        });
+      }
+    }
+    n += 1;
+  }
+  res.redirect('/admin3119Musa/listings?ok=' + encodeURIComponent(
+    n ? `${n} listing${n === 1 ? '' : 's'} ${act === 'approve' ? 'approved' : 'rejected'}.` : 'No pending listings in that selection.'
+  ));
 });
 
 router.post('/admin3119Musa/listings/:id/feature', (req, res) => {
@@ -637,29 +698,9 @@ router.post('/admin3119Musa/claims/:id/recheck', async (req, res) => {
   if (c && c.status === 'pending') {
     const result = await runCheck(c.method, c.domain, c.token);
     if (result.ok) {
-      const now = new Date().toISOString();
-      db.prepare("UPDATE claims SET status='verified', verified_at=? WHERE id=?").run(now, c.id);
-      db.prepare("UPDATE listings SET claimed=1, owner_user_id=?, last_verified_at=?, updated_at=datetime('now') WHERE id=?")
-        .run(c.user_id, now, c.listing_id);
-      db.prepare("UPDATE claims SET status='rejected' WHERE listing_id=? AND id<>? AND status='pending'").run(c.listing_id, c.id);
-      const l = db.prepare('SELECT slug, name FROM listings WHERE id=?').get(c.listing_id);
-      if (l) submitForIndexing([`/listing/${l.slug}`]);
-      const u = db.prepare('SELECT name, email FROM users WHERE id=?').get(c.user_id);
-      if (u && l) {
-        const { siteUrl: su5, escHtml: eh5 } = require('../lib/util');
-        sendBranded(u.email, `Ownership verified — ${l.name}`, {
-          kicker: 'Claim verified',
-          title: 'You now own your listing',
-          preheader: `Ownership of ${l.name} on FirmLedger has been verified.`,
-          alert: `Your ownership of <b>${eh5(l.name)}</b> is now verified. The listing carries the claimed mark, and you control its record.`,
-          alertTone: 'ok',
-          paragraphs: [
-            'From your dashboard you can update contact details, add events and enrich the company profile. Verified ownership also unlocks FirmLedger Pro perks on this listing when your account is Pro.',
-          ],
-          cta: { label: 'Manage your listing', url: su5('/dashboard/listings') },
-          note: 'Keep your verification token in place — removing it may trigger a re-verification check.',
-        }).catch(() => {});
-      }
+      const l = db.prepare('SELECT * FROM listings WHERE id=?').get(c.listing_id);
+      const u = db.prepare('SELECT * FROM users WHERE id=?').get(c.user_id);
+      if (l && u) finalizeVerifiedClaim(c, l, u);
       return res.redirect('/admin3119Musa/claims?ok=' + encodeURIComponent(`Verified: ${result.detail}`));
     }
     return res.redirect('/admin3119Musa/claims?err=' + encodeURIComponent(`Not verified yet: ${result.detail}`));
@@ -687,6 +728,12 @@ router.post('/admin3119Musa/claims/:id/reject', (req, res) => {
         cta: { label: 'Submit a new claim', url: su4('/dashboard/claims') },
         note: 'If you believe this is a mistake, contact <a href="mailto:support@firmledger.co.ke" style="color:#1D4ED8;">support@firmledger.co.ke</a> with your business registration details.',
       }).catch(() => {});
+      notify.notifyUser(u.id, {
+        kind: 'claim',
+        title: 'Ownership claim was not verified',
+        body: l ? `Your claim on ${l.name} could not be verified.` : 'Your ownership claim could not be verified.',
+        url: '/dashboard',
+      });
     }
   }
   res.redirect('/admin3119Musa/claims?ok=' + encodeURIComponent('Claim rejected.'));
@@ -706,6 +753,7 @@ router.get('/admin3119Musa/users/export.firmledger', (req, res) => {
 /** GET — full backup of every user and everything attached to their account. */
 router.get('/admin3119Musa/users/backup.firmledger', (req, res) => {
   const body = backup.buildBackup();
+  setSetting('last_backup_at', new Date().toISOString());
   const stamp = new Date().toISOString().slice(0, 10);
   res.set('Content-Type', 'application/octet-stream');
   res.set('Content-Disposition', `attachment; filename="firmledger-backup-${stamp}.firmledger"`);
@@ -731,21 +779,51 @@ router.post('/admin3119Musa/users/import', backup.backupField('backup_file'), (r
 /** POST — permanently delete a user + everything attributable to their account. */
 router.post('/admin3119Musa/users/:id/delete', (req, res) => {
   if (!require('../lib/session').validCsrf(req)) return res.status(403).redirect('/admin3119Musa/users');
+  const u = db.prepare('SELECT * FROM users WHERE id=?').get(req.params.id);
+  if (!u) return res.redirect('/admin3119Musa/users?err=' + encodeURIComponent('User not found.'));
+  sendBranded(u.email, 'Your FirmLedger account has been deleted', {
+    kicker: 'Account deleted',
+    title: 'Your account has been deleted',
+    preheader: 'Your FirmLedger account and personal data have been permanently removed.',
+    alert: 'Your FirmLedger account has been permanently deleted. Personal data, sessions and tickets are gone.',
+    alertTone: 'warn',
+    paragraphs: [
+      'Listings you submitted remain on the public ledger as factual records, with your name removed as owner. If this was a mistake, contact support@firmledger.co.ke — we cannot restore a deleted account.',
+    ],
+    cta: { label: 'Visit FirmLedger', url: siteUrl('/') },
+  }).catch(() => {});
+  db.prepare("UPDATE deletion_requests SET status='completed', resolved_at=datetime('now') WHERE user_id=? AND status='pending'").run(u.id);
   const r = backup.deleteUserCascade(Number(req.params.id));
   if (!r.ok) return res.redirect('/admin3119Musa/users?err=' + encodeURIComponent(r.error));
-  res.redirect('/admin3119Musa/users?ok=' + encodeURIComponent(`${r.name} (${r.email}) was permanently deleted.`));
+  res.redirect('/admin3119Musa/users?ok=' + encodeURIComponent(`${r.name} (${r.email}) was permanently deleted and emailed.`));
 });
 
 /* ---------------- Users ---------------- */
 router.get('/admin3119Musa/users', (req, res) => {
-  const users = db.prepare(
-    `SELECT u.*, (SELECT COUNT(*) FROM listings l WHERE l.owner_user_id = u.id) AS listing_count
-     FROM users u ORDER BY u.created_at DESC LIMIT 500`
+  const q = String(req.query.q || '').trim().slice(0, 80);
+  let users;
+  if (q) {
+    const like = `%${q.replace(/[%_]/g, '')}%`;
+    users = db.prepare(
+      `SELECT u.*, (SELECT COUNT(*) FROM listings l WHERE l.owner_user_id = u.id) AS listing_count
+       FROM users u WHERE u.email LIKE ? OR u.name LIKE ? ORDER BY u.created_at DESC LIMIT 500`
+    ).all(like, like);
+  } else {
+    users = db.prepare(
+      `SELECT u.*, (SELECT COUNT(*) FROM listings l WHERE l.owner_user_id = u.id) AS listing_count
+       FROM users u ORDER BY u.created_at DESC LIMIT 500`
+    ).all();
+  }
+  const deletionReqs = db.prepare(
+    `SELECT d.*, u.email, u.name FROM deletion_requests d JOIN users u ON u.id = d.user_id
+     WHERE d.status='pending' ORDER BY d.created_at DESC`
   ).all();
   res.render('admin/users', {
     meta: { title: 'Users — FirmLedger Admin', description: '', robots: 'noindex,nofollow' },
     users, section: 'users',
     isProUser,
+    q,
+    deletionReqs,
     ok: req.query.ok || '', err: req.query.err || '',
   });
 });
@@ -833,6 +911,7 @@ router.get('/admin3119Musa/settings', (req, res) => {
     },
     payments,
     section: 'settings',
+    ...require('./adminops').mailLocals(),
   });
 });
 
@@ -856,14 +935,18 @@ router.post('/admin3119Musa/settings', (req, res) => {
     if (m === 'sandbox' || m === 'live') setSetting('paypal_mode', m);
   }
   // Email — SMTP from Admin → Settings. env (SMTP_URL or MAIL_*) always wins.
-  if (!process.env.SMTP_URL && !process.env.MAIL_HOST) {
+  // Only touch SMTP keys when this POST actually included them (the Payments
+  // form and the SMTP form are separate — saving one must not wipe the other).
+  if (!process.env.SMTP_URL && !process.env.MAIL_HOST && req.body.smtp_host !== undefined) {
     setSetting('smtp_host', String(req.body.smtp_host || '').trim().slice(0, 200));
     setSetting('smtp_port', String(req.body.smtp_port || '').trim().slice(0, 6));
     setSetting('smtp_user', String(req.body.smtp_user || '').trim().slice(0, 200));
     if (String(req.body.smtp_pass || '').trim()) setSetting('smtp_pass', String(req.body.smtp_pass || '').trim().slice(0, 500));
     if (String(req.body.smtp_pass_clear || '') === '1') setSetting('smtp_pass', '');
-    setSetting('smtp_from', String(req.body.smtp_from || '').trim().slice(0, 200));
     setSetting('smtp_secure', req.body.smtp_secure === '1' ? '1' : '0');
+  }
+  if (req.body.smtp_from !== undefined) {
+    setSetting('smtp_from', String(req.body.smtp_from || '').trim().slice(0, 200));
   }
   res.redirect('/admin3119Musa/settings?ok=' + encodeURIComponent('Settings saved.'));
 });
@@ -1115,6 +1198,19 @@ function emailCounts() {
   };
 }
 
+router.get('/admin3119Musa/email/users.json', (req, res) => {
+  const q = String(req.query.q || '').trim().slice(0, 80);
+  if (!q) {
+    const users = db.prepare('SELECT id, name, email FROM users ORDER BY name LIMIT 40').all();
+    return res.json({ users });
+  }
+  const like = `%${q.replace(/[%_]/g, '')}%`;
+  const users = db.prepare(
+    'SELECT id, name, email FROM users WHERE name LIKE ? OR email LIKE ? ORDER BY name LIMIT 40'
+  ).all(like, like);
+  res.json({ users });
+});
+
 router.get('/admin3119Musa/email', (req, res) => {
   const users = db.prepare('SELECT id, name, email FROM users ORDER BY name LIMIT 1000').all();
   const log = db.prepare('SELECT * FROM admin_mail_log ORDER BY created_at DESC LIMIT 25').all();
@@ -1334,53 +1430,35 @@ router.post('/admin3119Musa/tickets/:id/reply', loadTicket, (req, res) => {
   if (action === 'reply') {
     support.reply(req.ticket.id, 'admin', body, '', '');
     if (req.ticket.status === 'open') support.setStatus(req.ticket.id, 'open'); // stays open until explicitly solved/closed
-    sendBranded(req.ticket.user_email, `Reply on your support ticket ${req.ticket.ref}`, {
-      kicker: 'Support reply',
-      title: `We replied on <b>${escHtml(req.ticket.subject)}</b>`,
-      preheader: `A member of our team replied on your support ticket ${req.ticket.ref}.`,
-      alert: `Your ticket <b>${req.ticket.ref}</b> has a new reply from the team — the full conversation (and any attachment) is in your support area.`,
-      alertTone: 'info',
-      paragraphs: [
-        body.length > 240 ? body.slice(0, 240) + '…' : body || 'The team sent a reply — open the ticket to read it.',
-      ],
-      cta: { label: 'View the ticket', url: siteUrl(`/dashboard/support/${req.ticket.id}`) },
-      note: 'This is an automated notification — the conversation continues inside your dashboard.',
-    }).catch(() => {});
-    return res.redirect(`/admin3119Musa/tickets/${req.ticket.id}?ok=` + encodeURIComponent('Reply posted — member notified by email.'));
+    notify.notifyUser(req.ticket.user_id, {
+      kind: 'ticket',
+      title: `Reply on ticket ${req.ticket.ref}`,
+      body: body.length > 180 ? body.slice(0, 180) + '…' : body,
+      url: `/dashboard/support/${req.ticket.id}`,
+    });
+    return res.redirect(`/admin3119Musa/tickets/${req.ticket.id}?ok=` + encodeURIComponent('Reply posted — member notified.'));
   }
 
   if (action === 'solve') {
     support.setStatus(req.ticket.id, 'solved');
-    sendBranded(req.ticket.user_email, `Ticket ${req.ticket.ref} marked Solved`, {
-      kicker: 'Ticket resolved',
-      title: `We resolved <b>${escHtml(req.ticket.subject)}</b>`,
-      preheader: `Your support ticket ${req.ticket.ref} has been marked solved.`,
-      alert: `Ticket <b>${req.ticket.ref}</b> is now marked <b>Solved</b>. Reply any time — the ticket re-stays open while the chat continues.`,
-      alertTone: 'ok',
-      paragraphs: [
-        `We believe this is handled. If anything else comes up, reply inside the ticket — we'll see it instantly and re-open it.`,
-      ],
-      cta: { label: 'View the ticket', url: siteUrl(`/dashboard/support/${req.ticket.id}`) },
-      note: `If this was plenty fixed, there's nothing else you need to do.`,
-    }).catch(() => {});
-    return res.redirect(`/admin3119Musa/tickets/${req.ticket.id}?ok=` + encodeURIComponent('Marked Solved — member emailed.'));
+    notify.notifyUser(req.ticket.user_id, {
+      kind: 'ticket',
+      title: `Ticket ${req.ticket.ref} marked Solved`,
+      body: 'Reply any time if something else comes up — the ticket reopens.',
+      url: `/dashboard/support/${req.ticket.id}`,
+    });
+    return res.redirect(`/admin3119Musa/tickets/${req.ticket.id}?ok=` + encodeURIComponent('Marked Solved — member notified.'));
   }
 
   if (action === 'close') {
     support.setStatus(req.ticket.id, 'closed');
-    sendBranded(req.ticket.user_email, `Ticket ${req.ticket.ref} was closed`, {
-      kicker: 'Ticket closed',
+    notify.notifyUser(req.ticket.user_id, {
+      kind: 'ticket',
       title: `Ticket ${req.ticket.ref} was closed`,
-      preheader: `Your support ticket ${req.ticket.ref} is now closed.`,
-      alert: `Ticket <b>${req.ticket.ref}</b> is closed. If you need help with something new, open a fresh ticket from your support area.`,
-      alertTone: 'warn',
-      paragraphs: [
-        `We've wrapped this one up. History remains inside your support area for reference.`,
-      ],
-      cta: { label: 'Open support', url: siteUrl('/dashboard/support') },
-      note: 'Already-solved tickets stay readable; new issues need a fresh ticket.',
-    }).catch(() => {});
-    return res.redirect(`/admin3119Musa/tickets/${req.ticket.id}?ok=` + encodeURIComponent('Ticket closed — member emailed.'));
+      body: 'History stays in your support area. Open a fresh ticket for a new issue.',
+      url: '/dashboard/support',
+    });
+    return res.redirect(`/admin3119Musa/tickets/${req.ticket.id}?ok=` + encodeURIComponent('Ticket closed — member notified.'));
   }
 
   if (action === 'reopen') {
@@ -1398,5 +1476,135 @@ router.get('/admin3119Musa/tickets/:id/poll', loadTicket, (req, res) => {
     lastMsgAt: db.prepare("SELECT COALESCE(MAX(created_at), '') t FROM ticket_messages WHERE ticket_id = ?").get(req.ticket.id).t,
   });
 });
+
+
+/* ================= Admin global search ================= */
+router.get('/admin3119Musa/search', (req, res) => {
+  const q = String(req.query.q || '').trim().slice(0, 80);
+  const like = q ? `%${q.replace(/[%_]/g, '')}%` : '';
+  const empty = { users: [], listings: [], claims: [], tickets: [], posts: [] };
+  if (!q || q.length < 2) {
+    return res.render('admin/search', {
+      meta: { title: 'Search — FirmLedger Admin', description: '', robots: 'noindex,nofollow' },
+      q, results: empty, section: 'search',
+    });
+  }
+  const results = {
+    users: db.prepare(
+      'SELECT id, name, email, suspended, created_at FROM users WHERE name LIKE ? OR email LIKE ? ORDER BY created_at DESC LIMIT 20'
+    ).all(like, like),
+    listings: db.prepare(
+      `SELECT id, slug, name, status, claimed, category, country, website FROM listings
+       WHERE name LIKE ? OR slug LIKE ? OR website LIKE ? OR email LIKE ? ORDER BY updated_at DESC LIMIT 20`
+    ).all(like, like, like, like),
+    claims: db.prepare(
+      `SELECT c.id, c.status, c.method, c.domain, l.name AS listing_name, u.email AS user_email
+       FROM claims c JOIN listings l ON l.id=c.listing_id JOIN users u ON u.id=c.user_id
+       WHERE l.name LIKE ? OR u.email LIKE ? OR c.domain LIKE ? ORDER BY c.created_at DESC LIMIT 20`
+    ).all(like, like, like),
+    tickets: db.prepare(
+      `SELECT t.id, t.ref, t.subject, t.status, u.email AS user_email
+       FROM tickets t JOIN users u ON u.id=t.user_id
+       WHERE t.ref LIKE ? OR t.subject LIKE ? OR u.email LIKE ? ORDER BY t.updated_at DESC LIMIT 20`
+    ).all(like, like, like),
+    posts: db.prepare(
+      'SELECT id, slug, title, status FROM blog_posts WHERE title LIKE ? OR slug LIKE ? OR excerpt LIKE ? ORDER BY updated_at DESC LIMIT 12'
+    ).all(like, like, like),
+  };
+  res.render('admin/search', {
+    meta: { title: `Search “${q}” — FirmLedger Admin`, description: '', robots: 'noindex,nofollow' },
+    q, results, section: 'search',
+  });
+});
+
+/* ================= Admin notifications ================= */
+router.get('/admin3119Musa/notifications', (req, res) => {
+  const items = notify.listAdmin();
+  res.render('admin/notifications', {
+    meta: { title: 'Notifications — FirmLedger Admin', description: '', robots: 'noindex,nofollow' },
+    items, section: 'notifications',
+    ok: req.query.ok || '',
+  });
+});
+
+router.post('/admin3119Musa/notifications/:id/read', (req, res) => {
+  notify.markRead(Number(req.params.id), { audience: 'admin' });
+  const row = db.prepare("SELECT url FROM notifications WHERE id=? AND audience='admin'").get(req.params.id);
+  const dest = row && row.url && String(row.url).startsWith('/') ? row.url : '/admin3119Musa/notifications';
+  res.redirect(dest);
+});
+
+router.post('/admin3119Musa/notifications/read-all', (req, res) => {
+  notify.markAllRead({ audience: 'admin' });
+  res.redirect('/admin3119Musa/notifications?ok=' + encodeURIComponent('All notifications marked read.'));
+});
+
+/* ================= Admin-initiated password reset ================= */
+router.post('/admin3119Musa/users/:id/reset', (req, res) => {
+  if (!require('../lib/session').validCsrf(req)) return res.status(403).redirect('/admin3119Musa/users');
+  const u = db.prepare('SELECT * FROM users WHERE id=?').get(req.params.id);
+  if (!u) return res.redirect('/admin3119Musa/users?err=' + encodeURIComponent('User not found.'));
+  const token = randomToken(32);
+  const expires = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+  db.prepare('DELETE FROM resets WHERE email=?').run(u.email);
+  db.prepare('INSERT INTO resets (email, token, expires_at) VALUES (?,?,?)').run(u.email, token, expires);
+  const url = siteUrl('/reset/' + token);
+  sendBranded(u.email, 'Reset your FirmLedger password', {
+    kicker: 'Password reset',
+    title: 'Reset your password',
+    preheader: 'An administrator started a password reset for your FirmLedger account.',
+    alert: 'A FirmLedger administrator started a password reset for your account. The link below is valid for 1 hour.',
+    alertTone: 'warn',
+    paragraphs: [
+      'If you did not expect this, you can ignore the email — your current password stays the same until you use the link.',
+    ],
+    cta: { label: 'Choose a new password', url },
+    note: `Or paste this URL: <a href="${url}" style="color:#1D4ED8;">${url}</a>`,
+  }).catch(() => {});
+  notify.notifyUser(u.id, {
+    kind: 'account',
+    title: 'Password reset sent',
+    body: 'An administrator emailed you a one-hour reset link.',
+    url: '/login',
+  });
+  res.redirect('/admin3119Musa/users?ok=' + encodeURIComponent(`Password reset emailed to ${u.email}.`));
+});
+
+/* ================= Pro transfer approve/reject ================= */
+router.post('/admin3119Musa/pro-transfer/:id/approve', (req, res) => {
+  const r = db.prepare('SELECT * FROM pro_transfer_requests WHERE id=?').get(req.params.id);
+  if (!r || r.status !== 'pending') return res.redirect('/admin3119Musa/listings');
+  const from = db.prepare('SELECT * FROM listings WHERE id=?').get(r.from_listing_id);
+  const to = db.prepare('SELECT * FROM listings WHERE id=?').get(r.to_listing_id);
+  if (!from || !to) {
+    db.prepare("UPDATE pro_transfer_requests SET status='rejected', resolved_at=datetime('now') WHERE id=?").run(r.id);
+    return res.redirect('/admin3119Musa/listings?err=' + encodeURIComponent('One of the listings is gone — request closed.'));
+  }
+  db.prepare('UPDATE listings SET plan=?, plan_expires_at=? WHERE id=?').run(from.plan, from.plan_expires_at, to.id);
+  db.prepare("UPDATE listings SET plan='free', plan_expires_at='' WHERE id=?").run(from.id);
+  db.prepare("UPDATE pro_transfer_requests SET status='approved', resolved_at=datetime('now') WHERE id=?").run(r.id);
+  notify.notifyUser(r.user_id, {
+    kind: 'pro',
+    title: 'Listing Pro transferred',
+    body: `Remaining Pro time moved from ${from.name} onto ${to.name}.`,
+    url: `/dashboard/listings/${to.id}/edit`,
+  });
+  res.redirect('/admin3119Musa/listings?ok=' + encodeURIComponent(`Moved remaining listing-scoped Pro from ${from.name} onto ${to.name}.`));
+});
+
+router.post('/admin3119Musa/pro-transfer/:id/reject', (req, res) => {
+  const r = db.prepare('SELECT * FROM pro_transfer_requests WHERE id=?').get(req.params.id);
+  if (r && r.status === 'pending') {
+    db.prepare("UPDATE pro_transfer_requests SET status='rejected', resolved_at=datetime('now') WHERE id=?").run(r.id);
+    notify.notifyUser(r.user_id, {
+      kind: 'pro',
+      title: 'Pro transfer was declined',
+      body: 'Admin declined moving remaining listing-scoped Pro. Listing Pro stays on the claimed record.',
+      url: '/dashboard',
+    });
+  }
+  res.redirect('/admin3119Musa/listings?ok=' + encodeURIComponent('Transfer request declined.'));
+});
+
 
 module.exports = router;

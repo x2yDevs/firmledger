@@ -7,6 +7,41 @@
     <% if (typeof ok !== 'undefined' && ok) { %><div class="alert alert-ok"><%= ok %></div><% } %>
     <% if (typeof err !== 'undefined' && err) { %><div class="alert alert-err"><%= err %></div><% } %>
 
+    <form class="form" method="get" action="/admin3119Musa/users" style="max-width:520px;margin-bottom:1.2rem">
+      <div class="search-hero">
+        <input class="input search-hero-in" type="search" name="q" value="<%= typeof q !== 'undefined' ? q : '' %>" placeholder="Search name or email…" maxlength="80">
+        <button class="btn btn-gold" type="submit">Search</button>
+      </div>
+    </form>
+
+    <% if (typeof deletionReqs !== 'undefined' && deletionReqs && deletionReqs.length) { %>
+      <div class="side-card">
+        <h3>Pending account deletions</h3>
+        <p class="muted" style="margin-bottom:12px">Members asked to delete their account. Deleting emails them first, then permanently removes personal data.</p>
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>User</th><th>Why</th><th>Requested</th><th></th></tr></thead>
+            <tbody>
+              <% deletionReqs.forEach(function (d) { %>
+                <tr>
+                  <td><strong><%= d.name %></strong><br><small class="muted"><%= d.email %></small></td>
+                  <td><small><%= d.reason %></small><% if (d.improve) { %><div class="score-hint">Could improve: <%= d.improve %></div><% } %></td>
+                  <td class="muted"><%= fmtDate(d.created_at) %></td>
+                  <td class="ta-right">
+                    <a class="btn btn-ghost btn-xs" href="/admin3119Musa/users/<%= d.user_id %>">View</a>
+                    <form method="post" action="/admin3119Musa/users/<%= d.user_id %>/delete" class="inline" onsubmit="return confirm('Permanently delete <%= d.name %> (<%= d.email %>)? They will be emailed first. This cannot be undone.');">
+                      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                      <button class="btn btn-danger btn-xs" type="submit">Delete account</button>
+                    </form>
+                  </td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    <% } %>
+
     <div class="backup-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:14px;margin-bottom:1.4rem">
       <div class="side-card" style="margin:0">
         <h3 style="margin:0 0 6px">Backup &amp; export</h3>
@@ -49,6 +84,10 @@
               <td class="ta-right actions-cell">
                 <a class="btn btn-ghost btn-xs" href="/admin3119Musa/users/<%= u.id %>">View</a>
                 <a class="btn btn-ghost btn-xs" href="/admin3119Musa/email?to=<%= encodeURIComponent(u.email) %>">Email</a>
+                <form method="post" action="/admin3119Musa/users/<%= u.id %>/reset" class="inline" onsubmit="return confirm('Email <%= u.email %> a one-hour password reset link?');">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <button class="btn btn-ghost btn-xs" type="submit">Reset password</button>
+                </form>
                 <% if (isProUser(u)) { %>
                 <form method="post" action="/admin3119Musa/users/<%= u.id %>/plan" class="inline" onsubmit="return confirm('Revoke FirmLedger Pro from this user? Listing perks and full-details access end immediately.');">
                   <input type="hidden" name="_csrf" value="<%= csrfToken %>">

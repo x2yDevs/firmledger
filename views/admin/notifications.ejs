@@ -1,0 +1,38 @@
+<%- include('../partials/top') %>
+<%- include('../partials/adminnav') %>
+
+<section class="section-tight">
+  <div class="container">
+    <div class="section-head">
+      <h2>Notifications</h2>
+      <% if (items && items.length) { %>
+      <form method="post" action="/admin3119Musa/notifications/read-all">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <button class="btn btn-ghost btn-sm" type="submit">Mark all read</button>
+      </form>
+      <% } %>
+    </div>
+    <% if (typeof ok !== 'undefined' && ok) { %><div class="alert alert-ok"><%= ok %></div><% } %>
+    <% if (!items.length) { %>
+      <p class="muted">Nothing waiting — new listings, claims, tickets and deletion requests will land here.</p>
+    <% } else { %>
+      <div class="notif-list">
+        <% items.forEach(function (n) { const unread = !n.read_at; %>
+          <form method="post" action="/admin3119Musa/notifications/<%= n.id %>/read" class="notif-row<%= unread ? ' unread' : '' %>">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <button type="submit">
+              <span class="notif-dot<%= unread ? ' on' : '' %>" aria-hidden="true"></span>
+              <span class="notif-copy">
+                <b><%= n.title %></b>
+                <% if (n.body) { %><span class="muted"><%= n.body %></span><% } %>
+                <small class="muted"><%= fmtDate(n.created_at) %><% if (n.kind) { %> · <%= n.kind %><% } %></small>
+              </span>
+            </button>
+          </form>
+        <% }) %>
+      </div>
+    <% } %>
+  </div>
+</section>
+
+<%- include('../partials/bottom') %>
