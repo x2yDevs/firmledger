@@ -1,11 +1,21 @@
 <%- include('../partials/top') %>
 <%- include('../partials/adminnav') %>
 
+<%
+  /* Actions fired from this page return to the same filtered/searched list. */
+  const keepView = `<input type="hidden" name="uq" value="${String(typeof q !== 'undefined' && q ? q : '').replace(/"/g, '&quot;')}"><input type="hidden" name="uf" value="${String(typeof f !== 'undefined' && f ? f : '').replace(/"/g, '&quot;')}">`;
+  const backLink = typeof back !== 'undefined' && back ? back : '/admin3119Musa/users';
+  const money = (c) => '$' + ((Number(c) || 0) / 100).toFixed(2);
+%>
+
 <section class="section-tight">
   <div class="container">
     <div class="section-head">
-      <h2><%= u.name %> <% if (u.suspended) { %><span class="pill pill-rejected">suspended</span><% } %></h2>
-      <a class="btn btn-ghost btn-sm" href="/admin3119Musa/users">← All users</a>
+      <div>
+        <p class="klabel">Console users</p>
+        <h2><%= u.name %> <% if (u.suspended) { %><span class="pill pill-rejected">suspended</span><% } %><% if (isProUser(u)) { %><span class="pill pill-pro">PRO</span><% } %></h2>
+      </div>
+      <a class="btn btn-ghost btn-sm" href="<%= backLink %>">← All users</a>
     </div>
 
     <div class="acct-grid" style="margin-bottom:26px">
@@ -14,28 +24,86 @@
         <table class="facts">
           <tr><th>Name</th><td><%= u.name %></td></tr>
           <tr><th>Email</th><td><%= u.email %></td></tr>
+          <tr><th>Role</th><td><%= u.role %></td></tr>
           <tr><th>Registered</th><td><%= fmtDate(u.created_at) %></td></tr>
+          <tr><th>Records submitted</th><td><%= submitted %> · <%= listings.length %> still owned</td></tr>
+          <tr><th>Plan</th><td><%= isProUser(u) ? 'FirmLedger Pro' : 'Free' %><%= isProUser(u) ? (u.plan_expires_at ? ` · until ${u.plan_expires_at}` : ' · lifetime') : '' %></td></tr>
           <tr><th>Live sessions</th><td><%= sessions %></td></tr>
           <tr><th>State</th><td><%= u.suspended ? 'Suspended' : 'Active' %></td></tr>
         </table>
+        <% if (typeof pendingDeletion !== 'undefined' && pendingDeletion) { %>
+          <div class="alert alert-err" style="margin-top:14px">
+            <b>Deletion requested <%= fmtDate(pendingDeletion.created_at) %>.</b>
+            <% if (pendingDeletion.reason) { %><div class="score-hint" style="color:inherit"><%= pendingDeletion.reason %></div><% } %>
+          </div>
+        <% } %>
         <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
           <% if (u.suspended) { %>
           <form method="post" action="/admin3119Musa/users/<%= u.id %>/unsuspend" class="inline">
             <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <%- keepView %>
             <button class="btn btn-primary btn-sm" type="submit">Unsuspend</button>
           </form>
           <% } else { %>
           <form method="post" action="/admin3119Musa/users/<%= u.id %>/suspend" class="inline" onsubmit="return confirm('Suspend this user? Their sessions are revoked and sign-in is blocked. Their records stay live.');">
             <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <%- keepView %>
             <button class="btn btn-danger btn-sm" type="submit">Suspend</button>
           </form>
           <% } %>
           <a class="btn btn-ghost btn-sm" href="/admin3119Musa/email?to=<%= encodeURIComponent(u.email) %>">Email <%= u.name.split(' ')[0] %></a>
+          <form method="post" action="/admin3119Musa/users/<%= u.id %>/reset" class="inline" onsubmit="return confirm('Email <%= u.email %> a one-hour password reset link?');">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <%- keepView %>
+            <button class="btn btn-ghost btn-sm" type="submit">Reset password</button>
+          </form>
           <form method="post" action="/admin3119Musa/users/<%= u.id %>/delete" class="inline" onsubmit="return confirm('Delete this account for good? Their listings stay on the ledger but become unclaimed.');">
             <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <%- keepView %>
             <button class="btn btn-danger btn-sm" type="submit">Delete account</button>
           </form>
         </div>
+      </div>
+
+      <div class="side-card">
+        <h3 style="margin:0 0 10px">Plan &amp; billing</h3>
+        <p class="muted" style="margin-bottom:14px">Account-level Pro — perks apply to every listing they own.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <% if (isProUser(u)) { %>
+          <form method="post" action="/admin3119Musa/users/<%= u.id %>/plan" class="inline" onsubmit="return confirm('Revoke FirmLedger Pro from this user? Listing perks and full-details access end immediately.');">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <input type="hidden" name="plan_action" value="revoke">
+            <%- keepView %>
+            <button class="btn btn-danger btn-sm" type="submit">Revoke Pro</button>
+          </form>
+          <% } else { %>
+          <form method="post" action="/admin3119Musa/users/<%= u.id %>/plan" class="inline">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <input type="hidden" name="plan_action" value="grant">
+            <%- keepView %>
+            <button class="btn btn-accent btn-sm" type="submit">Grant 30 days</button>
+          </form>
+          <form method="post" action="/admin3119Musa/users/<%= u.id %>/plan" class="inline">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <input type="hidden" name="plan_action" value="lifetime">
+            <%- keepView %>
+            <button class="btn btn-ghost btn-sm" type="submit">Grant lifetime</button>
+          </form>
+          <% } %>
+        </div>
+        <% if (typeof payments !== 'undefined' && payments.length) { %>
+          <h4 style="margin:18px 0 8px;font:600 11px/1 var(--fm);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)">Paid invoices</h4>
+          <div class="table-wrap">
+            <table class="table">
+              <thead><tr><th>Reference</th><th>Amount</th><th>Paid</th></tr></thead>
+              <tbody>
+                <% payments.forEach(function (p) { %>
+                <tr><td><code><%= p.reference %></code></td><td><%= money(p.amount) %> <%= p.currency %></td><td class="muted"><%= fmtDate(p.paid_at || p.created_at) %></td></tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
+        <% } else { %><p class="fine-print">No paid invoices on this account.</p><% } %>
       </div>
     </div>
 
@@ -47,11 +115,11 @@
         <tbody>
           <% listings.forEach(function (l) { %>
           <tr>
-            <td><a href="/listing/<%= l.slug %>" target="_blank"><strong><%= l.name %></strong></a></td>
-            <td><%= l.type %></td>
+            <td><span class="logo-tile logo-tile-sm"><%= l.name.slice(0, 1) %></span> <a href="/listing/<%= l.slug %>" target="_blank" rel="noopener"><strong><%= l.name %></strong></a></td>
+            <td><span class="pill pill-type"><%= l.type %></span></td>
             <td><span class="pill pill-<%= l.status %>"><%= l.status %></span></td>
             <td><%= l.claimed ? '✓' : '—' %></td>
-            <td><%= l.confidence %></td>
+            <td><span class="conf"><i style="width:<%= l.confidence %>%"></i></span> <span class="conf-num"><%= l.confidence %></span></td>
             <td class="muted"><%= fmtDate(l.created_at) %></td>
             <td class="ta-right"><a class="btn btn-ghost btn-xs" href="/admin3119Musa/listings/<%= l.id %>/edit">Edit</a></td>
           </tr>
@@ -80,6 +148,27 @@
       </table>
     </div>
     <% } else { %><p class="muted">No claims filed.</p><% } %>
+
+    <div class="section-head" style="margin-top:2rem"><h3>Their tickets</h3><span class="muted"><%= tickets.length %></span></div>
+    <% if (tickets.length) { %>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Ref</th><th>Subject</th><th>Category</th><th>Status</th><th>Last activity</th><th class="ta-right">Open</th></tr></thead>
+        <tbody>
+          <% tickets.forEach(function (t) { %>
+          <tr>
+            <td><code><%= t.ref %></code></td>
+            <td><strong><%= t.subject %></strong></td>
+            <td class="muted"><%= t.category %></td>
+            <td><span class="pill pill-<%= t.status === 'open' ? 'pending' : 'approved' %>"><%= t.status %></span></td>
+            <td class="muted"><%= fmtDate(t.updated_at) %></td>
+            <td class="ta-right"><a class="btn btn-ghost btn-xs" href="/admin3119Musa/tickets/<%= t.id %>">Open</a></td>
+          </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+    <% } else { %><p class="muted">No support tickets from this account.</p><% } %>
   </div>
 </section>
 

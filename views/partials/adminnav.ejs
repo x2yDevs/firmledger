@@ -18,9 +18,12 @@
       <a href="/admin3119Musa/blog" class="<%= section === 'blog' ? 'active' : '' %>">Blog</a>
       <a href="/admin3119Musa/settings" class="<%= section === 'settings' ? 'active' : '' %>">Settings</a>
     </nav>
-    <form method="post" action="/admin3119Musa/logout" class="inline">
+    <form method="post" action="/admin3119Musa/logout" class="admin-logout" title="Sign out of the console">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-      <button class="btn btn-ghost btn-sm" type="submit">Lock console</button>
+      <button class="btn btn-ghost btn-sm" type="submit">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        Lock console
+      </button>
     </form>
   </div>
 </div>

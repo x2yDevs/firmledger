@@ -24,7 +24,7 @@
       <% if (!providers.length) { %><p class="muted">No matching profiles.</p><% } %>
       <% providers.forEach(function(l){ %>
       <a class="search-row" href="/listing/<%= l.slug %>">
-        <% if (l.logo_url) { %><img src="<%= l.logo_url.startsWith('http') ? l.logo_url : ('/assets/uploads/' + l.logo_url) %>" alt="" width="34" height="34" loading="lazy"><% } else { %><span class="ph"><%= initials(l.name) %></span><% } %>
+        <% if (l.logo_url) { %><img src="<%= l.logo_url %>" alt="" width="34" height="34" loading="lazy"><% } else { %><span class="ph"><%= initials(l.name) %></span><% } %>
         <span class="sr-t"><b><%= l.name %><% if (perksActive(l)) { %> <span class="ptick ptick-sm" title="FirmLedger Pro — enhanced verified profile"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 2.4 3.3-.5 1 3.3L22 9l-1.7 3 1.7 3-3.3 1.8-1 3.3-3.3-.5L12 22l-2.4-2.4-3.3.5-1-3.3L2 15l1.7-3L2 9l3.3-1.8 1-3.3 3.3.5L12 2z" fill="#1D4ED8"/><path d="M10.6 15.4l-3-3 1.5-1.5 1.5 1.5 4.3-4.3 1.5 1.5-5.8 5.8z" fill="#fff"/></svg></span><% } %></b><small><%= l.category %> · <%= l.type %> · <%= [l.city,l.country].filter(Boolean).join(', ') || '—' %></small></span>
         <span class="sr-arrow">&rsaquo;</span>
       </a>

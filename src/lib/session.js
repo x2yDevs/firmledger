@@ -86,6 +86,13 @@ function attach(req, res, next) {
   next();
 }
 
+/** Length-safe constant-time token compare (timingSafeEqual throws on length mismatch). */
+function tokenEq(sent, expected) {
+  const a = Buffer.from(String(sent == null ? '' : sent));
+  const b = Buffer.from(String(expected == null ? '' : expected));
+  return a.length === b.length && a.length > 0 && crypto.timingSafeEqual(a, b);
+}
+
 /** CSRF guard for state-changing requests made under an active session. */
 function csrfProtect(req, res, next) {
   if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) return next();
@@ -93,8 +100,7 @@ function csrfProtect(req, res, next) {
   if ((req.headers['content-type'] || '').includes('multipart/form-data')) return next();
   const sess = req.userSession || req.adminSession;
   if (!sess) return next(); // unauthenticated posts (login/register) hold no privilege
-  const sent = req.body && req.body._csrf;
-  if (sent && crypto.timingSafeEqual(Buffer.from(String(sent)), Buffer.from(sess.csrf))) return next();
+  if (tokenEq(req.body && req.body._csrf, sess.csrf)) return next();
   return csrfFail(res);
 }
 
@@ -102,8 +108,7 @@ function csrfProtect(req, res, next) {
 function validCsrf(req) {
   const sess = req.userSession || req.adminSession;
   if (!sess) return true;
-  const sent = req.body && req.body._csrf;
-  return Boolean(sent) && crypto.timingSafeEqual(Buffer.from(String(sent)), Buffer.from(sess.csrf));
+  return tokenEq(req.body && req.body._csrf, sess.csrf);
 }
 
 function csrfFail(res) {
