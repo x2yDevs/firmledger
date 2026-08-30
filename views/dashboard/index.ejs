@@ -28,8 +28,8 @@
       <div class="stat-card"><span class="stat-label">Listings</span><span class="stat-num"><%= listings.length %></span><a href="#dash-listings">Manage &rsaquo;</a></div>
       <div class="stat-card"><span class="stat-label">Live</span><span class="stat-num"><%= nAppr %></span><span class="muted" style="font-size:12px"><%= nPend %> awaiting review</span></div>
       <div class="stat-card"><span class="stat-label">Verified</span><span class="stat-num"><%= nClaimed %></span><span class="muted" style="font-size:12px">ownership confirmed</span></div>
-      <div class="stat-card"><span class="stat-label">Plan</span><span class="stat-num" style="font-size:1.25rem;padding-top:6px"><%= accountPro ? 'Pro' : 'Free' %></span><a href="/dashboard/upgrade"><%= accountPro ? 'Manage &rsaquo;' : 'Upgrade &rsaquo;' %></a></div>
-      <div class="stat-card"><span class="stat-label">Open claims</span><span class="stat-num"><%= nOpenClaims %></span><a href="#dash-claims"><%= nOpenClaims ? 'Resume &rsaquo;' : 'Start &rsaquo;' %></a></div>
+      <div class="stat-card"><span class="stat-label">Plan</span><span class="stat-num" style="font-size:1.25rem;padding-top:6px"><%= accountPro ? 'Pro' : 'Free' %></span><a href="/dashboard/upgrade"><%= accountPro ? 'Manage' : 'Upgrade' %> &rsaquo;</a></div>
+      <div class="stat-card"><span class="stat-label">Open claims</span><span class="stat-num"><%= nOpenClaims %></span><a href="#dash-claims"><%= nOpenClaims ? 'Resume' : 'Start' %> &rsaquo;</a></div>
       <div class="stat-card"><span class="stat-label">Watchlist</span><span class="stat-num" style="font-size:1.25rem;padding-top:6px"><a href="/dashboard/watchlist" style="margin-top:0">Open &rsaquo;</a></span></div>
     </div>
 

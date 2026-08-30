@@ -1317,3 +1317,12 @@ h2.h-display { font-size: clamp(1.9rem, 3.4vw, 2.7rem); }
 @media (max-width: 640px) {
   .stat-cards[style*="repeat(5"] { grid-template-columns: 1fr 1fr !important; }
 }
+
+/* ================= r29: legal documents — one centred column on every screen ================= */
+/* /terms and /privacy used to hug the left edge of the 1200px container, leaving a wide empty
+   gutter on desktop. The whole document (heading row + body) now shares one centred measure at
+   every width; the existing <=760px rules keep the mobile treatment on top of it. */
+.legal-doc { max-width: 860px; margin-inline: auto; }
+.legal-doc .legal-body { max-width: 100%; }
+.legal-doc .sec-head { margin-bottom: clamp(20px, 3vw, 30px); }
+.legal-doc .sec-head .l { max-width: 100%; }

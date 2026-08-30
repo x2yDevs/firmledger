@@ -151,7 +151,7 @@
       <p class="muted">Account, money and newsletter mail always uses the same From address. Add as many providers as you like (Emitlo, Maileroo, Brevo, Mailjet, Mailtrap, SMTP2GO, Resend, AhaSend, SMTPfast, Forward Email, DNSExit, Zoho, or custom). If one hop hits a sending limit, the next hop is used automatically. <code>SMTP_URL</code> / <code>SMTP2_URL</code>… in <code>.env</code> are tried first.</p>
       <table class="facts" style="margin-top:12px">
         <tr><th>Status</th><td><% if (typeof smtp_configured !== 'undefined' ? smtp_configured : settings.smtp_configured) { %><span class="pill pill-approved">Configured ✓</span><% } else { %><span class="pill pill-pending">Outbox only</span><% } %></td></tr>
-        <tr><th>From (everywhere)</th><td><code><%= typeof mailFrom !== 'undefined' ? mailFrom : (settings.smtp_from || 'FirmLedger &lt;no-reply@firmledger.co.ke&gt;') %></code></td></tr>
+        <tr><th>From (everywhere)</th><td><code><%= typeof mailFrom !== 'undefined' ? mailFrom : (settings.smtp_from || 'FirmLedger <no-reply@firmledger.co.ke>') %></code></td></tr>
       </table>
       <form method="post" action="/admin3119Musa/mail/from" style="margin-top:14px">
         <input type="hidden" name="_csrf" value="<%= csrfToken %>">

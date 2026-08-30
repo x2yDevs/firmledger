@@ -35,6 +35,20 @@ function siteUrl(path = '') {
   return base + path;
 }
 
+/* A real, publicly resolvable origin? Used to keep dev/staging boxes out of search
+indexes: BASE_URL unset, localhost, .test/.local/.internal or a private IP means
+"not public yet". FORCE_INDEXABLE=1 overrides (e.g. a preview you do want indexed). */
+function isPublicBaseUrl() {
+  if (process.env.FORCE_INDEXABLE === '1') return true;
+  const base = String(process.env.BASE_URL || '').trim();
+  if (!base) return false;
+  let host = '';
+  try { host = new URL(base).hostname.toLowerCase(); } catch (e) { return false; }
+  if (/\.(local|internal|test|invalid|localhost)$/.test(host) || host === 'localhost') return false;
+  if (/^(127\.|0\.0\.0\.0$|::1$|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.)/.test(host)) return false;
+  return true;
+}
+
 function normalizeUrl(u) {
   u = (u || '').trim();
   if (!u) return '';
@@ -91,6 +105,6 @@ function isEmail(e) {
 
 module.exports = {
   slugify, randomToken, claimToken, fmtDate, truncate, escXml,
-  siteUrl, normalizeUrl, domainOf, parseLines, parseComma,
+  siteUrl, isPublicBaseUrl, normalizeUrl, domainOf, parseLines, parseComma,
   confidenceScore, isEmail, escHtml,
 };

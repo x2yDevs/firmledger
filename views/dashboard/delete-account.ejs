@@ -38,34 +38,19 @@
 
         <div class="form-section">Confirm it's you</div>
         <div class="form-two">
-          <label class="fl"><span>Retype your account name</span>
+          <label class="fl"><span>Retype your account name <small>exactly as on your profile</small></span>
             <input class="input" name="confirm_name" required maxlength="80" value="<%= old.confirm_name || '' %>" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="<%= user.name %>">
-            <p class="fine-print" style="margin-top:6px">Exactly as it appears on your profile — <b><%= user.name %></b>.</p>
           </label>
-          <label class="fl"><span>Type <b>delete my account</b> <small>copy-paste is disabled</small></span>
-            <input class="input" name="confirm_phrase" id="delPhrase" required maxlength="40" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="delete my account">
-            <p class="fine-print" style="margin-top:6px">Signed in as <b><%= user.email %></b>.</p>
+          <label class="fl"><span>Type <b>delete my account</b> <small>lowercase, with the spaces</small></span>
+            <input class="input" name="confirm_phrase" required maxlength="40" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="delete my account">
           </label>
         </div>
-
-        <p class="fine-print">We email you and the team when the request is received, and we email you again when the account is actually deleted. This is not instant.</p>
+        <p class="form-note">Signed in as <b><%= user.email %></b> · profile name <b><%= user.name %></b>. We email you and the team when the request is received, and email you again when the account is actually deleted — this is not instant.</p>
         <div class="form-actions">
           <button class="btn btn-danger" type="submit">Send deletion request</button>
           <a class="btn btn-ghost" href="/dashboard">Cancel</a>
         </div>
       </form>
-      <script>
-      (function () {
-        var el = document.getElementById('delPhrase');
-        if (!el) return;
-        ['paste', 'drop', 'copy', 'cut'].forEach(function (ev) {
-          el.addEventListener(ev, function (e) { e.preventDefault(); });
-        });
-        el.addEventListener('keydown', function (e) {
-          if ((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V')) e.preventDefault();
-        });
-      })();
-      </script>
     <% } %>
   </div>
 </section>

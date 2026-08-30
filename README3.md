@@ -113,6 +113,7 @@ The app ships with `.env.example`. Copy it to `.env` and change what you need �
 | `PAYPAL_CLIENT_ID` | — | PayPal REST app client ID. Leave blank and paste credentials in `Admin → Settings` instead. |
 | `PAYPAL_CLIENT_SECRET` | — | PayPal REST app secret. |
 | `PAYPAL_MODE` | — | `sandbox` (default, nothing is charged) or `live`. |
+| `FORCE_INDEXABLE` | — | `1` keeps a non-public `BASE_URL` open to search engines. By default an unset/localhost/`.test`/private-IP `BASE_URL` makes every response carry `X-Robots-Tag: noindex, follow` and `/robots.txt` answer `Disallow: /`. |
 
 The app binds `0.0.0.0`: any host that can reach the machine's IP can reach the site.
 **Put an HTTPS-terminating reverse proxy in front (Nginx/Caddy/Cloudflare) and set
@@ -191,6 +192,14 @@ $ npm start
 Generate a free TLS cert via Caddy or Let's Encrypt. Set `BASE_URL=https://yourdomain`.
 
 **C. PaaS (Railway / Render / Fly / Heroku):** build = `npm ci`, start = `npm start`, attach a persistent volume for `data/` and the app bootstraps itself. Set env vars in the dashboard.
+
+**Being found once it is up.** `BASE_URL` is also the SEO switch, not just a link builder: canonical
+URLs, OG tags, `robots.txt`, every sitemap `<loc>`, IndexNow and all email links derive from it, and
+the app refuses to let search engines index a host whose `BASE_URL` is not a public origin
+(`server.js` → `util.isPublicBaseUrl()`). A staging box therefore stays out of Google with no extra
+configuration, and `curl -sI https://your-domain/ | grep -i x-robots-tag` printing nothing is the
+proof that production is indexable. Full checklist: **README → “4b. Getting indexed”**; the install and
+TLS runbook for any provider: **README → “4a. Hosting on your own server or VPS”**.
 
 ---
 

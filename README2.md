@@ -114,6 +114,9 @@ firmledger/
 
 ## 3 · The request lifecycle (every page)
 
+0. **Security + indexing headers** — `nosniff`, `SAMEORIGIN`, referrer/permissions policy, and
+   `X-Robots-Tag: noindex, follow` whenever `BASE_URL` is not a public origin
+   (`util.isPublicBaseUrl()`) — a dev or staging host can never be indexed.
 1. **Static try** — `express.static` serves `/public` directly (7-day cache, versioned via `ASSET_V`).
 2. **Uploads** — `/uploads` serves files in `data/uploads` (30-day immutable).
 3. **`session.attach`** — loads/creates a session. Two cookies:
