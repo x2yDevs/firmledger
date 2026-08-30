@@ -1,0 +1,75 @@
+/** Seed the news area with real methodology posts on a fresh database. Idempotent. */
+const POSTS = [
+  {
+    slug: 'how-firmledger-builds-a-trustworthy-record',
+    title: 'How FirmLedger builds a trustworthy business record',
+    excerpt: 'The five-layer pipeline behind every profile: ingest, normalize, resolve, verify, refresh — and why provenance matters more than volume.',
+    body: `<p class="lead">Most business directories are mirrors of self-reported data: a company says what it is, and the directory repeats it forever. FirmLedger takes the opposite position. A record only earns a place on this site when it can point to where its facts came from — and every profile shows that citation trail publicly.</p>
+<h2>The problem with business data on the web</h2>
+<p>Company information is fragmented across registries, encyclopedias, news archives, social profiles and the companies' own websites. Each source is partial, differently formatted, and frequently out of date. Aggregators that merge these signals typically do so silently: you see a description, a founding year, a headcount — with no way to know which of them is current, or why you should believe any of it.</p>
+<p>The result is an ecosystem where a two-year-old funding headline can look more authoritative than a claim submitted yesterday by the actual owner. We think that is backwards, and it is exactly what our pipeline is designed to correct.</p>
+<h2>Layer 1 — Ingest</h2>
+<p>Records enter the ledger in two ways. First, structured enrichment: when a listing is created, we resolve the business's Wikipedia article and its linked Wikidata entity and import only real, citable fields — the summary description, official website, founding year, headquarters, logo and social handles. Second, direct submission: owners and contributors type records in by hand. If a business has no genuine Wikipedia article, enrichment refuses to invent data and the record is simply marked as submission-sourced. Both paths are legitimate; what matters is that the profile always shows which one produced it.</p>
+<h2>Layer 2 — Normalize</h2>
+<p>Raw input is standardized before it is stored. Names collapse onto one spelling; categories are deduplicated case- and punctuation-insensitively, so "Fintech", " Fintech " and "FINTECH" can never become three categories; locations split into country, city and region; logos are normalized to uniform 256×256 assets. The schema is strict at the field level — a founding year must be a year, a description must carry real substance of at least one hundred characters, taglines are capped so the directory stays a directory and not a billboard.</p>
+<h2>Layer 3 — Resolve</h2>
+<p>One business, one record. The ledger refuses duplicates by name and by website domain, whether the record was fetched from Wikipedia or typed in manually. When a second submission matches an existing record, the submitter is redirected to that record and offered the claim flow instead of a new page. This is the single most important structural decision in the product: everything else the ledger knows — sources, timelines, relationships, verification — attaches to one canonical profile per entity rather than scattering across near-duplicates.</p>
+<h2>Layer 4 — Verify</h2>
+<p>Review happens at two levels. Every submission is moderated by a human before publication. Separately, the actual owner of a business can cryptographically claim its record: add a DNS TXT record, one meta tag line, or our badge snippet to the official domain, and our servers check for it live. Verified ownership both raises the profile's confidence score and transfers editorial control to the owner — they can edit fields, post timeline events and record relationships, subject to continued moderation of structural changes.</p>
+<h2>Layer 5 — Refresh</h2>
+<p>Publication is not the end of the pipeline. Approved records are added to the sitemap index automatically and pushed to search engines via IndexNow within about ten hours. A freshness marker on each profile tells visitors how recently the record was touched; technology snapshots are re-detectable on demand by the owner; and anyone can file a removal or correction request from the profile itself, which lands in the same human moderation queue.</p>
+<h2>Why one Wikipedia source is worth more than ten anonymous ones</h2>
+<p>It would be trivial to scrape ten aggregators and report a median headcount. We do not, because reproducibility beats volume: a fact a third party can re-check beats five facts nobody can. Every field we import is traceable to an article a skeptic can open, and when the article changes, the citation on the profile tells a reviewer exactly where to look. That is what "source-backed" means on this site — not a badge, a trail.</p>`,
+  },
+  {
+    slug: 'dns-meta-or-badge-choosing-a-verification-method',
+    title: 'DNS, meta tag or badge: choosing a verification method for your listing',
+    excerpt: 'All three claim methods cryptographically prove the same thing. Here is how they differ, who each one suits, and what our servers actually check.',
+    body: `<p class="lead">Claiming a FirmLedger profile takes minutes, and all three supported methods prove the same fact: that you control the official domain of the business. This note explains what each method involves, when to pick which, and what happens behind the "Verify now" button.</p>
+<h2>Why domain proof?</h2>
+<p>A business profile is only meaningfully "owned" if control can be tied to something the business itself controls. Email addresses, names and phone numbers are all easy to fake on a directory; a domain is not. Whoever controls a domain's DNS zone, its homepage HTML, or its visible content controls the business's canonical identity on the web — so that is the identity we verify, live, at the moment you ask us to check.</p>
+<h2>Method 1 — DNS TXT record (strongest)</h2>
+<p>You add a single TXT record to the domain: host <code>@</code> (or <code>_firmledger</code>), value <code>firmledger-verification=&lt;your-token&gt;</code>, TTL five minutes. We query the domain's resolvers directly and check for the exact token.</p>
+<p><em>Choose this when:</em> you manage the company's DNS (registrar, Cloudflare, Route 53) but perhaps not its website code — common when marketing runs the site through an agency. DNS is also immune to website redesigns wiping the proof, so it is the most durable choice.</p>
+<p><em>Watch out for:</em> propagation. Most resolvers see a TXT record within minutes, but some corporate DNS setups cache aggressively. If the first check fails after adding the record, wait ten minutes and press "Verify now" again — re-checks are unlimited.</p>
+<h2>Method 2 — HTML meta tag (fastest for site owners)</h2>
+<p>You paste one line, <code>&lt;meta name="firmledger-verification" content="&lt;your-token&gt;"&gt;</code>, inside the homepage's <code>&lt;head&gt;</code>. We fetch the homepage and verify the tag, byte for byte.</p>
+<p><em>Choose this when:</em> you have access to the site's code or to a CMS feature like "custom head code" (every major CMS has one — WordPress theme headers, Webflow's head-code setting, Shopify's theme.liquid). It is usually the fastest path: no IT ticket, no DNS console.</p>
+<p><em>Watch out for:</em> tag managers and client-side injection. The check reads the served HTML, so a tag injected after page load by JavaScript will not be found. The line must be present in the source document itself.</p>
+<h2>Method 3 — The FirmLedger badge (zero code access)</h2>
+<p>You embed the badge snippet anywhere on the homepage — the footer works well. The badge is a small image linking back to your FirmLedger profile, and its embed code carries your verification token as a data attribute. We fetch the page and confirm the snippet is present. Once verified, the badge also advertises your "Verified" status to your visitors; it ships in light and dark themes and never tracks anyone.</p>
+<p><em>Choose this when:</em> you can edit some page content but nothing technical — or when you want the trust signal on your own site anyway. It is the only method your customers can see.</p>
+<h2>What our servers actually check</h2>
+<p>Verification is fully automated and runs at the moment you press the button: a live DNS query for method one, or a live fetch of your homepage for methods two and three. There is no human in the loop and no waiting period. If the token is there, the profile flips to "Verified owner" immediately; its confidence score rises; and the record becomes editable from your dashboard the same second. If it is not there, you get the exact reason — "tag not found", "record propagating" — not a generic failure.</p>
+<h2>After verification</h2>
+<p>Keep the proof in place. Re-checks can happen at any time after verification, and removing the proof can revert a profile to unclaimed. Pending competing claims are rejected automatically when a claim succeeds, and only one verified owner can hold a record at a time — by design, the ledger never shows two managers for one business.</p>`,
+  },
+  {
+    slug: 'why-we-fetch-from-wikipedia-and-nothing-else',
+    title: 'Why we fetch from Wikipedia, and nothing else',
+    excerpt: 'Our enrichment policy in one sentence: if it is not citable, it does not go on a profile. Here is the reasoning — and what that means for smaller businesses.',
+    body: `<p class="lead">When you press "Fetch from Wikipedia" on the FirmLedger form, you are triggering the most opinionated line of code in the product: the part that refuses to guess. This post explains why our auto-fill speaks to exactly one source — Wikipedia and its structured sibling Wikidata — and what that choice means in practice.</p>
+<h2>The alternative we rejected</h2>
+<p>The standard industry approach is breadth: scrape search-engine snippets, social profiles, aggregator sites and the open web freely, then let a model summarize the mess into a confident-sounding profile. It produces more data per company, faster — and it is precisely why so much business intelligence on the internet is quietly wrong. Snippet text is taken out of context, aggregators copy each other's errors, and language models fill gaps with the most statistically plausible answer rather than the true one. The output looks authoritative. It is not auditable.</p>
+<p>A business record that investors, journalists and partners will rely on cannot work like that. Every number and every sentence needs a handrail: somewhere a skeptic can go to re-verify it.</p>
+<h2>What Wikipedia gives us — and what it refuses to</h2>
+<p>Wikipedia's biography-of-organizations content sits behind a notability requirement and a citation norm that ordinary directories simply do not have. When a business has a genuine article, that article has usually been argued over by strangers with no stake in flattering the company — which is the best free noise filter on the internet. Its linked Wikidata entity then exposes the same facts as structured fields: official website, inception year, headquarters, logo image, social identifiers. Our fetch reads exactly those fields. Nothing is interpolated; missing fields stay empty.</p>
+<p>Just as important is what the check refuses to do. If the search returns only a disambiguation page, we skip it. If nothing titled like your query exists, we say so plainly — "has no real Wikipedia article; fill the record in manually" — instead of grabbing the closest full-text mention. An early build of the fetcher once returned a U.S. government finance agency for a Kenyan startup because the agency was mentioned in the startup's funding news. That is exactly the kind of answer the current fetcher is designed never to give: a wrong record, confidently presented.</p>
+<h2>Where the source shows up</h2>
+<p>The article used for enrichment is stored on the record as provenance. Open any fetched profile and look at "Sources &amp; provenance": you will see the Wikipedia article listed alongside the company's official website, with the date of record. The confidence score counts those citations; the public can check every claim against them without asking us.</p>
+<h2>What this means for smaller businesses</h2>
+<p>Most African SMEs do not have Wikipedia articles, and that is fine. Notability is a property of encyclopedias, not of legitimacy. A small business belongs on FirmLedger exactly as much as a blue-chip — it simply enters through manual submission instead of the one-click fetch, and its profile honestly reports that its data is submission-sourced until cited references exist. Owners can then make the record first-party true by claiming it through domain verification.</p>
+<p>We would rather ship a ledger that is slightly harder to fill than one that is easy to fill with noise. The bet is simple: ten records a skeptic can verify beat a hundred a skeptic cannot.</p>`,
+  },
+];
+
+function seedBlog(db) {
+  const count = db.prepare('SELECT COUNT(*) c FROM blog_posts').get().c;
+  if (count) return;
+  const ins = db.prepare(
+    "INSERT INTO blog_posts (slug, title, excerpt, body, status, published_at) VALUES (?,?,?,?,'published', datetime('now'))"
+  );
+  for (const p of POSTS) ins.run(p.slug, p.title, p.excerpt, p.body);
+}
+
+module.exports = { seedBlog };

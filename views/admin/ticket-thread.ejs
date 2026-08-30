@@ -1,0 +1,140 @@
+<%- include('../partials/top') %>
+<%- include('../partials/adminnav') %>
+
+<div class="crumbbar"><div class="container">
+  <div class="breadcrumbs"><a href="/admin3119Musa/tickets">Tickets</a><span aria-hidden="true">›</span><span><%= t.ref %></span></div>
+</div></div>
+
+<section class="section-tight chat-page">
+  <div class="container" style="max-width:990px">
+
+    <div class="section-head" style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem">
+      <div>
+        <h2><%= t.subject %></h2>
+        <p class="muted" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:14px;margin:0">
+          <span class="ticket-ref"><%= t.ref %></span>
+          <span class="badge badge-cat"><%= t.category %></span>
+          · opened by <b><%= t.user_name %></b> (<%= t.user_email %>)
+        </p>
+      </div>
+      <div class="ticket-actions">
+        <form method="post" action="/admin3119Musa/tickets/<%= t.id %>/reply" style="margin:0;display:inline-flex;gap:6px">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <% if (t.status !== 'solved') { %><button name="action" value="solve" class="btn btn-ghost btn-sm" type="submit" style="color:#0E9F6E">✓ Solve</button><% } %>
+          <% if (t.status !== 'closed') { %><button name="action" value="close" class="btn btn-ghost btn-sm" type="submit" style="color:var(--bad)">✕ Close</button><% } %>
+          <% if (t.status === 'closed' || t.status === 'solved') { %><button name="action" value="reopen" class="btn btn-ghost btn-sm" type="submit">↩ Reopen</button><% } %>
+        </form>
+      </div>
+    </div>
+
+    <% if (flashMsg) { %><div class="alert alert-ok" style="margin-bottom:1rem"><%= flashMsg %></div><% } %>
+
+    <div class="chat-window">
+      <div class="chat-head">
+        <div class="chat-head-avatar"><%= (t.user_name || 'U').trim().slice(0,1).toUpperCase() %></div>
+        <div class="chat-head-meta">
+          <div class="chat-head-name"><%= t.user_name %></div>
+          <div class="chat-head-sub">
+            <span class="badge status-<%= t.status %>" id="statusBadge" style="background:rgba(255,255,255,.14);color:#fff;text-transform:capitalize"><%= t.status === 'open' ? 'Open' : t.status === 'solved' ? 'Solved' : 'Closed' %></span>
+            <span><%= t.user_email %></span>
+          </div>
+        </div>
+        <div class="chat-head-sub" id="connStatus" aria-live="polite">online</div>
+      </div>
+
+      <div class="chat-pane" id="feed">
+        <% let lastDay = ''; %>
+        <% messages.forEach(function (m) { %>
+          <% const day = m.created_at.slice(0, 10); %>
+          <% if (day !== lastDay) { lastDay = day; %>
+            <div class="chat-day"><%= fmtDate(new Date(day + 'T00:00:00Z')) %></div>
+          <% } %>
+          <div class="wa-row <%= m.sender === 'admin' ? 'wa-mine' : 'wa-theirs' %>">
+            <div class="wa-bubble">
+              <div class="wa-tail"></div>
+              <div class="wa-who"><%= m.sender === 'admin' ? 'Team' : t.user_name %></div>
+              <% if (m.body) { %><div class="wa-text"><%- m.body.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\n/g,'<br>') %></div><% } %>
+              <% if (m.attachment) { %>
+                <a class="wa-attach" href="<%= m.attachment %>" target="_blank" rel="noopener"><svg class="ric" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg><%= m.attachment_name || 'Attachment' %></a>
+              <% } %>
+              <div class="wa-meta"><%= m.created_at.slice(11, 16) %></div>
+            </div>
+          </div>
+        <% }); %>
+      </div>
+
+      <div class="chat-status-line" id="chatStatus" aria-live="polite">Connected — new member messages appear instantly.</div>
+
+      <form method="post" action="/admin3119Musa/tickets/<%= t.id %>/reply" class="chat-composer" id="composer">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <input type="hidden" name="action" value="reply">
+        <div class="composer-box">
+          <textarea name="body" id="msgInput" rows="1" placeholder="Reply to <%= t.user_name.split(' ')[0] %> — Enter to send, Shift+Enter for a new line" aria-label="Reply"></textarea>
+        </div>
+        <button class="composer-send" type="submit" title="Send" aria-label="Send reply">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+        </button>
+      </form>
+    </div>
+
+    <% if (more && more.length) { %>
+      <div class="section-head" style="margin:2rem 0 .8rem"><h3 style="font-size:1rem">More by <%= t.user_name %></h3></div>
+      <div class="ticket-list">
+        <% more.forEach(function (o) { %>
+          <a class="ticket-card" href="/admin3119Musa/tickets/<%= o.id %>" style="padding:.9rem 1.1rem">
+            <span class="ticket-ref"><%= o.ref %></span>
+            <span class="badge status-<%= o.status %>"><%= o.status === 'open' ? 'Open' : o.status === 'solved' ? 'Solved' : 'Closed' %></span>
+            <div class="ticket-subject" style="font-size:.95rem"><%= o.subject %></div>
+          </a>
+        <% }); %>
+      </div>
+    <% } %>
+  </div>
+</section>
+
+<script>
+(function () {
+  const pane = document.getElementById('feed');
+  const ta = document.getElementById('msgInput');
+  const form = document.getElementById('composer');
+  const statusEl = document.getElementById('chatStatus');
+  const badge = document.getElementById('statusBadge');
+  const ticketId = <%= t.id %>;
+  let lastUpdated = '<%= t.updated_at %>';
+  const labels = { open: 'Open', solved: 'Solved', closed: 'Closed' };
+
+  if (pane) pane.scrollTop = pane.scrollHeight;
+  function autoSize() { if (!ta) return; ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 140) + 'px'; }
+  if (ta) {
+    ta.addEventListener('input', autoSize);
+    ta.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (ta.value.trim().length) form.requestSubmit(); }
+    });
+    autoSize();
+  }
+
+  async function poll() {
+    try {
+      const r = await fetch('/admin3119Musa/tickets/' + ticketId + '/poll', { cache: 'no-store' });
+      if (!r.ok) return;
+      const j = await r.json();
+      if (j.status && badge) { badge.textContent = labels[j.status] || j.status; badge.className = 'badge status-' + j.status; }
+      if (j.updatedAt && j.updatedAt !== lastUpdated) {
+        lastUpdated = j.updatedAt;
+        if (statusEl) statusEl.textContent = 'Member replied — updating…';
+        setTimeout(function () { window.location.reload(); }, 350);
+        return;
+      }
+      if (statusEl) statusEl.textContent = 'Connected — new member messages appear instantly.';
+      document.getElementById('connStatus').textContent = 'online';
+    } catch (e) {
+      if (statusEl) statusEl.textContent = 'Connection dropped — retrying…';
+      document.getElementById('connStatus').textContent = 'offline';
+    }
+  }
+  poll();
+  setInterval(poll, 4000);
+})();
+</script>
+
+<%- include('../partials/bottom') %>

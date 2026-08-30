@@ -1,0 +1,84 @@
+<%- include('../partials/top') %>
+<%- include('../partials/adminnav') %>
+
+<section class="section-tight">
+  <div class="container">
+    <div class="section-head">
+      <h2>Listings</h2>
+      <a class="btn btn-primary btn-sm" href="/admin3119Musa/listings/new">+ Add listing</a>
+      <div class="filter-tabs">
+        <a href="/admin3119Musa/listings" class="<%= !status ? 'active' : '' %>">All</a>
+        <a href="/admin3119Musa/listings?status=pending" class="<%= status === 'pending' ? 'active' : '' %>">Pending</a>
+        <a href="/admin3119Musa/listings?status=approved" class="<%= status === 'approved' ? 'active' : '' %>">Approved</a>
+        <a href="/admin3119Musa/listings?status=rejected" class="<%= status === 'rejected' ? 'active' : '' %>">Rejected</a>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Listing</th><th>Type / Category</th><th>Owner</th><th>Plan</th><th>Status</th><th>Conf.</th><th class="ta-right">Actions</th></tr></thead>
+        <tbody>
+          <% listings.forEach(function (l) { %>
+            <tr>
+              <td>
+                <span class="logo-tile logo-tile-sm"><%= l.name.slice(0, 1) %></span>
+                <strong><%= l.name %></strong>
+                <% if (l.claimed) { %><span class="tick" title="Verified owner">✓</span><% } %>
+                <br><small class="muted"><%= l.website %></small>
+              </td>
+              <td><span class="pill pill-type"><%= l.type %></span> <small class="muted"><%= l.category %></small></td>
+              <td><small class="muted"><%= l.owner_email || '—' %></small></td>
+              <td><% if (planOf(l) !== 'free') { %><span class="pill pill-pro">PRO</span><br><small class="muted"><%= planOf(l).replace(/^pro · /, '') %></small><% } else { %><span class="pill pill-free">Free</span><% } %></td>
+              <td><span class="pill pill-<%= l.status %>"><%= l.status %></span><% if (l.featured) { %><span class="pill pill-featured">Featured</span><% } %></td>
+              <td><span class="conf-num"><%= l.confidence %></span></td>
+              <td class="ta-right actions-cell">
+                <a class="btn btn-ghost btn-xs" href="/admin3119Musa/listings/<%= l.id %>/edit">Edit</a>
+                <% if (l.status === 'approved') { %>
+                  <a class="btn btn-ghost btn-xs" href="/listing/<%= l.slug %>" target="_blank">View</a>
+                  <form method="post" action="/admin3119Musa/listings/<%= l.id %>/reject" class="inline">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                    <button class="btn btn-ghost btn-xs" type="submit">Reject</button>
+                  </form>
+                <% } else { %>
+                  <form method="post" action="/admin3119Musa/listings/<%= l.id %>/approve" class="inline">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                    <button class="btn btn-primary btn-xs" type="submit">Approve</button>
+                  </form>
+                <% } %>
+                <form method="post" action="/admin3119Musa/listings/<%= l.id %>/feature" class="inline">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <button class="btn btn-ghost btn-xs" type="submit"><%= l.featured ? 'Unfeature' : 'Feature' %></button>
+                </form>
+                <% if (planOf(l) !== 'free') { %>
+                <form method="post" action="/admin3119Musa/listings/<%= l.id %>/plan" class="inline" onsubmit="return confirm('Revoke the Pro plan from “<%= l.name.replace(/"/g, '') %>”?');">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <input type="hidden" name="plan_action" value="revoke">
+                  <button class="btn btn-danger btn-xs" type="submit">Revoke Pro</button>
+                </form>
+                <% } else { %>
+                <form method="post" action="/admin3119Musa/listings/<%= l.id %>/plan" class="inline" title="Grant 30 days of FirmLedger Pro">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <input type="hidden" name="plan_action" value="grant">
+                  <button class="btn btn-accent btn-xs" type="submit">Grant Pro</button>
+                </form>
+                <form method="post" action="/admin3119Musa/listings/<%= l.id %>/plan" class="inline" title="Grant lifetime FirmLedger Pro (no expiry)">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <input type="hidden" name="plan_action" value="lifetime">
+                  <button class="btn btn-ghost btn-xs" type="submit">Lifetime</button>
+                </form>
+                <% } %>
+                <form method="post" action="/admin3119Musa/listings/<%= l.id %>/delete" class="inline" onsubmit="return confirm('Delete “<%= l.name.replace(/"/g, '') %>” permanently?');">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <button class="btn btn-danger btn-xs" type="submit">Delete</button>
+                </form>
+              </td>
+            </tr>
+          <% }) %>
+          <% if (!listings.length) { %><tr><td colspan="7" class="muted" style="text-align:center;padding:2rem">No listings in this queue.</td></tr><% } %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<%- include('../partials/bottom') %>

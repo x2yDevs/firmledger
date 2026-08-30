@@ -1,0 +1,27 @@
+<%- include('../partials/top') %>
+
+<section class="auth-wrap">
+  <div class="auth-card rv">
+    <div class="auth-head">
+      <img src="/assets/logo-mark.png" alt="" width="44" height="44" style="margin-bottom:14px">
+      <p class="klabel">Email authentication</p>
+      <h1>Welcome back</h1>
+      <p style="font-size:13.5px">Sign in to manage your listings and claims.</p>
+    </div>
+    <% if (errors.length) { %><div class="alert alert-err"><% errors.forEach(function (e) { %><div><%= e %></div><% }) %></div><% } %>
+    <form method="post" action="/login" class="form">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <input type="hidden" name="next" value="<%= next %>">
+      <label><span>Email address</span>
+        <input type="email" name="email" required autocomplete="email" value="<%= old.email || '' %>">
+      </label>
+      <label><span>Password</span>
+        <input type="password" name="password" required autocomplete="current-password">
+      </label>
+      <button class="btn btn-primary btn-block" type="submit">Sign in</button>
+      <p class="auth-alt"><a href="/forgot">Forgot your password?</a></p>
+    </form>
+    <p class="auth-alt">New to FirmLedger? <a href="/register">Create an account</a></p>
+  </div>
+</section>
+<%- include('../partials/bottom') %>

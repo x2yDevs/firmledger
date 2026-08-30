@@ -1,0 +1,449 @@
+<%- include('partials/top') %>
+
+<% if (l.status === 'pending') { %>
+<div class="container flash-wrap"><div class="alert alert-warn" role="alert">This listing is awaiting review — it is only visible to you and FirmLedger moderators.</div></div>
+<% } else if (l.status === 'rejected') { %>
+<div class="container flash-wrap"><div class="alert alert-err" role="alert">This listing was rejected during review. Update it from your dashboard to re-submit.</div></div>
+<% } %>
+
+<div class="container">
+  <nav class="crumb rv" aria-label="Breadcrumb">
+    <a href="/">Home</a><span class="sep">/</span><a href="/directory/c/<%= catSlug %>"><%= l.category %></a><span class="sep">/</span><span><%= l.name %></span>
+  </nav>
+
+  <div class="prof-head rv" style="--d:50ms">
+    <% if (l.logo_url) { %><img class="avatar" src="<%= l.logo_url %>" alt="<%= l.name %> logo"><% } else { %><span class="avatar"><%= initials(l.name) %></span><% } %>
+    <div class="prof-title" style="flex:1;min-width:260px">
+      <h1 class="prof-name"><%= l.name %><% if (perksPro) { %><span class="ptick" title="FirmLedger Pro — enhanced verified profile" aria-label="FirmLedger Pro verified"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 2.4 3.3-.5 1 3.3L22 9l-1.7 3 1.7 3-3.3 1.8-1 3.3-3.3-.5L12 22l-2.4-2.4-3.3.5-1-3.3L2 15l1.7-3L2 9l3.3-1.8 1-3.3 3.3.5L12 2z" fill="#1D4ED8"/><path d="M10.6 15.4l-3-3 1.5-1.5 1.5 1.5 4.3-4.3 1.5 1.5-5.8 5.8z" fill="#fff"/></svg></span><% } %></h1>
+      <p class="prof-tagline"><%= l.tagline %></p>
+      <div class="prof-meta">
+        <span class="chip"><%= typeLabel %></span>
+        <a class="chip mut" href="/directory/c/<%= catSlug %>"><%= l.category %></a>
+        <% if (place) { %><span class="chip mut"><%= place %></span><% } %>
+        <% if (l.founded) { %><span class="chip mut">Est. <%= l.founded %></span><% } %>
+        <% if (l.size) { %><span class="chip mut"><%= l.size %> people</span><% } %>
+        <% if (l.claimed) { %><span class="vbadge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Verified owner</span><% } %>
+        <% if (perksPro) { %><span class="pill pill-pro" title="Owner has FirmLedger Pro">PRO</span><% } %>
+        <span class="status live">Indexed</span>
+      </div>
+    </div>
+    <div class="prof-actions">
+      <% if (user) { %>
+        <form method="post" action="/dashboard/watchlist/toggle" style="margin:0">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <input type="hidden" name="listing_id" value="<%= l.id %>">
+          <input type="hidden" name="back" value="/listing/<%= l.slug %>">
+          <button class="btn btn-ghost watch-btn <%= watching ? 'watching' : '' %>" type="submit" title="<%= watching ? 'Stop watching this company' : 'Watch this company — get email digests on updates' %>">
+            <svg class="w-star" viewBox="0 0 24 24" fill="<%= watching ? 'currentColor' : 'none' %>" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 2l2.9 6.26 6.6.56-5 4.4 1.5 6.44L12 16.9l-6 2.76 1.5-6.44-5-4.4 6.6-.56L12 2z"/></svg>
+            <%= watching ? 'Watching' : 'Watch' %>
+          </button>
+        </form>
+      <% } else { %>
+        <a class="btn btn-ghost watch-btn" href="/login?next=/listing/<%= l.slug %>" title="Log in to watch this company">
+          <svg class="w-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 2l2.9 6.26 6.6.56-5 4.4 1.5 6.44L12 16.9l-6 2.76 1.5-6.44-5-4.4 6.6-.56L12 2z"/></svg>
+          Watch
+        </a>
+      <% } %>
+      <% if (l.website && viewFull) { %><a class="btn btn-ghost" href="<%= l.website %>" rel="noopener nofollow" target="_blank">Visit website ↗</a><% } %>
+      <% if (!l.claimed) { %><a class="btn btn-accent" href="/claim/<%= l.slug %>">Claim this listing</a><% } %>
+    </div>
+    <div class="share-row" aria-label="Share this listing">
+      <span class="share-label">Share</span>
+      <a class="share-btn sb-wa" href="https://wa.me/?text=<%= encodeURIComponent(l.name + ' on FirmLedger — ' + meta.canonical) %>" target="_blank" rel="noopener" aria-label="Share on WhatsApp" title="Share on WhatsApp">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2a9.9 9.9 0 0 0-8.5 14.94L2 22l5.2-1.5A9.9 9.9 0 1 0 12.04 2Zm5.79 14.2c-.24.67-1.4 1.29-1.94 1.34-.5.05-1.13.24-3.8-.8-3.2-1.26-5.24-4.53-5.4-4.74-.16-.21-1.3-1.73-1.3-3.3 0-1.58.82-2.35 1.12-2.67.3-.33.64-.41.86-.41.21 0 .43 0 .62.01.2.01.47-.07.74.56.27.65.93 2.26 1.01 2.42.08.17.14.36.03.58-.11.21-.17.34-.33.53-.17.19-.35.42-.5.56-.17.17-.34.35-.15.68.19.33.83 1.38 1.78 2.24 1.23 1.09 2.26 1.43 2.58 1.6.32.16.5.14.69-.08.19-.21.79-.92 1-1.24.21-.32.42-.26.71-.16.29.1 1.86.88 2.18 1.04.32.16.53.24.61.37.08.14.08.79-.16 1.45Z"/></svg>
+      </a>
+      <a class="share-btn sb-li" href="https://www.linkedin.com/sharing/share-offsite/?url=<%= encodeURIComponent(meta.canonical) %>" target="_blank" rel="noopener" aria-label="Share on LinkedIn" title="Share on LinkedIn">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.45 20.45h-3.55v-5.57c0-1.33-.03-3.04-1.85-3.04-1.86 0-2.14 1.45-2.14 2.94v5.67H9.35V9h3.41v1.56h.05c.47-.9 1.63-1.85 3.36-1.85 3.6 0 4.27 2.37 4.27 5.46v6.28ZM5.34 7.43a2.06 2.06 0 1 1 0-4.12 2.06 2.06 0 0 1 0 4.12ZM7.12 20.45H3.55V9h3.57v11.45Z"/></svg>
+      </a>
+      <a class="share-btn sb-x" href="https://twitter.com/intent/tweet?text=<%= encodeURIComponent(l.name + ' — verified on FirmLedger') %>&url=<%= encodeURIComponent(meta.canonical) %>" target="_blank" rel="noopener" aria-label="Share on X" title="Share on X">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.24 2H21.5l-7.09 8.1L22.5 22h-6.56l-5.14-6.71L4.9 22H1.64l7.58-8.66L1 2h6.72l4.65 6.14L18.24 2Zm-1.14 18.2h1.8L6.54 3.71H4.62L17.1 20.2Z"/></svg>
+      </a>
+      <a class="share-btn sb-fb" href="https://www.facebook.com/sharer/sharer.php?u=<%= encodeURIComponent(meta.canonical) %>" target="_blank" rel="noopener" aria-label="Share on Facebook" title="Share on Facebook">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.07C24 5.4 18.63 0 12 0S0 5.4 0 12.07C0 18.1 4.39 23.09 10.13 24v-8.44H7.08v-3.49h3.04V9.41c0-3.02 1.8-4.7 4.54-4.7 1.31 0 2.68.24 2.68.24v2.97h-1.5c-1.5 0-1.96.93-1.96 1.89v2.26h3.32l-.53 3.49h-2.8V24C19.62 23.1 24 18.1 24 12.07Z"/></svg>
+      </a>
+      <a class="share-btn sb-em" href="mailto:?subject=<%= encodeURIComponent(l.name + ' on FirmLedger') %>&body=<%= encodeURIComponent('Check out ' + l.name + ' — verified record on FirmLedger: ' + meta.canonical) %>" aria-label="Share by email" title="Share by email">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg>
+      </a>
+      <button type="button" class="share-btn sb-cp" class="js-copy-link" data-copy-url="<%= meta.canonical %>" aria-label="Copy link" title="Copy link">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="prof-grid">
+    <div>
+      <div class="panel rv">
+        <div class="panel-h-t">
+          <h3>Overview</h3>
+          <% if (viewFull && Object.keys(socials).length) { %>
+          <div class="social-row social-icons-only" aria-label="<%= l.name %> on social media">
+            <% Object.entries(socials).forEach(function ([k, v]) { %>
+            <a class="social-link ico" href="<%= v %>" rel="noopener nofollow" target="_blank"
+               aria-label="<%= l.name %> on <%= k === 'x' ? 'X (Twitter)' : k.charAt(0).toUpperCase() + k.slice(1) %>"
+               title="<%= k === 'x' ? 'X' : k.charAt(0).toUpperCase() + k.slice(1) %>">
+              <span class="social-ico"><%- ICONS[k] || ICONS.website %></span>
+            </a>
+            <% }) %>
+          </div>
+          <% } %>
+        </div>
+        <div class="prose"><% (l.description || '').split(/\n{2,}/).forEach(function (p) { %><p style="font-size:14px;line-height:1.75;color:var(--ink2)"><%= p %></p><% }) %></div>
+        <% if (tags.length) { %>
+        <div class="rel-chips" style="margin-top:14px"><% tags.forEach(function (t) { %><a href="/directory?q=<%= encodeURIComponent(t) %>"><%= t %></a><% }) %></div>
+        <% } %>
+      </div>
+
+      <% if (viewFull && people.length) { %>
+      <div class="panel rv">
+        <h3>Key people</h3>
+        <div class="people-chips">
+          <% people.forEach(function (p) { %>
+          <div class="person">
+            <span class="person-av"><%= initials(p.name) %></span>
+            <div class="person-in">
+              <% if (p.slug) { %><a class="person-n" href="/listing/<%= p.slug %>"><%= p.name %></a><% } else { %><b class="person-n"><%= p.name %></b><% } %>
+              <span class="person-r"><%= p.note %></span>
+            </div>
+            <% if (Object.keys(p.socials).length) { %>
+            <div class="person-soc">
+              <% Object.entries(p.socials).forEach(function ([k, v]) { %>
+              <a class="social-link ico sm" href="<%= v %>" rel="noopener nofollow" target="_blank" aria-label="<%= p.name %> on <%= k === 'x' ? 'X' : k %>" title="<%= k === 'x' ? 'X' : k.charAt(0).toUpperCase() + k.slice(1) %>"><span class="social-ico"><%- ICONS[k] || ICONS.website %></span></a>
+              <% }) %>
+            </div>
+            <% } %>
+          </div>
+          <% }) %>
+        </div>
+      </div>
+      <% } %>
+
+      <% if (viewFull && (eco.capital.length || eco.offer.length)) { %>
+      <div class="panel rv">
+        <h3>Ecosystem</h3>
+        <div class="eco-grid">
+          <% if (eco.capital.length) { %>
+          <div class="eco-col">
+            <h4>Capital &amp; structure</h4>
+            <% eco.capital.forEach(function (it) { %>
+            <div class="eco-row">
+              <span class="eco-lab" title="Relationship"><%= it.relLabel %></span>
+              <% if (it.slug) { %><a href="/listing/<%= it.slug %>"><%= it.name %></a><% } else { %><span><%= it.name %></span><% } %>
+            </div>
+            <% }) %>
+          </div>
+          <% } %>
+          <% if (eco.offer.length) { %>
+          <div class="eco-col">
+            <h4>Products &amp; services</h4>
+            <% eco.offer.forEach(function (it) { %>
+            <div class="eco-row">
+              <span class="eco-lab" title="Relationship"><%= it.relLabel %></span>
+              <% if (it.slug) { %><a href="/listing/<%= it.slug %>"><%= it.name %></a><% } else { %><span><%= it.name %></span><% } %>
+            </div>
+            <% }) %>
+          </div>
+          <% } %>
+        </div>
+      </div>
+      <% } %>
+
+      <% if (watchJobs.length) { %>
+      <div class="panel rv" id="jobs">
+        <div class="panel-h-t">
+          <h3>Open positions <span class="src-d"><%= watchJobs.length %> open</span></h3>
+          <a class="muted" href="/jobs" style="font-size:.8rem">All jobs on FirmLedger →</a>
+        </div>
+        <div>
+          <% watchJobs.forEach(function (j) { %>
+            <div class="pos-row">
+              <div>
+                <div class="pos-title"><a href="<%= j.apply_url %>" target="_blank" rel="noopener nofollow"><%= j.title %> ↗</a><% if (j.featured) { %> <span class="job-featured" style="position:static;display:inline-block;margin-left:6px">FEATURED JOB</span><% } %></div>
+                <div class="pos-sub"><%= j.role_type %> · <%= j.location %> · posted <%= fmtDate(j.created_at) %></div>
+              </div>
+              <a class="btn btn-ghost btn-sm pos-apply" href="<%= j.apply_url %>" target="_blank" rel="noopener nofollow">Apply ↗</a>
+            </div>
+          <% }); %>
+        </div>
+      </div>
+      <% } %>
+
+      <% if (viewFull && graph.items.length) { %>
+      <div class="panel rv">
+        <h3>Relationship graph</h3>
+        <div id="relGraph" class="rel-graph" role="img" aria-label="Relationship graph for <%= l.name %>" style="margin:-6px -10px 0"></div>
+        <script type="application/json" id="relGraphData"><%- JSON.stringify(graph) %></script>
+        <script src="/js/graph.js?v=<%= assetV %>" defer></script>
+        <div class="graph-legend" id="relGraphLegend"></div>
+      </div>
+      <% } %>
+
+      <% if (viewFull && events.length) { %>
+      <div class="panel rv">
+        <h3>Timeline</h3>
+        <ul class="timeline">
+          <% events.forEach(function (e) { %>
+          <li>
+            <span class="timeline-dot timeline-<%= e.kind %>"></span>
+            <div><b style="font-size:14px"><%= e.title %></b>
+              <span style="font:600 11px/1.6 var(--fm);color:var(--accent);margin-left:8px"><%= e.event_date %></span>
+            </div>
+            <span class="pill pill-type" style="font-size:10px;margin-top:4px;display:inline-block"><%= e.kind %></span>
+          </li>
+          <% }) %>
+        </ul>
+      </div>
+      <% } %>
+
+      <% if (!viewFull) { %>
+      <div class="panel rv pro-locked">
+        <div class="plc-left">
+          <span class="plc-lock" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></span>
+          <div>
+            <h3 style="margin:0">Full listing details ✦ FirmLedger Pro</h3>
+            <p style="font-size:13.5px;color:var(--muted);margin:.35rem 0 0">This listing carries more detail — public website, email &amp; phone, social links, the events timeline and the relationship graph. Full details are an <b>account-level FirmLedger Pro</b> perk: register and upgrade once and every listing on FirmLedger opens up for you.</p>
+          </div>
+        </div>
+        <div class="plc-actions">
+          <% if (!user) { %>
+            <a class="btn btn-accent btn-sm" href="/pricing?register=1">Register &amp; go Pro</a>
+            <a class="btn btn-ghost btn-sm" href="/login">Log in</a>
+            <a class="btn btn-ghost btn-sm" href="/pricing">See pricing</a>
+          <% } else { %>
+            <a class="btn btn-accent btn-sm" href="/pricing">Go Pro</a>
+            <a class="btn btn-ghost btn-sm" href="/pricing">See pricing</a>
+          <% } %>
+        </div>
+      </div>
+      <% } %>
+
+      <% if (viewFull && (tech.length || hiringUrl)) { %>
+      <div class="panel rv">
+        <div class="panel-h-t"><h3>Technology radar</h3><% if (techCheckedAt) { %><span class="src-d">detected <%= fmtDate(techCheckedAt) %></span><% } %></div>
+        <% if (tech.length) { %>
+        <div class="tech-chips">
+          <% tech.forEach(function (t) { %><span class="tech-chip"><b><%= t.n %></b><small><%= t.c %></small></span><% }) %>
+        </div>
+        <p class="form-note" style="margin-top:10px">Detected from the public homepage of <%= l.website ? l.website.replace(/^https?:\/\//, '') : 'their website' %> — real server/header/markup signals only.</p>
+        <% } else { %>
+        <p style="font-size:13.5px;color:var(--muted)">No recognisable technologies detected on the public homepage.</p>
+        <% } %>
+        <% if (hiringUrl) { %>
+        <div class="hiring-note">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
+          <span><b>Appears to be hiring.</b> The homepage links to a careers page: <a href="<%= hiringUrl %>" rel="noopener nofollow" target="_blank"><%= hiringUrl.replace(/^https?:\/\//, '') %></a></span>
+        </div>
+        <% } %>
+      </div>
+      <% } %>
+
+      <% if (faqs.length) { %>
+      <div class="panel rv">
+        <h3>Frequently asked questions</h3>
+        <div class="faq-list">
+          <% faqs.forEach(function (f, i) { %>
+          <details class="faq" <%= i === 0 ? 'open' : '' %>>
+            <summary><%= f.q %><span class="faq-tgl" aria-hidden="true">+</span></summary>
+            <div class="faq-a"><p><%= f.a %></p></div>
+          </details>
+          <% }) %>
+        </div>
+      </div>
+      <% } %>
+
+      <% if (related.length) { %>
+      <div class="panel rv">
+        <h3>More in <%= l.category %></h3>
+        <div class="hscroll" role="region" aria-label="More listings in <%= l.category %>">
+          <% related.forEach(function (r) { %>
+          <a class="related-card hcard" href="/listing/<%= r.slug %>">
+            <% if (r.logo_url) { %><img class="avatar" style="width:36px;height:36px;font-size:13px" src="<%= r.logo_url %>" alt="" loading="lazy"><% } else { %><span class="avatar" style="width:36px;height:36px;font-size:13px"><%= initials(r.name) %></span><% } %>
+            <div><strong style="font-size:14px"><%= r.name %></strong>
+              <p><%= truncate(r.tagline, 64) %></p>
+            </div>
+          </a>
+          <% }) %>
+        </div>
+      </div>
+      <% } %>
+
+      <% if (competitors.length) { %>
+      <div class="panel rv">
+        <div class="panel-h-t"><h3>Competitors</h3><span class="src-d"><%= competitors.length %> tracked</span></div>
+        <p class="form-note" style="margin:0 0 10px">Same category and entity type. Explore alternatives and market neighbours.</p>
+        <div class="hscroll" role="region" aria-label="Competitors of <%= l.name %>">
+          <% competitors.forEach(function (c) { %>
+          <a class="related-card hcard" href="/listing/<%= c.slug %>">
+            <% if (c.logo_url) { %><img class="avatar" style="width:36px;height:36px;font-size:13px" src="<%= c.logo_url %>" alt="" loading="lazy"><% } else { %><span class="avatar" style="width:36px;height:36px;font-size:13px"><%= initials(c.name) %></span><% } %>
+            <div><strong style="font-size:14px"><%= c.name %></strong>
+              <p><%= truncate(c.tagline || '', 64) %></p>
+              <p class="hcard-m"><% if (c.city || c.country) { %><%= [c.city, c.country].filter(Boolean).join(', ') %><% } %></p>
+            </div>
+          </a>
+          <% }) %>
+        </div>
+      </div>
+      <% } %>
+
+      <p class="removal-link rv">Something wrong with this record? <a href="/removal/<%= l.slug %>">Request its removal</a> — every request is reviewed by our moderation team. Or <a href="/claim/<%= l.slug %>">claim it</a> if it is yours.</p>
+    </div>
+
+    <div>
+      <div class="panel rv" style="--d:80ms">
+        <h3>Key facts</h3>
+        <table class="facts">
+          <tr><th>Entity type</th><td><%= typeLabel %></td></tr>
+          <tr><th>Category</th><td><a href="/directory/c/<%= catSlug %>" style="color:var(--accent2)"><%= l.category %></a></td></tr>
+          <% if (l.city || l.country) { %><tr><th>Location</th><td><%= [l.city, l.region, l.country].filter(Boolean).join(', ') %></td></tr><% } %>
+          <% if (l.founded) { %><tr><th>Founded</th><td><%= l.founded %></td></tr><% } %>
+          <% if (l.size) { %><tr><th>Team size</th><td><%= l.size %></td></tr><% } %>
+          <% if (l.address) { %><tr><th>Address</th><td><%= l.address %></td></tr><% } %>
+          <% if (viewFull) { %>
+          <% if (l.email) { %><tr><th>Email</th><td><a href="mailto:<%= l.email %>" style="color:var(--accent2)"><%= l.email %></a></td></tr><% } %>
+          <% if (l.phone) { %><tr><th>Phone</th><td><a href="tel:<%= l.phone.replace(/\s/g, '') %>" style="color:var(--accent2)"><%= l.phone %></a></td></tr><% } %>
+          <% if (l.website) { %><tr><th>Website</th><td><a href="<%= l.website %>" rel="noopener nofollow" target="_blank" style="color:var(--accent2)"><%= l.website.replace(/^https?:\/\//, '') %> ↗</a></td></tr><% } %>
+          <% } %>
+          <tr><th>Plan</th><td><% if (perksPro) { %><span class="pill pill-pro">FirmLedger Pro</span><% } else { %><span class="pill pill-free">Free</span><% } %></td></tr>
+          <tr><th>Listed</th><td><%= fmtDate(l.created_at) %></td></tr>
+          <tr><th>FirmLedger ID</th><td class="mono" style="font-size:11px">FL-<%= String(100000 + l.id).slice(1) %></td></tr>
+        </table>
+      </div>
+
+      <div class="panel rv flscore-panel" style="--d:120ms">
+        <h3>FirmLedger Score</h3>
+        <div class="flscore-head">
+          <span class="flscore-dial dial-<%= score.score >= 75 ? 'green' : score.score >= 45 ? 'gold' : 'red' %>">
+            <svg viewBox="0 0 42 42" class="dial" aria-label="FirmLedger score <%= score.score %> of 100">
+              <circle class="dial-bg" cx="21" cy="21" r="15.9155"/>
+              <circle class="dial-val" cx="21" cy="21" r="15.9155" stroke-dasharray="<%= score.score %>, 100"/>
+            </svg>
+            <b><%= score.score %></b><small>/100</small>
+          </span>
+          <div class="flscore-sub">
+            <div style="font:600 14px/1.3 var(--fb);color:var(--ink)">Health &amp; completeness</div>
+            <div style="font:500 11px/1.5 var(--fm);color:var(--muted)"><%= score.filledCount %>/<%= score.totalFields %> core fields · transparent breakdown below</div>
+          </div>
+        </div>
+        <div class="score-bars">
+          <% score.parts.forEach(function (p) { %>
+          <div class="score-bar">
+            <span class="sb-l"><%= p.label %></span>
+            <span class="sb-t"><span class="sb-f <%= p.have >= p.max ? 'full' : p.have === 0 ? 'none' : '' %>" style="width:<%= Math.round(p.have / p.max * 100) %>%"></span></span>
+            <span class="sb-n"><%= p.have %>/<%= p.max %></span>
+          </div>
+          <% }) %>
+        </div>
+      </div>
+
+      <div class="panel rv" style="--d:160ms">
+        <h3>Verification &amp; trust</h3>
+        <div style="display:flex;align-items:center;gap:14px;padding-bottom:14px;border-bottom:1px solid var(--hair)">
+          <%- dial(l.confidence) %>
+          <div>
+            <div style="font:600 14px/1.3 var(--fb);color:var(--ink)">Confidence score</div>
+            <div style="font:500 11px/1.5 var(--fm);color:var(--muted)"><%= sources.length %> source<%= sources.length === 1 ? '' : 's' %> · field provenance recorded</div>
+          </div>
+        </div>
+        <table class="facts" style="margin-top:4px">
+          <tr><th>Ownership</th><td><% if (l.claimed) { %><span class="status verified" style="text-transform:none">Verified owner</span><% } else { %><span class="status pending" style="text-transform:none">Unclaimed</span><% } %></td></tr>
+          <tr><th>Last verified</th><td><%= l.last_verified_at ? fmtDate(l.last_verified_at) : '—' %></td></tr>
+          <tr><th>Review status</th><td><%= l.status === 'approved' ? 'Approved by review' : l.status %></td></tr>
+          <tr><th>Freshness</th><td><span class="status <%= freshnessCls %>" style="text-transform:none"><%= freshness %></span></td></tr>
+        </table>
+      </div>
+
+      <div class="panel rv" style="--d:200ms">
+        <h3>Sources &amp; provenance</h3>
+        <% if (sources.length || l.website) { %>
+          <% if (l.website) { %>
+          <div class="src-row">
+            <a class="src-n" href="<%= l.website %>" rel="noopener nofollow" target="_blank"><%= l.website.replace(/^https?:\/\//, '') %> (primary)</a>
+            <span class="src-m auto">auto</span>
+            <span class="src-d"><%= fmtDate(sourceDate) %></span>
+          </div>
+          <% } %>
+          <% sources.forEach(function (s) { %>
+          <div class="src-row">
+            <a class="src-n" href="<%= s %>" rel="noopener nofollow" target="_blank"><%= s.replace(/^https?:\/\//, '') %></a>
+            <span class="src-m auto">auto</span>
+            <span class="src-d"><%= fmtDate(sourceDate) %></span>
+          </div>
+          <% }) %>
+        <div class="form-note">Field-level provenance: each fact above carries source attribution in the ledger; the public trail lists record-level sources.</div>
+        <% } else { %>
+        <p style="font-size:13.5px">No external sources recorded yet for this record.</p>
+        <% } %>
+        <% if (l.claimed && ownerName) { %><div class="form-note" style="color:var(--ok)">Managed by verified owner · <%= ownerName %></div><% } %>
+      </div>
+
+      <div class="panel rv" style="--d:240ms">
+        <% if (l.claimed) { %>
+        <h3><span style="color:var(--ok)">✓</span> Ownership verified</h3>
+        <p style="font-size:13.5px">This record is managed by its verified owner<% if (ownerName) { %> (<%= ownerName %>)<% } %>. Changes are reviewed before publication.</p>
+        <% } else { %>
+        <h3>Is this your business?</h3>
+        <p style="font-size:13.5px">Prove domain control with DNS, an HTML meta tag, or the FirmLedger badge — and take control of this record.</p>
+        <a class="btn btn-accent btn-block" style="margin-top:14px" href="/claim/<%= l.slug %>">Claim this listing</a>
+        <% } %>
+        <% if (isOwner) { %>
+        <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap">
+          <a class="btn btn-ghost btn-sm" href="/dashboard/listings/<%= l.id %>/edit">Edit listing</a>
+          <a class="btn btn-ghost btn-sm" href="/dashboard/listings/<%= l.id %>/jobs"><svg class="ric" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>Jobs board<%= canJobPost ? '' : ' (Pro)' %></a>
+        </div>
+        <% } %>
+      </div>
+
+      <% if (isOwner) { %>
+      <div class="panel rv" style="--d:280ms">
+        <h3><%= perksPro ? 'Your premium badge' : 'Your verified badge' %> <% if (perksPro) { %><small class="chip-pro">PRO</small><% } %></h3>
+        <p style="font-size:13px;color:var(--muted)"><%= perksPro ? 'Your gold Premium Member badge — embed it on your homepage; it links here and proves your FirmLedger Pro membership live.' : 'Embed this badge on your homepage — it links here and confirms your verification. Two themes, one snippet each.' %></p>
+
+        <div class="badge-rows" style="margin-top:14px">
+          <div class="badge-row">
+            <div class="badge-row-preview" aria-label="Badge preview, light theme">
+              <span class="bp-t">Light theme</span>
+              <a href="/listing/<%= l.slug %>"><img src="/badge/<%= l.slug %>.svg?theme=light" alt="FirmLedger verified badge for <%= l.name %> — light theme" width="200" height="56" loading="lazy"></a>
+            </div>
+            <div class="badge-row-code">
+              <span class="bp-t">Embed code</span>
+              <div class="badge-code-wrap">
+                <textarea class="input mono badge-code" rows="4" readonly onclick="this.select()"><a href="<%= SITE %>/listing/<%= l.slug %>"><img src="<%= SITE %>/badge/<%= l.slug %>.svg?theme=light" alt="<%= l.name %> — verified on FirmLedger" width="200" height="56"></a></textarea>
+                <button type="button" class="btn btn-accent btn-sm badge-copy-btn" data-copy>Copy snippet</button>
+              </div>
+            </div>
+          </div>
+          <div class="badge-row">
+            <div class="badge-row-preview badge-row-preview-dark" aria-label="Badge preview, dark theme">
+              <span class="bp-t">Dark theme</span>
+              <a href="/listing/<%= l.slug %>"><img src="/badge/<%= l.slug %>.svg?theme=dark" alt="FirmLedger verified badge for <%= l.name %> — dark theme" width="200" height="56" loading="lazy"></a>
+            </div>
+            <div class="badge-row-code">
+              <span class="bp-t">Embed code</span>
+              <div class="badge-code-wrap">
+                <textarea class="input mono badge-code" rows="4" readonly onclick="this.select()"><a href="<%= SITE %>/listing/<%= l.slug %>"><img src="<%= SITE %>/badge/<%= l.slug %>.svg?theme=dark" alt="<%= l.name %> — verified on FirmLedger" width="200" height="56"></a></textarea>
+                <button type="button" class="btn btn-accent btn-sm badge-copy-btn" data-copy>Copy snippet</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="badge-note" style="margin-top:10px">Paste a snippet into your website's header or footer. The badge is served live — the moment this profile updates, it updates everywhere it's embedded.</p>
+      </div>
+      <% } %>
+    </div>
+  </div>
+</div>
+<script>
+(function () {
+  const btn = document.querySelector('.js-copy-link');
+  if (!btn) return;
+  btn.addEventListener('click', async function () {
+    const url = btn.getAttribute('data-copy-url');
+    try { await navigator.clipboard.writeText(url); } catch (e) {
+      const ta = document.createElement('textarea'); ta.value = url; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
+    }
+    btn.classList.add('copied');
+    btn.title = 'Copied!';
+    setTimeout(function () { btn.classList.remove('copied'); btn.title = 'Copy link'; }, 1600);
+  });
+})();
+</script>
+<%- include('partials/bottom') %>

@@ -1,0 +1,217 @@
+<%- include('../partials/top') %>
+
+<section class="page-head">
+  <div class="container dash-head">
+    <div>
+      <h1>Dashboard</h1>
+      <p class="muted">Welcome back, <%= user.name %></p>
+    </div>
+    <a href="/dashboard/listings/new" class="btn btn-primary">+ Add listing</a>
+  </div>
+</section>
+
+<section class="section-tight">
+  <div class="container">
+
+
+    <div class="section-head"><h2>Your listings</h2></div>
+    <% if (listings.length === 0) { %>
+      <div class="empty-state">
+        <h3>No listings yet</h3>
+        <p>Put your first business on the record — it takes about two minutes.</p>
+        <a href="/dashboard/listings/new" class="btn btn-primary">Submit a listing</a>
+      </div>
+    <% } else { %>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Listing</th><th>Plan</th><th>Status</th><th>Confidence</th><th>FirmLedger Score</th><th class="ta-right">Actions</th></tr></thead>
+          <tbody>
+            <% listings.forEach(function (l) { %>
+              <tr>
+                <td>
+                  <span class="logo-tile logo-tile-sm"><%= l.name.slice(0, 1) %></span>
+                  <strong><%= l.name %></strong>
+                  <% if (l.claimed) { %><span class="tick" title="Verified owner">✓</span><% } %>
+                  <% if (l.featured) { %><span class="pill pill-featured">Featured</span><% } %>
+                </td>
+                <td>
+                  <% if (plans[l.id] && plans[l.id].perks) { %>
+                    <span class="pill pill-pro" title="Blue tick, homepage Featured slot, premium badge…">PRO perks</span>
+                  <% } else { %>
+                    <span class="pill pill-free">FREE</span>
+                  <% } %>
+                </td>
+                <td><span class="pill pill-<%= l.status %>"><%= l.status %></span></td>
+                <td><span class="conf"><i style="width:<%= l.confidence %>%"></i></span> <span class="conf-num"><%= l.confidence %></span></td>
+                <td>
+                  <% const sc = scores[l.id]; %>
+                  <span class="score-chip <%= sc.score >= 75 ? 'hi' : sc.score >= 45 ? 'mid' : 'lo' %>"><%= sc.score %><small>/100</small></span>
+                  <% if (sc.missing) { %><div class="score-hint"><%= sc.missing[1] %></div><% } %>
+                </td>
+                <td class="ta-right actions-cell">
+                  <% if (l.status === 'approved') { %><a class="btn btn-ghost btn-xs" href="/listing/<%= l.slug %>">View</a><% } %>
+                  <a class="btn btn-ghost btn-xs" href="/dashboard/listings/<%= l.id %>/edit">Edit</a>
+                  <% if (!accountPro) { %>
+                    <a class="btn btn-accent btn-xs" href="/dashboard/upgrade">Upgrade to Pro</a>
+                  <% } %>
+                  <% if (l.website) { %>
+                    <form method="post" action="/dashboard/listings/<%= l.id %>/refresh-tech" class="inline" title="Re-run technology detection on the homepage">
+                      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                      <button class="btn btn-ghost btn-xs" type="submit">Refresh tech</button>
+                    </form>
+                  <% } %>
+                  <% if (l.claimed) { %>
+                    <a class="btn btn-ghost btn-xs" href="/badge/<%= l.slug %>.svg?theme=light" target="_blank" rel="noopener">Badge</a>
+                  <% } else if (l.status === 'approved') { %>
+                    <a class="btn btn-ghost btn-xs" href="/claim/<%= l.slug %>">Claim</a>
+                  <% } %>
+                  <form method="post" action="/dashboard/listings/<%= l.id %>/delete" class="inline" onsubmit="return confirm('Permanently delete this listing? This cannot be undone.');">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                    <button class="btn btn-danger btn-xs" type="submit">Delete</button>
+                  </form>
+                </td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    <% } %>
+
+    <div class="section-head" style="margin-top:3rem">
+      <h2>Claim an existing record</h2>
+    </div>
+    <div class="side-card" style="max-width:640px">
+      <p class="muted">Found your business already listed? Claim it by proving domain control — DNS record, meta tag, or the FirmLedger badge.</p>
+      <% if (claimable.length) { %>
+      <form class="form" method="get" action="/claim/" onsubmit="event.preventDefault(); const s=this.querySelector('select'); if(s.value) location.href='/claim/'+s.value;">
+        <div class="claim-form-row">
+          <label style="flex:1;margin:0"><span style="font-weight:500;margin-bottom:8px">Listing to claim</span>
+            <select required>
+              <option value="">Select a listing to claim…</option>
+              <% claimable.forEach(function (c) { %><option value="<%= c.slug %>"><%= c.name %></option><% }) %>
+            </select>
+          </label>
+          <button class="btn btn-primary" type="submit" style="flex:none;margin-bottom:16px">Start claim</button>
+        </div>
+      </form>
+      <% } else { %>
+      <p class="muted" style="font-size:13px;margin-top:8px">Every approved listing on FirmLedger is already claimed — nothing to claim right now.</p>
+      <% } %>
+    </div>
+
+    <div class="section-head" style="margin-top:3rem"><h2>Your subscription</h2></div>
+    <div class="side-card" style="max-width:640px">
+      <div class="upgrade-status">
+        <div class="us-title">
+          <b><% if (accountPro) { %>FirmLedger Pro<span class="pill pill-pro" style="margin-left:8px">ACTIVE</span><% } else { %>Free plan<span class="pill pill-free" style="margin-left:8px">CURRENT</span><% } %></b>
+          <span class="muted" style="font-size:13px">
+            <% if (accountPro && accountExpires) { %>Active until <b><%= accountExpires %></b> · paying again extends it.<% } %>
+            <% if (accountPro && !accountExpires) { %>Lifetime — admin-granted.<% } %>
+            <% if (!accountPro) { %>Upgrade to unlock every listing's full details — and give your own listings the blue tick, homepage Featured slot and premium badge.<% } %>
+          </span>
+        </div>
+      </div>
+      <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap">
+        <a class="btn <%= accountPro ? 'btn-ghost' : 'btn-accent' %>" href="/dashboard/upgrade"><%= accountPro ? 'Manage / extend your plan' : 'Upgrade to Pro' %></a>
+        <a class="btn btn-ghost" href="/pricing" target="_blank" rel="noopener">Pricing</a>
+      </div>
+    </div>
+
+    <div class="section-head" style="margin-top:3rem"><h2>Account settings</h2></div>
+    <div class="acct-grid">
+      <div class="side-card">
+        <h3 style="margin:0 0 10px">Profile</h3>
+        <p class="muted" style="margin-bottom:14px">Your name and sign-in email, used across submissions and claims.</p>
+        <form method="post" action="/dashboard/account" class="form">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <label class="fl"><span>Name</span><input class="input" name="name" value="<%= user.name %>" required maxlength="80"></label>
+          <label class="fl"><span>Email</span><input class="input" type="email" name="email" value="<%= user.email %>" required maxlength="190"></label>
+          <% if (fa2On) { %>
+            <label class="fl"><span>Authenticator / recovery code</span><input class="input" name="fa_code" placeholder="6 digits or xxxx-xxxx-xxxx" autocomplete="off" required style="font-variant-numeric:tabular-nums"></label>
+            <p class="muted" style="font-size:.78rem;margin:-6px 0 10px">Your account has 2FA — this change needs your current app code or an unused recovery code.</p>
+          <% } %>
+          <button class="btn btn-primary btn-sm" type="submit">Save changes</button>
+        </form>
+      </div>
+      <div class="side-card">
+        <h3 style="margin:0 0 10px">Password</h3>
+        <p class="muted" style="margin-bottom:14px">Changing your password signs out all other devices.</p>
+        <form method="post" action="/dashboard/password" class="form">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <label class="fl"><span>Current password</span><input class="input" type="password" name="current_password" required autocomplete="current-password"></label>
+          <label class="fl"><span>New password</span>
+            <div class="pw-wrap"><input class="input" type="password" name="new_password" id="dash-pw" required minlength="8" placeholder="At least 8 characters" autocomplete="new-password" data-pw-input="dash-pw-meter" data-eye-for="dash-pw"></div>
+            <div class="pw-meter" id="dash-pw-meter" style="display:none"></div>
+          </label>
+          <label class="fl"><span>Confirm new password</span>
+            <div class="pw-wrap"><input class="input" type="password" name="new_password_confirm" id="dash-pw2" required minlength="8" placeholder="Retype the new password" autocomplete="new-password" data-pw-confirm="dash-pw" data-pw-note="dash-pw-match" data-eye-for="dash-pw2"></div>
+            <div class="pw-match" id="dash-pw-match"></div>
+          </label>
+          <% if (fa2On) { %>
+            <label class="fl"><span>Authenticator / recovery code</span><input class="input" name="fa_code" placeholder="6 digits or xxxx-xxxx-xxxx" autocomplete="off" required style="font-variant-numeric:tabular-nums"></label>
+            <p class="muted" style="font-size:.78rem;margin:-6px 0 10px">Your account has 2FA — this change needs your current app code or an unused recovery code.</p>
+          <% } %>
+          <button class="btn btn-primary btn-sm" type="submit">Change password</button>
+        </form>
+      </div>
+      <div class="side-card">
+        <h3 style="margin:0 0 10px">Security</h3>
+        <p class="muted" style="margin-bottom:14px">Two-factor authentication protects password &amp; email changes.</p>
+        <% if (fa2On) { %>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+            <span class="badge badge-ok">2FA enabled</span>
+            <span class="muted" style="font-size:.82rem">Password &amp; email changes require a code from your authenticator app.</span>
+          </div>
+        <% } else { %>
+          <p class="muted" style="font-size:.85rem;margin-bottom:12px">2FA is off. Turn it on to require a code for password &amp; email changes.</p>
+        <% } %>
+        <a class="btn btn-ghost btn-sm" href="/dashboard/security"><%= fa2On ? 'Manage 2FA' : 'Enable 2FA' %></a>
+      </div>
+      <div class="side-card">
+        <h3 style="margin:0 0 10px">Support</h3>
+        <p class="muted" style="margin-bottom:14px">Billing, listings, technical issues — chat live with the team and attach files.</p>
+        <a class="btn btn-primary btn-sm" href="/dashboard/support">Open support</a>
+        <% if (typeof unread !== 'undefined' && unread && unread.length) { } %>
+      </div>
+      <div class="side-card">
+        <h3 style="margin:0 0 10px">Watchlist</h3>
+        <p class="muted" style="margin-bottom:14px">Star companies to track them — email digests when their record changes<% if (accountPro) { %>, plus CSV export for your CRM<% } %>.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <a class="btn btn-ghost btn-sm" href="/dashboard/watchlist">Open watchlist</a>
+          <a class="btn btn-ghost btn-sm" href="/jobs">Jobs board</a>
+        </div>
+      </div>
+      <div class="side-card">
+        <h3 style="margin:0 0 10px">Developer API <% if (accountPro) { %><span class="pill pill-pro" style="margin-left:6px">PRO</span><% } %></h3>
+        <p class="muted" style="margin-bottom:14px">REST access to your records — API-key auth, CRUD endpoints, rate limits, docs &amp; a live playground.<% if (!accountPro) { %> <b>Included with Pro.</b><% } %></p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <a class="btn btn-ghost btn-sm" href="/dashboard/api">API keys &amp; usage</a>
+          <a class="btn btn-ghost btn-sm" href="/dashboard/api/playground">Playground</a>
+        </div>
+      </div>
+    </div>
+
+    <% if (claims.length) { %>
+      <div class="section-head" style="margin-top:3rem"><h2>Your verification requests</h2></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Listing</th><th>Method</th><th>Domain</th><th>Status</th><th>Requested</th><th></th></tr></thead>
+          <tbody>
+            <% claims.forEach(function (c) { %>
+              <tr>
+                <td><a href="/listing/<%= c.listing_slug %>"><strong><%= c.listing_name %></strong></a></td>
+                <td><% if (c.method === 'dns') { %>DNS record<% } else if (c.method === 'meta') { %>Meta tag<% } else { %>Site badge<% } %></td>
+                <td><code><%= c.domain %></code></td>
+                <td><span class="pill pill-<%= c.status === 'verified' ? 'approved' : c.status === 'pending' ? 'pending' : 'rejected' %>"><%= c.status %></span></td>
+                <td class="muted"><%= fmtDate(c.created_at) %></td>
+                <td class="ta-right"><% if (c.status === 'pending') { %><a class="btn btn-ghost btn-xs" href="/claim/verify/<%= c.id %>">Resume verification</a><% } %></td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    <% } %>
+  </div>
+</section>
+
+<%- include('../partials/bottom') %>

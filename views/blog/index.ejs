@@ -1,0 +1,31 @@
+<%- include('../partials/top') %>
+
+<div class="container page-pad">
+  <div class="sec-head rv">
+    <div class="l">
+      <p class="klabel">News &amp; insights</p>
+      <h2>The FirmLedger blog</h2>
+      <p>Methodology notes, product decisions and release notes — written by the team, never auto-generated.</p>
+    </div>
+    <span class="idx">BLOG</span>
+  </div>
+
+  <% if (!posts.length) { %>
+  <div class="empty rv"><p>Nothing published yet — check back soon.</p></div>
+  <% } else { %>
+  <div class="blog-grid">
+    <% posts.forEach(function(p, i){ %>
+    <article class="blog-card rv" style="--d:<%= i*60 %>ms">
+      <a class="blog-card-link" href="/blog/<%= p.slug %>">
+        <span class="blog-date"><%= fmtDate(p.published_at) %></span>
+        <h3><%= p.title %></h3>
+        <p><%= p.excerpt %></p>
+        <span class="blog-more">Read &rsaquo;</span>
+      </a>
+    </article>
+    <% }); %>
+  </div>
+  <% } %>
+</div>
+
+<%- include('../partials/bottom') %>

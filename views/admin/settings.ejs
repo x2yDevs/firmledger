@@ -1,0 +1,220 @@
+<%- include('../partials/top') %>
+<%- include('../partials/adminnav') %>
+
+<section class="section-tight">
+  <div class="container container-narrow">
+    <div class="section-head"><h2>Settings</h2></div>
+
+    <form method="post" action="/admin3119Musa/settings" class="form form-card">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <h3 class="form-section">Moderation &amp; indexing</h3>
+      <label class="check check-lg">
+        <input type="checkbox" name="auto_approve" value="1" <%= settings.auto_approve === '1' ? 'checked' : '' %>>
+        <span><strong>Auto-approve submissions</strong><br><small class="muted">New listings go live immediately (not recommended for public launch).</small></span>
+      </label>
+      <label class="check check-lg">
+        <input type="checkbox" name="indexing_enabled" value="1" <%= settings.indexing_enabled === '1' ? 'checked' : '' %>>
+        <span><strong>Push new listings to search engines</strong><br><small class="muted">Submits approve-and-claim events to IndexNow (Bing, Yandex, DuckDuckGo…) the moment they happen.</small></span>
+      </label>
+      <h3 class="form-section" style="margin-top:1.6rem">Payments — FirmLedger Pro via PayPal</h3>
+      <p class="muted">Checkout runs on PayPal's hosted payment page (REST Orders API). Create an app at <code>developer.paypal.com</code> to get a <b>Client ID</b> and <b>Secret</b>. <b>Sandbox</b> credentials never charge real money; switch <b>Mode</b> to <code>live</code> with production credentials to go live. Environment variables (<code>PAYPAL_CLIENT_ID</code>, <code>PAYPAL_CLIENT_SECRET</code>, <code>PAYPAL_MODE</code>) always win over these saved values.</p>
+      <% if (settings.paypal_key_set) { %>
+        <p><span class="pill pill-approved">PayPal active ✓ (<%= settings.paypal_mode %>)</span> — Pro upgrades are live at <code>/pricing</code>.</p>
+      <% } else { %>
+        <p><span class="pill pill-pending">Not configured</span> — paste your Client ID and Secret below to switch on Pro payments.</p>
+      <% } %>
+      <div class="grid-2">
+        <label><span>Client ID *</span>
+          <input type="text" name="paypal_client_id" autocomplete="off" spellcheck="false" placeholder="AYSqPX51tXo…  (from developer.paypal.com)" <%= settings.paypal_env ? 'disabled' : '' %>>
+          <small class="muted" style="display:block;margin-top:4px"><%= settings.paypal_client_id_set ? '✓ saved — paste a new one to rotate' : 'not saved yet' %></small>
+        </label>
+        <label><span>Secret *</span>
+          <input type="password" name="paypal_client_secret" autocomplete="new-password" spellcheck="false" placeholder="EPj1nx7Zf…" <%= settings.paypal_env ? 'disabled' : '' %>>
+          <small class="muted" style="display:block;margin-top:4px"><%= settings.paypal_key_set ? '✓ saved — paste a new one to rotate' : 'not saved yet' %></small>
+        </label>
+      </div>
+      <div class="grid-2">
+        <label><span>Mode</span>
+          <select name="paypal_mode" <%= settings.paypal_env ? 'disabled' : '' %>>
+            <option value="sandbox" <%= settings.paypal_mode === 'sandbox' ? 'selected' : '' %>>sandbox — test payments</option>
+            <option value="live" <%= settings.paypal_mode === 'live' ? 'selected' : '' %>>live — real money</option>
+          </select>
+        </label>
+        <label><span>Plan offers</span>
+          <span class="muted" style="display:block;padding:.55rem 0">Manage monthly / yearly / custom offers in <a href="/admin3119Musa/plans" style="color:var(--accent2)">Admin → Plan offers</a>.</span>
+        </label>
+      </div>
+      <label class="check"><input type="checkbox" name="paypal_client_secret_clear" value="1"><span>Remove the saved credentials (payments will be disabled)</span></label>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">Save settings</button>
+      </div>
+    </form>
+
+  <% if (payments && payments.length) { %>
+  <div class="form-card" style="margin-top:24px">
+    <h3 class="form-section">Recent Pro payments</h3>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Reference</th><th>Plan</th><th>Amount</th><th>Status</th><th>Channel</th><th>Date</th></tr></thead>
+        <tbody>
+          <% payments.forEach(function (p) { %>
+          <tr>
+            <td class="mono" style="font-size:12px"><%= p.reference %></td>
+            <td><%= p.plan_name || p.listing_name || '—' %><div class="score-hint"><%= p.user_email || '' %></div></td>
+            <td><%= p.currency %> <%= (p.amount / 100).toFixed(2) %></td>
+            <td><span class="pill pill-<%= p.status === 'success' ? 'approved' : p.status === 'failed' ? 'rejected' : 'pending' %>"><%= p.status %></span></td>
+            <td><%= p.channel || '—' %></td>
+            <td class="muted" style="font-size:12.5px"><%= (p.paid_at || p.created_at || '').slice(0, 10) %></td>
+          </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <% } %>
+
+    <div class="form-card" style="margin-top:24px">
+      <h3 class="form-section">IndexNow key</h3>
+      <p class="muted">This key proves ownership to search engines. It is served automatically at:</p>
+      <div class="token-box">
+        <code id="indexnowKey"><%= settings.indexnow_key %></code>
+        <button class="btn btn-ghost btn-sm" type="button" data-copy="#indexnowKey">Copy</button>
+      </div>
+      <p class="muted"><code><%= settings.base_url %>/<%= settings.indexnow_key %>.txt</code> — <a href="/<%= settings.indexnow_key %>.txt" target="_blank">test it ↗</a></p>
+      <form method="post" action="/admin3119Musa/settings/regen-key" onsubmit="return confirm('Regenerate the IndexNow key? The old key file becomes invalid.');">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <button class="btn btn-ghost" type="submit">Regenerate key</button>
+      </form>
+    </div>
+
+    <div class="form-card">
+      <h3 class="form-section">Console security — two-factor authentication</h3>
+      <p class="muted">The admin console requires the secret code <em>plus</em> a time-based one-time code (TOTP) from an authenticator app.</p>
+      <table class="facts">
+        <tr>
+          <th>Second factor</th>
+          <td><% if (settings.totp_enrolled) { %><span class="pill pill-approved">Enrolled ✓</span> — Google Authenticator / 1Password / Authy / Aegis<% } else { %><span class="pill pill-pending">Not enrolled yet</span> — you will be asked to scan a QR code on next sign-in<% } %></td>
+        </tr>
+        <% if (settings.totp_enrolled) { %>
+        <tr>
+          <th>Recovery codes left</th>
+          <td><strong><%= settings.recovery_remaining %> of 10</strong><% if (settings.recovery_remaining <= 3) { %> <span class="pill pill-pending">running low</span><% } %> — one-time codes that open the console without the authenticator app. Regenerating invalidates every old code instantly, and the fresh set is emailed to the admin inbox.</td>
+        </tr>
+        <% } %>
+      </table>
+      <% if (settings.totp_enrolled) { %>
+      <div class="form-actions" style="margin-top:16px">
+        <form method="post" action="/admin3119Musa/settings/recovery-regenerate" style="margin:0" onsubmit="return confirm('Generate a new set of 10 recovery codes? All previous codes stop working immediately. The authenticator app is not affected.');">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <button class="btn btn-ghost" type="submit">Regenerate recovery codes</button>
+        </form>
+        <form method="post" action="/admin3119Musa/settings/2fa-reset" style="margin:0" onsubmit="return confirm('Reset two-factor authentication? Your authenticator key AND all recovery codes are wiped. You will re-enroll with a new QR code the next time you sign in.');">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <button class="btn btn-danger" type="submit">Reset two-factor</button>
+        </form>
+      </div>
+      <% } %>
+    </div>
+
+    <div class="form-card form">
+      <h3 class="form-section">Engagement — newsletter · watchlist · jobs</h3>
+      <p class="muted">The weekly "new verified companies" digest goes to footer/register subscribers automatically (checked hourly) — at whichever cadence you set below. Watchlist digests fire instantly when a watched listing changes. Subscribers — guests and accounts — get a welcome email the moment they join.</p>
+      <form method="post" action="/admin3119Musa/settings/newsletter-cadence" class="cadence-row">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <span class="cadence-label">Digest automation</span>
+        <select name="cadence" class="cadence-select" aria-label="Digest cadence">
+          <option value="daily" <%= settings.nl_cadence.key === 'daily' ? 'selected' : '' %>>Daily — every day with fresh content</option>
+          <option value="weekly" <%= settings.nl_cadence.key === 'weekly' ? 'selected' : '' %>>Weekly — the default (7-day window)</option>
+          <option value="monthly" <%= settings.nl_cadence.key === 'monthly' ? 'selected' : '' %>>Monthly — one rollup per month</option>
+        </select>
+        <button class="btn btn-ghost btn-sm" type="submit">Apply</button>
+        <span class="form-note">Currently <b><%= settings.nl_cadence.display.toLowerCase() %></b> — checker fires hourly; it sends when the <b><%= settings.nl_cadence.key %></b> window has passed since the last send.</span>
+      </form>
+      <div class="stats-strip" style="margin-top:16px">
+        <div class="stat-cell"><div class="stat-n"><%= settings.nl_subscribers %></div><div class="stat-l">Newsletter subs</div></div>
+        <div class="stat-cell"><div class="stat-n"><%= settings.favorites_total %></div><div class="stat-l">Watchlist entries</div></div>
+        <div class="stat-cell"><div class="stat-n"><%= settings.jobs_open %></div><div class="stat-l">Open jobs</div></div>
+        <div class="stat-cell"><div class="stat-n" style="font-size:1rem;line-height:2;padding-top:4px"><%= settings.nl_last_sent === 'never' ? '—' : settings.nl_last_sent.slice(0, 10) %></div><div class="stat-l">Last digest<%= settings.nl_last_sent === 'never' ? ' · never sent' : '' %></div></div>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:18px">
+        <form method="post" action="/admin3119Musa/settings/newsletter-send" style="margin:0">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <button class="btn btn-primary btn-sm" type="submit">Send digest now</button>
+        </form>
+        <a class="btn btn-ghost btn-sm" href="/admin3119Musa/email?to=newsletter"><svg class="ric" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg>Email subscribers directly</a>
+        <span class="form-note">Force-send emulates this week's email (verified + new listings, last 7 days).</span>
+      </div>
+    </div>
+
+    <div class="form-card form">
+      <h3 class="form-section">Email — SMTP</h3>
+      <p class="muted">With SMTP configured, every FirmLedger email (welcome, receipts, security notices, moderation updates, admin blasts) is delivered to real inboxes with FirmLedger branding. Without it everything is written to <code>data/outbox.log</code> instead.</p>
+      <dl class="facts" style="margin-top:12px">
+        <div><dt>Status</dt><dd><% if (settings.smtp_configured) { %><span class="pill pill-approved">Configured ✓ — real emails will be sent</span><% } else { %><span class="pill pill-pending">Not configured</span> — mail is written to <code>data/outbox.log</code><% } %></dd></div>
+        <% if (settings.smtp_env) { %><div><dt>Source</dt><dd>Environment variables (<code>SMTP_URL</code> or <code>MAIL_*</code>) — these win over anything saved below.</dd></div><% } %>
+      </dl>
+      <% if (!settings.smtp_env) { %>
+      <form method="post" action="/admin3119Musa/settings" style="margin-top:16px">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <div class="grid-3">
+          <label style="grid-column:span 2"><span>SMTP host *</span><input type="text" name="smtp_host" value="<%= settings.smtp_host %>" placeholder="smtppro.zoho.com · smtp.zoho.com · smtp.resend.com"></label>
+          <label><span>Port *</span><input type="number" name="smtp_port" value="<%= settings.smtp_port %>" min="1" max="65535" placeholder="465"></label>
+          <label style="grid-column:span 1"><span>Username *</span><input type="text" name="smtp_user" value="<%= settings.smtp_user %>" placeholder="you@yourdomain.com" autocomplete="off"></label>
+          <label style="grid-column:span 2"><span>Password / app password *</span><input type="password" name="smtp_pass" value="" autocomplete="new-password" placeholder="<%= settings.smtp_pass_set ? '•••••••• (saved — leave blank to keep)' : 'smtp password or app-specific password' %>"></label>
+        </div>
+        <label><span>From address (optional — must match the mail account on providers like Zoho, Gmail)</span><input type="text" name="smtp_from" value="<%= settings.smtp_from %>" placeholder="FirmLedger <you@yourdomain.com>"></label>
+        <label class="check" style="align-self:start"><input type="checkbox" name="smtp_secure" value="1" <%= settings.smtp_secure === '1' ? 'checked' : '' %>><span>Implicit TLS (port 465). Leave unchecked for STARTTLS on port 587.</span></label>
+        <div class="form-actions">
+          <button class="btn btn-accent" type="submit">Save SMTP settings</button>
+        </div>
+        <p class="form-note">Zoho quick setup: host <code>smtppro.zoho.com</code> (or <code>smtp.zoho.com</code> for free Zoho Mail), port <code>465</code>, TLS checked, username = your full Zoho email, password = your Zoho account password (or an app password if two-factor is on at <a href="https://accounts.zoho.com/home" target="_blank" rel="noopener">accounts.zoho.com</a> → Security → App Passwords). The From address must be that same Zoho address or 553 rejections appear — leave it blank and it auto-fills from your username.</p>
+      </form>
+      <% } %>
+      <form method="post" action="/admin3119Musa/settings/test-mail" style="margin-top:6px">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <h4 class="form-section" style="margin-top:22px">Verify deliverability</h4>
+        <div class="fetch-row">
+          <label class="fetch-input"><span>Send a test email to</span><input type="email" name="test_to" required placeholder="you@yourdomain.com"></label>
+          <button class="btn btn-ghost fetch-btn" type="submit">Verify &amp; send test</button>
+        </div>
+        <p class="form-note" style="margin-top:-4px">The test verifies the connection over the wire and sends a real branded email, so you can confirm deliverability before members depend on it. Check the inbox <em>and spam folder</em>.</p>
+      </form>
+    </div>
+
+    <div class="form-card">
+      <h3 class="form-section">Environment</h3>
+      <p class="muted">Runtime configuration of this installation — what it's called on the internet, how mail behaves, and where search engines pick it up.</p>
+      <div class="env-grid">
+        <div class="env-item">
+          <span class="env-k">Base URL</span>
+          <code class="env-code"><%= settings.base_url %></code>
+        </div>
+        <div class="env-item">
+          <span class="env-k">Email delivery</span>
+          <% if (settings.smtp_configured) { %>
+          <span class="pill pill-approved">SMTP live ✓</span>
+          <span class="env-note">Real branded emails are being delivered.</span>
+          <% } else { %>
+          <span class="pill pill-pending">Outbox only</span>
+          <span class="env-note">Mail is written to <code>data/outbox.log</code> until SMTP is configured above.</span>
+          <% } %>
+        </div>
+        <div class="env-item">
+          <span class="env-k">Admin code</span>
+          <span class="env-note">Set via <code>ADMIN_SECRET</code> in <code>.env</code> — rotate it there and restart.</span>
+        </div>
+        <div class="env-item">
+          <span class="env-k">Sitemap</span>
+          <a class="env-link" href="/sitemap.xml" target="_blank">/sitemap.xml <span aria-hidden="true">↗</span></a>
+          <span class="env-note">Submit once in Google Search Console &amp; Bing Webmaster Tools.</span>
+        </div>
+        <div class="env-item">
+          <span class="env-k">RSS feed</span>
+          <a class="env-link" href="/feed.xml" target="_blank">/feed.xml <span aria-hidden="true">↗</span></a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<%- include('../partials/bottom') %>

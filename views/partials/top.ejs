@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title><%= meta.title %></title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="<%= meta.description %>">
+<% if (meta.noindex) { %>
+<meta name="robots" content="noindex, follow">
+<% } else if (meta.robots) { %>
+<meta name="robots" content="<%= meta.robots %>">
+<% } else { %>
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
+<% } %>
+<link rel="canonical" href="<%= meta.canonical %>">
+<% const ogImage = meta.image || (SITE + '/assets/og-card.png'); %>
+<meta property="og:title" content="<%= meta.title %>">
+<meta property="og:description" content="<%= meta.description %>">
+<meta property="og:url" content="<%= meta.canonical %>">
+<meta property="og:image" content="<%= ogImage %>">
+<meta property="og:image:secure_url" content="<%= ogImage %>">
+<% if (meta.image) { %><meta property="og:image:alt" content="<%= meta.title %>"><% } else { %>
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="FirmLedger — Verified Company Intelligence &amp; Business Directory"><% } %>
+<meta property="og:type" content="<%= meta.ogType || 'website' %>">
+<meta property="og:site_name" content="FirmLedger">
+<meta property="og:locale" content="en_KE">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@firmledger">
+<meta name="twitter:title" content="<%= meta.title %>">
+<meta name="twitter:description" content="<%= meta.description %>">
+<meta name="twitter:image" content="<%= ogImage %>">
+<meta name="theme-color" content="#0A1628">
+<meta name="color-scheme" content="light">
+<link rel="icon" type="image/png" href="/assets/favicon.png">
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+<link rel="manifest" href="/assets/site.webmanifest">
+<link rel="alternate" type="application/rss+xml" title="FirmLedger — new & updated listings" href="<%= SITE %>/feed.xml">
+<% if (meta.alternates && meta.alternates.length) { meta.alternates.forEach(function(a){ %>
+<link rel="alternate" hreflang="<%= a.hreflang %>" href="<%= a.href %>">
+<% }); } %>
+<link rel="stylesheet" href="/css/app.css?v=<%= assetV %>">
+<% if (meta.jsonld) { %>
+<script type="application/ld+json"><%- JSON.stringify(meta.jsonld) %></script>
+<% } %>
+<% if (meta.breadcrumbs) { %>
+<script type="application/ld+json"><%- JSON.stringify({ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: meta.breadcrumbs.map(function(b, i){ return { '@type': 'ListItem', position: i + 1, name: b.name, item: b.url }; }) }) %></script>
+<% } %>
+<% if (meta.verifiedBadge) { %>
+<link rel="author" href="<%= meta.verifiedBadge %>">
+<% } %>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div class="util-bar">
+  <div class="container">
+    <span><span class="dot"></span>&nbsp; Operational</span>
+    <span class="r">
+      <span>firmledger.co.ke · Nairobi</span>
+      <span>Data refreshed <%= todayIso %></span>
+      <span>6 open sources</span>
+    </span>
+  </div>
+</div>
+<header class="site-header">
+  <div class="container header-in">
+    <a class="brand" href="/" aria-label="FirmLedger home">
+      <img src="/assets/logo-mark.png" alt="" class="logo-img" width="34" height="34">
+      <span class="brand-name">Firm<b>Ledger</b></span>
+    </a>
+    <nav class="nav" aria-label="Main">
+      <a href="/directory" aria-current="<%= nav === 'directory' ? 'true' : 'false' %>" class="<%= nav === 'directory' ? 'active' : '' %>">Directory</a>
+      <a href="/pricing" aria-current="<%= nav === 'pricing' ? 'true' : 'false' %>" class="<%= nav === 'pricing' ? 'active' : '' %>">Pricing</a>
+      <a href="/claim" class="<%= nav === 'claim' ? 'active' : '' %>">Claim a listing</a>
+      <a href="/api" class="<%= nav === 'api' ? 'active' : '' %>">API</a>
+      <a href="/sitemap.xml">Sitemap</a>
+      <a href="/feed.xml">RSS</a>
+    </nav>
+    <form class="hdr-search search-hero" action="/search" method="get" role="search">
+      <input class="input search-hero-in" type="search" name="q" placeholder="Search businesses, topics, docs…" aria-label="Search FirmLedger" maxlength="120">
+      <button class="btn btn-gold" type="submit">Search</button>
+    </form>
+    <div class="header-actions">
+      <a class="btn btn-ghost btn-sm header-cta" href="<%= user ? '/dashboard' : '/login' %>"><%= user ? 'Dashboard' : 'Sign in' %></a>
+      <a class="btn btn-primary btn-sm header-cta" href="/dashboard/listings/new">Add a listing</a>
+      <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open menu" aria-expanded="false">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+    </div>
+  </div>
+  <div id="mobileNav" class="mobile-nav">
+    <form class="hdr-search search-hero m-search" action="/search" method="get" role="search">
+      <input class="input search-hero-in" type="search" name="q" placeholder="Search businesses, topics, docs…" aria-label="Search FirmLedger" maxlength="120">
+      <button class="btn btn-gold" type="submit">Search</button>
+    </form>
+    <a href="/directory">Directory</a>
+    <a href="/pricing">Pricing</a>
+    <a href="/claim">Claim a listing</a>
+    <a href="/api">API</a>
+    <a href="/about">About</a>
+    <% if (user) { %>
+    <a href="/dashboard">Dashboard</a>
+    <a href="/dashboard/security">Security</a>
+    <a href="/dashboard/support">Support</a>
+    <form method="post" action="/logout" style="margin:0"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button type="submit" style="display:block;width:100%;text-align:left;padding:13px 4px;font:500 16px/1 var(--fb);color:var(--ink);border-bottom:1px solid var(--hair);background:none">Sign out</button></form>
+    <% } else { %>
+    <a href="/login">Sign in</a>
+    <a href="/register">Create account</a>
+    <% } %>
+    <a href="/dashboard/listings/new">Add a listing</a>
+  </div>
+</header>
+<% if (flash.ok) { %><div class="container flash-wrap"><div class="alert alert-ok" role="alert"><%= flash.ok %></div></div><% } %>
+<% if (flash.err) { %><div class="container flash-wrap"><div class="alert alert-err" role="alert"><%= flash.err %></div></div><% } %>
+<main id="main">

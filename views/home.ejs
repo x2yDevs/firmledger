@@ -1,0 +1,169 @@
+<%- include('partials/top') %>
+<%
+  var tileIcons = {
+    company: '<rect x="3" y="9" width="18" height="12" rx="2"/><path d="M9 21V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v16"/><path d="M7 13h2M15 13h2M7 17h2M15 17h2"/>',
+    startup: '<path d="M12 3l4.5 8h-9z"/><path d="M9.2 15L12 20l2.8-5"/><path d="M7.5 11 5 15.5M16.5 11 19 15.5"/>',
+    agency: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/><path d="M3 13h18"/>',
+    organization: '<circle cx="9" cy="8" r="3"/><path d="M3 21c0-3.3 2.7-5 6-5s6 1.7 6 5"/><circle cx="17" cy="9" r="2.4"/><path d="M15.5 15.6c2.8.3 5 2 5.5 5.4"/>',
+    product: '<path d="M12 2l9 5v10l-9 5-9-5V7z"/><path d="M12 12l9-5M12 12v10M12 12L3 7"/>',
+    service: '<circle cx="12" cy="12" r="3.4"/><path d="M12 2.5V6M12 18v3.5M2.5 12H6M18 12h3.5M5.3 5.3l2.4 2.4M16.3 16.3l2.4 2.4M5.3 18.7l2.4-2.4M16.3 7.7l2.4-2.4"/>',
+    publisher: '<rect x="3" y="5" width="14" height="14" rx="2"/><path d="M7 9h6M7 12.5h6M7 16h4"/><path d="M17 9h2a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2"/>',
+  };
+  var seen = {}; var tick = tickerItems.filter(function(t){ if (seen[t.slug]) return false; seen[t.slug] = 1; return true; });
+%>
+<section class="hero">
+  <div class="container hero-grid">
+    <div>
+      <p class="klabel rv">Verified business intelligence</p>
+      <h1 class="rv" style="--d:60ms">The business record layer for modern discovery</h1>
+      <p class="lede rv" style="--d:120ms">FirmLedger indexes companies, startups, agencies, organizations, products, services and publishers into canonical, source-backed profiles — with field-level provenance, confidence scoring, ownership verification and a unified intelligence API on the roadmap.</p>
+      <form class="searchbar rv" style="--d:180ms" action="/directory" role="search">
+        <input type="search" name="q" data-suggest="names" autocomplete="off" placeholder="Search businesses — name, keyword or category…" aria-label="Search businesses">
+        <button type="submit">Search</button>
+      </form>
+      <div class="hero-cta rv" style="--d:240ms">
+        <a class="btn btn-primary" href="/dashboard/listings/new">Add a listing</a>
+        <a class="btn btn-ghost" href="/directory">Explore the ledger</a>
+      </div>
+      <div class="stats-strip rv" style="--d:300ms">
+        <div class="stat-cell"><div class="stat-n"><%= stats.listings %></div><div class="stat-l">Live entities</div></div>
+        <div class="stat-cell"><div class="stat-n">6</div><div class="stat-l">Open sources</div></div>
+        <div class="stat-cell"><div class="stat-n"><%= medianConf === null ? '—' : medianConf %></div><div class="stat-l">Median confidence</div></div>
+        <div class="stat-cell"><div class="stat-n">10h</div><div class="stat-l">Indexing SLA</div></div>
+      </div>
+    </div>
+    <aside class="ledger-card rv" style="--d:160ms" aria-label="Recent verifications">
+      <div class="lc-head">
+        <span class="dot" style="width:6px;height:6px;border-radius:50%;background:#3DD68C;display:inline-block"></span>
+        <span class="t">Ledger · recent verifications</span>
+        <span class="chip ok" style="margin-left:auto">Live</span>
+      </div>
+      <% if (recentVerifications.length) { recentVerifications.forEach(function(l){ %>
+      <a class="lc-row" href="/listing/<%= l.slug %>">
+        <div>
+          <div class="lc-name"><%= l.name %><% if (perksActive(l)) { %><span class="ptick ptick-sm" title="FirmLedger Pro — enhanced verified profile"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 2.4 3.3-.5 1 3.3L22 9l-1.7 3 1.7 3-3.3 1.8-1 3.3-3.3-.5L12 22l-2.4-2.4-3.3.5-1-3.3L2 15l1.7-3L2 9l3.3-1.8 1-3.3 3.3.5L12 2z" fill="#1D4ED8"/><path d="M10.6 15.4l-3-3 1.5-1.5 1.5 1.5 4.3-4.3 1.5 1.5-5.8 5.8z" fill="#fff"/></svg></span><% } %></div>
+          <div class="lc-sub"><%= typeLabel(l.type) %> · <%= listingLoc(l) %> · verified <%= fmtDate(l.last_verified_at) %></div>
+        </div>
+        <%- dial(l.confidence) %>
+      </a>
+      <% }); } else { %>
+      <div class="lc-empty">The ledger is new — verified records will stream in here as listings are claimed.</div>
+      <% } %>
+    </aside>
+  </div>
+</section>
+<% if (tick.length) { %>
+<div class="ticker" aria-hidden="true">
+  <div class="ticker-track">
+    <% for (var rep = 0; rep < 2; rep++) { tick.forEach(function(t){ %>
+    <a class="tk-item" href="/listing/<%= t.slug %>"><%= t.name %> <span class="c">◆ <%= t.confidence %></span></a>
+    <% }); } %>
+  </div>
+</div>
+<% } %>
+
+<section class="section">
+  <div class="container">
+    <div class="sec-head rv">
+      <div class="l">
+        <p class="klabel">Directory</p>
+        <h2>Seven entity types, one canonical ledger</h2>
+        <p>Browse the full index by entity type. Every record carries provenance, a confidence score and a public source trail.</p>
+      </div>
+      <span class="idx">01 / DIRECTORY</span>
+    </div>
+    <div class="cat-grid">
+      <% byType.forEach(function(t, i){ %>
+      <a class="cat-tile rv" style="--d:<%= i * 50 %>ms" href="/directory?type=<%= t.value %>">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><%- tileIcons[t.value] || '' %></svg>
+        <span class="n"><%= t.label %><%= t.value === 'organization' ? 's' : t.value.endsWith('s') ? '' : 's' %></span>
+        <span class="c"><%= t.count %> entities</span>
+      </a>
+      <% }); %>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <div class="sec-head rv">
+      <div class="l">
+        <p class="klabel">Methodology</p>
+        <h2>How the ledger is built</h2>
+        <p>Five layers turn raw open data into a canonical, scored, refreshable business record.</p>
+      </div>
+      <span class="idx">02 / METHOD</span>
+    </div>
+    <div class="pipe">
+      <div class="st rv"><span class="n">L1</span><h3>Ingest</h3><p>Records are collected from open registries, encyclopedias, news (GDELT), crawls — and public submissions.</p></div>
+      <div class="st rv" style="--d:60ms"><span class="n">L2</span><h3>Normalize</h3><p>Names, categories and fields are standardized into one common schema.</p></div>
+      <div class="st rv" style="--d:120ms"><span class="n">L3</span><h3>Resolve</h3><p>Entity resolution merges duplicates into a single canonical record.</p></div>
+      <div class="st rv" style="--d:180ms"><span class="n">L4</span><h3>Verify</h3><p>Confidence scoring plus manual review; field-level provenance recorded. Owners can cryptographically claim records.</p></div>
+      <div class="st rv" style="--d:240ms"><span class="n">L5</span><h3>Refresh</h3><p>A refresh layer keeps records current; approved listings index to search engines within ~10h.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <div class="sec-head rv">
+      <div class="l">
+        <p class="klabel">Featured records</p>
+        <h2>Recently verified listings</h2>
+      </div>
+      <span class="idx">03 / RECORDS</span>
+    </div>
+    <% if (featured.length) { %>
+    <div class="list-grid">
+      <% featured.forEach(function(l){ %>
+      <a class="l-card" href="/listing/<%= l.slug %>">
+        <div class="l-top">
+          <% if (l.logo_url) { %><img class="avatar" src="<%= l.logo_url %>" alt="" loading="lazy"><% } else { %><span class="avatar"><%= initials(l.name) %></span><% } %>
+          <div>
+            <div class="l-name"><%= l.name %><% if (perksActive(l)) { %><span class="ptick ptick-sm" title="FirmLedger Pro — enhanced verified profile"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 2.4 3.3-.5 1 3.3L22 9l-1.7 3 1.7 3-3.3 1.8-1 3.3-3.3-.5L12 22l-2.4-2.4-3.3.5-1-3.3L2 15l1.7-3L2 9l3.3-1.8 1-3.3 3.3.5L12 2z" fill="#1D4ED8"/><path d="M10.6 15.4l-3-3 1.5-1.5 1.5 1.5 4.3-4.3 1.5 1.5-5.8 5.8z" fill="#fff"/></svg></span><% } %></div>
+            <div class="l-meta"><%= typeLabel(l.type) %> · <%= listingLoc(l) %></div>
+          </div>
+        </div>
+        <p class="l-desc"><%= l.tagline %></p>
+        <div class="l-foot">
+          <% if (l.claimed) { %><span class="vbadge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Verified</span><% } %>
+          <span class="tag"><%= typeLabel(l.type) %></span>
+          <%- dial(l.confidence) %>
+        </div>
+      </a>
+      <% }); %>
+    </div>
+    <% } else { %>
+    <div class="empty-state">
+      <h3>The ledger is open</h3>
+      <p>No featured records yet. The first verified listings of the new index will appear here.</p>
+      <a class="btn btn-primary" href="/dashboard/listings/new">Add the first listing</a>
+    </div>
+    <% } %>
+  </div>
+</section>
+
+<section class="band">
+  <div class="container band-grid">
+    <div class="rv">
+      <p class="klabel">FirmLedger API</p>
+      <h2 style="margin-top:12px">A unified, source-backed business intelligence API</h2>
+      <p>Create, read, update and delete the records you own over clean REST endpoints — API-key authentication, honest rate limits, full docs and a live playground. <strong>Included with FirmLedger Pro.</strong></p>
+      <div class="band-cta">
+        <a class="btn btn-accent" href="/api">Explore the API</a>
+        <a class="btn btn-ghost" href="/api/docs">Read the docs</a>
+      </div>
+    </div>
+    <div class="rv" style="--d:100ms">
+      <div class="code-block" style="margin:0"><span class="code-label">live</span><span class="c"># GET /api/v1/listings</span>
+Authorization: Bearer fl_live_…
+{
+  <span class="k">"data"</span>: [ { <span class="k">"slug"</span>: <span class="s">"acme-ltd"</span>,
+    <span class="k">"status"</span>: <span class="s">"approved"</span>,
+    <span class="k">"confidence"</span>: <span class="s">84</span> } ],
+  <span class="k">"meta"</span>: { <span class="k">"total"</span>: <span class="s">3</span> }
+}</div>
+    </div>
+  </div>
+</section>
+<%- include('partials/bottom') %>

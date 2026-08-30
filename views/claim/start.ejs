@@ -1,0 +1,63 @@
+<%- include('../partials/top') %>
+
+<div class="container" style="padding-top:clamp(28px,4vw,44px)">
+  <nav class="crumb"><a href="/listing/<%= l.slug %>"><%= l.name %></a><span class="sep">/</span><span>Claim</span></nav>
+  <div class="sec-head" style="margin-top:18px">
+    <div class="l">
+      <p class="klabel">Ownership verification</p>
+      <h2>Claim “<%= l.name %>”</h2>
+      <p>Prove you control <strong><%= suggestedDomain || 'the business domain' %></strong> and this record becomes yours to manage.</p>
+    </div>
+    <span class="idx">CLAIM</span>
+  </div>
+  <div class="wiz">
+    <span class="ws on"><span class="b">1</span> Method</span> —
+    <span class="ws on"><span class="b">2</span> Domain</span> —
+    <span class="ws"><span class="b">3</span> Token</span> —
+    <span class="ws"><span class="b">4</span> Verify</span>
+  </div>
+</div>
+
+<section class="section-tight">
+  <div class="container container-narrow">
+    <% if (errors.length) { %>
+      <div class="alert alert-err"><% errors.forEach(function (e) { %><div>· <%= e %></div><% }) %></div>
+    <% } %>
+
+    <form method="post" action="/claim/<%= l.slug %>" class="form form-card">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+
+      <h3 class="form-section">1 · Choose how to prove ownership</h3>
+      <div class="methods">
+        <label class="method">
+          <input type="radio" name="method" value="dns" required>
+          <span class="method-name">DNS record</span>
+          <span class="method-desc">Add a TXT record to your domain's DNS. Strongest proof — recommended if you manage your own DNS.</span>
+        </label>
+        <label class="method">
+          <input type="radio" name="method" value="meta">
+          <span class="method-name">HTML meta tag</span>
+          <span class="method-desc">Paste one line into your homepage's <code>&lt;head&gt;</code>. Fast if you have access to the site code or CMS.</span>
+        </label>
+        <label class="method">
+          <input type="radio" name="method" value="badge">
+          <span class="method-name">Site badge</span>
+          <span class="method-desc">Embed the FirmLedger badge snippet anywhere on your homepage. Also shows visitors you're on the record.</span>
+        </label>
+      </div>
+
+      <h3 class="form-section">2 · Confirm the domain</h3>
+      <label><span>Website domain</span>
+        <input type="text" name="domain" required value="<%= suggestedDomain %>" placeholder="yourcompany.co.ke">
+      </label>
+      <p class="fine-print">The domain must match the listing's website — this protects listings from being claimed by third parties.</p>
+
+      <div class="form-actions">
+        <button class="btn btn-primary btn-lg" type="submit">Generate verification token</button>
+        <a class="btn btn-ghost" href="/listing/<%= l.slug %>">Cancel</a>
+      </div>
+    </form>
+  </div>
+</section>
+
+<%- include('../partials/bottom') %>

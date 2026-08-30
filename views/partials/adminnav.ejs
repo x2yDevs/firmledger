@@ -1,0 +1,21 @@
+<div class="admin-bar">
+  <div class="container admin-bar-in">
+    <nav class="admin-tabs" aria-label="Admin">
+      <a href="/admin3119Musa/dashboard" class="<%= section === 'dashboard' ? 'active' : '' %>">Overview</a>
+      <a href="/admin3119Musa/listings" class="<%= section === 'listings' ? 'active' : '' %>">Listings</a>
+      <a href="/admin3119Musa/categories" class="<%= section === 'categories' ? 'active' : '' %>">Categories</a>
+      <a href="/admin3119Musa/claims" class="<%= section === 'claims' ? 'active' : '' %>">Claims</a>
+      <a href="/admin3119Musa/users" class="<%= section === 'users' ? 'active' : '' %>">Users</a>
+      <a href="/admin3119Musa/plans" class="<%= section === 'plans' ? 'active' : '' %>">Plan offers</a>
+      <a href="/admin3119Musa/removals" class="<%= section === 'removals' ? 'active' : '' %>">Removals</a>
+      <a href="/admin3119Musa/tickets" class="<%= section === 'tickets' ? 'active' : '' %>">Tickets</a>
+      <a href="/admin3119Musa/email" class="<%= section === 'email' ? 'active' : '' %>">Email</a>
+      <a href="/admin3119Musa/blog" class="<%= section === 'blog' ? 'active' : '' %>">Blog</a>
+      <a href="/admin3119Musa/settings" class="<%= section === 'settings' ? 'active' : '' %>">Settings</a>
+    </nav>
+    <form method="post" action="/admin3119Musa/logout" class="inline">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <button class="btn btn-ghost btn-sm" type="submit">Lock console</button>
+    </form>
+  </div>
+</div>

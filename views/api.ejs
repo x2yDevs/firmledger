@@ -1,0 +1,93 @@
+<%- include('partials/top') %>
+
+<section class="section" style="padding-top:clamp(40px,5vw,64px)">
+  <div class="container">
+    <div class="sec-head rv">
+      <div class="l">
+        <p class="klabel">Developer platform</p>
+        <h2>The FirmLedger API — <span style="color:var(--accent)">live</span> for Pro members</h2>
+        <p>A unified, source-backed business intelligence API — create, read, update and delete the records you own over clean REST endpoints with API-key authentication. <strong style="color:var(--accent)">Access is included with FirmLedger Pro</strong> — alongside the unlocked directory, verified ticks and Featured placement.</p>
+      </div>
+      <span class="idx">API / V1</span>
+    </div>
+
+    <div class="band-grid rv" style="--d:60ms">
+      <div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:22px">
+          <% if (user) { %>
+          <a class="btn btn-accent" href="/dashboard/api">Open your API console</a>
+          <a class="btn btn-ghost" href="/dashboard/api/playground">Try the playground</a>
+          <% } else { %>
+          <a class="btn btn-accent" href="/pricing">Get Pro &amp; API access</a>
+          <a class="btn btn-ghost" href="/login?next=/dashboard/api">Sign in</a>
+          <% } %>
+          <a class="btn btn-ghost" href="/api/docs">Read the documentation</a>
+        </div>
+        <div class="api-notes">
+          <div class="feature">
+            <h3>Full CRUD over REST</h3>
+            <p><code>GET</code>, <code>POST</code>, <code>PUT</code> and <code>DELETE</code> your listings — same moderation pipeline as the dashboard, same record shape in and out.</p>
+          </div>
+          <div class="feature">
+            <h3>API-key authentication</h3>
+            <p>Up to 3 keys per Pro account, shown once and stored hashed. Every request carries <code>Authorization: Bearer fl_live_…</code> — only approved, paying accounts hold keys.</p>
+          </div>
+          <div class="feature">
+            <h3>Protected by design</h3>
+            <p>Per-key read &amp; write rate limits, an in-flight concurrency gate, a platform write ceiling and a brute-force lockout guard keep the API fast and fair for everyone.</p>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="code-block"><span class="code-label">quick start</span><span class="c"># 1. Go Pro, then create a key at /dashboard/api</span>
+<span class="c"># 2. List your records</span>
+curl <%= SITE %>/api/v1/listings \
+  -H <span class="s">"Authorization: Bearer fl_live_your_key"</span>
+
+{
+  <span class="k">"data"</span>: [ { <span class="k">"id"</span>: <span class="s">12</span>, <span class="k">"slug"</span>: <span class="s">"acme-ltd"</span>,
+    <span class="k">"name"</span>: <span class="s">"Acme Ltd"</span>, <span class="k">"status"</span>: <span class="s">"approved"</span>, … } ],
+  <span class="k">"meta"</span>: { <span class="k">"page"</span>: <span class="s">1</span>, <span class="k">"per_page"</span>: <span class="s">20</span>, <span class="k">"total"</span>: <span class="s">3</span> }
+}</div>
+      </div>
+    </div>
+
+    <h3 class="h-section">v1 endpoints — all live</h3>
+    <div class="table-wrap" style="margin-top:16px">
+      <table class="table">
+        <thead><tr><th>Method</th><th>Endpoint</th><th>Description</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1</code></td><td>Discovery — versions, endpoints, limits</td><td><span class="pill pill-approved">Live</span></td></tr>
+          <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1/me</code></td><td>Your account, plan, key usage and limits</td><td><span class="pill pill-approved">Live</span></td></tr>
+          <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1/listings</code></td><td>Your listings, paginated (status filter)</td><td><span class="pill pill-approved">Live</span></td></tr>
+          <tr><td><span class="m-chip m-post">POST</span></td><td><code>/api/v1/listings</code></td><td>Create a listing — enters moderation as <code>pending</code></td><td><span class="pill pill-approved">Live</span></td></tr>
+          <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1/listings/:id</code></td><td>Fetch one of your listings by id</td><td><span class="pill pill-approved">Live</span></td></tr>
+          <tr><td><span class="m-chip m-put">PUT</span></td><td><code>/api/v1/listings/:id</code></td><td>Update any writable fields on your listing</td><td><span class="pill pill-approved">Live</span></td></tr>
+          <tr><td><span class="m-chip m-delete">DELETE</span></td><td><code>/api/v1/listings/:id</code></td><td>Remove your listing and its attachments</td><td><span class="pill pill-approved">Live</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="fine-print">Every endpoint is covered in the <a href="/api/docs" style="color:var(--accent);font-weight:600">API documentation</a> with parameters, curl examples and the error catalogue — and you can fire live calls from the <a href="/dashboard/api/playground" style="color:var(--accent);font-weight:600">dashboard playground</a>.</p>
+  </div>
+</section>
+
+<section class="band">
+  <div class="container band-grid">
+    <div class="rv">
+      <p class="klabel">Meanwhile</p>
+      <h2 style="margin-top:12px">The full index is already open</h2>
+      <p>Browse the complete public ledger — every approved record with sources, confidence scores and ownership verification — or pull it into your own tools via RSS.</p>
+      <div class="band-cta">
+        <a class="btn btn-accent" href="/directory">Explore the directory</a>
+        <a class="btn btn-ghost" href="/feed.xml">RSS feed</a>
+      </div>
+    </div>
+    <div class="rv" style="--d:100ms">
+      <div class="code-block" style="margin:0"><span class="code-label">today</span><span class="c"># live endpoints, no key needed</span>
+GET /sitemap.xml      <span class="c"># auto-indexed</span>
+GET /feed.xml         <span class="c"># new + updated records</span>
+GET /listing/:slug    <span class="c"># canonical profiles</span></div>
+    </div>
+  </div>
+</section>
+<%- include('partials/bottom') %>

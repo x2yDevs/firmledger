@@ -1,0 +1,25 @@
+{
+  "name": "firmledger",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "FirmLedger — verified company intelligence and business listings.",
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^12.11.1",
+    "compression": "^1.8.1",
+    "cookie-parser": "^1.4.7",
+    "ejs": "^6.0.1",
+    "express": "^4.22.2",
+    "multer": "^2.2.0",
+    "nodemailer": "^9.0.5",
+    "qrcode": "^1.5.4",
+    "sharp": "^0.35.3"
+  }
+}

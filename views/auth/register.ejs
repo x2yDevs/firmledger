@@ -1,0 +1,37 @@
+<%- include('../partials/top') %>
+
+<section class="auth-wrap">
+  <div class="auth-card">
+    <div class="auth-head">
+      <img src="/assets/logo-mark.png" alt="" width="40" height="40">
+      <h1>Create your account</h1>
+      <p class="muted">Submit listings, claim your business, manage your record.</p>
+    </div>
+    <% if (errors.length) { %><div class="alert alert-err"><% errors.forEach(function (e) { %><div><%= e %></div><% }) %></div><% } %>
+    <form method="post" action="/register" class="form">
+      <label><span>Full name</span>
+        <input type="text" name="name" required autocomplete="name" value="<%= old.name || '' %>">
+      </label>
+      <label><span>Email address</span>
+        <input type="email" name="email" required autocomplete="email" value="<%= old.email || '' %>">
+      </label>
+      <label><span>Password <small class="muted">(min 8 characters)</small></span>
+        <div class="pw-wrap"><input type="password" id="reg-password" name="password" required minlength="8" autocomplete="new-password" data-pw-input="reg-pw-meter"></div>
+        <div class="pw-meter" id="reg-pw-meter" style="display:none"></div>
+      </label>
+      <label><span>Confirm password</span>
+        <div class="pw-wrap"><input type="password" id="reg-password2" name="password_confirm" required minlength="8" autocomplete="new-password" data-pw-confirm="reg-password" data-pw-note="reg-pw-match"></div>
+        <div class="pw-match" id="reg-pw-match"></div>
+      </label>
+      <label class="checker" style="display:flex;gap:10px;align-items:flex-start;margin:4px 0 14px">
+        <input type="checkbox" name="newsletter" value="1" checked style="margin-top:4px">
+        <span style="font-size:.88rem;line-height:1.5;color:var(--ink2)">Email me the weekly digest — new verified companies and freshly added listings. One-click unsubscribe anytime.</span>
+      </label>
+      <button class="btn btn-primary btn-block" type="submit">Create account</button>
+      <p class="fine-print">By creating an account you agree to keep your listings accurate and up to date.</p>
+    </form>
+    <p class="auth-alt">Already have an account? <a href="/login">Sign in</a></p>
+  </div>
+</section>
+
+<%- include('../partials/bottom') %>

@@ -1,0 +1,111 @@
+<%- include('partials/top') %>
+<div class="container page-pad">
+  <div class="sec-head rv">
+    <div class="l">
+      <p class="klabel">Directory</p>
+      <h2>Search &amp; discovery</h2>
+      <p>Filter by type, category, location and confidence. Results are canonical, source-backed records — approved listings only.</p>
+    </div>
+    <span class="idx">DIRECTORY</span>
+  </div>
+
+  <form class="filters rv" style="--d:60ms" method="get" action="/directory">
+    <input type="hidden" name="view" value="<%= view %>">
+    <input type="search" name="q" placeholder="Keyword, name, tag…" value="<%= filters.q || '' %>" aria-label="Keyword">
+    <select name="type" aria-label="Type" onchange="this.form.submit()">
+      <option value="">All types</option>
+      <% TYPES.forEach(function(t){ %><option value="<%= t.value %>"<%= filters.type === t.value ? ' selected' : '' %>><%= t.label %>s</option><% }); %>
+    </select>
+    <select name="category" aria-label="Category" onchange="this.form.submit()">
+      <option value="">All categories</option>
+      <% allCats.forEach(function(c){ %><option value="<%= c.name %>"<%= filters.category === c.name ? ' selected' : '' %>><%= c.name %></option><% }); %>
+    </select>
+    <select name="country" aria-label="Location" onchange="this.form.submit()">
+      <option value="">All locations</option>
+      <% COUNTRIES.forEach(function(c){ %><option<%= filters.country === c ? ' selected' : '' %>><%= c %></option><% }); %>
+    </select>
+    <select name="sort" aria-label="Sort" onchange="this.form.submit()">
+      <option value=""<%= !filters.sort ? ' selected' : '' %>>Sort: confidence</option>
+      <option value="newest"<%= filters.sort === 'newest' ? ' selected' : '' %>>Sort: newest</option>
+      <option value="name"<%= filters.sort === 'name' ? ' selected' : '' %>>Sort: name</option>
+    </select>
+    <div style="grid-column:1/-1;display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-top:2px">
+      <label class="check"><input type="checkbox" name="verified" value="1" onchange="this.form.submit()"<%= filters.verified === '1' ? ' checked' : '' %>> <span>Verified owners only</span></label>
+      <button class="btn btn-primary btn-sm" type="submit">Apply</button>
+      <a class="btn btn-ghost btn-sm" href="/directory">Reset</a>
+    </div>
+  </form>
+
+  <div class="results-bar rv" style="--d:90ms">
+    <div class="results-line" id="resultsLine" style="margin:0"><%= total %> record<%= total === 1 ? '' : 's' %> · canonical ledger view<%= filters.q ? ` · “${filters.q}”` : '' %><%= filters.type ? ` · ${typeLabel(filters.type)}s` : '' %><%= filters.category ? ` · ${filters.category}` : '' %><%= filters.country ? ` · ${filters.country}` : '' %></div>
+    <div class="view-toggle" role="group" aria-label="View mode">
+      <a class="vt <%= view !== 'list' ? 'on' : '' %>" href="/directory<%= qs({ view: undefined, page: undefined }) %>" aria-label="Grid view" title="Grid view">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      </a>
+      <a class="vt <%= view === 'list' ? 'on' : '' %>" href="/directory<%= qs({ view: 'list', page: undefined }) %>" aria-label="List view" title="List view">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+      </a>
+    </div>
+  </div>
+
+  <% if (listings.length) { %>
+  <% if (view === 'list') { %>
+  <div class="rows" id="dirGrid">
+    <div class="rows-head">
+      <span class="rw-c-name">Record</span>
+      <span class="rw-c-cat">Category</span>
+      <span class="rw-c-loc">Location</span>
+      <span class="rw-c-st">Status</span>
+      <span class="rw-c-cf">Confidence</span>
+    </div>
+    <% listings.forEach(function(l){ %>
+    <a class="row-line" href="/listing/<%= l.slug %>">
+      <span class="rw-c-name">
+        <% if (l.logo_url) { %><img class="avatar" src="<%= l.logo_url %>" alt="" loading="lazy"><% } else { %><span class="avatar"><%= initials(l.name) %></span><% } %>
+        <span class="rw-t"><b><%= l.name %><% if (perksActive(l)) { %> <span class="ptick ptick-sm" title="FirmLedger Pro — enhanced verified profile"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 2.4 3.3-.5 1 3.3L22 9l-1.7 3 1.7 3-3.3 1.8-1 3.3-3.3-.5L12 22l-2.4-2.4-3.3.5-1-3.3L2 15l1.7-3L2 9l3.3-1.8 1-3.3 3.3.5L12 2z" fill="#1D4ED8"/><path d="M10.6 15.4l-3-3 1.5-1.5 1.5 1.5 4.3-4.3 1.5 1.5-5.8 5.8z" fill="#fff"/></svg></span><% } %></b><small><%= typeLabel(l.type) %></small></span>
+      </span>
+      <span class="rw-c-cat"><%= l.category %></span>
+      <span class="rw-c-loc"><%= listingLoc(l) %></span>
+      <span class="rw-c-st"><% if (l.claimed) { %><span class="vbadge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Verified</span><% } else { %><span class="muted" style="font-size:12px">Unclaimed</span><% } %></span>
+      <span class="rw-c-cf"><%- dial(l.confidence) %></span>
+    </a>
+    <% }); %>
+  </div>
+  <% } else { %>
+  <div class="list-grid" id="dirGrid">
+    <% listings.forEach(function(l){ %>
+    <a class="l-card" href="/listing/<%= l.slug %>">
+      <div class="l-top">
+        <% if (l.logo_url) { %><img class="avatar" src="<%= l.logo_url %>" alt="" loading="lazy"><% } else { %><span class="avatar"><%= initials(l.name) %></span><% } %>
+        <div>
+          <div class="l-name"><%= l.name %><% if (perksActive(l)) { %><span class="ptick ptick-sm" title="FirmLedger Pro — enhanced verified profile"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 2.4 3.3-.5 1 3.3L22 9l-1.7 3 1.7 3-3.3 1.8-1 3.3-3.3-.5L12 22l-2.4-2.4-3.3.5-1-3.3L2 15l1.7-3L2 9l3.3-1.8 1-3.3 3.3.5L12 2z" fill="#1D4ED8"/><path d="M10.6 15.4l-3-3 1.5-1.5 1.5 1.5 4.3-4.3 1.5 1.5-5.8 5.8z" fill="#fff"/></svg></span><% } %></div>
+          <div class="l-meta"><%= typeLabel(l.type) %> · <%= listingLoc(l) %></div>
+        </div>
+      </div>
+      <p class="l-desc"><%= l.tagline || l.description %></p>
+      <div class="l-foot">
+        <% if (l.claimed) { %><span class="vbadge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Verified</span><% } %>
+        <span class="tag"><%= typeLabel(l.type) %></span>
+        <%- dial(l.confidence) %>
+      </div>
+    </a>
+    <% }); %>
+  </div>
+  <% } %>
+
+  <% if (pages > 1) { %>
+  <nav class="pagination" aria-label="Pagination">
+    <% if (page > 1) { %><a class="btn btn-ghost btn-sm" href="/directory<%= qs({ page: page - 1 }) %>">← Previous</a><% } %>
+    <span class="results-line" style="margin:0">Page <%= page %> of <%= pages %></span>
+    <% if (page < pages) { %><a class="btn btn-ghost btn-sm" href="/directory<%= qs({ page: page + 1 }) %>">Next →</a><% } %>
+  </nav>
+  <% } %>
+  <% } else { %>
+  <div class="empty-state">
+    <h3>No records match</h3>
+    <p>Try widening your filters — or add the business you're looking for to the ledger.</p>
+    <a class="btn btn-primary" href="/dashboard/listings/new">Add a listing</a>
+  </div>
+  <% } %>
+</div>
+<%- include('partials/bottom') %>

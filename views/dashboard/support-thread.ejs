@@ -1,0 +1,133 @@
+<%- include('../partials/top') %>
+
+<div class="crumbbar"><div class="container">
+  <div class="breadcrumbs"><a href="/dashboard">Dashboard</a><span aria-hidden="true">›</span><a href="/dashboard/support">Support</a><span aria-hidden="true">›</span><span><%= t.ref %></span></div>
+</div></div>
+
+<section class="section-tight chat-page">
+  <div class="container" style="max-width:990px">
+
+    <div class="section-head" style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem">
+      <div>
+        <h2><%= t.subject %></h2>
+        <p class="muted" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:14px;margin:0">
+          <span class="ticket-ref"><%= t.ref %></span>
+          <span class="badge badge-cat"><%= t.category %></span>
+        </p>
+      </div>
+      <% if (t.status === 'closed') { %><span class="badge status-closed" style="flex:0 0 auto">Closed by the firm — replies disabled</span><% } %>
+    </div>
+
+    <% if (flashMsg) { %><div class="alert alert-ok" style="margin-bottom:1rem"><%= flashMsg %></div><% } %>
+    <% if (errors.length) { %><div class="alert alert-err" style="margin-bottom:1rem"><% errors.forEach(function (e) { %><div><%= e %></div><% }) %></div><% } %>
+
+    <div class="chat-window" id="chatWindow">
+      <div class="chat-head">
+        <div class="chat-head-avatar"><svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.94 14.55L2 22l5.62-1.44A10 10 0 1 0 12 2Zm5.83 12.83c-.89.44-2.02.64-3.03.35a9.2 9.2 0 0 1-4.06-2.3c-1.05-1.08-2-2.5-2.25-3.68-.17-.78.02-1.66.5-2.33.27-.38.62-.62 1-.66.32-.03.62.22.84.62l.63 1.18c.1.19.09.4-.04.57l-.31.42c-.14.2-.12.45.03.64a9 9 0 0 0 4 3.19c.2.11.43.07.6-.09l.36-.36c.18-.17.42-.2.63-.09l1.28.68c.42.22.63.44.6.82-.02.21-.24.6-.38.74-.2.23-.44.41-.5.3Z"/></svg></div>
+        <div class="chat-head-meta">
+          <div class="chat-head-name">FirmLedger Support</div>
+          <div class="chat-head-sub">
+            <span id="statusBadge" class="badge status-<%= t.status %>" style="background:rgba(255,255,255,.14);color:#fff;text-transform:capitalize"><%= t.status === 'open' ? 'Open' : t.status === 'solved' ? 'Solved' : 'Closed' %></span>
+            <span>Tickets reply direct to your email too</span>
+          </div>
+        </div>
+        <div class="chat-head-sub" id="connStatus" aria-live="polite">online</div>
+      </div>
+
+      <div class="chat-pane" id="feed">
+        <% let lastDay = ''; %>
+        <% messages.forEach(function (m) { %>
+          <% const day = m.created_at.slice(0, 10); %>
+          <% if (day !== lastDay) { lastDay = day; %>
+            <div class="chat-day"><%= fmtDate(new Date(day + 'T00:00:00Z')) %></div>
+          <% } %>
+          <div class="wa-row <%= m.sender === 'user' ? 'wa-mine' : 'wa-theirs' %>">
+            <div class="wa-bubble">
+              <div class="wa-tail"></div>
+              <div class="wa-who"><%= m.sender === 'admin' ? 'FirmLedger Team' : 'You' %></div>
+              <% if (m.body) { %><div class="wa-text"><%- m.body.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\n/g,'<br>') %></div><% } %>
+              <% if (m.attachment) { %>
+                <a class="wa-attach" href="<%= m.attachment %>" target="_blank" rel="noopener"><svg class="ric" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg><%= m.attachment_name || 'Attachment' %></a>
+              <% } %>
+              <div class="wa-meta"><%= m.created_at.slice(11, 16) %></div>
+            </div>
+          </div>
+        <% }); %>
+      </div>
+
+      <div class="chat-status-line" id="chatStatus" aria-live="polite">Connected — new replies appear instantly.</div>
+
+      <% if (t.status !== 'closed') { %>
+        <form method="post" action="/dashboard/support/<%= t.id %>/reply" class="chat-composer" id="composer">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <div class="composer-box">
+            <textarea name="body" id="msgInput" rows="1" placeholder="Type your message — Enter to send, Shift+Enter for a new line" aria-label="Message"></textarea>
+          </div>
+          <button class="composer-send" type="submit" title="Send" aria-label="Send message">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+          </button>
+        </form>
+      <% } else { %>
+        <div class="chat-status-line" style="text-align:center;padding:14px">This ticket is closed — open a fresh ticket for anything new.</div>
+      <% } %>
+    </div>
+
+    <p class="muted" style="font-size:0.86rem">
+      Every reply also lands in your email inbox · ticket history stays here even after you're done.
+    </p>
+  </div>
+</section>
+
+<script>
+(function () {
+  const pane = document.getElementById('feed');
+  const ta = document.getElementById('msgInput');
+  const form = document.getElementById('composer');
+  const statusEl = document.getElementById('chatStatus');
+  const badge = document.getElementById('statusBadge');
+  const ticketId = <%= t.id %>;
+  let lastUpdated = '<%= t.updated_at %>';
+  const labels = { open: 'Open', solved: 'Solved', closed: 'Closed' };
+
+  // scroll to newest
+  if (pane) pane.scrollTop = pane.scrollHeight;
+
+  // auto-resize + Enter-to-send
+  function autoSize() { if (!ta) return; ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 140) + 'px'; }
+  if (ta) {
+    ta.addEventListener('input', autoSize);
+    ta.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        if (ta.value.trim().length) form.requestSubmit();
+      }
+    });
+    autoSize();
+  }
+
+  // live poll
+  async function poll() {
+    try {
+      const r = await fetch('/dashboard/support/' + ticketId + '/poll', { cache: 'no-store' });
+      if (!r.ok) return;
+      const j = await r.json();
+      if (j.status && badge) { badge.textContent = labels[j.status] || j.status; badge.className = 'badge status-' + j.status; }
+      if (j.updatedAt && j.updatedAt !== lastUpdated) {
+        lastUpdated = j.updatedAt;
+        if (statusEl) statusEl.textContent = 'New message — updating…';
+        setTimeout(function () { window.location.reload(); }, 350);
+        return;
+      }
+      if (statusEl) statusEl.textContent = 'Connected — new replies appear instantly.';
+      document.getElementById('connStatus').textContent = 'online';
+    } catch (e) {
+      if (statusEl) statusEl.textContent = 'Connection dropped — retrying…';
+      document.getElementById('connStatus').textContent = 'offline';
+    }
+  }
+  poll();
+  setInterval(poll, 4000);
+})();
+</script>
+
+<%- include('../partials/bottom') %>

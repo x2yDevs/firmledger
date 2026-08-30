@@ -1,0 +1,17 @@
+{
+  "name": "FirmLedger — Verified Company Intelligence & Business Directory",
+  "short_name": "FirmLedger",
+  "description": "The business record layer for modern discovery: verified, source-backed listings for companies, startups, agencies, organizations, products, services and publishers.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#FBFAF8",
+  "theme_color": "#0A1628",
+  "lang": "en",
+  "icons": [
+    { "src": "/assets/favicon.png", "sizes": "64x64", "type": "image/png" },
+    { "src": "/assets/logo-mark-96.png", "sizes": "96x96", "type": "image/png" },
+    { "src": "/assets/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "/assets/logo-mark.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

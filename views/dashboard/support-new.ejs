@@ -1,0 +1,73 @@
+<%- include('../partials/top') %>
+
+<section class="section-tight">
+  <div class="container">
+    <div class="breadcrumbs"><a href="/dashboard">Dashboard</a><span aria-hidden="true">›</span><a href="/dashboard/support">Support</a><span aria-hidden="true">›</span><span>New ticket</span></div>
+
+    <div class="section-head">
+      <h2>New ticket</h2>
+      <a class="btn btn-ghost btn-sm" href="/dashboard/support">← All tickets</a>
+    </div>
+
+    <div class="support-new-grid">
+      <div>
+        <% if (errors.length) { %><div class="alert alert-err"><% errors.forEach(function (e) { %><div><%= e %></div><% }) %></div><% } %>
+
+        <div class="form-card" style="margin-bottom:0">
+          <form method="post" action="/dashboard/support/new" class="form">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+
+            <h3 class="form-section">What's it about?</h3>
+            <label><span>Subject *</span>
+              <input type="text" name="subject" required maxlength="200" value="<%= old.subject || '' %>" placeholder="e.g. Can't claim my listing">
+            </label>
+
+            <div class="form-row">
+              <label><span>Category *</span>
+                <select name="category" required>
+                  <option value="">Choose…</option>
+                  <option value="billing" <%= old.category === 'billing' ? 'selected' : '' %>>Billing</option>
+                  <option value="technical" <%= old.category === 'technical' ? 'selected' : '' %>>Technical issue</option>
+                  <option value="listing" <%= old.category === 'listing' ? 'selected' : '' %>>My listing</option>
+                  <option value="account" <%= old.category === 'account' ? 'selected' : '' %>>Account</option>
+                  <option value="verification" <%= old.category === 'verification' ? 'selected' : '' %>>Verification</option>
+                  <option value="other" <%= old.category === 'other' ? 'selected' : '' %>>Something else</option>
+                </select>
+              </label>
+            </div>
+
+            <h3 class="form-section">The details</h3>
+            <label><span>Describe what's going on * <small class="muted">(a few sentences)</small></span>
+              <textarea name="body" rows="9" required minlength="20" placeholder="What happened? What did you expect? Include error text, URLs, dates and your account email — anything that makes it reproducible."><%= old.body || '' %></textarea>
+            </label>
+
+            <button class="btn btn-primary btn-block btn-lg" type="submit">Open ticket &amp; start chat</button>
+            <p class="fine-print">You'll get a branded confirmation email with the ticket number; the live chat opens straight away.</p>
+          </form>
+        </div>
+      </div>
+
+      <div>
+        <div class="side-card ticket-sidecard" style="margin-bottom:14px">
+          <h3>How tickets work</h3>
+          <table class="facts">
+            <tr><th>Ref</th><td>A unique FL-XXXXXX tracking number</td></tr>
+            <tr><th>Live chat</th><td>Answers appear instantly, plus an email copy</td></tr>
+            <tr><th>Email copy</th><td>Every reply also lands in your inbox</td></tr>
+            <tr><th>Close</th><td>The team closes once you're happy</td></tr>
+          </table>
+        </div>
+
+        <div class="side-card ticket-sidecard">
+          <h3>Other ways to reach us</h3>
+          <p class="muted" style="font-size:0.9rem;line-height:1.7">
+            Prefer email? <a href="mailto:support@firmledger.co.ke">support@firmledger.co.ke</a><br><br>
+            Security issues and abuse reports go to the same inbox — note your account email in the message so we can verify it's really you.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<%- include('../partials/bottom') %>

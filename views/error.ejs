@@ -1,0 +1,12 @@
+<%- include('partials/top') %>
+
+<div class="container" style="text-align:center;padding:clamp(70px,10vw,130px) 20px">
+  <p class="error-code"><%= code %></p>
+  <h1><%= heading %></h1>
+  <p style="max-width:520px;margin:14px auto 30px;color:var(--ink2)"><%= message %></p>
+  <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+    <a class="btn btn-primary" href="/">Back to FirmLedger</a>
+    <a class="btn btn-ghost" href="/directory">Browse directory</a>
+  </div>
+</div>
+<%- include('partials/bottom') %>

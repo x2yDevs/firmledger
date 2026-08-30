@@ -1,0 +1,117 @@
+<%- include('../partials/top') %>
+
+<section class="section-tight">
+  <div class="container">
+    <div class="breadcrumbs"><a href="/dashboard">Dashboard</a><span aria-hidden="true">›</span><a href="/dashboard/api">Developer API</a><span aria-hidden="true">›</span><span>Playground</span></div>
+    <div class="section-head" style="align-items:flex-end">
+      <div>
+        <h2>API playground</h2>
+        <span class="muted">Run real v1 calls against <b>your own records</b> — the exact code path and limits as <code>/api/v1</code>. Writes are live: a POST creates, a DELETE deletes.</span>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <a class="btn btn-ghost btn-sm" href="/dashboard/api">API keys &amp; usage</a>
+        <a class="btn btn-ghost btn-sm" href="/api/docs" target="_blank" rel="noopener">Documentation ↗</a>
+      </div>
+    </div>
+
+    <% if (err) { %><div class="alert alert-err"><%= err %></div><% } %>
+    <% if (!pro) { %>
+    <div class="form-card" style="text-align:center;padding:clamp(28px,4vw,44px)">
+      <h3 class="form-section" style="text-align:center;border-bottom:0;padding-bottom:0">The playground is a FirmLedger Pro feature</h3>
+      <p class="muted" style="max-width:520px;margin:6px auto 18px">Upgrade to run live API calls against your own records — no setup, no curl, straight from the browser.</p>
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+        <a class="btn btn-accent" href="/dashboard/upgrade">Upgrade to Pro</a>
+        <a class="btn btn-ghost" href="/api/docs" target="_blank" rel="noopener">Read the docs ↗</a>
+      </div>
+    </div>
+    <% } else { %>
+
+    <div style="display:grid;grid-template-columns:minmax(340px,460px) 1fr;gap:18px;align-items:start" class="play-grid">
+      <form method="post" action="/dashboard/api/playground" class="form-card form" style="margin:0">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <h3 class="form-section">Request</h3>
+        <label class="fl"><span>Load a preset</span>
+          <select class="cadence-select" id="pgPreset" style="min-width:0">
+            <option value="">— custom request —</option>
+            <% endpoints.forEach(function (ep, i) { %>
+            <option value="<%= i %>" <%= (form.method === ep.m && form.path === ep.path) ? 'selected' : '' %>><%= ep.m %> <%= ep.path %></option>
+            <% }) %>
+          </select>
+        </label>
+        <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+          <label class="fl" style="margin:0;flex:0 0 auto"><span>Method</span>
+            <select class="cadence-select" name="method" id="pgMethod" style="min-width:0;width:130px">
+              <% ['GET','POST','PUT','DELETE'].forEach(function (m) { %>
+              <option value="<%= m %>" <%= form.method === m ? 'selected' : '' %>><%= m %></option>
+              <% }) %>
+            </select>
+          </label>
+          <label class="fl" style="margin:0;flex:1;min-width:200px"><span>Path</span><input class="input mono" name="path" id="pgPath" value="<%= form.path %>" placeholder="/api/v1/listings" spellcheck="false" style="font-size:13px"></label>
+        </div>
+        <label class="fl" id="pgBodyWrap"><span>JSON body <span class="muted" style="text-transform:none;letter-spacing:0">(POST &amp; PUT — leave empty otherwise)</span></span>
+          <textarea class="input mono" name="body" id="pgBody" rows="12" spellcheck="false" style="font-size:12.5px;line-height:1.7;resize:vertical"><%= form.body %></textarea>
+        </label>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <button class="btn btn-primary" type="submit">Send request</button>
+          <span class="form-note" style="margin:0">Limits here mirror the wire: <b><%= limits.READ_RPM %></b> reads · <b><%= limits.WRITE_RPM %></b> writes per minute.</span>
+        </div>
+      </form>
+
+      <div class="form-card" style="margin:0;min-height:300px">
+        <h3 class="form-section">Response</h3>
+        <% if (result) { %>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+          <% const sc = result.status < 300 ? 'pill-approved' : (result.status === 429 ? 'pill-pending' : 'pill-rejected'); %>
+          <span class="pill <%= sc %>" style="font-size:.78rem"><%= result.status === 204 ? '204 No Content' : result.status + ' ' + ({200:'OK',201:'Created',400:'Bad Request',401:'Unauthorized',403:'Forbidden',404:'Not Found',409:'Conflict',413:'Payload Too Large',422:'Unprocessable',429:'Too Many Requests'}[result.status] || '') %></span>
+          <span class="mono muted" style="font-size:12px"><%= result.ms %> ms · executed as <%= user.email %></span>
+        </div>
+        <div class="code-block" style="margin-top:0"><span class="code-label">headers</span><% Object.entries(result.headers).forEach(function ([k, v]) { %><span class="k"><%= k %></span>: <span class="s"><%= v %></span>
+<% }) %></div>
+        <% if (result.json) { %>
+        <div class="code-block"><span class="code-label">body</span><% JSON.stringify(result.json, null, 2).split('\n').forEach(function (line) { const m = line.match(/^(\s*)("[^"]+"\s*:)\s*(.*)$/); if (m) { %><%= m[1] %><span class="k"><%= m[2] %></span> <span class="s"><%= m[3] %></span>
+<% } else { %><%= line %>
+<% } }) %></div>
+        <% } else { %>
+        <p class="muted">Empty body — that is the correct answer for this call.</p>
+        <% } %>
+        <% } else { %>
+        <p class="muted" style="margin-top:6px">Pick a preset or compose your own request on the left and press <b>Send request</b>. The status, rate-limit headers and JSON body land here — exactly what a real API client would receive.</p>
+        <div class="code-block"><span class="code-label">example</span><span class="c"># create a listing, then clean up after yourself</span>
+POST /api/v1/listings        <span class="c">→ 201 + the new record (id in body)</span>
+GET  /api/v1/listings/&lt;id&gt;  <span class="c">→ 200 + the record</span>
+PUT  /api/v1/listings/&lt;id&gt;  <span class="c">→ 200 + the updated record</span>
+DELETE /api/v1/listings/&lt;id&gt; <span class="c">→ 204 (gone)</span></div>
+        <% } %>
+      </div>
+    </div>
+    <% } %>
+  </div>
+</section>
+
+<script>
+(function () {
+  var presets = <%- JSON.stringify(endpoints) %>;
+  var sel = document.getElementById('pgPreset');
+  var method = document.getElementById('pgMethod');
+  var path = document.getElementById('pgPath');
+  var body = document.getElementById('pgBody');
+  var wrap = document.getElementById('pgBodyWrap');
+  if (!sel || !method) return;
+  function syncBodyVisibility() {
+    var m = method.value;
+    wrap.style.display = (m === 'POST' || m === 'PUT') ? '' : 'none';
+  }
+  var SAMPLE_ID = '<%= typeof sampleId !== 'undefined' && sampleId ? sampleId : '' %>';
+  sel.addEventListener('change', function () {
+    var p = presets[Number(sel.value)];
+    if (!p) return;
+    method.value = p.m; path.value = p.path; body.value = p.body || '';
+    if (SAMPLE_ID && p.path.indexOf('listings/') > -1) path.value = '/api/v1/listings/' + SAMPLE_ID;
+    syncBodyVisibility();
+  });
+  method.addEventListener('change', syncBodyVisibility);
+  syncBodyVisibility();
+})();
+</script>
+
+<%- include('../partials/bottom') %>

@@ -1,0 +1,33 @@
+<%- include('../partials/top') %>
+
+<section class="auth-wrap">
+  <div class="auth-card">
+    <div class="auth-head">
+      <img src="/assets/logo-mark.png" alt="" width="40" height="40">
+      <h1>Check your email</h1>
+      <p class="muted">We sent a 6-digit verification code to<br><strong><%= email %></strong><br>It's valid for <strong><%= ttl %> minutes</strong>.</p>
+    </div>
+
+    <% if (resent) { %><div class="alert alert-ok">✓ A fresh code is on its way — check your inbox (and spam folder).</div><% } %>
+    <% if (errors.length) { %><div class="alert alert-err"><% errors.forEach(function (e) { %><div><%= e %></div><% }) %></div><% } %>
+
+    <form method="post" action="/register/verify" class="form">
+      <input type="hidden" name="email" value="<%= email %>">
+      <label><span>Verification code</span>
+        <input type="text" name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required autocomplete="one-time-code" autofocus
+          placeholder="000000" style="text-align:center;font:600 22px/1.2 var(--fm);letter-spacing:.45em">
+      </label>
+      <button class="btn btn-primary btn-block" type="submit">Verify &amp; create my account</button>
+      <p class="fine-print">Enter the code from the email — it expires in <%= ttl %> minutes. Wrong code more than a few times locks it out; request a new one below.</p>
+    </form>
+
+    <form method="post" action="/register/verify/resend" class="form" style="margin-top:10px">
+      <input type="hidden" name="email" value="<%= email %>">
+      <button class="btn btn-ghost btn-block" type="submit">Resend code</button>
+    </form>
+
+    <p class="auth-alt">Wrong email? <a href="/register">Start over</a></p>
+  </div>
+</section>
+
+<%- include('../partials/bottom') %>

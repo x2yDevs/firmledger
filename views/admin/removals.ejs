@@ -1,0 +1,49 @@
+<%- include('../partials/top') %>
+<%- include('../partials/adminnav') %>
+
+<section class="section-tight">
+  <div class="container">
+    <div class="section-head">
+      <h2>Removal requests</h2>
+      <span class="muted"><%= rows.filter(function(r){return r.status==='pending'}).length %> pending</span>
+    </div>
+    <% if (typeof query !== 'undefined' && query.ok) { %><div class="alert alert-ok"><%= query.ok %></div><% } %>
+
+    <% if (!rows.length) { %>
+    <div class="empty-state"><h3>Nothing here</h3><p>No removal requests have been filed.</p></div>
+    <% } else { %>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Listing</th><th>Requested by</th><th>Reason</th><th>Status</th><th>Filed</th><th class="ta-right">Resolve</th></tr></thead>
+        <tbody>
+          <% rows.forEach(function (r) { %>
+          <tr>
+            <td>
+              <% if (r.listing_name) { %><a href="/listing/<%= r.listing_slug %>" target="_blank"><strong><%= r.listing_name %></strong></a><br><small class="muted"><%= r.listing_status %></small><% } else { %><small class="muted">(listing deleted)</small><% } %>
+            </td>
+            <td><strong><%= r.name %></strong><br><small class="muted"><%= r.email %></small></td>
+            <td style="max-width:340px"><small><%= r.reason %></small></td>
+            <td><span class="pill pill-<%= r.status === 'pending' ? 'pending' : r.status === 'removed' ? 'rejected' : 'approved' %>"><%= r.status %></span></td>
+            <td class="muted"><%= fmtDate(r.created_at) %></td>
+            <td class="ta-right actions-cell">
+              <% if (r.status === 'pending') { %>
+              <form method="post" action="/admin3119Musa/removals/<%= r.id %>/remove-listing" class="inline" onsubmit="return confirm('Permanently delete this listing from the ledger and resolve the request?');">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                <button class="btn btn-danger btn-xs" type="submit">Remove listing</button>
+              </form>
+              <form method="post" action="/admin3119Musa/removals/<%= r.id %>/dismiss" class="inline">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                <button class="btn btn-ghost btn-xs" type="submit">Dismiss</button>
+              </form>
+              <% } else { %><small class="muted">Resolved <%= r.resolved_at ? fmtDate(r.resolved_at) : '' %></small><% } %>
+            </td>
+          </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+    <% } %>
+  </div>
+</section>
+
+<%- include('../partials/bottom') %>

@@ -1,0 +1,68 @@
+<%- include('../partials/top') %>
+<%- include('../partials/adminnav') %>
+
+<section class="section-tight">
+  <div class="container">
+    <div class="section-head">
+      <h2>Plan offers</h2>
+      <span class="muted">What /pricing sells — monthly, yearly, or any custom offer you add. Prices are charged in USD via PayPal.</span>
+    </div>
+
+    <% if (ok) { %><div class="alert alert-ok"><%= ok %></div><% } %>
+    <% if (err) { %><div class="alert alert-err"><%= err %></div><% } %>
+
+    <div class="form-card">
+      <h3 class="form-section">Add an offer</h3>
+      <form class="form" method="post" action="/admin3119Musa/plans">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <div class="grid-2">
+          <label><span>Name</span><input type="text" name="name" placeholder="Monthly" maxlength="60" required></label>
+          <label><span>Tagline (shown under the price)</span><input type="text" name="blurb" placeholder="Flexible monthly billing, cancel anytime." maxlength="240"></label>
+        </div>
+        <div class="grid-3">
+          <label><span>Price (USD)</span><input type="text" name="price_usd" placeholder="30" inputmode="decimal" required></label>
+          <label><span>Duration (days)</span><input type="number" name="duration_days" placeholder="30" inputmode="numeric" min="1" max="3650" required></label>
+          <label><span>Sort order</span><input type="number" name="sort" inputmode="numeric" min="0" placeholder="1"></label>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit">Create offer</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="table-wrap" style="margin-top:22px">
+      <table class="table">
+        <thead><tr><th>Offer</th><th>Price</th><th>Duration</th><th>≈ per month</th><th>Status</th><th>Sort</th><th></th></tr></thead>
+        <tbody>
+          <% plans.forEach(function (p) { %>
+          <tr <%= p.active ? '' : 'style="opacity:.55"' %>>
+            <td><b><%= p.name %></b><% if (p.blurb) { %><div class="score-hint"><%= p.blurb %></div><% } %></td>
+            <td><b>$<%= (p.price_cents / 100).toFixed(2) %></b></td>
+            <td><%= p.duration_days %> days</td>
+            <td class="muted">$<%= (p.price_cents / 100 / (p.duration_days / 30)).toFixed(2) %>/mo</td>
+            <td><span class="pill pill-<%= p.active ? 'approved' : 'pending' %>"><%= p.active ? 'live' : 'hidden' %></span></td>
+            <td class="muted"><%= p.sort %></td>
+            <td class="ta-right" style="white-space:nowrap">
+              <form method="post" action="/admin3119Musa/plans/<%= p.id %>/toggle" class="inline">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                <button class="btn btn-ghost btn-xs" type="submit"><%= p.active ? 'Hide' : 'Show' %></button>
+              </form>
+              <form method="post" action="/admin3119Musa/plans/<%= p.id %>/delete" class="inline" onsubmit="return confirm('Delete this offer? Offers with payments are deactivated instead.');">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                <button class="btn btn-danger btn-xs" type="submit">Delete</button>
+              </form>
+            </td>
+          </tr>
+          <% }) %>
+          <% if (!plans.length) { %>
+          <tr><td colspan="7" class="muted">No offers yet — add one above. With no active offers, the /pricing page shows a "coming soon" card.</td></tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="fine-print" style="margin-top:18px">Hidden offers stop being sold but keep existing subscribers' time running. Deleting an offer that has payments attached deactivates it instead — receipts stay intact. Granting/revoking Pro directly on a user is on <b>Users →</b>.</p>
+  </div>
+</section>
+
+<%- include('../partials/bottom') %>

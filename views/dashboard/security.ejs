@@ -1,0 +1,138 @@
+<%- include('../partials/top') %>
+
+<div class="container" style="padding:2rem 0 4rem;max-width:900px">
+  <div class="breadcrumbs"><a href="/dashboard">Dashboard</a><span aria-hidden="true">›</span><span>Security</span></div>
+
+  <div class="section-head" style="margin-bottom:1.2rem">
+    <h1>Security</h1>
+    <p class="muted">Two-factor authentication protects the most sensitive changes on your account.</p>
+  </div>
+
+  <% if (newCodes) { %>
+    <div class="alert alert-ok" style="margin-bottom:1.5rem">
+      <span class="flash-icon">✓</span>
+      <div>
+        <strong>Two-factor is on.</strong> Below are your <strong>10 recovery codes</strong> — each works exactly once if your authenticator app is unreachable. This is the <strong>only time</strong> we show all of them.
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:1.5rem">
+      <div class="card-body">
+        <h3 style="margin:0 0 .8rem;font-size:1rem">Your recovery codes</h3>
+        <ol class="recovery-codes">
+          <% newCodes.forEach(function (code) { %><li><code><%= code %></code></li><% }); %>
+        </ol>
+        <div style="margin-top:1rem;display:flex;gap:.7rem;flex-wrap:wrap">
+          <form method="post" action="/dashboard/security/recovery-codes.txt" style="margin:0">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <input type="hidden" name="codes" value="<%= newCodes.join(',') %>">
+            <button class="btn btn-primary btn-sm" type="submit">Download as firmledger-recovery-codes.txt</button>
+          </form>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="copyCodes()">Copy all</button>
+        </div>
+        <p class="fine-print" style="margin-top:.75rem">This is the only time these codes are visible together. Save the file offline — never in your email inbox.</p>
+      </div>
+    </div>
+  <% } %>
+
+  <div class="card" style="margin-bottom:1.5rem">
+    <div class="card-body" style="display:flex;align-items:flex-start;justify-content:space-between;gap:1.5rem;flex-wrap:wrap">
+      <div>
+        <h2 style="margin:0 0 .35rem;font-size:1.08rem;display:flex;align-items:center;gap:.5rem">
+          Two-factor authentication (2FA)
+          <% if (twoFaOn) { %><span class="badge badge-ok" style="font-size:.72rem">Enabled</span><% } else { %><span class="badge" style="font-size:.72rem;background:var(--paper-2);color:var(--ink-soft)">Off</span><% } %>
+        </h2>
+        <% if (twoFaOn) { %>
+          <p class="muted" style="margin:0 0 .6rem">Changing your password or your email now requires a 6-digit code from your authenticator app — or one of your recovery codes.</p>
+          <p class="muted" style="margin:0"><strong><%= recoveryLeft %></strong> of your 10 recovery codes remain. Re-enroll to generate a fresh set.</p>
+        <% } else { %>
+          <p class="muted" style="margin:0">When enabled, signing in and sensitive changes (password, email) require a second factor: a code from an app like Google Authenticator, Authy or Aegis, or one of your recovery codes.</p>
+        <% } %>
+      </div>
+      <div>
+        <% if (!twoFaOn && !enroll) { %>
+          <form method="post" action="/dashboard/security/2fa/start">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <button class="btn btn-primary" type="submit">Set up 2FA</button>
+          </form>
+        <% } %>
+        <% if (twoFaOn) { %>
+          <form method="post" action="/dashboard/security/2fa/disable" class="form" style="min-width:220px">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <label style="margin-bottom:.5rem"><span>Current authenticator or recovery code</span>
+              <input type="text" name="code" required placeholder="6 digits or xxxx-xxxx-xxxx" autocomplete="off" style="font-variant-numeric:tabular-nums">
+            </label>
+            <% if (typeof disableErr !== 'undefined' && disableErr) { %><p class="form-err"><%= disableErr %></p><% } %>
+            <button class="btn btn-ghost btn-block" type="submit">Disable 2FA</button>
+          </form>
+        <% } %>
+      </div>
+    </div>
+  </div>
+
+  <% if (enroll) { %>
+    <div class="card" id="enroll">
+      <div class="card-body">
+        <h2 style="margin:0 0 .5rem;font-size:1.08rem">Step 1 — connect your authenticator app</h2>
+        <p class="muted" style="margin:0 0 1rem">Open your authenticator app (Google Authenticator, Authy, Aegis, Microsoft Authenticator, 1Password…) and scan this QR code or paste the secret below. Your app starts generating 6-digit codes immediately.</p>
+        <div style="display:flex;gap:1.5rem;flex-wrap:wrap;align-items:flex-start">
+          <% if (enroll.qr) { %>
+            <div style="flex:0 0 auto;background:#fff;border:1px solid var(--line);border-radius:12px;padding:8px;box-shadow:var(--shadow-soft)">
+              <img src="<%= enroll.qr %>" width="200" height="200" alt="QR code to scan with your authenticator app">
+            </div>
+          <% } %>
+          <div style="flex:1;min-width:220px">
+            <p style="margin:0 0 .4rem"><strong>Manual setup key</strong><br><span class="muted">Account:</span> FirmLedger</p>
+            <div class="copy-row">
+              <code id="secretCode" style="font-size:.98rem;letter-spacing:2px"><%= enroll.secret %></code>
+              <button type="button" class="btn btn-ghost btn-xs" onclick="copySecret()">Copy</button>
+            </div>
+          </div>
+        </div>
+
+        <h2 style="margin:1.4rem 0 .5rem;font-size:1.08rem">Step 2 — confirm with a code</h2>
+        <p class="muted" style="margin:0 0 .9rem">Enter the 6-digit code currently showing in your app. We then generate your 10 recovery codes immediately.</p>
+        <form method="post" action="/dashboard/security/2fa/verify" class="form" style="max-width:340px">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <label style="margin-bottom:.7rem"><span>6-digit code</span>
+            <input type="text" name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required autofocus
+              placeholder="000000" style="text-align:center;font:600 20px/1.2 var(--fm);letter-spacing:.4em">
+          </label>
+          <% if (enroll.error) { %><p class="form-err"><%= enroll.error %></p><% } %>
+          <button class="btn btn-primary btn-block" type="submit">Enable 2FA &amp; show recovery codes</button>
+          <p class="fine-print">The code changes every 30 seconds — if it refreshes while you type, just use the new one.</p>
+        </form>
+      </div>
+    </div>
+  <% } %>
+
+  <div class="card">
+    <div class="card-body">
+      <h2 style="margin:0 0 .4rem;font-size:1.08rem">Where 2FA applies</h2>
+      <ul class="muted" style="margin:.5rem 0 0 1.1rem;line-height:1.8">
+        <li>Changing your account <strong>password</strong></li>
+        <li>Changing your account <strong>email address</strong></li>
+        <li>Disabling two-factor itself</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script>
+function copyCodes() {
+  const list = Array.from(document.querySelectorAll('.recovery-codes li code')).map(function (el) { return el.textContent.trim(); });
+  navigator.clipboard.writeText(list.join('\n')).then(function () { flashToast('Codes copied to clipboard'); });
+}
+function copySecret() {
+  const el = document.getElementById('secretCode');
+  navigator.clipboard.writeText(el.textContent.trim()).then(function () { flashToast('Setup key copied'); });
+}
+function flashToast(msg) {
+  const t = document.createElement('div');
+  t.className = 'toast-branded';
+  t.textContent = msg;
+  Object.assign(t.style, { position: 'fixed', bottom: '26px', left: '50%', transform: 'translateX(-50%)', background: '#0A1628', color: '#fff', padding: '10px 22px', borderRadius: '10px', fontSize: '14px', zIndex: 9999 });
+  document.body.appendChild(t); setTimeout(function () { t.remove(); }, 2200);
+}
+</script>
+
+<%- include('../partials/bottom') %>

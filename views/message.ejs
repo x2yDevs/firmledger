@@ -1,0 +1,14 @@
+<%- include('partials/top') %>
+
+<div class="container" style="text-align:center;padding:clamp(70px,10vw,130px) 20px">
+  <div class="badge-ok-big" style="margin:0 auto 20px">
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+  </div>
+  <h1 style="font-family:var(--fd);font-size:clamp(28px,4vw,40px);letter-spacing:-.01em"><%= heading %></h1>
+  <p style="max-width:540px;margin:14px auto 30px;color:var(--ink2);line-height:1.7"><%- text %></p>
+  <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+    <a class="btn btn-primary" href="<%= link.href %>"><%= link.label %></a>
+    <a class="btn btn-ghost" href="/directory">Browse directory</a>
+  </div>
+</div>
+<%- include('partials/bottom') %>

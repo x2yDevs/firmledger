@@ -1,0 +1,46 @@
+<%- include('../partials/top') %>
+
+<div class="container" style="padding-top:clamp(28px,4vw,44px)">
+  <p class="klabel" style="margin-bottom:8px">Admin console — two-factor active</p>
+  <h2 style="font:600 1.9rem/1.15 var(--fd);color:var(--ink);max-width:640px"><%= locals.regenerated ? 'Your new recovery codes' : 'Your recovery codes' %></h2>
+  <p class="muted" style="max-width:640px;margin-top:10px;font-size:14px;line-height:1.7">
+    <% if (locals.regenerated) { %>
+      A fresh set replaces every previous recovery code — <strong>old codes stopped working this instant</strong>;
+      the authenticator app itself is unchanged.
+    <% } else { %>
+      Two-factor authentication is now live on this console.
+    <% } %>
+    Below are <strong>10 one-time recovery codes</strong> —
+    use one instead of the app code if your authenticator is ever unreachable.
+    They've also been <strong>emailed to the admin inbox</strong> so you have a copy to keep —
+    this screen is the <strong>only time</strong> they are shown together.
+  </p>
+</div>
+
+<section class="section-tight">
+  <div class="container container-narrow" style="max-width:760px">
+    <div class="alert alert-ok" style="margin-bottom:1.2rem">
+      <strong>Save these now.</strong>&nbsp;Each code works exactly once. Store them offline — never in your email inbox.
+    </div>
+
+    <div class="form-card">
+      <ol class="recovery-codes" id="codesList">
+        <% codes.forEach(function (code) { %><li><code><%= code %></code></li><% }); %>
+      </ol>
+
+      <div style="display:flex;gap:.7rem;flex-wrap:wrap;margin-top:1.2rem">
+        <form method="post" action="/admin3119Musa/2fa-recovery.txt" style="margin:0">
+          <input type="hidden" name="_csrf" value="<%= dlCsrf %>">
+          <input type="hidden" name="codes" value="<%= codes.join(',') %>">
+          <button class="btn btn-primary" type="submit">Download as firmledger-admin-recovery-codes.txt</button>
+        </form>
+        <button type="button" class="btn btn-ghost" onclick="navigator.clipboard.writeText(Array.from(document.querySelectorAll('.recovery-codes li code')).map(function(e){return e.textContent.trim()}).join('\n'))">Copy all</button>
+        <a class="btn btn-ghost" href="/admin3119Musa/dashboard">Done — open the console</a>
+      </div>
+
+      <p class="fine-print" style="margin-top:.9rem">At the /admin3119Musa two-factor screen you can enter either the 6-digit app code or one of these codes.</p>
+    </div>
+  </div>
+</section>
+
+<%- include('../partials/bottom') %>

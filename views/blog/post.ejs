@@ -1,0 +1,12 @@
+<%- include('../partials/top') %>
+
+<div class="container page-pad blog-prose-wrap">
+  <article class="blog-prose">
+    <p class="blog-crumb rv"><a href="/blog">&lsaquo; All posts</a></p>
+    <h1 class="rv"><%= post.title %></h1>
+    <p class="blog-byline rv">FirmLedger editorial · <%= fmtDate(post.published_at) %></p>
+    <div class="blog-body rv"><%- post.body %></div>
+  </article>
+</div>
+
+<%- include('../partials/bottom') %>

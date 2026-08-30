@@ -1,0 +1,57 @@
+<%- include('partials/top') %>
+
+<div class="container page-pad legal-doc">
+  <div class="sec-head rv">
+    <div class="l">
+      <p class="klabel">Legal</p>
+      <h2>Privacy Policy</h2>
+      <p>Effective 1 August 2026 · Applies to FirmLedger (firmledger.co.ke) and all of its services.</p>
+    </div>
+    <span class="idx">PRIVACY</span>
+  </div>
+
+  <div class="legal-body rv">
+    <h3>1. Who we are</h3>
+    <p>FirmLedger is a public business ledger operated from Nairobi, Kenya. It publishes canonical, source-backed profiles of companies, startups, agencies, organizations, products, services and publishers. For the purposes of the Kenya Data Protection Act, 2019 and comparable laws, FirmLedger acts as the data controller for personal data processed through this site. You can reach us at <a href="mailto:privacy@firmledger.co.ke">privacy@firmledger.co.ke</a> and <a href="mailto:support@firmledger.co.ke">support@firmledger.co.ke</a>.</p>
+
+    <h3>2. What we collect</h3>
+    <p><b>Account data.</b> When you register we store your name, email address, and a PBKDF2-hashed password (per-user salt, 600,000 iterations — passwords are never stored in readable form).</p>
+    <p><b>Session data.</b> Sign-ins create server-side session records (a random token with a cryptographically keyed HMAC, expiry, and your user id) plus one session cookie on your browser. No analytics, advertising, or tracking cookies are set, and we run no third-party trackers.</p>
+    <p><b>Submission data.</b> When you add a listing, request a removal, or file a claim, we store the content you provide — record fields, removal-request name and email, claim verification token and domain — so moderation can act on it and so we can reach you about it.</p>
+    <p><b>Business directory data.</b> The directory itself contains information about businesses (entity names, locations, social profiles, websites). Most of it is not personal data. Where a person's name appears — for example a founder recorded in a relationship, or a public profile hosted on the ledger — it is sourced from public references or provided by that person or the entity's owner, and is visible publicly because that is its purpose.</p>
+    <p><b>Technical logs.</b> Our web server keeps standard access logs (IP address, requested URL, user agent, timestamp) for security monitoring, abuse prevention and debugging. We do not build advertising profiles from them.</p>
+    <p><b>Content we deliberately never collect.</b> Payment details, biometric data, government identifiers, precise location tracking, and any special-category data. If we ever begin charging for a service, payment processing will be handled externally by a PCI-compliant provider.</p>
+
+    <h3>3. Why we process it, and on what basis</h3>
+    <p>We process account and session data to operate the service (performance of a contract with you). We process submission and moderation data to maintain the accuracy of the ledger (legitimate interest). We publish business directory data in the public interest of accurate, reusable business information (legitimate interest). Where the law requires consent — for example a regulatory investigation demand — we seek or comply as required.</p>
+
+    <h3>4. The public nature of directory content</h3>
+    <p>Approved listings, their timelines, relationships, sources and verification states are <b>publicly visible by design</b> and are syndicated via sitemap, RSS and search-engine pings. Do not submit anything you are not prepared to have indexed. A person whose name appears on the ledger through a public source (for example, linked from a company's Wikipedia article) may contact us for correction or removal at any time.</p>
+
+    <h3>5. Sharing and disclosure</h3>
+    <p>We do not sell personal data. We share data only in these narrow cases: (a) with the infrastructure providers that host the site (hosting, DNS/CDN), (b) when required by a lawful request from a competent authority, or (c) as part of a transfer of the FirmLedger service itself, with notice. Our homepage fetches for verification and tech detection are server-to-server; they do not send your personal data to the fetched sites.</p>
+
+    <h3>6. Retention</h3>
+    <p>Account data is kept while your account exists. Deleted-account session tokens are destroyed at sign-out; pending moderation reviews are retained for auditability; server logs rotate and are deleted after 90 days. Unverified claim tokens expire within 14 days and are purged. Data we are legally required to keep is kept only for the required period.</p>
+
+    <h3>7. Security</h3>
+    <p>Passwords are hashed with PBKDF2-SHA512 (600k iterations, unique per-user salt). Session cookies are <code>HttpOnly</code>, <code>SameSite=Lax</code>, and <code>Secure</code> in production. All database access goes through parameterized statements; pages escape output by default; upload inputs are type-checked, size-limited and content-sniffed; and external fetches are strictly allowlisted. No system is perfectly secure — if you believe you have found a vulnerability, write to <a href="mailto:support@firmledger.co.ke">support@firmledger.co.ke</a>.</p>
+
+    <h3>8. Your rights</h3>
+    <p>You may view and correct your account data in the dashboard; export the records you own by asking us; delete your account and have your personal data erased subject to legal holding (business records themselves may remain as factual directory entries, with your name removed where it was personal data); object to processing, restrict processing, and — if you are in Kenya — lodge a complaint with the Office of the Data Protection Commissioner. Write to <a href="mailto:privacy@firmledger.co.ke">privacy@firmledger.co.ke</a>; we respond within 30 days.</p>
+
+    <h3>9. Children</h3>
+    <p>FirmLedger is not directed at children under 18 and we do not knowingly collect their data. If you believe a child's information is on the ledger, contact us for removal.</p>
+
+    <h3>10. International transfers</h3>
+    <p>Infrastructure providers may process data in other jurisdictions. Where such transfers occur they are governed by the provider's data-processing terms.</p>
+
+    <h3>11. Changes to this policy</h3>
+    <p>Material changes will be announced on this page with a revised effective date at least 14 days before they take effect. Continued use after the effective date constitutes acceptance.</p>
+
+    <h3>12. Contact</h3>
+    <p>Privacy questions: <a href="mailto:privacy@firmledger.co.ke">privacy@firmledger.co.ke</a> · General: <a href="mailto:support@firmledger.co.ke">support@firmledger.co.ke</a>.</p>
+  </div>
+</div>
+
+<%- include('partials/bottom') %>

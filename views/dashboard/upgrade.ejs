@@ -1,0 +1,101 @@
+<%- include('../partials/top') %>
+
+<section class="page-head">
+  <div class="container">
+    <p class="crumb"><a href="/dashboard">Dashboard</a> → Upgrade</p>
+    <h1>Upgrade to FirmLedger Pro</h1>
+    <p class="lede" style="max-width:680px">One subscription, everything unlocked: you get to <b>view every listing's full details</b> — and listings you own carry the blue verified tick, homepage Featured placement and the premium gold badge.</p>
+  </div>
+</section>
+
+<section class="section-tight">
+  <div class="container container-narrow">
+
+    <% if (typeof okmsg !== 'undefined' && okmsg) { %><div class="alert alert-ok"><%= okmsg %></div><% } %>
+    <% if (err) { %><div class="alert alert-err"><%= err %></div><% } %>
+
+    <div class="upgrade-status">
+      <div class="logo-tile logo-tile-sm"><%= (user.name || 'U').slice(0, 1) %></div>
+      <div class="us-title">
+        <b><%= user.name %></b>
+        <span class="muted" style="font-size:13px">
+          Current plan: <b><%= isPro ? 'FirmLedger Pro' : 'Free' %></b>
+          <% if (isPro && planExpires) { %> · active until <b><%= planExpires %></b> — paying again extends it<% } %>
+          <% if (isPro && !planExpires) { %> · lifetime<% } %>
+        </span>
+      </div>
+    </div>
+
+    <h3 class="h-section" style="margin-top:2.2rem">Choose an offer</h3>
+    <div class="plan-grid" style="margin-top:14px">
+      <% offers.forEach(function (p, i) { %>
+      <div class="plan-card <%= i === 0 ? 'plan-pro' : '' %>">
+        <% if (i === 0) { %><div class="plan-flag">POPULAR</div><% } %>
+        <h3><%= p.name %></h3>
+        <p class="plan-price">$<%= (p.price_cents / 100).toFixed(2) %><small> · <%= p.currency %> · <%= p.duration_days %> days</small></p>
+        <p class="muted" style="font-size:13.5px"><%= p.blurb || 'Full Pro access.' %></p>
+        <% if (p.duration_days >= 90) { %>
+        <p class="fine-print" style="margin:.4rem 0 0;color:var(--ok)">≈ $<%= (p.price_cents / 100 / (p.duration_days / 30)).toFixed(2) %>/mo — vs monthly billing.</p>
+        <% } %>
+        <% if (!paypalReady) { %>
+          <div class="alert alert-err" style="margin-top:10px">
+            Online payments are not configured yet. The administrator adds PayPal credentials in Admin → Settings → Payments.
+          </div>
+        <% } else { %>
+          <form method="post" action="/dashboard/upgrade">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <input type="hidden" name="plan_id" value="<%= p.id %>">
+            <button class="btn btn-primary btn-block btn-lg" type="submit" style="margin-top:14px;display:flex;align-items:center;justify-content:center;gap:8px">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7.076 21.337H2.47a.641.641 0 0 1-.633-.74L4.944.901C4.986.627 5.229.432 5.515.432h7.892c2.224 0 3.932.582 5.078 1.723 1.159 1.155 1.582 2.77 1.264 4.807l-.015.104-.181 1.048a.648.648 0 0 0 .769.767c.928.164 1.674.5 2.221.997.664.604 1.06 1.452 1.176 2.513.116 1.069-.118 2.167-.7 3.265a7.24 7.24 0 0 1-1.979 2.2 8.105 8.105 0 0 1-2.68 1.372c-1.016.327-2.042.49-3.048.49H12.63a.648.648 0 0 0-.634.743l.666 4.186a.648.648 0 0 0 .642.547h5.473a.648.648 0 0 0 .621-.773l-.268-1.518-.03-.164a.648.648 0 0 1 .645-.778h.458c1.638 0 2.978-.39 3.99-1.16a5.134 5.134 0 0 0 1.895-2.693c.35-1.107.397-2.235.141-3.36-.7-3.075-3.355-4.166-6.732-4.166h-3.395a.648.648 0 0 0-.635.735L7.082 21.29a.643.643 0 0 1-.006.047z"/></svg>
+              Pay with PayPal — $<%= (p.price_cents / 100).toFixed(2) %>
+            </button>
+          </form>
+        <% } %>
+      </div>
+      <% }) %>
+      <% if (!offers.length) { %>
+      <div class="plan-card">
+        <h3>No offers configured yet</h3>
+        <p class="muted">The administrator adds Pro offers in Admin → Plans.</p>
+      </div>
+      <% } %>
+    </div>
+    <p class="fine-print" style="display:block;text-align:center;margin-top:14px">
+      Secure checkout by <b>PayPal</b>;
+      account activates the moment PayPal confirms. Time stacks on top of anything remaining.
+    </p>
+
+    <h3 class="h-section" style="margin-top:2.4rem">What Pro unlocks</h3>
+    <div class="feature-grid" style="margin-top:12px">
+      <div class="feature"><h3>For you</h3><p>View every listing's <b>full details</b> — public website, email, phone, the events timeline and the relationship graph. Free accounts and guests see the basic profile only.</p></div>
+      <div class="feature" style="--d:60ms"><h3>Your listings get the blue tick</h3><p>A <b>blue verified tick</b> renders right on your company name — profile, directory, search results and homepage cards.</p></div>
+      <div class="feature" style="--d:120ms"><h3>Homepage Featured placement</h3><p>Your listings appear in the homepage Featured section while Pro runs — highest-visibility slot on FirmLedger.</p></div>
+      <div class="feature" style="--d:180ms"><h3>Premium company badge</h3><p>Your live embeddable badge upgrades to the <b>gold Premium Member</b> variant for your own website.</p></div>
+      <div class="feature" style="--d:240ms"><h3>Verification &amp; trust boost</h3><p>Your edits and claims get <b>priority review</b> from the admin verification team.</p></div>
+      <div class="feature" style="--d:270ms"><h3>Developer API access</h3><p>Full <b>REST API</b> over the records you own — API keys, CRUD endpoints, rate-limited and documented, with a live playground in your dashboard.</p></div>
+      <div class="feature" style="--d:300ms"><h3>Front of the queue</h3><p>Priority moderation for new submissions and edits across everything you manage.</p></div>
+    </div>
+
+    <% if (payments.length) { %>
+    <h3 class="h-section" style="margin-top:2.4rem">Payment history</h3>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Reference</th><th>Plan</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead>
+        <tbody>
+          <% payments.forEach(function (p) { %>
+          <tr>
+            <td class="mono" style="font-size:12px"><%= p.reference %></td>
+            <td><%= p.plan_name || '—' %></td>
+            <td><%= p.currency %> <%= (p.amount / 100).toFixed(2) %></td>
+            <td><span class="pill pill-<%= p.status === 'success' ? 'approved' : p.status === 'failed' ? 'rejected' : 'pending' %>"><%= p.status %></span></td>
+            <td class="muted" style="font-size:12.5px"><%= (p.paid_at || p.created_at || '').slice(0, 10) %></td>
+          </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+    <% } %>
+  </div>
+</section>
+
+<%- include('../partials/bottom') %>

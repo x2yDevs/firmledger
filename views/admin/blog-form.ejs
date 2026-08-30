@@ -1,0 +1,39 @@
+<%- include('../partials/top') %>
+<%- include('../partials/adminnav') %>
+
+<section class="section-tight">
+  <div class="container container-narrow">
+    <div class="section-head">
+      <h2><%= p.id ? 'Edit post' : 'New post' %></h2>
+      <a class="btn btn-ghost btn-sm" href="/admin3119Musa/blog">← All posts</a>
+    </div>
+
+    <form method="post" action="<%= action %>" class="form form-card">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <label class="fl"><span>Title</span>
+        <input class="input" name="title" value="<%= p.title %>" required maxlength="200">
+      </label>
+      <label class="fl"><span>Slug (URL) — leave blank to generate from the title</span>
+        <input class="input mono" name="slug" value="<%= p.slug %>" maxlength="120" placeholder="my-first-post">
+      </label>
+      <label class="fl"><span>Excerpt (shown on the blog index and RSS)</span>
+        <textarea class="input" name="excerpt" rows="2" maxlength="400"><%= p.excerpt %></textarea>
+      </label>
+      <label class="fl"><span>Body — headings as &lt;h2&gt;, paragraphs as &lt;p&gt;, links allowed</span>
+        <textarea class="input mono" name="body" rows="18"><%= p.body %></textarea>
+      </label>
+      <label class="fl"><span>Status</span>
+        <select class="input" name="status">
+          <option value="draft" <%= p.status !== 'published' ? 'selected' : '' %>>Draft</option>
+          <option value="published" <%= p.status === 'published' ? 'selected' : '' %>>Published</option>
+        </select>
+      </label>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">Save post</button>
+        <a class="btn btn-ghost" href="/admin3119Musa/blog">Cancel</a>
+      </div>
+    </form>
+  </div>
+</section>
+
+<%- include('../partials/bottom') %>

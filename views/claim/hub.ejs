@@ -1,0 +1,47 @@
+<%- include('../partials/top') %>
+
+<div class="container page-pad">
+  <div class="sec-head rv">
+    <div class="l">
+      <p class="klabel">Ownership</p>
+      <h2>Claim your business profile</h2>
+      <p>Take control of your FirmLedger record in minutes. Prove you control the official domain by DNS record, meta tag or badge — our servers verify it cryptographically, in seconds.</p>
+    </div>
+    <span class="idx">CLAIM</span>
+  </div>
+
+  <div class="feature-grid rv" style="margin-bottom:34px">
+    <div class="feature"><h3>Why claim?</h3><p>Verified owners can edit every field, post timeline events, record relationships — and the profile carries a permanent “Verified owner” badge with a higher confidence score.</p></div>
+    <div class="feature" style="--d:60ms"><h3>Three methods</h3><p>DNS TXT record (strongest), HTML meta tag (fastest for site owners), or the FirmLedger badge (zero code access, visible trust signal). Check happens live, at the press of a button.</p></div>
+    <div class="feature" style="--d:120ms"><h3>Free, one owner</h3><p>Claiming costs nothing and only one verified owner exists per record — the ledger never shows two competing managers for one business.</p></div>
+  </div>
+
+  <div class="claim-find rv">
+    <h3 class="h-section" style="margin:0;padding:0;border:0">Find your business</h3>
+    <form class="search-hero claim-find-form" method="get" action="/directory" role="search" style="margin:0">
+      <input class="input search-hero-in" type="search" name="q" placeholder="Search by name or website…">
+      <button class="btn btn-gold" type="submit">Search the ledger</button>
+    </form>
+    <p class="muted" style="margin:0;font-size:13px">Open the profile and press “Claim this listing”. If it isn't in the ledger yet, <a href="/dashboard/listings/new">add it</a> — you'll verify as part of that process.</p>
+  </div>
+
+  <% if (unclaimed.length) { %>
+  <h3 class="h-section">Recently published, still unclaimed</h3>
+  <div class="claim-grid">
+    <% unclaimed.forEach(function(l, i){ %>
+    <div class="claim-card rv" style="--d:<%= (i%4)*60 %>ms">
+      <div class="claim-card-t">
+        <b><%= l.name %></b>
+        <small><%= l.category %> · <%= typeLabel(l.type) %></small>
+      </div>
+      <div class="claim-card-a">
+        <a class="btn btn-ghost" href="/listing/<%= l.slug %>">View</a>
+        <a class="btn btn-gold" href="/claim/<%= l.slug %>">Claim</a>
+      </div>
+    </div>
+    <% }); %>
+  </div>
+  <% } %>
+</div>
+
+<%- include('../partials/bottom') %>

@@ -1,0 +1,125 @@
+</main>
+<% const _nl = (typeof nlFlash !== 'undefined' && nlFlash) ? nlFlash : ''; %>
+<section class="news-band" aria-label="Weekly digest">
+  <div class="container">
+    <div class="news-inner">
+      <span class="news-mark" aria-hidden="true"><img src="/assets/logo-mark.png" alt="" width="46" height="46"></span>
+      <div class="news-copy">
+        <div class="news-kicker">FirmLedger digest</div>
+        <h3>Weekly digest — new verified companies</h3>
+        <p>Every week: freshly verified businesses and the newest additions to the ledger, in one short email. One-click unsubscribe.<% if (user) { %> <a href="/dashboard/settings" style="text-decoration:underline;white-space:nowrap">Manage your digest →</a><% } %></p>
+      </div>
+      <% if (_nl) { %>
+        <p class="news-ok" role="status"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><%= _nl %></p>
+      <% } else { %>
+        <form class="news-form" method="post" action="/newsletter/subscribe">
+          <% if (typeof csrfToken !== 'undefined' && csrfToken) { %><input type="hidden" name="_csrf" value="<%= csrfToken %>"><% } %>
+          <input type="email" name="email" required placeholder="you@company.com" aria-label="Your email for the weekly digest" maxlength="254">
+          <button class="news-subscribe-btn" type="submit">Subscribe</button>
+        </form>
+      <% } %>
+    </div>
+  </div>
+</section>
+<footer class="site-footer">
+  <div class="container foot-grid">
+    <div class="foot-brand">
+      <a class="brand" href="/">
+        <img src="/assets/logo-mark.png" alt="" class="logo-img" width="34" height="34">
+        <span class="brand-name">Firm<b>Ledger</b></span>
+      </a>
+      <p>The business record layer for modern discovery — canonical, source-backed profiles for companies, startups, agencies, organizations, products, services and publishers.</p>
+      <div class="foot-socials" aria-label="FirmLedger on social media">
+        <% SITE_SOCIALS.forEach(function(s){ %>
+        <a class="foot-soc" href="<%= s.url %>" <% if (!s.url.startsWith('mailto:')) { %>target="_blank" rel="noopener noreferrer me"<% } %> aria-label="<%= s.label %>" title="<%= s.label %>">
+          <span class="social-ico"><%- ICONS[s.key] || ICONS.website %></span>
+        </a>
+        <% }); %>
+      </div>
+    </div>
+    <div class="foot-col">
+      <h4>Platform</h4>
+      <ul>
+        <li><a href="/directory">Directory</a></li>
+        <li><a href="/pricing">Pricing</a></li>
+        <li><a href="/jobs">Jobs board</a></li>
+        <li><a href="/dashboard/watchlist">Watchlist</a></li>
+        <li><a href="/dashboard/listings/new">Add a listing</a></li>
+        <li><a href="/claim">Claim a listing</a></li>
+        <li><a href="/api">API</a></li>
+      </ul>
+    </div>
+    <div class="foot-col">
+      <h4>Browse by</h4>
+      <ul>
+        <li><a href="/directory?type=company">Companies</a></li>
+        <li><a href="/directory?type=startup">Startups</a></li>
+        <li><a href="/directory?type=agency">Agencies</a></li>
+        <li><a href="/directory?type=organization">Organizations</a></li>
+        <li><a href="/directory?type=publisher">Publishers</a></li>
+      </ul>
+    </div>
+    <div class="foot-col">
+      <h4>Categories</h4>
+      <ul>
+        <% footerCats.forEach(function(c){ %>
+        <li><a href="/directory/c/<%= c.slug %>"><%= c.name %></a></li>
+        <% }); %>
+        <li><a href="/directory?sort=newest">Recently added</a></li>
+        <li><a href="/directory">Search &amp; discovery</a></li>
+      </ul>
+    </div>
+    <div class="foot-col">
+      <h4>Resources</h4>
+      <ul>
+        <li><a href="/about">Mission &amp; transparency</a></li>
+        <li><a href="/docs">Documentation</a></li>
+        <li><a href="/blog">News &amp; insights</a></li>
+        <li><a href="/privacy">Privacy Policy</a></li>
+        <li><a href="/terms">Terms of Use</a></li>
+        <li><a href="/feed.xml">RSS feed</a></li>
+        <li><a href="mailto:support@firmledger.co.ke">support@firmledger.co.ke</a></li>
+      </ul>
+    </div>
+    <% if (typeof footerNews !== 'undefined' && footerNews && footerNews.length) { %>
+    <div class="foot-col foot-news">
+      <h4>News</h4>
+      <ul>
+        <% footerNews.forEach(function(p){ %>
+        <li><a href="/blog/<%= p.slug %>"><%= p.title %></a><span class="fn-date"><%= (p.published_at||'').split(' ')[0] %></span></li>
+        <% }); %>
+      </ul>
+    </div>
+    <% } %>
+  </div>
+  <div class="foot-bottom">
+    <div class="container" style="display:flex;align-items:center;gap:18px;flex-wrap:wrap">
+      <span>© 2026 FirmLedger</span>
+      <span><span class="ok-dot"></span>All systems operational</span>
+      <div class="fb-r">
+        <a href="/directory">Directory</a>
+        <a href="/api">API</a>
+        <a href="/sitemap.xml">Sitemap</a>
+        <a href="/feed.xml">RSS</a>
+      </div>
+    </div>
+  </div>
+</footer>
+<script src="/js/main.js?v=<%= assetV %>" defer></script>
+<%- typeof extraScripts !== 'undefined' ? extraScripts : '' %>
+<% if (_nl) { %>
+<% const _nlKind = ((typeof nlFlashKind !== 'undefined' && nlFlashKind === 'err') || _nl.toLowerCase().startsWith('enter a valid')) ? 'err' : 'ok'; %>
+<script>
+(function () {
+  var kind = <%- JSON.stringify(_nlKind) %>;
+  var msg = <%- JSON.stringify(_nl) %>;
+  var toast = function () {
+    if (!window.__flToast || !document.querySelector('.toast-zone')) return setTimeout(toast, 60);
+    window.__flToast(kind, msg, 'FirmLedger digest');
+  };
+  toast();
+})();
+</script>
+<% } %>
+</body>
+</html>

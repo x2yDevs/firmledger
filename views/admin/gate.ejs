@@ -1,0 +1,21 @@
+<%- include('../partials/top') %>
+
+<section class="auth-wrap">
+  <div class="auth-card">
+    <div class="auth-head">
+      <img src="/assets/logo-mark.png" alt="" width="40" height="40">
+      <h1>Admin console</h1>
+      <p class="muted">Enter the admin secret code to continue.</p>
+    </div>
+    <% if (error) { %><div class="alert alert-err"><%= error %></div><% } %>
+    <form method="post" action="/admin3119Musa" class="form">
+      <label><span>Admin secret code</span>
+        <input type="password" name="code" required autocomplete="off" autofocus>
+      </label>
+      <button class="btn btn-primary btn-block" type="submit">Unlock console</button>
+    </form>
+    <p class="fine-print">After the code, a second factor is required: a 6-digit authenticator code (Google Authenticator, 1Password, Authy…). The code is set via the <code>ADMIN_SECRET</code> environment variable.</p>
+  </div>
+</section>
+
+<%- include('../partials/bottom') %>

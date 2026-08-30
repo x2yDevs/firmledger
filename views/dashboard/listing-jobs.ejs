@@ -1,0 +1,94 @@
+<%- include('../partials/top') %>
+
+<section class="section-tight">
+  <div class="container" style="max-width:920px">
+    <div class="breadcrumbs"><a href="/dashboard">Dashboard</a><span aria-hidden="true">›</span><a href="/dashboard/listings/<%= l.id %>/edit"><%= l.name %></a><span aria-hidden="true">›</span><span>Jobs</span></div>
+
+    <div class="section-head" style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem">
+      <div>
+        <h2>Jobs at <%= l.name %>
+          <% if (pro) { %><span class="pill pill-pro" style="margin-left:8px;vertical-align:middle">PRO</span><% } %>
+        </h2>
+        <p class="muted" style="margin:4px 0 0;font-size:14px">
+          Openings post to <a href="/listing/<%= l.slug %>" target="_blank" rel="noopener">your listing page</a> and the public <a href="/jobs" target="_blank" rel="noopener">/jobs board</a> — marked <b>FEATURED JOB</b>.
+        </p>
+      </div>
+      <a class="btn btn-ghost btn-sm" href="/dashboard/listings/<%= l.id %>/edit">← Edit listing</a>
+    </div>
+
+    <% if (flashMsg) { %><div class="alert alert-ok" style="margin-bottom:1rem"><%= flashMsg %></div><% } %>
+    <% if (errMsg) { %><div class="alert alert-err" style="margin-bottom:1rem"><%= errMsg %></div><% } %>
+    <% if (errors.length) { %><div class="alert alert-err" style="margin-bottom:1rem"><% errors.forEach(function (e) { %><div><%= e %></div><% }) %></div><% } %>
+
+    <div class="form-card" style="<%= pro ? '' : 'opacity:.6;filter:grayscale(.3)' %>">
+      <h3 class="form-section">Post a new opening</h3>
+      <% if (!pro) { %>
+        <div class="alert alert-warn" style="margin-bottom:1rem">
+          <b>Pro feature.</b> Job posts are part of FirmLedger Pro — upgrade to publish openings on this listing and the public jobs board.
+          <a href="/dashboard/upgrade" style="font-weight:700">Upgrade →</a>
+        </div>
+      <% } %>
+      <form method="post" action="/dashboard/listings/<%= l.id %>/jobs" class="form">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <label><span>Job title *</span>
+          <input type="text" name="title" required maxlength="80" value="<%= old.title || '' %>" placeholder="e.g. Senior Frontend Engineer" <%= pro ? '' : 'disabled' %>>
+        </label>
+        <div class="form-row">
+          <label><span>Type *</span>
+            <select name="role_type" <%= pro ? '' : 'disabled' %>>
+              <% JOB_TYPES.forEach(function (t) { %><option value="<%= t %>" <%= old.role_type === t ? 'selected' : '' %>><%= t %></option><% }); %>
+            </select>
+          </label>
+          <label><span>Location *</span>
+            <input type="text" name="location" required maxlength="80" value="<%= old.location || '' %>" placeholder="Nairobi · Remote" <%= pro ? '' : 'disabled' %>>
+          </label>
+        </div>
+        <label><span>Apply URL * <small class="muted">(full link)</small></span>
+          <input type="url" name="apply_url" required maxlength="400" value="<%= old.apply_url || '' %>" placeholder="https://yourcompany.com/careers/engineer" <%= pro ? '' : 'disabled' %>>
+        </label>
+        <label><span>Role description * <small class="muted">(min 30 characters)</small></span>
+          <textarea name="description" rows="5" maxlength="600" minlength="30" placeholder="What the person will do, the stack, and the level…" <%= pro ? '' : 'disabled' %>><%= old.description || '' %></textarea>
+        </label>
+        <button class="btn btn-primary" type="submit" <%= pro ? '' : 'disabled' %>>Publish opening</button>
+        <p class="fine-print">Up to 5 open positions per listing. Openings appear on your listing page and the /jobs board instantly.</p>
+      </form>
+    </div>
+
+    <div class="section-head" style="margin-top:2rem"><h3>Open &amp; closed positions</h3></div>
+    <% if (!jobs.length) { %>
+      <div class="panel" style="padding:32px 24px;text-align:center">
+        <p class="muted" style="margin:0">No positions posted yet<% if (pro) { %> — publish your first opening above<% } %>.</p>
+      </div>
+    <% } else { %>
+      <div class="jobs-grid" style="grid-template-columns:1fr">
+        <% jobs.forEach(function (j) { %>
+          <article class="job-card" style="<%= j.status !== 'open' ? 'opacity:.55' : '' %>">
+            <div class="job-head">
+              <div class="job-meta">
+                <h3 class="job-title"><%= j.title %></h3>
+                <div class="job-company" style="display:flex;gap:8px;flex-wrap:wrap">
+                  <span class="chip mut"><%= j.role_type %></span>
+                  <span class="chip mut"><%= j.location %></span>
+                  <span class="badge status-<%= j.status === 'open' ? 'open' : 'closed' %>"><%= j.status === 'open' ? 'Open' : 'Closed' %></span>
+                  <span class="muted" style="font-size:.78rem">posted <%= fmtDate(j.created_at) %></span>
+                </div>
+              </div>
+              <% if (j.featured && j.status === 'open') { %><span class="job-featured">FEATURED JOB</span><% } %>
+            </div>
+            <div style="display:flex;gap:8px;justify-content:flex-end">
+              <a class="btn btn-ghost btn-sm" href="<%= j.apply_url %>" target="_blank" rel="noopener nofollow">Preview apply link ↗</a>
+              <% if (j.status === 'open') { %>
+                <form method="post" action="/dashboard/listings/<%= l.id %>/jobs/<%= j.id %>/close" style="margin:0">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <button class="btn btn-ghost btn-sm" type="submit" style="color:var(--bad)">✕ Close position</button>
+                </form>
+              <% } %>
+            </div>
+          </article>
+        <% }); %>
+      </div>
+    <% } %>
+  </div>
+</section>
+
+<%- include('../partials/bottom') %>

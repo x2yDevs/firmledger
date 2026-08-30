@@ -1,0 +1,107 @@
+<%- include('../partials/top') %>
+
+<div class="container" style="padding-top:clamp(28px,4vw,44px)">
+  <nav class="crumb"><a href="/listing/<%= l.slug %>"><%= l.name %></a><span class="sep">/</span><span>Claim</span><span class="sep">/</span><span>Verify</span></nav>
+  <div class="sec-head" style="margin-top:18px">
+    <div class="l">
+      <p class="klabel">Ownership verification</p>
+      <h2>Verify “<%= l.name %>”</h2>
+      <p>Method: <strong><% if (c.method === 'dns') { %>DNS record<% } else if (c.method === 'meta') { %>HTML meta tag<% } else { %>Site badge<% } %></strong> · Domain: <code><%= c.domain %></code></p>
+    </div>
+    <span class="idx">VERIFY</span>
+  </div>
+  <div class="wiz">
+    <span class="ws"><span class="b">✓</span> Method</span> —
+    <span class="ws"><span class="b">✓</span> Domain</span> —
+    <span class="ws on"><span class="b">3</span> Token</span> —
+    <span class="ws"><span class="b">4</span> Verify</span>
+  </div>
+</div>
+
+<section class="section-tight">
+  <div class="container container-narrow">
+    <% if (result && !result.ok) { %>
+      <div class="alert alert-err"><strong>Not verified yet.</strong> <%= result.detail %></div>
+    <% } %>
+    <% if (c.status === 'verified') { %>
+      <div class="alert alert-ok">✓ Verified on <%= fmtDate(c.verified_at) %> — this record is now managed by your account.</div>
+    <% } %>
+
+    <div class="form-card">
+      <h3 class="form-section">Your verification token</h3>
+      <div class="token-box">
+        <code id="claimToken"><%= c.token %></code>
+        <button class="btn btn-ghost btn-sm" type="button" data-copy="#claimToken">Copy</button>
+      </div>
+
+      <% if (c.method === 'dns') { %>
+        <h3 class="form-section">Add this DNS record</h3>
+        <ol class="steps">
+          <li>Open your DNS manager (your registrar or DNS host — e.g. Cloudflare, GoDaddy, Namecheap).</li>
+          <li>Create a new <strong>TXT</strong> record:
+            <div class="kv"><span>Host / Name</span><code>@</code> <em>(or <code>_firmledger</code> — either works)</em></div>
+            <div class="kv"><span>Value</span><code>firmledger-verification=<%= c.token %></code> <button class="btn btn-ghost btn-xs" type="button" data-copy-val="firmledger-verification=<%= c.token %>">Copy</button></div>
+            <div class="kv"><span>TTL</span><code>300</code> (5 minutes)</div>
+          </li>
+          <li>Save, then return here and press <strong>Verify now</strong>. DNS can take a few minutes to propagate.</li>
+        </ol>
+      <% } else if (c.method === 'meta') { %>
+        <h3 class="form-section">Add this meta tag</h3>
+        <ol class="steps">
+          <li>Open your homepage's HTML (or your CMS's custom-head / header scripts setting).</li>
+          <li>Paste this inside <code>&lt;head&gt;</code>:</li>
+        </ol>
+        <pre class="code-block" id="metaSnippet">&lt;meta name="firmledger-verification" content="<%= c.token %>"&gt;</pre>
+        <button class="btn btn-ghost btn-sm" type="button" data-copy="#metaSnippet">Copy snippet</button>
+      <% } else { %>
+        <h3 class="form-section">Embed the FirmLedger badge</h3>
+        <ol class="steps">
+          <li>Paste one of these snippets anywhere on <code><%= c.domain %></code>'s homepage (footer works well). Pick the theme that suits your site — both carry your claim token. Clicking the badge takes visitors straight to your verified FirmLedger profile.</li>
+        </ol>
+        <div class="badge-previews">
+          <div class="badge-preview">
+            <span class="bp-t">Light theme</span>
+            <a href="/listing/<%= l.slug %>"><img src="/badge/<%= l.slug %>.svg?theme=light" alt="FirmLedger badge, light theme" width="200" height="56"></a>
+          </div>
+          <div class="badge-preview dark">
+            <span class="bp-t">Dark theme</span>
+            <a href="/listing/<%= l.slug %>"><img src="/badge/<%= l.slug %>.svg?theme=dark" alt="FirmLedger badge, dark theme" width="200" height="56"></a>
+          </div>
+        </div>
+        <pre class="code-block" id="badgeSnippet">&lt;a href="<%= profileUrl %>" rel="noopener" title="<%= l.name %> on FirmLedger" data-firmledger-claim="<%= c.token %>"&gt;
+  &lt;img src="<%= SITE %>/badge/<%= l.slug %>.svg?theme=light" alt="<%= l.name %> — verified on FirmLedger" width="200" height="56"&gt;
+&lt;/a&gt;</pre>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn btn-ghost btn-sm" type="button" data-copy="#badgeSnippet">Copy light snippet</button>
+          <button class="btn btn-ghost btn-sm" type="button" data-copy-val="&lt;a href=&quot;<%= profileUrl %>&quot; rel=&quot;noopener&quot; title=&quot;<%= l.name %> on FirmLedger&quot; data-firmledger-claim=&quot;<%= c.token %>&quot;&gt;&lt;img src=&quot;<%= SITE %>/badge/<%= l.slug %>.svg?theme=dark&quot; alt=&quot;<%= l.name %> — verified on FirmLedger&quot; width=&quot;200&quot; height=&quot;56&quot;&gt;&lt;/a&gt;">Copy dark snippet</button>
+        </div>
+      <% } %>
+
+      <div class="verify-status" style="margin-top:22px">
+        <h3 class="form-section" style="margin-bottom:6px">Verification status</h3>
+        <table class="facts">
+          <tr><th>Claim state</th><td><span class="pill pill-<%= c.status === 'verified' ? 'approved' : 'pending' %>"><%= c.status %></span></td></tr>
+          <tr><th>Method</th><td><% if (c.method === 'dns') { %>DNS record<% } else if (c.method === 'meta') { %>HTML meta tag<% } else { %>Site badge<% } %></td></tr>
+          <tr><th>Domain</th><td><code><%= c.domain %></code></td></tr>
+          <tr><th>Requested</th><td><%= fmtDate(c.created_at) %></td></tr>
+          <tr><th>Token</th><td><code style="font-size:11px"><%= c.token %></code></td></tr>
+          <tr><th>Last check</th><td><% if (result && !result.ok) { %><span style="color:var(--err)">Failed — <%= result.detail %></span><% } else if (c.status === 'verified') { %><span style="color:var(--ok)">Passed <%= fmtDate(c.verified_at) %></span><% } else { %>Not checked yet — press “Verify now”.<% } %></td></tr>
+        </table>
+      </div>
+
+      <div class="form-actions">
+        <form method="post" action="/claim/verify/<%= c.id %>" class="inline">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <button class="btn btn-primary btn-lg" type="submit">Verify now</button>
+        </form>
+        <form method="post" action="/claim/<%= c.id %>/cancel" class="inline">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <button class="btn btn-ghost" type="submit">Cancel claim</button>
+        </form>
+      </div>
+      <p class="fine-print">Verification is checked live against <%= c.domain %>. Once verified, the listing is assigned to your account and its confidence score increases.</p>
+    </div>
+  </div>
+</section>
+
+<%- include('../partials/bottom') %>

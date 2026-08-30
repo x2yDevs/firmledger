@@ -1,0 +1,77 @@
+<%- include('../partials/top') %>
+
+<section class="section-tight">
+  <div class="container" style="max-width:820px">
+    <div class="breadcrumbs"><a href="/dashboard">Dashboard</a><span aria-hidden="true">›</span><span>Notification settings</span></div>
+
+    <div class="section-head">
+      <h2>Notification settings</h2>
+      <p class="muted" style="margin:4px 0 0;font-size:14px">Choose what lands in your inbox. Security emails are always on; these are the ones you control.</p>
+    </div>
+
+    <% if (ok) { %><div class="alert alert-ok" style="margin-bottom:1rem"><%= ok %></div><% } %>
+    <% if (err) { %><div class="alert alert-err" style="margin-bottom:1rem"><%= err %></div><% } %>
+
+    <div class="form-card">
+      <h3 class="form-section">Email preferences</h3>
+
+      <div class="pref-row">
+        <div class="pref-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg>
+        </div>
+        <div class="pref-copy">
+          <div class="pref-title">
+            Weekly digest — new verified companies
+            <span class="pill <%= active ? 'pill-approved' : 'pill-pending' %>" style="margin-left:8px"><%= active ? 'On' : 'Off' %></span>
+          </div>
+          <p class="pref-desc">
+            One short email per week: freshly verified businesses and the newest additions to the ledger.
+            Sent to <b><%= user.email %></b>. One-click unsubscribe, anytime.
+            <% if (sub && active) { %>Subscribed <%= fmtDate(sub.created_at) %> (source: <%= sub.source %>).<% } %>
+          </p>
+        </div>
+        <form method="post" action="/dashboard/settings/digest" style="margin:0;flex-shrink:0">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <input type="hidden" name="digest" value="<%= active ? '0' : '1' %>">
+          <button class="btn <%= active ? 'btn-ghost' : 'btn-primary' %> btn-sm" type="submit"><%= active ? 'Turn off' : 'Turn on' %></button>
+        </form>
+      </div>
+
+      <div class="pref-row" style="border-top:1px solid var(--hair)">
+        <div class="pref-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.9 6.26 6.6.56-5 4.4 1.5 6.44L12 16.9l-6 2.76 1.5-6.44-5-4.4 6.6-.56L12 2z"/></svg>
+        </div>
+        <div class="pref-copy">
+          <div class="pref-title">Watchlist update alerts</div>
+          <p class="pref-desc">
+            Instant digest when a company on your <a href="/dashboard/watchlist">watchlist</a> changes its record — new tech, location, team size.
+            Add companies to the watchlist and these arrive automatically.
+          </p>
+        </div>
+        <a class="btn btn-ghost btn-sm" href="/dashboard/watchlist" style="flex-shrink:0">Manage watchlist</a>
+      </div>
+
+      <div class="pref-row" style="border-top:1px solid var(--hair);opacity:.72">
+        <div class="pref-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        </div>
+        <div class="pref-copy">
+          <div class="pref-title">Security &amp; account notices <span class="pill pill-approved" style="margin-left:8px">Always on</span></div>
+          <p class="pref-desc">Password changes, sign-in alerts and moderation decisions are always emailed — they protect your account and can't be switched off.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-card" style="margin-top:1.4rem">
+      <h3 class="form-section">More settings</h3>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <a class="btn btn-ghost btn-sm" href="/dashboard">Account profile</a>
+        <a class="btn btn-ghost btn-sm" href="/dashboard/security">Two-factor authentication</a>
+        <a class="btn btn-ghost btn-sm" href="/dashboard/upgrade">Plan &amp; upgrades</a>
+        <a class="btn btn-ghost btn-sm" href="/dashboard/support">Support</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<%- include('../partials/bottom') %>

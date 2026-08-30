@@ -1,0 +1,230 @@
+<%- include('partials/top') %>
+
+<section class="page-head">
+  <div class="container">
+    <p class="kicker">API reference</p>
+    <h1 class="h-display">FirmLedger <em style="font-style:normal;color:var(--accent2)">API v1</em></h1>
+    <p class="lede">REST access to the records you own — API-key authentication, predictable JSON, honest rate limits. <b>Available with FirmLedger Pro.</b></p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">
+      <a class="btn btn-primary" href="<%= user ? '/dashboard/api' : '/pricing' %>"><%= user ? 'Open your API console' : 'Get Pro &amp; an API key' %></a>
+      <a class="btn btn-ghost" href="<%= user ? '/dashboard/api/playground' : '/login?next=/dashboard/api/playground' %>">Open the playground</a>
+    </div>
+  </div>
+</section>
+
+<section class="section-tight">
+  <div class="container" style="display:grid;grid-template-columns:230px 1fr;gap:24px;align-items:start" class="docs-grid">
+    <div class="side-card docs-toc" style="margin:0">
+      <h3 style="margin:0 0 10px;font-size:.95rem">On this page</h3>
+      <p style="display:flex;flex-direction:column;gap:8px;margin:0;font-size:13.5px">
+        <a href="#auth">Authentication</a>
+        <a href="#limits">Rate limits &amp; protection</a>
+        <a href="#errors">Errors</a>
+        <a href="#ep-discovery">GET /api/v1</a>
+        <a href="#ep-me">GET /api/v1/me</a>
+        <a href="#ep-list">GET /api/v1/listings</a>
+        <a href="#ep-create">POST /api/v1/listings</a>
+        <a href="#ep-get">GET /api/v1/listings/:id</a>
+        <a href="#ep-update">PUT /api/v1/listings/:id</a>
+        <a href="#ep-delete">DELETE /api/v1/listings/:id</a>
+        <a href="#etiquette">Fair-use rules</a>
+      </p>
+    </div>
+
+    <div style="min-width:0">
+
+      <div class="form-card docs-anchor" id="auth">
+        <h3 class="form-section">Authentication</h3>
+        <p class="muted">Every request must carry an API key created by a <b>FirmLedger Pro</b> account at <a href="/dashboard/api" style="color:var(--accent)">/dashboard/api</a>. Send it in the <code>Authorization</code> header — never in URLs or bodies.</p>
+        <div class="code-block"><span class="code-label">headers</span>Authorization: Bearer fl_live_your_key_here
+<span class="c"># X-API-Key: fl_live_your_key_here   ← accepted alternative</span></div>
+        <table class="facts">
+          <tr><th>Key format</th><td><code>fl_live_</code> + 32 characters — shown once at creation, stored only as a SHA-256 hash</td></tr>
+          <tr><th>Keys per account</th><td>Up to <strong><%= limits.MAX_KEYS %></strong> active — use one per integration, revoke instantly from the console</td></tr>
+          <tr><th>Access requirement</th><td>An active <strong>FirmLedger Pro</strong> subscription — lapsed plans receive <code>403 pro_required</code> until renewal</td></tr>
+          <tr><th>Failures</th><td>Unknown key → <code>401 invalid_key</code> · revoked → <code>401 key_revoked</code> · malformed → <code>401 invalid_key</code> (counted by the brute-force guard)</td></tr>
+        </table>
+      </div>
+
+      <div class="form-card docs-anchor" id="limits">
+        <h3 class="form-section">Rate limits &amp; protection</h3>
+        <p class="muted">Limits are per rolling 60-second window, per key. They exist to stop bots from hammering the record store and to keep one loud integration from slowing everyone else down.</p>
+        <table class="facts">
+          <tr><th>Reads (GET)</th><td><strong><%= limits.READ_RPM %> / minute</strong> per key</td></tr>
+          <tr><th>Writes (POST · PUT · DELETE)</th><td><strong><%= limits.WRITE_RPM %> / minute</strong> per key, plus a platform-wide ceiling of <strong><%= limits.GLOBAL_WRITE_RPM %> writes / minute</strong></td></tr>
+          <tr><th>Concurrency</th><td>Up to <strong><%= limits.MAX_INFLIGHT %></strong> simultaneous requests per key — beyond that, <code>429 too_many_concurrent</code></td></tr>
+          <tr><th>Brute-force guard</th><td>After <strong><%= limits.BRUTE_MAX_FAILS %> invalid keys</strong> from one network address: <code>429 ip_locked</code> for <strong><%= limits.BRUTE_LOCK_MIN %> minutes</strong></td></tr>
+          <tr><th>Body limit</th><td>JSON request bodies up to <strong>100 KB</strong> — larger gets <code>413 payload_too_large</code></td></tr>
+          <tr><th>Write integrity</th><td>Every write is a single transaction (WAL journal, busy-timeout) — records can never half-save, and writes queue instead of stampeding</td></tr>
+        </table>
+        <p class="muted" style="margin-top:6px">Every response tells you where you stand — mind these headers before you retry:</p>
+        <div class="code-block"><span class="code-label">rate-limit headers on every response</span><span class="k">X-RateLimit-Limit</span>: <span class="s"><%= limits.READ_RPM %></span>        <span class="c"># your window size (reads shown here)</span>
+<span class="k">X-RateLimit-Remaining</span>: <span class="s">58</span>   <span class="c"># calls left in the current window</span>
+<span class="k">X-RateLimit-Reset</span>: <span class="s">23</span>      <span class="c"># seconds until the window rolls</span>
+<span class="k">X-RateLimit-Scope</span>: <span class="s">read</span>     <span class="c"># which budget this call consumed</span>
+<span class="k">X-Request-Id</span>: <span class="s">req_1ab2c3d4e5f6a7b8</span>  <span class="c"># quote it when writing to support</span></div>
+        <p class="fine-print">When you do hit a limit, the status is <code>429</code> and the <code>Retry-After</code> header (plus <code>error.retry_after_seconds</code>) tells you exactly when to try again. Honor it — clients that respect back-off are never permanently blocked.</p>
+      </div>
+
+      <div class="form-card docs-anchor" id="errors">
+        <h3 class="form-section">Errors</h3>
+        <p class="muted">Machine-readable envelope on every failure — same shape everywhere:</p>
+        <div class="code-block"><span class="code-label">error shape</span>{
+  <span class="k">"error"</span>: {
+    <span class="k">"code"</span>: <span class="s">"validation_failed"</span>,
+    <span class="k">"message"</span>: <span class="s">"Some fields need attention."</span>,
+    <span class="k">"details"</span>: { <span class="k">"errors"</span>: [ { <span class="k">"field"</span>: <span class="s">"tagline"</span>, <span class="k">"message"</span>: <span class="s">"Required, 20–90 characters…"</span> } ] }
+  }
+}</div>
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>HTTP</th><th><code>error.code</code></th><th>Meaning &amp; fix</th></tr></thead>
+            <tbody>
+              <tr><td>400</td><td><code>invalid_json</code> / <code>invalid_body</code></td><td>Body isn't valid JSON or isn't an object — check quotes, send <code>Content-Type: application/json</code>.</td></tr>
+              <tr><td>401</td><td><code>missing_key</code> · <code>invalid_key</code> · <code>key_revoked</code></td><td>No/unknown/dead key. Create a fresh one in the console; revoked keys never come back.</td></tr>
+              <tr><td>403</td><td><code>pro_required</code> · <code>account_suspended</code></td><td>Pro plan inactive (renew at /pricing) or the account is suspended.</td></tr>
+              <tr><td>404</td><td><code>not_found</code> · <code>unknown_endpoint</code></td><td>That listing id isn't on your account, or the path/method isn't in v1.</td></tr>
+              <tr><td>409</td><td><code>duplicate_listing</code></td><td>A record with that name or domain already exists — <code>details.existing</code> carries its id/slug.</td></tr>
+              <tr><td>413</td><td><code>payload_too_large</code></td><td>Body over 100 KB — trim the description or split the work.</td></tr>
+              <tr><td>422</td><td><code>validation_failed</code> · <code>unknown_fields</code> · <code>invalid_filter</code></td><td>Field-level problems — <code>details.errors[]</code> names each one; unknown keys are rejected instead of ignored.</td></tr>
+              <tr><td>429</td><td><code>rate_limited</code> · <code>too_many_concurrent</code> · <code>global_write_limit</code> · <code>ip_locked</code></td><td>Back off for <code>Retry-After</code> seconds, then resume.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="form-card docs-anchor" id="ep-discovery">
+        <h3 class="form-section"><span class="m-chip m-get">GET</span>&nbsp; <code>/api/v1</code> — discovery</h3>
+        <p class="muted">Returns the API name, version, endpoint list and live limits. Handy for health checks.</p>
+        <div class="code-block"><span class="code-label">curl</span>curl <%= SITE %>/api/v1 -H "Authorization: Bearer fl_live_your_key"</div>
+      </div>
+
+      <div class="form-card docs-anchor" id="ep-me">
+        <h3 class="form-section"><span class="m-chip m-get">GET</span>&nbsp; <code>/api/v1/me</code> — account &amp; usage</h3>
+        <p class="muted">Who this key belongs to, the plan state, live limits and usage counters across all your keys.</p>
+        <div class="code-block"><span class="code-label">curl</span>curl <%= SITE %>/api/v1/me -H "Authorization: Bearer fl_live_your_key"</div>
+        <div class="code-block"><span class="code-label">200 OK</span>{
+  <span class="k">"data"</span>: {
+    <span class="k">"id"</span>: <span class="s">7</span>,
+    <span class="k">"email"</span>: <span class="s">"dev@acme.com"</span>,
+    <span class="k">"name"</span>: <span class="s">"Acme Dev"</span>,
+    <span class="k">"plan"</span>: <span class="s">"pro"</span>,
+    <span class="k">"plan_expires_at"</span>: <span class="s">"2027-01-01"</span>,
+    <span class="k">"api"</span>: {
+      <span class="k">"key_prefix"</span>: <span class="s">"fl_live_a3Kd…"</span>,
+      <span class="k">"active_keys"</span>: <span class="s">1</span>, <span class="k">"max_keys"</span>: <span class="s"><%= limits.MAX_KEYS %></span>,
+      <span class="k">"limits"</span>: { <span class="k">"read_requests_per_minute"</span>: <span class="s"><%= limits.READ_RPM %></span>,
+        <span class="k">"write_requests_per_minute"</span>: <span class="s"><span><%= limits.WRITE_RPM %></span></span>,
+        <span class="k">"max_concurrent_per_key"</span>: <span class="s"><%= limits.MAX_INFLIGHT %></span> },
+      <span class="k">"usage"</span>: { <span class="k">"today_requests"</span>: <span class="s">41</span>, <span class="k">"today_writes"</span>: <span class="s">6</span>,
+        <span class="k">"total_requests"</span>: <span class="s">1290</span>, <span class="k">"total_writes"</span>: <span class="s">118</span> }
+    }
+  }
+}</div>
+      </div>
+
+      <div class="form-card docs-anchor" id="ep-list">
+        <h3 class="form-section"><span class="m-chip m-get">GET</span>&nbsp; <code>/api/v1/listings</code> — your records</h3>
+        <table class="facts">
+          <tr><th><code>page</code></th><td>Page number, default <code>1</code></td></tr>
+          <tr><th><code>per_page</code></th><td>Page size, default <code>20</code>, max <code>50</code></td></tr>
+          <tr><th><code>status</code></th><td>Optional: <code>pending</code>, <code>approved</code> or <code>rejected</code></td></tr>
+        </table>
+        <div class="code-block"><span class="code-label">curl</span>curl "<%= SITE %>/api/v1/listings?status=approved&amp;per_page=50" -H "Authorization: Bearer fl_live_your_key"</div>
+        <p class="fine-print">Newest first. <code>meta</code> echoes page, per_page, total and total_pages.</p>
+      </div>
+
+      <div class="form-card docs-anchor" id="ep-create">
+        <h3 class="form-section"><span class="m-chip m-post">POST</span>&nbsp; <code>/api/v1/listings</code> — create</h3>
+        <p class="muted">Creates a record <b>you own</b> with status <code>pending</code> — it goes live after the standard moderation pass, exactly like dashboard submissions. Send JSON with <code>Content-Type: application/json</code>.</p>
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Field</th><th>Type</th><th>Rule</th></tr></thead>
+            <tbody>
+              <tr><td><code>name</code> *</td><td>string</td><td>2–60 chars</td></tr>
+              <tr><td><code>tagline</code> *</td><td>string</td><td>20–90 chars — a proper one-liner</td></tr>
+              <tr><td><code>description</code> *</td><td>string</td><td>100–1200 chars</td></tr>
+              <tr><td><code>website</code> *</td><td>URL</td><td>Full URL — powers verification; one record per domain (409 on dupes)</td></tr>
+              <tr><td><code>country</code> *</td><td>string</td><td>e.g. "Kenya"</td></tr>
+              <tr><td><code>type</code></td><td>enum</td><td><%= limits.TYPES %></td></tr>
+              <tr><td><code>category</code></td><td>string</td><td>Existing site category — new names are auto-registered</td></tr>
+              <tr><td><code>founded</code></td><td>string</td><td><code>2021</code> or <code>2021-07</code></td></tr>
+              <tr><td><code>size</code></td><td>enum</td><td><%= limits.SIZES %></td></tr>
+              <tr><td><code>email</code> · <code>phone</code></td><td>string</td><td>Valid email / up to 40 chars</td></tr>
+              <tr><td><code>city</code> · <code>region</code> · <code>address</code></td><td>string</td><td>Length-capped free text</td></tr>
+              <tr><td><code>logo_url</code></td><td>URL</td><td>Direct image URL (logo storage is URL-based)</td></tr>
+              <tr><td><code>tags</code></td><td>array | string</td><td><code>["saas","fintech"]</code> or comma string — 160 chars total</td></tr>
+              <tr><td><code>socials</code></td><td>object</td><td>Keys from: <%= limits.SOCIALS %> — full URLs</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="code-block"><span class="code-label">curl</span>curl -X POST <%= SITE %>/api/v1/listings \
+  -H "Authorization: Bearer fl_live_your_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Acme Logistics Ltd",
+    "tagline": "Cold-chain freight for East African exporters end to end",
+    "description": "Acme Logistics Ltd runs refrigerated trucking and bonded warehousing between Mombasa, Nairobi and Kampala, giving exporters one audited cold chain from packhouse to airport.",
+    "website": "https://acme-logistics.example",
+    "country": "Kenya",
+    "type": "company",
+    "founded": "2019",
+    "tags": ["logistics", "cold-chain"]
+  }'</div>
+        <div class="code-block"><span class="code-label">201 Created</span><span class="c"># Location: /api/v1/listings/42</span>
+{
+  <span class="k">"data"</span>: { <span class="k">"id"</span>: <span class="s">42</span>, <span class="k">"slug"</span>: <span class="s">"acme-logistics-ltd"</span>, <span class="k">"status"</span>: <span class="s">"pending"</span>, … },
+  <span class="k">"meta"</span>: { <span class="k">"note"</span>: <span class="s">"Created with status \"pending\" — goes live after moderation…"</span> }
+}</div>
+      </div>
+
+      <div class="form-card docs-anchor" id="ep-get">
+        <h3 class="form-section"><span class="m-chip m-get">GET</span>&nbsp; <code>/api/v1/listings/:id</code> — fetch one</h3>
+        <p class="muted">Full serialized record — every field, tags as an array, socials as an object, plus the canonical <code>url</code>. Only records you own: others' ids return <code>404 not_found</code>.</p>
+        <div class="code-block"><span class="code-label">curl</span>curl <%= SITE %>/api/v1/listings/42 -H "Authorization: Bearer fl_live_your_key"</div>
+      </div>
+
+      <div class="form-card docs-anchor" id="ep-update">
+        <h3 class="form-section"><span class="m-chip m-put">PUT</span>&nbsp; <code>/api/v1/listings/:id</code> — update</h3>
+        <p class="muted">Send only the fields you want to change (any of the writable fields from POST). Unknown fields are rejected with <code>422 unknown_fields</code> so typos never silently drop. The response is the fully updated record.</p>
+        <div class="code-block"><span class="code-label">curl</span>curl -X PUT <%= SITE %>/api/v1/listings/42 \
+  -H "Authorization: Bearer fl_live_your_key" \
+  -H "Content-Type: application/json" \
+  -d '{ "tagline": "Cold-chain freight and bonded warehousing, Mombasa to Kampala", "city": "Mombasa" }'</div>
+      </div>
+
+      <div class="form-card docs-anchor" id="ep-delete">
+        <h3 class="form-section"><span class="m-chip m-delete">DELETE</span>&nbsp; <code>/api/v1/listings/:id</code> — remove</h3>
+        <p class="muted">Deletes the record and everything attached to it (events, jobs, watchlist stars, relationships) in one transaction. Returns <code>204 No Content</code>. Deleting is permanent — the same record can always be re-created with POST.</p>
+        <div class="code-block"><span class="code-label">curl</span>curl -X DELETE <%= SITE %>/api/v1/listings/42 -H "Authorization: Bearer fl_live_your_key"
+<span class="c"># → 204, empty body</span></div>
+      </div>
+
+      <div class="form-card docs-anchor" id="etiquette">
+        <h3 class="form-section">Fair-use rules</h3>
+        <p class="muted">The API is lenient by design and strict only where abuse starts. Integrations that follow these rules never see a limit:</p>
+        <table class="facts">
+          <tr><th>Retry with the clock</th><td>On <code>429</code>, wait <code>Retry-After</code> seconds — not a fixed blind loop</td></tr>
+          <tr><th>Serial writes</th><td>Fire writes one after another, not in bursts — the concurrency gate rejects pile-ups</td></tr>
+          <tr><th>Cache reads</th><td>Records change slowly; re-fetch on demand, not on a spin</td></tr>
+          <tr><th>Keep keys server-side</th><td>Never ship a key in browser/mobile code — proxy through your backend</td></tr>
+          <tr><th>Versioning</th><td>Breaking changes ship as <code>/api/v2</code> — v1 responses and field names stay stable</td></tr>
+        </table>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<section class="cta-band">
+  <div class="container" style="text-align:center">
+    <h2 class="h-display">Keys live where you do.</h2>
+    <p class="lede" style="margin:0 auto 2rem">Generate a key, then fire your first call from the playground — no curl required.</p>
+    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+      <a class="btn btn-light btn-lg" href="<%= user ? '/dashboard/api' : '/pricing' %>"><%= user ? 'Open the API console' : 'Go Pro — get API access' %></a>
+      <a class="btn btn-ghost btn-lg" href="/pricing" style="color:#fff;border-color:rgba(255,255,255,.4)">See pricing</a>
+    </div>
+  </div>
+</section>
+
+<%- include('partials/bottom') %>

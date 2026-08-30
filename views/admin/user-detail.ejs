@@ -1,0 +1,86 @@
+<%- include('../partials/top') %>
+<%- include('../partials/adminnav') %>
+
+<section class="section-tight">
+  <div class="container">
+    <div class="section-head">
+      <h2><%= u.name %> <% if (u.suspended) { %><span class="pill pill-rejected">suspended</span><% } %></h2>
+      <a class="btn btn-ghost btn-sm" href="/admin3119Musa/users">← All users</a>
+    </div>
+
+    <div class="acct-grid" style="margin-bottom:26px">
+      <div class="side-card">
+        <h3 style="margin:0 0 10px">Account</h3>
+        <table class="facts">
+          <tr><th>Name</th><td><%= u.name %></td></tr>
+          <tr><th>Email</th><td><%= u.email %></td></tr>
+          <tr><th>Registered</th><td><%= fmtDate(u.created_at) %></td></tr>
+          <tr><th>Live sessions</th><td><%= sessions %></td></tr>
+          <tr><th>State</th><td><%= u.suspended ? 'Suspended' : 'Active' %></td></tr>
+        </table>
+        <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
+          <% if (u.suspended) { %>
+          <form method="post" action="/admin3119Musa/users/<%= u.id %>/unsuspend" class="inline">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <button class="btn btn-primary btn-sm" type="submit">Unsuspend</button>
+          </form>
+          <% } else { %>
+          <form method="post" action="/admin3119Musa/users/<%= u.id %>/suspend" class="inline" onsubmit="return confirm('Suspend this user? Their sessions are revoked and sign-in is blocked. Their records stay live.');">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <button class="btn btn-danger btn-sm" type="submit">Suspend</button>
+          </form>
+          <% } %>
+          <a class="btn btn-ghost btn-sm" href="/admin3119Musa/email?to=<%= encodeURIComponent(u.email) %>">Email <%= u.name.split(' ')[0] %></a>
+          <form method="post" action="/admin3119Musa/users/<%= u.id %>/delete" class="inline" onsubmit="return confirm('Delete this account for good? Their listings stay on the ledger but become unclaimed.');">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <button class="btn btn-danger btn-sm" type="submit">Delete account</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-head"><h3>Their listings</h3><span class="muted"><%= listings.length %></span></div>
+    <% if (listings.length) { %>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Listing</th><th>Type</th><th>Status</th><th>Claimed</th><th>Conf.</th><th>Created</th><th class="ta-right">Edit</th></tr></thead>
+        <tbody>
+          <% listings.forEach(function (l) { %>
+          <tr>
+            <td><a href="/listing/<%= l.slug %>" target="_blank"><strong><%= l.name %></strong></a></td>
+            <td><%= l.type %></td>
+            <td><span class="pill pill-<%= l.status %>"><%= l.status %></span></td>
+            <td><%= l.claimed ? '✓' : '—' %></td>
+            <td><%= l.confidence %></td>
+            <td class="muted"><%= fmtDate(l.created_at) %></td>
+            <td class="ta-right"><a class="btn btn-ghost btn-xs" href="/admin3119Musa/listings/<%= l.id %>/edit">Edit</a></td>
+          </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+    <% } else { %><p class="muted">No listings tied to this account.</p><% } %>
+
+    <div class="section-head" style="margin-top:2rem"><h3>Their claims</h3><span class="muted"><%= claims.length %></span></div>
+    <% if (claims.length) { %>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Listing</th><th>Method</th><th>Domain</th><th>Status</th><th>Date</th></tr></thead>
+        <tbody>
+          <% claims.forEach(function (c) { %>
+          <tr>
+            <td><%= c.listing_name || '(listing deleted)' %></td>
+            <td><%= c.method %></td>
+            <td><code><%= c.domain %></code></td>
+            <td><span class="pill pill-<%= c.status === 'verified' ? 'approved' : c.status === 'pending' ? 'pending' : 'rejected' %>"><%= c.status %></span></td>
+            <td class="muted"><%= fmtDate(c.created_at) %></td>
+          </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+    <% } else { %><p class="muted">No claims filed.</p><% } %>
+  </div>
+</section>
+
+<%- include('../partials/bottom') %>

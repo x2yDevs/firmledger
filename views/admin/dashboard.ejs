@@ -1,0 +1,47 @@
+<%- include('../partials/top') %>
+<%- include('../partials/adminnav') %>
+
+<section class="section-tight">
+  <div class="container">
+    <div class="stat-cards">
+      <div class="stat-card"><span class="stat-num"><%= stats.pending %></span><span class="stat-label">Pending review</span><a href="/admin3119Musa/listings?status=pending">Review →</a></div>
+      <div class="stat-card"><span class="stat-num"><%= stats.approved %></span><span class="stat-label">Live listings</span><a href="/admin3119Musa/listings?status=approved">View →</a></div>
+      <div class="stat-card"><span class="stat-num"><%= stats.claimed %></span><span class="stat-label">Claimed &amp; verified</span></div>
+      <div class="stat-card"><span class="stat-num"><%= stats.users %></span><span class="stat-label">Registered users</span><a href="/admin3119Musa/users">View →</a></div>
+      <div class="stat-card"><span class="stat-num"><%= stats.pendingClaims %></span><span class="stat-label">Open claims</span><a href="/admin3119Musa/claims">Review →</a></div>
+
+      <div class="stat-card"><span class="stat-num"><%= stats.pendingRemovals %></span><span class="stat-label">Removal requests</span><a href="/admin3119Musa/removals">Resolve →</a></div>
+      <div class="stat-card"><span class="stat-num"><%= stats.suspended %></span><span class="stat-label">Suspended users</span><a href="/admin3119Musa/users">Manage →</a></div>
+      <div class="stat-card"><span class="stat-num"><%= stats.posts %></span><span class="stat-label">Blog posts</span><a href="/admin3119Musa/blog">Write →</a></div>
+    </div>
+
+    <div class="section-head" style="margin-top:2.5rem"><h2>Recent submissions</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Listing</th><th>Type</th><th>Status</th><th>Confidence</th><th>Submitted</th><th class="ta-right">Actions</th></tr></thead>
+        <tbody>
+          <% recent.forEach(function (l) { %>
+            <tr>
+              <td><strong><%= l.name %></strong></td>
+              <td><span class="pill pill-type"><%= l.type %></span></td>
+              <td><span class="pill pill-<%= l.status %>"><%= l.status %></span></td>
+              <td><span class="conf"><i style="width:<%= l.confidence %>%"></i></span> <span class="conf-num"><%= l.confidence %></span></td>
+              <td class="muted"><%= fmtDate(l.created_at) %></td>
+              <td class="ta-right actions-cell">
+                <a class="btn btn-ghost btn-xs" href="/admin3119Musa/listings/<%= l.id %>/edit">Edit</a>
+                <% if (l.status !== 'approved') { %>
+                  <form method="post" action="/admin3119Musa/listings/<%= l.id %>/approve" class="inline">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                    <button class="btn btn-primary btn-xs" type="submit">Approve</button>
+                  </form>
+                <% } %>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<%- include('../partials/bottom') %>

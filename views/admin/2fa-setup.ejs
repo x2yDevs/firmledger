@@ -1,0 +1,47 @@
+<%- include('../partials/top') %>
+
+<div class="container" style="padding-top:clamp(28px,4vw,44px)">
+  <p class="klabel" style="margin-bottom:8px">Admin console — first factor passed</p>
+  <h2 style="font:600 1.9rem/1.15 var(--fd);color:var(--ink);max-width:640px">Set up two-factor authentication</h2>
+  <p class="muted" style="max-width:640px;margin-top:10px;font-size:14px;line-height:1.7">
+    The FirmLedger console is protected by a second factor. Scan the QR code with an authenticator app
+    (Google Authenticator, 1Password, Authy, Aegis…), or type the manual key below. Then enter the
+    current 6-digit code to finish enrollment.
+  </p>
+</div>
+
+<section class="section-tight">
+  <div class="container container-narrow">
+    <% if (error) { %><div class="alert alert-err"><%= error %></div><% } %>
+
+    <div class="form-card qr-card">
+      <h3 class="form-section">1 · Scan with your authenticator</h3>
+      <% if (qr) { %>
+      <img class="qr-img" src="<%= qr %>" alt="QR code encoding your FirmLedger two-factor secret" width="240" height="240">
+      <% } else { %>
+      <p class="muted" style="font-size:13px">QR rendering unavailable on this server — use the manual key below.</p>
+      <% } %>
+
+      <h3 class="form-section">2 · Or enter the key manually</h3>
+      <div class="token-box">
+        <code id="totpKey" style="letter-spacing:1px;word-break:break-all"><%= secret %></code>
+        <button class="btn btn-ghost btn-sm" type="button" data-copy="#totpKey">Copy</button>
+      </div>
+      <p class="fine-print">Time-based, SHA-1, 30-second window, 6 digits. Keep this key as safe as the admin code.</p>
+
+      <h3 class="form-section">3 · Confirm the current code</h3>
+      <form method="post" action="/admin3119Musa/2fa-setup" class="form">
+        <input type="hidden" name="_csrf" value="<%= pendingCsrf %>">
+        <label><span>6-digit code from your app</span>
+          <input type="text" name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required autocomplete="one-time-code" autofocus placeholder="123456">
+        </label>
+        <div class="form-actions">
+          <button class="btn btn-primary btn-lg" type="submit">Activate two-factor</button>
+        </div>
+      </form>
+      <p class="fine-print">After activation, every sign-in requires the admin code <em>and</em> a current authenticator code.</p>
+    </div>
+  </div>
+</section>
+
+<%- include('../partials/bottom') %>

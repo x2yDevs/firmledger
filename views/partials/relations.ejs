@@ -1,0 +1,49 @@
+<%/* Shared relationship manager. Expects: relations, REL_TYPES, actionUrl, deleteUrl, csrfToken */%>
+<div class="form-card" id="relations">
+  <h3 class="form-section">Relationships — founders, investors, products &amp; more</h3>
+  <% if (relations && relations.length) { %>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Relationship</th><th>Entity</th><th>Note</th><th></th></tr></thead>
+        <tbody>
+          <% relations.forEach(function (r) { %>
+            <tr>
+              <td><span class="rel-badge rel-<%= r.rel %>"><%= r.rel %></span></td>
+              <td>
+                <% if (r.slug) { %><a href="/listing/<%= r.slug %>" target="_blank"><strong><%= r.name %></strong></a> <% if (r.claimed) { %><span class="tick">✓</span><% } %>
+                <% } else { %><strong><%= r.name %></strong> <small class="muted">(not in the ledger)</small><% } %>
+              </td>
+              <td><small class="muted"><%= r.note || '—' %></small></td>
+              <td class="ta-right">
+                <form method="post" action="<%= deleteUrl %>/<%= r.relId %>/delete" class="inline" onsubmit="return confirm('Remove this relationship?');">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <button class="btn btn-danger btn-xs" type="submit">Remove</button>
+                </form>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } else { %>
+    <p class="muted">No relationships recorded yet. These power the graph shown on the public profile.</p>
+  <% } %>
+  <form method="post" action="<%= actionUrl %>/relations" class="form rel-form">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <div class="rel-form-row">
+      <label class="rel-type"><span>Type</span>
+        <select name="rel_type" required>
+          <% REL_TYPES.forEach(function (t) { %><option value="<%= t.value %>"><%= t.label %></option><% }) %>
+        </select>
+      </label>
+      <label class="rel-target"><span>Company, product or person</span>
+        <input type="text" name="target" required maxlength="120" placeholder="e.g. Jenga Cloud or Wanjiku Mwangi" data-suggest="names" autocomplete="off">
+      </label>
+      <label class="rel-note"><span>Note <small class="muted">(optional)</small></span>
+        <input type="text" name="note" maxlength="200" placeholder="Seed round, 2023…">
+      </label>
+      <button class="btn btn-ghost rel-add" type="submit">+ Add</button>
+    </div>
+    <p class="fine-print">If the name matches an approved FirmLedger listing, the graph links the two profiles automatically.</p>
+  </form>
+</div>

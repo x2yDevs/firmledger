@@ -1,0 +1,131 @@
+<%- include('../partials/top') %>
+<%- include('../partials/adminnav') %>
+
+<section class="section-tight">
+  <div class="container container-narrow">
+    <div class="section-head">
+      <h2>Edit — <%= l.name %></h2>
+      <a class="btn btn-ghost btn-sm" href="/listing/<%= l.slug %>" target="_blank">View public profile ↗</a>
+    </div>
+
+    <form method="post" action="/admin3119Musa/listings/<%= l.id %>/edit" class="form form-card">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+
+      <h3 class="form-section">Moderation</h3>
+      <div class="grid-3">
+        <label><span>Status</span>
+          <select name="status">
+            <% ['pending', 'approved', 'rejected'].forEach(function (s) { %><option value="<%= s %>" <%= l.status === s ? 'selected' : '' %>><%= s %></option><% }) %>
+          </select>
+        </label>
+        <label><span>Confidence (0–97)</span>
+          <input type="number" name="confidence" min="0" max="97" value="<%= l.confidence %>">
+        </label>
+        <label><span>Last verified at</span>
+          <input type="text" name="last_verified_at" value="<%= l.last_verified_at || '' %>" placeholder="ISO date or blank">
+        </label>
+      </div>
+      <div class="check-row">
+        <label class="check"><input type="checkbox" name="featured" value="1" <%= l.featured ? 'checked' : '' %>><span>Featured</span></label>
+        <label class="check"><input type="checkbox" name="claimed" value="1" <%= l.claimed ? 'checked' : '' %>><span>Claimed (verified owner)</span></label>
+      </div>
+
+      <h3 class="form-section">Identity</h3>
+      <label><span>Name</span><input type="text" name="name" value="<%= l.name %>" required></label>
+      <label><span>Tagline</span><input type="text" name="tagline" value="<%= l.tagline %>"></label>
+      <label><span>Description</span><textarea name="description" rows="5"><%= l.description %></textarea></label>
+      <div class="grid-3">
+        <label><span>Type</span>
+          <select name="type"><% TYPES.forEach(function (t) { %><option value="<%= t.value %>" <%= l.type === t.value ? 'selected' : '' %>><%= t.label %></option><% }) %></select>
+        </label>
+        <label><span>Category (pick or create)</span>
+          <input type="text" name="category" list="adminCategoryList" maxlength="40" value="<%= l.category %>" autocomplete="off">
+          <datalist id="adminCategoryList"><% allCats.forEach(function (c) { %><option value="<%= c.name %>"><% }) %></datalist>
+        </label>
+        <label><span>Tags</span><input type="text" name="tags" value="<%= l.tags %>"></label>
+      </div>
+
+      <h3 class="form-section">Logo — uniform 256 × 256</h3>
+      <div class="logo-row">
+        <div class="logo-preview">
+          <% if (l.logo_url) { %><img src="<%= l.logo_url %>" alt=""><% } else { %><span class="logo-tile"><%= l.name.slice(0, 1) %></span><% } %>
+        </div>
+        <div class="logo-controls">
+          <label><span>Logo URL <small class="muted">direct link to a PNG, JPG, WebP or SVG</small></span>
+            <input type="text" name="logo_url" value="<%= (l.logo_url || '').startsWith('/uploads') ? '' : (l.logo_url || '') %>" placeholder="https://…/logo.png"></label>
+          <% if (l.logo_url) { %><label class="check"><input type="checkbox" name="remove_logo" value="1"><span>Remove current</span></label><% } %>
+        </div>
+      </div>
+
+      <h3 class="form-section">Contact &amp; facts</h3>
+      <div class="grid-3">
+        <label><span>Website</span><input type="text" name="website" value="<%= l.website %>"></label>
+        <label><span>Founded</span><input type="text" name="founded" value="<%= l.founded %>"></label>
+        <label><span>Size</span><input type="text" name="size" value="<%= l.size %>"></label>
+      </div>
+      <div class="grid-3">
+        <label><span>Country</span><input type="text" name="country" value="<%= l.country %>"></label>
+        <label><span>City</span><input type="text" name="city" value="<%= l.city %>"></label>
+        <label><span>Region / County</span><input type="text" name="region" value="<%= l.region %>"></label>
+      </div>
+      <div class="grid-3">
+        <label><span>Email</span><input type="text" name="email" value="<%= l.email %>"></label>
+        <label><span>Phone</span><input type="text" name="phone" value="<%= l.phone %>"></label>
+        <label><span>Address</span><input type="text" name="address" value="<%= l.address %>"></label>
+      </div>
+
+      <h3 class="form-section">Sources (one URL per line)</h3>
+      <label><span class="sr-only">Sources</span>
+        <textarea name="sources" rows="4" placeholder="https://registry.example/…&#10;https://wikipedia.org/wiki/…"><%= sources %></textarea>
+      </label>
+
+      <div class="form-actions">
+        <button class="btn btn-primary btn-lg" type="submit">Save changes</button>
+        <a class="btn btn-ghost" href="/admin3119Musa/listings">Back</a>
+      </div>
+    </form>
+
+    <%- include('../partials/relations', { relations, REL_TYPES, actionUrl: '/admin3119Musa/listings/' + l.id, deleteUrl: '/admin3119Musa/relations', csrfToken }) %>
+
+    <div class="form-card" id="timeline">
+      <h3 class="form-section">Timeline events</h3>
+      <% if (events.length) { %>
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Date</th><th>Kind</th><th>Event</th><th></th></tr></thead>
+            <tbody>
+              <% events.forEach(function (e) { %>
+                <tr>
+                  <td><code><%= e.event_date %></code></td>
+                  <td><span class="pill pill-type"><%= e.kind %></span></td>
+                  <td><%= e.title %></td>
+                  <td class="ta-right">
+                    <form method="post" action="/admin3119Musa/events/<%= e.id %>/delete" class="inline">
+                      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                      <button class="btn btn-danger btn-xs" type="submit">Remove</button>
+                    </form>
+                  </td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+      <% } else { %><p class="muted">No events yet.</p><% } %>
+      <form method="post" action="/admin3119Musa/listings/<%= l.id %>/events" class="form event-form">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <div class="grid-3">
+          <label><span>Date</span><input type="text" name="event_date" placeholder="2024-06" required></label>
+          <label><span>Kind</span>
+            <select name="kind">
+              <% ['founded', 'funding', 'product', 'leadership', 'acquisition', 'milestone'].forEach(function (k) { %><option value="<%= k %>"><%= k %></option><% }) %>
+            </select>
+          </label>
+          <label><span>Event</span><input type="text" name="title" placeholder="Seed round closed" required></label>
+        </div>
+        <button class="btn btn-ghost" type="submit">+ Add event</button>
+      </form>
+    </div>
+  </div>
+</section>
+
+<%- include('../partials/bottom') %>

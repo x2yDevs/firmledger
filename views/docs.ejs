@@ -1,0 +1,34 @@
+<%- include('partials/top') %>
+
+<div class="container page-pad">
+  <div class="sec-head rv">
+    <div class="l">
+      <p class="klabel">Documentation</p>
+      <h2>How FirmLedger works</h2>
+      <p>The complete, honest guide to the ledger: submissions, enrichment, verification, scoring, relationships, technology detection, indexing and moderation.</p>
+    </div>
+    <span class="idx">DOCS</span>
+  </div>
+
+  <div class="docs-layout">
+    <nav class="docs-nav rv" aria-label="Documentation sections">
+      <p class="docs-nav-t">Contents</p>
+      <% sections.forEach(function(s){ %>
+      <a href="#<%= s.id %>"><%= s.title %></a>
+      <% }); %>
+    </nav>
+
+    <div class="docs-body">
+      <% sections.forEach(function(s, i){ %>
+      <section id="<%= s.id %>" class="doc-sec rv">
+        <span class="doc-idx"><%= String(i+1).padStart(2, '0') %></span>
+        <h3><%= s.title %></h3>
+        <p class="doc-lede"><%= s.lede %></p>
+        <% s.body.forEach(function(p){ %><p><%- p %></p><% }); %>
+      </section>
+      <% }); %>
+    </div>
+  </div>
+</div>
+
+<%- include('partials/bottom') %>

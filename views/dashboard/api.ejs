@@ -1,0 +1,114 @@
+<%- include('../partials/top') %>
+
+<section class="section-tight">
+  <div class="container">
+    <div class="breadcrumbs"><a href="/dashboard">Dashboard</a><span aria-hidden="true">›</span><span>Developer API</span></div>
+    <div class="section-head" style="align-items:flex-end">
+      <div>
+        <h2>Developer API
+          <% if (pro) { %><span class="pill pill-pro" style="vertical-align:middle;margin-left:8px">PRO</span><% } %>
+        </h2>
+        <span class="muted">REST access to your FirmLedger records — API-key authentication, rate limits and a live playground. <b>Included with FirmLedger Pro.</b></span>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <a class="btn btn-ghost btn-sm" href="/api/docs" target="_blank" rel="noopener">API documentation ↗</a>
+        <a class="btn btn-primary btn-sm" href="/dashboard/api/playground">Open the playground</a>
+      </div>
+    </div>
+
+    <% if (ok) { %><div class="alert alert-ok"><%= ok %></div><% } %>
+    <% if (err) { %><div class="alert alert-err"><%= err %></div><% } %>
+
+    <% if (typeof reveal !== 'undefined' && reveal) { %>
+    <div class="alert alert-ok" style="margin-bottom:10px"><strong>Store this key somewhere safe now</strong> — for security it is never shown again. Revoke and regenerate any time.</div>
+    <div class="token-box" style="margin-top:0">
+      <code id="newApiKey"><%= reveal %></code>
+      <button class="btn btn-primary btn-sm" type="button" data-copy="#newApiKey">Copy key</button>
+    </div>
+    <% } %>
+
+    <% if (!pro) { %>
+    <div class="form-card" style="text-align:center;padding:clamp(28px,4vw,44px)">
+      <h3 class="form-section" style="text-align:center;border-bottom:0;padding-bottom:0">API access is a FirmLedger Pro feature</h3>
+      <p class="muted" style="max-width:560px;margin:6px auto 18px">Pro members generate API keys here and get full REST access — create, read, update and delete the listings they own — with documentation, sensible rate limits and a live playground.</p>
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+        <a class="btn btn-accent" href="/dashboard/upgrade">Upgrade to Pro</a>
+        <a class="btn btn-ghost" href="/pricing">See pricing</a>
+        <a class="btn btn-ghost" href="/api/docs" target="_blank" rel="noopener">Read the API docs ↗</a>
+      </div>
+    </div>
+    <% } else { %>
+
+    <div class="form-card">
+      <h3 class="form-section">API keys</h3>
+      <p class="muted">Keys authenticate every request as an <code>Authorization: Bearer</code> header. You can hold up to <b><%= maxKeys %></b> active keys — use separate keys per integration so one leak never touches the rest. Only hashes are stored: a raw key is shown once, at creation.</p>
+      <form method="post" action="/dashboard/api/keys" class="form" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:6px">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <label class="fl" style="flex:1;min-width:240px;margin:0"><span>Label for the new key</span><input class="input" name="label" maxlength="60" placeholder="e.g. CRM sync · production" required></label>
+        <button class="btn btn-primary" type="submit">Generate API key</button>
+      </form>
+      <p class="form-note" style="margin-top:0">The full key appears once on the next screen — copy it immediately.</p>
+      <% if (keys.length) { %>
+      <div class="table-wrap" style="margin-top:14px">
+        <table class="table">
+          <thead><tr><th>Label</th><th>Key</th><th>Created</th><th>Last used</th><th>Requests</th><th>State</th><th class="ta-right">Actions</th></tr></thead>
+          <tbody>
+            <% keys.forEach(function (k) { %>
+            <tr>
+              <td><strong><%= k.label || 'Untitled key' %></strong></td>
+              <td><span class="mono" style="font-size:12.5px"><%= k.prefix %></span></td>
+              <td class="muted" style="font-size:12.5px"><%= (k.created_at || '').slice(0, 10) %></td>
+              <td class="muted" style="font-size:12.5px"><%= k.last_used_at ? k.last_used_at.slice(0, 16) : 'never' %></td>
+              <td><span class="mono" style="font-size:12.5px"><%= k.total_requests %></span> <span class="muted" style="font-size:11.5px">(<%= k.write_requests %> writes)</span></td>
+              <td><% if (k.revoked_at) { %><span class="pill pill-rejected">revoked</span><% } else { %><span class="pill pill-approved">active</span><% } %></td>
+              <td class="ta-right">
+                <% if (!k.revoked_at) { %>
+                <form method="post" action="/dashboard/api/keys/<%= k.id %>/revoke" class="inline" onsubmit="return confirm('Revoke this key immediately? Every integration using it starts receiving 401 responses.');">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <button class="btn btn-danger btn-xs" type="submit">Revoke</button>
+                </form>
+                <% } %>
+              </td>
+            </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+      <% } else { %>
+      <p class="muted" style="margin-top:12px">No keys yet — generate your first one above.</p>
+      <% } %>
+    </div>
+
+    <div class="form-card">
+      <h3 class="form-section">Usage — across all your keys</h3>
+      <div class="stats-strip" style="margin-top:6px">
+        <div class="stat-cell"><div class="stat-n"><%= usage.today_requests %></div><div class="stat-l">Requests today</div></div>
+        <div class="stat-cell"><div class="stat-n"><%= usage.today_writes %></div><div class="stat-l">Writes today</div></div>
+        <div class="stat-cell"><div class="stat-n"><%= usage.total_requests %></div><div class="stat-l">All-time requests</div></div>
+        <div class="stat-cell"><div class="stat-n"><%= usage.total_writes %></div><div class="stat-l">All-time writes</div></div>
+      </div>
+      <p class="form-note">Counters update on every authenticated call. The <a href="/dashboard/api/playground" style="color:var(--accent);font-weight:600">playground</a> runs against your own data with the same per-minute rules.</p>
+    </div>
+
+    <div class="form-card">
+      <h3 class="form-section">Limits &amp; protection</h3>
+      <p class="muted">These limits keep the API fast for everyone and stop abuse (key guessing, floods, write stampedes) before it reaches the record store.</p>
+      <table class="facts">
+        <tr><th>Read rate limit</th><td><strong><%= limits.READ_RPM %> requests / 60s</strong> per key — every response carries <code>X-RateLimit-*</code> headers</td></tr>
+        <tr><th>Write rate limit</th><td><strong><%= limits.WRITE_RPM %> requests / 60s</strong> per key, plus a platform-wide write ceiling of <%= limits.GLOBAL_WRITE_RPM %>/60s</td></tr>
+        <tr><th>Concurrency</th><td>Max <strong><%= limits.MAX_INFLIGHT %></strong> requests in flight per key — extras receive <code>429 too_many_concurrent</code></td></tr>
+        <tr><th>Brute-force guard</th><td><strong><%= limits.BRUTE_MAX_FAILS %> bad keys</strong> from one network locks that address for <strong><%= limits.BRUTE_LOCK_MIN %> minutes</strong> (<code>429 ip_locked</code> + Retry-After)</td></tr>
+        <tr><th>Body limit</th><td>JSON bodies up to <strong>100 KB</strong> — larger payloads get <code>413</code></td></tr>
+        <tr><th>Write safety</th><td>All writes run in single transactions on a WAL database with a busy-timer — no partial records, no lock pile-ups</td></tr>
+        <tr><th>Key format</th><td><code>fl_live_</code> + 32 characters, shown once, stored hashed</td></tr>
+      </table>
+      <div class="form-actions" style="margin-top:16px">
+        <a class="btn btn-primary btn-sm" href="/dashboard/api/playground">Try the playground</a>
+        <a class="btn btn-ghost btn-sm" href="/api/docs" target="_blank" rel="noopener">Full API documentation ↗</a>
+      </div>
+    </div>
+    <% } %>
+  </div>
+</section>
+
+<%- include('../partials/bottom') %>

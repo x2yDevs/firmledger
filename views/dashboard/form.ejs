@@ -1,0 +1,180 @@
+<%- include('../partials/top') %>
+
+<section class="page-head">
+  <div class="container">
+    <h1><%= editing ? 'Edit listing' : 'Submit a listing' %></h1>
+    <p class="muted"><%= editing ? 'Changes to a rejected listing automatically resubmit it for review.' : 'Paste your website URL and we\'ll pre-fill the record from its public metadata. Complete profiles publish faster.' %></p>
+  </div>
+</section>
+
+<section class="section-tight">
+  <div class="container container-narrow">
+    <% if (errors.length) { %>
+      <div class="alert alert-err"><strong>Please fix the following:</strong><% errors.forEach(function (e) { %><div>· <%= e %></div><% }) %></div>
+    <% } %>
+
+    <% if (typeof dupClaim !== 'undefined' && dupClaim) { %>
+      <div class="dup-claim" role="note">
+        <div class="dc-t">
+          <b>“<%= dupClaim.name %>” already exists on the ledger</b>
+          <span>One business, one canonical record. If this is your business, claim the existing record — verification takes minutes via DNS, meta tag or badge.</span>
+        </div>
+        <div class="dc-a">
+          <a class="btn btn-ghost" href="/listing/<%= dupClaim.slug %>" target="_blank" rel="noopener">View record</a>
+          <a class="btn btn-accent" href="/claim/<%= dupClaim.slug %>">Claim it now</a>
+        </div>
+      </div>
+    <% } %>
+
+    <form method="post" action="<%= action %>" class="form form-card" id="listingForm">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+
+      <h3 class="form-section">Start from Wikipedia — real data only</h3>
+      <div class="fetch-row">
+        <label class="fetch-input"><span>Business name or website *</span>
+          <input type="text" name="website" id="websiteInput" required value="<%= l.website || '' %>" placeholder="e.g. Safaricom or safaricom.co.ke">
+        </label>
+        <button type="button" class="btn btn-ghost fetch-btn" id="fetchBtn">⌁ Fetch from Wikipedia</button>
+      </div>
+      <input type="hidden" name="enrich_source" id="enrichSource" value="">
+      <p class="fetch-status muted" id="fetchStatus">We pull the business's real Wikipedia article and Wikidata record — description, official website, logo, founding year, HQ and social profiles — and fill empty fields only. The article is recorded as the record's source.</p>
+
+      <h3 class="form-section">Identity</h3>
+      <label><span>Listing name * <small class="count" data-count-for="name">0/<%= LIMITS.name %></small></span>
+        <input type="text" name="name" required maxlength="<%= LIMITS.name %>" value="<%= l.name || '' %>" placeholder="e.g. PesaBridge" data-count>
+      </label>
+      <div class="grid-2">
+        <label><span>Entity type</span>
+          <select name="type">
+            <% TYPES.forEach(function (t) { %><option value="<%= t.value %>" <%= l.type === t.value ? 'selected' : '' %>><%= t.label %></option><% }) %>
+          </select>
+        </label>
+        <label><span>Category — pick or create</span>
+          <input type="text" name="category" list="categoryList" maxlength="40" value="<%= l.category || '' %>" placeholder="Start typing…" autocomplete="off">
+          <datalist id="categoryList">
+            <% allCats.forEach(function (c) { %><option value="<%= c.name %>"><% }) %>
+          </datalist>
+        </label>
+      </div>
+      <p class="fine-print" style="margin-top:-.4rem">New categories are de-duplicated automatically — “Fintech” and “ fintech ” can never become two categories.</p>
+      <label><span>Tagline * <small class="count" data-count-for="tagline">0/<%= LIMITS.tagline[1] %></small></span>
+        <input type="text" name="tagline" required minlength="<%= LIMITS.tagline[0] %>" maxlength="<%= LIMITS.tagline[1] %>" value="<%= l.tagline || '' %>" placeholder="What it does, in one sentence (<%= LIMITS.tagline[0] %>–<%= LIMITS.tagline[1] %> chars)" data-count>
+      </label>
+      <label><span>Description * <small class="count" data-count-for="description">0/<%= LIMITS.description[1] %></small></span>
+        <textarea name="description" id="descriptionInput" rows="6" required minlength="<%= LIMITS.description[0] %>" maxlength="<%= LIMITS.description[1] %>" placeholder="What the business does, who it serves, what makes it notable (<%= LIMITS.description[0] %>–<%= LIMITS.description[1] %> characters)…" data-count><%= l.description || '' %></textarea>
+      </label>
+      <label><span>Tags</span>
+        <input type="text" name="tags" maxlength="160" value="<%= l.tags || '' %>" placeholder="payments, api, logistics (comma-separated)">
+      </label>
+
+      <h3 class="form-section">Logo — uniform 256 × 256</h3>
+      <div class="logo-row">
+        <div class="logo-preview" id="logoPreviewWrap">
+          <% if (l.logo_url) { %><img src="<%= l.logo_url %>" alt="" id="logoPreview"><% } else { %><span class="logo-tile" id="logoPlaceholder"><%= (l.name || 'F').slice(0, 1) %></span><img src="" alt="" id="logoPreview" hidden><% } %>
+        </div>
+        <div class="logo-controls">
+          <label><span>Logo URL <small class="muted">direct link to a PNG, JPG, WebP or SVG — rendered 256×256</small></span>
+            <input type="text" name="logo_url" id="logoUrl" value="<%= (l.logo_url || '').startsWith('/uploads') ? '' : (l.logo_url || '') %>" placeholder="https://…/logo.png">
+          </label>
+          <p class="form-note" style="margin-top:6px">Paste the logo's web address — we also auto-detect the official logo from the website's own metadata when you use the auto-fill above.</p>
+          <% if (l.logo_url) { %><label class="check"><input type="checkbox" name="remove_logo" value="1"><span>Remove current logo</span></label><% } %>
+        </div>
+      </div>
+
+      <h3 class="form-section">Social presence</h3>
+      <div class="grid-2">
+        <label><span class="social-label"><span class="social-ico"><%- ICONS.linkedin %></span> LinkedIn</span><input type="text" name="social_linkedin" id="social_linkedin" value="<%= l.social_linkedin || '' %>" placeholder="https://linkedin.com/company/…"></label>
+        <label><span class="social-label"><span class="social-ico"><%- ICONS.x %></span> X (Twitter)</span><input type="text" name="social_x" id="social_x" value="<%= l.social_x || '' %>" placeholder="https://x.com/…"></label>
+      </div>
+      <div class="grid-3">
+        <label><span class="social-label"><span class="social-ico"><%- ICONS.facebook %></span> Facebook</span><input type="text" name="social_facebook" id="social_facebook" value="<%= l.social_facebook || '' %>"></label>
+        <label><span class="social-label"><span class="social-ico"><%- ICONS.instagram %></span> Instagram</span><input type="text" name="social_instagram" id="social_instagram" value="<%= l.social_instagram || '' %>"></label>
+        <label><span class="social-label"><span class="social-ico"><%- ICONS.youtube %></span> YouTube</span><input type="text" name="social_youtube" id="social_youtube" value="<%= l.social_youtube || '' %>"></label>
+      </div>
+
+      <h3 class="form-section">Facts &amp; location</h3>
+      <div class="grid-2">
+        <label><span>Founded</span><input type="text" name="founded" maxlength="7" value="<%= l.founded || '' %>" placeholder="2021"></label>
+        <label><span>Team size</span>
+          <select name="size">
+            <option value="">—</option>
+            <% SIZES.forEach(function (s) { %><option value="<%= s %>" <%= l.size === s ? 'selected' : '' %>><%= s %></option><% }) %>
+          </select>
+        </label>
+      </div>
+      <div class="grid-2">
+        <label><span>Country *</span>
+          <input type="text" name="country" list="countryList" required maxlength="60" value="<%= l.country || '' %>" placeholder="Kenya" autocomplete="off">
+          <datalist id="countryList">
+            <% COUNTRIES.forEach(function (c) { %><option value="<%= c %>"><% }) %>
+          </datalist>
+        </label>
+        <label><span>City</span><input type="text" name="city" maxlength="80" value="<%= l.city || '' %>" placeholder="Nyeri"></label>
+      </div>
+      <div class="grid-2">
+        <label><span>County / State / Region</span><input type="text" name="region" maxlength="80" value="<%= l.region || '' %>" placeholder="Nyeri County"></label>
+        <label><span>Address</span><input type="text" name="address" maxlength="160" value="<%= l.address || '' %>" placeholder="Street / building (optional)"></label>
+      </div>
+      <div class="grid-2">
+        <label><span>Public email</span><input type="email" name="email" id="emailInput" value="<%= l.email || '' %>" placeholder="hello@…"></label>
+        <label><span>Public phone</span><input type="text" name="phone" maxlength="40" value="<%= l.phone || '' %>" placeholder="+254 …"></label>
+      </div>
+      <div class="plan-locked" style="border-style:solid">
+        <p class="muted" style="margin:0;font-size:12.5px">Everything on this form is free to submit. <b>FirmLedger Pro</b> adds the perks on top: the blue verified tick on your company name, Featured placement on the homepage, and the premium company badge — for listings you own.
+          <% if (editing) { %><a href="/dashboard/upgrade">See plans →</a><% } else { %><a href="/pricing" target="_blank" rel="noopener">See plans →</a><% } %>
+        </p>
+      </div>
+
+      <div class="form-actions">
+        <button class="btn btn-primary btn-lg" type="submit"><%= editing ? 'Save changes' : 'Submit for review' %></button>
+        <a class="btn btn-ghost" href="/dashboard">Cancel</a>
+      </div>
+      <p class="fine-print">Submissions go live after moderation, then are automatically pushed to search engines for indexing.</p>
+    </form>
+
+    <% if (editing) { %>
+      <%- include('../partials/relations', { relations, REL_TYPES, actionUrl: '/dashboard/listings/' + l.id, deleteUrl: '/dashboard/relations', csrfToken }) %>
+
+      <div class="form-card" id="timeline">
+        <h3 class="form-section">Timeline events</h3>
+        <% if (events && events.length) { %>
+          <div class="table-wrap">
+            <table class="table">
+              <thead><tr><th>Date</th><th>Kind</th><th>Event</th><th></th></tr></thead>
+              <tbody>
+                <% events.forEach(function (e) { %>
+                  <tr>
+                    <td><code><%= e.event_date %></code></td>
+                    <td><span class="pill pill-type"><%= e.kind %></span></td>
+                    <td><%= e.title %></td>
+                    <td class="ta-right">
+                      <form method="post" action="/dashboard/events/<%= e.id %>/delete" class="inline">
+                        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                        <button class="btn btn-danger btn-xs" type="submit">Remove</button>
+                      </form>
+                    </td>
+                  </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
+        <% } else { %><p class="muted">Founding date, funding rounds, launches and leadership changes — they render as a timeline on the public profile.</p><% } %>
+        <form method="post" action="/dashboard/listings/<%= l.id %>/events" class="form event-form">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <div class="grid-3">
+            <label><span>Date</span><input type="text" name="event_date" placeholder="2024-06" maxlength="7" required></label>
+            <label><span>Kind</span>
+              <select name="kind">
+                <% ['founded', 'funding', 'product', 'leadership', 'acquisition', 'milestone'].forEach(function (k) { %><option value="<%= k %>"><%= k %></option><% }) %>
+              </select>
+            </label>
+            <label><span>Event</span><input type="text" name="title" placeholder="Seed round closed" maxlength="200" required></label>
+          </div>
+          <button class="btn btn-ghost" type="submit">+ Add event</button>
+        </form>
+      </div>
+    <% } %>
+  </div>
+</section>
+
+<%- include('../partials/bottom') %>

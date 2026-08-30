@@ -1,0 +1,65 @@
+<%- include('partials/top') %>
+<div class="container">
+  <nav class="crumb rv" aria-label="Breadcrumb">
+    <a href="/">Home</a><span class="sep">/</span><a href="/directory">Directory</a><span class="sep">/</span><a href="/directory/c/<%= cat.slug %>"><%= cat.name %></a><% if (placeName) { %><span class="sep">/</span><span><%= placeName %></span><% } %>
+  </nav>
+  <div class="sec-head rv" style="--d:60ms;margin-top:18px">
+    <div class="l">
+      <p class="klabel">Category index</p>
+      <h2><%= cat.name %><%= placeName ? ` in ${placeName}` : '' %></h2>
+      <p><%= total %> verified <%= cat.name.toLowerCase() %> record<%= total === 1 ? '' : 's' %><%= placeName ? ` based in ${placeName}` : '' %> — canonical, source-backed profiles with confidence scoring.</p>
+    </div>
+    <span class="idx"><%= String(total).padStart(2, '0') %> / RECORDS</span>
+  </div>
+
+  <% if (siblings.length) { %>
+  <div class="loc-chips rv" style="--d:100ms">
+    <a class="tag" href="/directory/c/<%= cat.slug %>" style="<%= !placeName ? 'border-color:var(--accent);color:var(--accent2)' : '' %>">All locations</a>
+    <% siblings.forEach(function(s){ %>
+    <a class="tag" href="/directory/c/<%= cat.slug %>-in-<%= s.slug %>"><%= cat.name %> in <%= s.name %></a>
+    <% }); %>
+  </div>
+  <% } %>
+</div>
+
+<section class="section-tight" style="padding-top:26px">
+  <div class="container">
+    <% if (listings.length) { %>
+    <div class="list-grid">
+      <% listings.forEach(function(l){ %>
+      <a class="l-card" href="/listing/<%= l.slug %>">
+        <div class="l-top">
+          <% if (l.logo_url) { %><img class="avatar" src="<%= l.logo_url %>" alt="" loading="lazy"><% } else { %><span class="avatar"><%= initials(l.name) %></span><% } %>
+          <div>
+            <div class="l-name"><%= l.name %><% if (perksActive(l)) { %><span class="ptick ptick-sm" title="FirmLedger Pro — enhanced verified profile"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 2.4 3.3-.5 1 3.3L22 9l-1.7 3 1.7 3-3.3 1.8-1 3.3-3.3-.5L12 22l-2.4-2.4-3.3.5-1-3.3L2 15l1.7-3L2 9l3.3-1.8 1-3.3 3.3.5L12 2z" fill="#1D4ED8"/><path d="M10.6 15.4l-3-3 1.5-1.5 1.5 1.5 4.3-4.3 1.5 1.5-5.8 5.8z" fill="#fff"/></svg></span><% } %></div>
+            <div class="l-meta"><%= typeLabel(l.type) %> · <%= listingLoc(l) %></div>
+          </div>
+        </div>
+        <p class="l-desc"><%= l.tagline || l.description %></p>
+        <div class="l-foot">
+          <% if (l.claimed) { %><span class="vbadge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Verified</span><% } %>
+          <span class="tag"><%= typeLabel(l.type) %></span>
+          <%- dial(l.confidence) %>
+        </div>
+      </a>
+      <% }); %>
+    </div>
+
+    <% if (pages > 1) { %>
+    <nav class="pagination" aria-label="Pagination">
+      <% if (page > 1) { %><a class="btn btn-ghost btn-sm" href="<%= path %>?page=<%= page - 1 %>">← Previous</a><% } %>
+      <span class="results-line" style="margin:0">Page <%= page %> of <%= pages %></span>
+      <% if (page < pages) { %><a class="btn btn-ghost btn-sm" href="<%= path %>?page=<%= page + 1 %>">Next →</a><% } %>
+    </nav>
+    <% } %>
+    <% } else { %>
+    <div class="empty-state">
+      <h3>No <%= cat.name.toLowerCase() %> records <%= placeName ? `in ${placeName}` : '' %> yet</h3>
+      <p>This slice of the ledger is still empty. Know a business that belongs here?</p>
+      <a class="btn btn-primary" href="/dashboard/listings/new">Add a listing</a>
+      <% if (placeName) { %><div style="margin-top:14px"><a href="/directory/c/<%= cat.slug %>" style="color:var(--accent);font-weight:600;font-size:13.5px">Browse all <%= cat.name %> →</a></div><% } %>
+    </div>
+    <% } %>
+  </div>
+</section>
+<%- include('partials/bottom') %>

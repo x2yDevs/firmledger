@@ -1,0 +1,85 @@
+<%- include('../partials/top') %>
+<%- include('../partials/adminnav') %>
+
+<section class="section-tight">
+  <div class="container container-narrow">
+    <div class="section-head">
+      <h2>Add a listing</h2>
+      <a class="btn btn-ghost btn-sm" href="/admin3119Musa/listings">← All listings</a>
+    </div>
+
+    <% if (errors.length) { %>
+      <div class="alert alert-err"><strong>Please fix the following:</strong><% errors.forEach(function (e) { %><div>· <%= e %></div><% }) %></div>
+    <% } %>
+
+    <form method="post" action="/admin3119Musa/listings/new" class="form form-card">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+
+      <h3 class="form-section">Moderation</h3>
+      <div class="grid-3">
+        <label><span>Status</span>
+          <select name="status">
+            <% ['approved', 'pending', 'rejected'].forEach(function (s) { %><option value="<%= s %>" <%= (l.status || 'approved') === s ? 'selected' : '' %>><%= s %></option><% }) %>
+          </select>
+        </label>
+        <label><span>Confidence (0–97)</span>
+          <input type="number" name="confidence" min="0" max="97" value="<%= l.confidence || 55 %>">
+        </label>
+        <label class="check" style="align-self:end;padding-bottom:10px"><input type="checkbox" name="featured" value="1" <%= l.featured ? 'checked' : '' %>><span>Featured</span></label>
+      </div>
+
+      <h3 class="form-section">Identity</h3>
+      <label><span>Name *</span><input type="text" name="name" value="<%= l.name || '' %>" required maxlength="120"></label>
+      <div class="grid-2">
+        <label><span>Type *</span>
+          <select name="type" required>
+            <option value="">Choose…</option>
+            <% TYPES.forEach(function (t) { %><option value="<%= t.value %>" <%= l.type === t.value ? 'selected' : '' %>><%= t.label %></option><% }) %>
+          </select>
+        </label>
+        <label><span>Category * — pick from the list, or type a new one (case-variants auto-merge, duplicates impossible)</span><input type="text" name="category" value="<%= l.category || '' %>" list="catlist" required maxlength="40" placeholder="Start typing…" autocomplete="off"></label>
+      </div>
+      <datalist id="catlist"><% allCats.forEach(function (c) { %><option value="<%= c.name %>"><%= c.official ? '' : '(custom)' %><% }) %></datalist>
+      <label><span>Tagline — one line</span><input type="text" name="tagline" value="<%= l.tagline || '' %>" maxlength="160"></label>
+      <label><span>Description * (≥100 characters, real facts only)</span><textarea name="description" rows="5" required><%= l.description || '' %></textarea></label>
+
+      <h3 class="form-section">Presence</h3>
+      <div class="grid-2">
+        <label><span>Website</span><input type="url" name="website" value="<%= l.website || '' %>" placeholder="https://…" maxlength="190"></label>
+        <label><span>Public email</span><input type="email" name="email" value="<%= l.email || '' %>" maxlength="190"></label>
+      </div>
+      <div class="grid-3">
+        <label><span>Phone</span><input type="text" name="phone" value="<%= l.phone || '' %>" maxlength="40"></label>
+        <label><span>Founded</span><input type="text" name="founded" value="<%= l.founded || '' %>" maxlength="9" placeholder="e.g. 2014"></label>
+        <label><span>Team size</span>
+          <select name="size"><option value="">—</option><% SIZES.forEach(function (s) { %><option value="<%= s %>" <%= l.size === s ? 'selected' : '' %>><%= s %></option><% }) %></select>
+        </label>
+      </div>
+      <div class="grid-3">
+        <label><span>Country</span><input type="text" name="country" value="<%= l.country || '' %>" list="ctlist" maxlength="60"></label>
+        <datalist id="ctlist"><% COUNTRIES.forEach(function (c) { %><option value="<%= c %>"><% }) %></datalist>
+        <label><span>Region / state</span><input type="text" name="region" value="<%= l.region || '' %>" maxlength="60"></label>
+        <label><span>City</span><input type="text" name="city" value="<%= l.city || '' %>" maxlength="60"></label>
+      </div>
+      <label><span>Address</span><input type="text" name="address" value="<%= l.address || '' %>" maxlength="160"></label>
+      <label><span>Tags — comma-separated</span><input type="text" name="tags" value="<%= l.tags || '' %>" maxlength="200"></label>
+
+      <h3 class="form-section">Logo &amp; socials</h3>
+      <label><span>Logo URL</span><input type="url" name="logo_url" value="<%= l.logo_url || '' %>" placeholder="https://…" maxlength="300"></label>
+      <label><span>Socials — JSON, e.g. {"x":"https://x.com/…","linkedin":"https://linkedin.com/company/…"}</span>
+        <textarea name="socials" rows="3" style="font-family:var(--fm);font-size:12.5px"><%= l.socials || '' %></textarea>
+      </label>
+
+      <h3 class="form-section">Sources</h3>
+      <label><span>Source URLs — one per line (shown publicly)</span><textarea name="sources" rows="3" placeholder="https://en.wikipedia.org/wiki/…"></textarea></label>
+
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">Create listing</button>
+        <a class="btn btn-ghost" href="/admin3119Musa/listings">Cancel</a>
+      </div>
+      <p class="fine-print">Duplicate protection: the same name or website domain cannot create a second record. Approved listings are pushed to search engines automatically (IndexNow + sitemap).</p>
+    </form>
+  </div>
+</section>
+
+<%- include('../partials/bottom') %>

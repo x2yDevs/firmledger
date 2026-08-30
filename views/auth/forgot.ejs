@@ -1,0 +1,26 @@
+<%- include('../partials/top') %>
+
+<section class="auth-wrap">
+  <div class="auth-card">
+    <div class="auth-head">
+      <img src="/assets/logo-mark.png" alt="" width="40" height="40">
+      <h1>Reset your password</h1>
+      <p class="muted">We'll email you a secure reset link.</p>
+    </div>
+    <% if (sent) { %>
+      <div class="alert alert-ok">If an account exists for that email, a reset link is on its way. Check your inbox (and spam folder).</div>
+      <p class="auth-alt"><a href="/login">Back to sign in</a></p>
+    <% } else { %>
+      <% if (errors.length) { %><div class="alert alert-err"><% errors.forEach(function (e) { %><div><%= e %></div><% }) %></div><% } %>
+      <form method="post" action="/forgot" class="form">
+        <label><span>Email address</span>
+          <input type="email" name="email" required autocomplete="email">
+        </label>
+        <button class="btn btn-primary btn-block" type="submit">Send reset link</button>
+      </form>
+      <p class="auth-alt"><a href="/login">Back to sign in</a></p>
+    <% } %>
+  </div>
+</section>
+
+<%- include('../partials/bottom') %>

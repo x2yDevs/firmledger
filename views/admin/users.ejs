@@ -1,0 +1,96 @@
+<%- include('../partials/top') %>
+<%- include('../partials/adminnav') %>
+
+<section class="section-tight">
+  <div class="container">
+    <div class="section-head"><h2>Registered users</h2></div>
+    <% if (typeof ok !== 'undefined' && ok) { %><div class="alert alert-ok"><%= ok %></div><% } %>
+    <% if (typeof err !== 'undefined' && err) { %><div class="alert alert-err"><%= err %></div><% } %>
+
+    <div class="backup-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:14px;margin-bottom:1.4rem">
+      <div class="side-card" style="margin:0">
+        <h3 style="margin:0 0 6px">Backup &amp; export</h3>
+        <p class="muted" style="margin-bottom:12px;font-size:0.86rem">Download every user and their details as a <code>.firmledger</code> file — aligned, auditable, importable. The full backup also carries their listings, claims, tickets and payments.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <a class="btn btn-primary btn-sm" href="/admin3119Musa/users/backup.firmledger"><svg class="ric" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Full backup (.firmledger)</a>
+          <a class="btn btn-ghost btn-sm" href="/admin3119Musa/users/export.firmledger"><svg class="ric" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Export users only</a>
+        </div>
+        <p class="fine-print" style="margin-top:10px">Restoring after a loss? Use Import below — accounts sign in with their original passwords.</p>
+      </div>
+      <div class="side-card" style="margin:0">
+        <h3 style="margin:0 0 6px">Import from file</h3>
+        <p class="muted" style="margin-bottom:12px;font-size:0.86rem">Restore from a <code>.firmledger</code> export or backup. Existing emails are updated; new ones are created. Nothing is silently deleted.</p>
+        <form method="post" action="/admin3119Musa/users/import" enctype="multipart/form-data" class="form" style="margin:0">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <label class="fl"><span>Backup file</span><input class="input" type="file" name="backup_file" accept=".firmledger,.json" required style="font-size:0.85rem"></label>
+          <button class="btn btn-primary btn-sm" type="submit">Import from .firmledger</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Name</th><th>Email</th><th>Listings</th><th>Plan</th><th>Status</th><th class="ta-right">Manage</th></tr></thead>
+        <tbody>
+          <% users.forEach(function (u) { %>
+            <tr>
+              <td><span class="avatar avatar-sm"><%= (u.name || 'U').slice(0, 1).toUpperCase() %></span> <strong><%= u.name %></strong><br><small class="muted">joined <%= fmtDate(u.created_at) %></small></td>
+              <td><small class="muted"><%= u.email %></small></td>
+              <td><%= u.listing_count %></td>
+              <td>
+                <% if (isProUser(u)) { %>
+                  <span class="pill pill-pro">PRO</span>
+                  <div class="score-hint"><%= u.plan_expires_at ? 'until ' + u.plan_expires_at : 'lifetime' %></div>
+                <% } else { %>
+                  <span class="pill pill-free">FREE</span>
+                <% } %>
+              </td>
+              <td><% if (u.suspended) { %><span class="pill pill-rejected">suspended</span><% } else { %><span class="pill pill-approved">active</span><% } %></td>
+              <td class="ta-right actions-cell">
+                <a class="btn btn-ghost btn-xs" href="/admin3119Musa/users/<%= u.id %>">View</a>
+                <a class="btn btn-ghost btn-xs" href="/admin3119Musa/email?to=<%= encodeURIComponent(u.email) %>">Email</a>
+                <% if (isProUser(u)) { %>
+                <form method="post" action="/admin3119Musa/users/<%= u.id %>/plan" class="inline" onsubmit="return confirm('Revoke FirmLedger Pro from this user? Listing perks and full-details access end immediately.');">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <input type="hidden" name="plan_action" value="revoke">
+                  <button class="btn btn-danger btn-xs" type="submit">Revoke Pro</button>
+                </form>
+                <% } else { %>
+                <form method="post" action="/admin3119Musa/users/<%= u.id %>/plan" class="inline">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <input type="hidden" name="plan_action" value="grant">
+                  <button class="btn btn-accent btn-xs" type="submit">Grant 30d</button>
+                </form>
+                <form method="post" action="/admin3119Musa/users/<%= u.id %>/plan" class="inline">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <input type="hidden" name="plan_action" value="lifetime">
+                  <button class="btn btn-ghost btn-xs" type="submit">Lifetime</button>
+                </form>
+                <% } %>
+                <% if (u.suspended) { %>
+                <form method="post" action="/admin3119Musa/users/<%= u.id %>/unsuspend" class="inline">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <button class="btn btn-ghost btn-xs" type="submit">Unsuspend</button>
+                </form>
+                <% } else { %>
+                <form method="post" action="/admin3119Musa/users/<%= u.id %>/suspend" class="inline" onsubmit="return confirm('Suspend this user? Sign-in is blocked and sessions revoked.');">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <button class="btn btn-danger btn-xs" type="submit">Suspend</button>
+                </form>
+                <% } %>
+                <form method="post" action="/admin3119Musa/users/<%= u.id %>/delete" class="inline" onsubmit="return confirm('Permanently delete <%= u.name %> (<%= u.email %>) and everything tied to this account — sessions, tickets, claims, payment history — removing them from sign-in? The ledgers (listings) stay. This cannot be undone.');">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <button class="btn btn-danger btn-xs" type="submit" style="background:#7F1D1D;border-color:#7F1D1D">Delete</button>
+                </form>
+              </td>
+            </tr>
+          <% }) %>
+          <% if (!users.length) { %><tr><td colspan="6" class="muted" style="text-align:center;padding:2rem">No users yet.</td></tr><% } %>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+</section>
+
+<%- include('../partials/bottom') %>

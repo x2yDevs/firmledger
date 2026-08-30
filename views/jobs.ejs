@@ -1,0 +1,86 @@
+<%- include('partials/top') %>
+
+<section class="section-tight">
+  <div class="container">
+    <div class="section-head" style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem">
+      <div>
+        <h2>Featured jobs</h2>
+        <p class="muted" style="margin:4px 0 0;font-size:15px">Open roles at verified, source-backed businesses — <%= jobs.length %> position<%= jobs.length === 1 ? '' : 's' %> across <%= companies %> compan<%= companies === 1 ? 'y' : 'ies' %>.</p>
+      </div>
+      <a class="btn btn-ghost btn-sm" href="/directory">Browse companies →</a>
+    </div>
+
+    <form class="jobs-filters rv" method="get" action="/jobs" role="search" aria-label="Search and filter open positions">
+      <div class="jf-row">
+        <input type="search" name="q" placeholder="Search titles, skills, companies…" value="<%= filters.q %>" aria-label="Search jobs">
+        <select name="type" aria-label="Role type">
+          <option value="">Any type</option>
+          <% JOB_TYPES.forEach(function (t) { %><option value="<%= t %>" <%= filters.type === t ? 'selected' : '' %>><%= t %></option><% }); %>
+        </select>
+        <select name="category" aria-label="Company category">
+          <option value="">Any category</option>
+          <% categories.forEach(function (c) { %><option value="<%= c %>" <%= filters.category === c ? 'selected' : '' %>><%= c %></option><% }); %>
+        </select>
+        <select name="country" aria-label="Country">
+          <option value="">Any country</option>
+          <% countries.forEach(function (c) { %><option value="<%= c %>" <%= filters.country === c ? 'selected' : '' %>><%= c %></option><% }); %>
+        </select>
+        <button class="btn btn-primary" type="submit">Filter</button>
+      </div>
+      <div class="jf-sub">
+        <label class="jf-check"><input type="checkbox" name="featured" value="1" <%= filters.featured ? 'checked' : '' %> onchange="this.form.submit()"><span>Featured jobs only</span></label>
+        <% if (isFiltered) { %>
+          <span class="jf-count"><%= jobs.length %> result<%= jobs.length === 1 ? '' : 's' %></span>
+          <a class="jf-clear" href="/jobs">✕ Clear filters</a>
+        <% } %>
+      </div>
+    </form>
+
+    <% if (!jobs.length) { %>
+      <% if (isFiltered) { %>
+        <div class="panel" style="text-align:center;padding:56px 24px">
+          <h3 style="font-family:var(--fd);font-size:22px;margin-bottom:8px">No positions match that search</h3>
+          <p class="muted" style="max-width:440px;margin:0 auto">Try a broader keyword, or clear the filters to see every open role on the ledger.</p>
+          <a class="btn btn-primary" style="margin-top:18px" href="/jobs">Clear filters</a>
+        </div>
+      <% } else { %>
+        <div class="panel" style="text-align:center;padding:60px 24px">
+          <h3 style="font-family:var(--fd);font-size:22px;margin-bottom:8px">No open positions right now</h3>
+          <p class="muted" style="max-width:440px;margin:0 auto">When businesses on the ledger post openings, they appear here instantly. Owners with Pro can post from their dashboard.</p>
+          <a class="btn btn-accent" style="margin-top:18px" href="/pricing">Post jobs with Pro</a>
+        </div>
+      <% } %>
+    <% } else { %>
+      <div class="jobs-grid">
+        <% jobs.forEach(function (j) { %>
+          <article class="job-card">
+            <div class="job-head">
+              <% if (j.logo_url) { %>
+                <img class="job-logo" src="<%= j.logo_url %>" alt="" loading="lazy" width="46" height="46">
+              <% } else { %>
+                <span class="job-logo job-logo-fb"><%= (j.company || 'C').trim().slice(0,1).toUpperCase() %></span>
+              <% } %>
+              <div class="job-meta">
+                <h3 class="job-title"><a href="<%= j.apply_url %>" target="_blank" rel="noopener nofollow"><%= j.title %> ↗</a></h3>
+                <div class="job-company">
+                  <a href="/listing/<%= j.slug %>"><%= j.company %></a>
+                  <% if (j.claimed) { %><span class="job-vtick" title="Verified owner"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><% } %>
+                </div>
+              </div>
+              <% if (j.featured) { %><span class="job-featured">FEATURED JOB</span><% } %>
+            </div>
+            <p class="job-desc"><%= j.description.length > 160 ? j.description.slice(0, 160) + '…' : j.description %></p>
+            <div class="job-facts">
+              <span class="chip mut"><%= j.role_type %></span>
+              <span class="chip mut"><%= j.location %></span>
+              <span class="chip mut"><%= j.category %></span>
+              <span class="job-date">posted <%= fmtDate(j.created_at) %></span>
+            </div>
+          </article>
+        <% }); %>
+      </div>
+    <% } %>
+  </div>
+</section>
+
+<%- include('partials/bottom') %>
