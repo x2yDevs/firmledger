@@ -788,7 +788,6 @@ router.get('/sitemaps/static.xml', (req, res) => {
     { loc: siteUrl('/blog'), changefreq: 'weekly', priority: '0.6' },
     { loc: siteUrl('/jobs'), changefreq: 'daily', priority: '0.7' },
     { loc: siteUrl('/api/docs'), changefreq: 'monthly', priority: '0.6' },
-    { loc: siteUrl('/register'), changefreq: 'yearly', priority: '0.4' },
   ];
   for (const p of db.prepare("SELECT slug, updated_at, published_at, status FROM blog_posts WHERE status='published'").all()) {
     urls.push({

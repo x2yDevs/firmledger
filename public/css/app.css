@@ -154,7 +154,7 @@ p { color: var(--muted); }
   .nav { display: none; } .menu-btn { display: inline-flex; } .header-cta { display: none; }
   .site-header .hdr-search:not(.m-search) { display: none; }
   .hdr-search.m-search { display: flex; }
-  .mobile-nav { display: block; position: absolute; top: 68px; left: 0; right: 0; background: var(--paper); border-bottom: 1px solid var(--hair); padding: 10px 20px 22px; visibility: hidden; opacity: 0; transform: translateY(-6px); transition: .2s; z-index: 99; }
+  .mobile-nav { display: block; position: absolute; top: 68px; left: 0; right: 0; background: var(--paper); border-bottom: 1px solid var(--hair); padding: 10px 20px 22px; visibility: hidden; opacity: 0; transform: translateY(-6px); transition: .2s; z-index: 99; max-height: calc(100vh - 68px); overflow-y: auto; -webkit-overflow-scrolling: touch; }
   .mobile-nav.open { visibility: visible; opacity: 1; transform: none; }
   .mobile-nav a { display: block; padding: 13px 4px; font: 500 16px/1 var(--fb); color: var(--ink); border-bottom: 1px solid var(--hair); }
 }
@@ -417,7 +417,7 @@ img.avatar { object-fit: contain; padding: 5px; background: var(--surface); bord
 mark { background: #FBF0CB; color: inherit; border-radius: 3px; padding: 0 1px; }
 .sg-more { margin: 8px 0 0; font: 500 12px/1 var(--fm); }
 .sg-more a { color: var(--accent2); }
-.backup-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 14px; margin-bottom: 1.4rem; }
+.backup-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(270px, 100%), 1fr)); gap: 14px; margin-bottom: 1.4rem; }
 /* Standalone field caption — same type as .form label > span, usable outside .form */
 .fld-cap { display: block; font: 600 13px/1.4 var(--fb); margin-bottom: 8px; color: var(--ink); }
 .fld-cap small { color: var(--muted); font-weight: 400; }
@@ -743,6 +743,7 @@ img.logo-tile { object-fit: contain; padding: 4px; background: #fff; border: 1px
   .rows-head { display: none; }
   .row-line { grid-template-columns: 1fr auto; }
   .rw-c-cat, .rw-c-loc { display: none; }
+  .rw-c-name { grid-column: 1 / -1; }
 }
 
 .acct-grid { display: grid; gap: 16px; }
@@ -761,7 +762,7 @@ img.logo-tile { object-fit: contain; padding: 4px; background: #fff; border: 1px
 
 .claim-find { display: grid; gap: 14px; margin-top: 2.4rem; padding-top: 1.4rem; border-top: 1px solid var(--hair); }
 .claim-find .claim-find-form { margin: 0; max-width: 640px; }
-.claim-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); margin-top: 14px; }
+.claim-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(min(250px, 100%), 1fr)); margin-top: 14px; }
 .claim-card { border: 1px solid var(--hair); border-radius: var(--r); background: var(--surface); padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
 .claim-card-t b { display: block; font: 600 14px/1.25 var(--fb); color: var(--ink); }
 .claim-card-t small { font: 500 11px/1.4 var(--fm); color: var(--muted); }
@@ -781,7 +782,7 @@ img.logo-tile { object-fit: contain; padding: 4px; background: #fff; border: 1px
 .doc-sec p { font-size: 14px; line-height: 1.8; color: var(--ink2); max-width: 76ch; }
 .doc-sec code { background: var(--bg2, #F4F1EA); border-radius: 4px; padding: 1px 5px; font: 500 12.5px/1.5 var(--fm); }
 
-.blog-grid { display: grid; gap: 18px; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+.blog-grid { display: grid; gap: 18px; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); }
 .blog-card { border: 1px solid var(--hair); border-radius: 14px; background: var(--surface); transition: transform .15s, box-shadow .15s; }
 .blog-card:hover { transform: translateY(-2px); box-shadow: 0 14px 34px -18px rgba(10, 22, 40, .28); }
 .blog-card-link { display: block; padding: 22px; text-decoration: none; color: inherit; height: 100%; }
@@ -847,7 +848,7 @@ img.logo-tile { object-fit: contain; padding: 4px; background: #fff; border: 1px
 .plan-locked p { font-size: 13.5px; max-width: 60ch; }
 
 /* pricing / upgrade plan cards */
-.plan-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 22px; align-items: start; }
+.plan-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 22px; align-items: start; }
 .plan-card { position: relative; background: var(--surface); border: 1px solid var(--hair); border-radius: 14px; padding: 26px; }
 .plan-card h3 { font: 700 20px/1.2 var(--fd); color: var(--ink); margin: 0 0 6px; }
 .plan-pro { border: 2px solid var(--accent); box-shadow: 0 12px 32px rgba(10, 22, 40, .07); }
@@ -952,7 +953,7 @@ img.logo-tile { object-fit: contain; padding: 4px; background: #fff; border: 1px
 .ticket-cell-main { display: flex; align-items: flex-start; gap: .5rem; }
 .ticket-cell-subject { font-weight: 600; color: var(--navy); }
 
-.recovery-codes { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: .5rem .9rem; }
+.recovery-codes { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(150px, 100%), 1fr)); gap: .5rem .9rem; }
 .recovery-codes li code {
   display: block; padding: .5rem .7rem; background: var(--paper-2); border: 1px solid var(--line);
   border-radius: 7px; font: 500 .88rem/1.2 var(--fm); letter-spacing: 1px; text-align: center;
@@ -1236,7 +1237,7 @@ img.logo-tile { object-fit: contain; padding: 4px; background: #fff; border: 1px
 .dash-removal { position: relative; display: inline-block; vertical-align: middle; margin-left: 6px; }
 .dash-removal summary { list-style: none; cursor: pointer; }
 .dash-removal summary::-webkit-details-marker { display: none; }
-.dash-removal[open] > form { position: absolute; right: 0; z-index: 20; background: var(--surface); border: 1px solid var(--hair); border-radius: var(--r); padding: 12px; box-shadow: var(--shadow); }
+.dash-removal[open] > form { position: absolute; right: 0; z-index: 20; background: var(--surface); border: 1px solid var(--hair); border-radius: var(--r); padding: 12px; box-shadow: var(--shadow); max-width: calc(100vw - 48px); }
 
 /* Mobile: center legal/docs/directory content; keep desktop layout. */
 @media (max-width: 760px) {
@@ -1370,3 +1371,78 @@ h2.h-display { font-size: clamp(1.9rem, 3.4vw, 2.7rem); }
 @media (max-width: 1060px) and (min-width: 721px) {
   .methods, .feature-grid, .api-notes { grid-template-columns: 1fr 1fr; }
 }
+
+/* ================= r31: responsive hardening — every form grid, control row and menu ================= */
+/* Form grids (.grid-2 / .grid-3) collapse to a single column on phones instead of
+   squeezing three ~88px inputs side by side; .form-two and .form-row already do this. */
+@media (max-width: 720px) {
+  .grid-2, .grid-3 { grid-template-columns: 1fr; }
+}
+
+/* Inline "field + action" rows wrap and full-width their children on small screens
+   so the button never overflows or crowds the input out of reach. */
+.fetch-row { flex-wrap: wrap; }
+.fetch-btn { max-width: 100%; }
+@media (max-width: 560px) {
+  .fetch-row { flex-direction: column; align-items: stretch; }
+  .fetch-row .fetch-input, .fetch-row .fetch-btn { width: 100%; margin-bottom: 12px; }
+  .claim-form-row { flex-wrap: wrap; }
+  .claim-form-row select, .claim-form-row input { flex: 1 1 100%; min-width: 0; }
+}
+
+/* The logo preview stacks above the URL field on very narrow screens instead of
+   leaving the text control a sliver of space. */
+@media (max-width: 420px) {
+  .logo-row { flex-wrap: wrap; }
+  .logo-controls { flex-basis: 100%; }
+}
+
+/* Long unbroken content (URLs, emails, codes, company names) always breaks instead
+   of pushing the page wider — a hard guarantee against horizontal scroll. */
+.l-name, .prof-name, .prof-tagline, .l-meta, .rw-t b, .src-n, .pos-title, .job-title,
+.facts td, .ticket-subject, .chat-body, .wa-text, .news-copy p, .eco-row a,
+.badge-note, .form-note, .fine-print, .env-code, .env-link, .env-note {
+  overflow-wrap: anywhere;
+}
+
+/* Score bars: let the label column shrink instead of reserving a fixed 128px on
+   phones, keeping the bar itself visible. */
+.score-bar { grid-template-columns: minmax(0, 128px) 1fr 44px; }
+
+/* Narrow-screens polish for the top utility strip: keep the status dot + location
+   readable and simply let surplus metadata recede rather than clip awkwardly. */
+@media (max-width: 420px) {
+  .util-bar .r span:last-child { display: none; }
+  .util-bar .container { gap: 12px; }
+}
+
+/* ================= r31b: verified fixes from viewport audit (320–1280px) ================= */
+/* Grid/flex "blowout": a child's intrinsic min-width must never widen a collapsed
+   column past the viewport. The .band-grid right column holds `white-space:pre`
+   code blocks whose longest line used to force the 1fr track to ~450px on phones. */
+.band-grid > *, .hero-grid > *, .prof-grid > *, .docs-grid > *, .docs-layout > *,
+.play-grid > *, .eco-grid > *, .acct-grid > *, .env-grid > *, .form-two > *,
+.grid-2 > *, .grid-3 > *, .form-row > *, .support-new-grid > * {
+  min-width: 0;
+}
+
+/* Footer newsletter: the email input + Subscribe button must fit the panel at every
+   width. The input gives up its browser-default min-width, and on phones the pair
+   stacks so the button is never clipped (the panel clips with overflow:hidden). */
+.news-form { flex-wrap: wrap; }
+.news-form input[type="email"] { min-width: 0; }
+@media (max-width: 480px) {
+  .news-form input[type="email"],
+  .news-form .news-subscribe-btn,
+  .news-form .btn-accent { flex: 1 1 100%; }
+}
+
+/* Pro-locked panel (guest listing view): the CTA button group was a non-shrinking
+   flex item (flex:0 0 auto) whose three buttons pushed the page past ~380px. */
+.pro-locked .plc-left { min-width: 0; }
+.pro-locked .plc-actions { flex: 0 1 auto; min-width: 0; max-width: 100%; }
+.pro-locked .plc-actions .btn { max-width: 100%; }
+
+/* Directory list view: let the name/status cells actually shrink so the ellipsis on
+   long company names engages instead of relying on clipping alone. */
+.rw-t b, .rw-t small, .rw-c-name { min-width: 0; }
