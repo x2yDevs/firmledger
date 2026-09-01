@@ -280,6 +280,7 @@ function createListing(user, body) {
       url: '/admin3119Musa/listings?status=pending',
     });
   } catch { /* notify is best-effort */ }
+  try { require('./ai').scheduleModeration(row.id); } catch { /* AI moderation is best-effort */ }
   return { status: 201, body: { data: serialize(row), meta: { note: 'Created with status "pending" — it goes live after the usual moderation pass, exactly like listings added from the dashboard.' } } };
 }
 
@@ -293,6 +294,9 @@ function updateListing(user, id, body) {
   const nextStatus = (row.status === 'approved' || row.status === 'rejected') ? 'pending' : row.status;
   db.prepare(`UPDATE listings SET ${setSql ? setSql + ',' : ''} status=?, updated_at=datetime('now') WHERE id=?`).run(...vals, nextStatus, row.id);
   const fresh = db.prepare('SELECT * FROM listings WHERE id=?').get(row.id);
+  if (nextStatus === 'pending') {
+    try { require('./ai').scheduleModeration(fresh.id); } catch { /* AI moderation is best-effort */ }
+  }
   return { status: 200, body: { data: serialize(fresh), meta: { note: 'Updated. Metadata edits re-enter moderation review if the core record changed.' } } };
 }
 

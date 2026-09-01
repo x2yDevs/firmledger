@@ -1,0 +1,502 @@
+<%- include('../partials/top') %>
+<%- include('../partials/adminnav') %>
+
+<section class="section-tight ai-page">
+  <div class="container">
+    <div class="section-head">
+      <div>
+        <p class="klabel">Admin · Groq</p>
+        <h2>AI Playground</h2>
+        <p class="muted" style="margin-top:6px;max-width:62ch">Draft listings from a prompt, run the admin assistant against real console actions, and optionally let Groq moderate new submissions. Writes ask first unless you tick them under Settings. The API key never leaves this server.</p>
+      </div>
+      <div class="ai-status-row">
+        <% if (settings.groq_configured) { %>
+          <span class="pill pill-approved">Groq ready · <%= settings.groq_key_source === 'env' ? '.env' : 'saved key' %></span>
+        <% } else { %>
+          <span class="pill pill-rejected">Groq key missing</span>
+        <% } %>
+        <% if (settings.moderation_on) { %>
+          <span class="pill pill-approved">Auto-moderation on</span>
+        <% } else { %>
+          <span class="pill pill-pending">Auto-moderation off</span>
+        <% } %>
+        <span class="pill"><%= settings.groq_model %></span>
+      </div>
+    </div>
+
+    <% if (!settings.groq_configured) { %>
+      <div class="alert alert-warn">Add a Groq API key in <b>Settings</b> below, or set <code>GROQ_API_KEY</code> in <code>.env</code>. Create a key at <a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com/keys</a>.</div>
+    <% } %>
+    <% if (ok) { %><div class="alert alert-ok"><%= ok %></div><% } %>
+    <% if (err) { %><div class="alert alert-err"><%= err %></div><% } %>
+
+    <div class="ai-tabs" role="tablist">
+      <button type="button" class="ai-tab active" data-tab="gen" role="tab" aria-selected="true">Listing generator</button>
+      <button type="button" class="ai-tab" data-tab="chat" role="tab" aria-selected="false">Assistant</button>
+      <button type="button" class="ai-tab" data-tab="set" role="tab" aria-selected="false">Settings &amp; logs</button>
+    </div>
+
+    <div class="ai-grid">
+      <!-- ================= Generator ================= -->
+      <div class="ai-pane is-on" data-pane="gen">
+        <div class="form-card ai-card">
+          <h3 class="form-section">Listing generator</h3>
+          <p class="muted" style="margin:-8px 0 16px">Describe a business (name, website, a snippet). Groq returns a draft that matches the public API field limits. Nothing is published until you review and save.</p>
+          <label><span>Prompt</span>
+            <textarea id="gen-prompt" rows="5" maxlength="4000" placeholder="e.g. Acme Cold Chain Ltd, acmecold.co.ke — refrigerated freight between Mombasa and Kampala for horticulture exporters, founded 2019, ~40 staff, Nairobi."></textarea>
+          </label>
+          <div class="form-actions">
+            <button class="btn btn-primary" type="button" id="gen-btn" <%= settings.groq_configured ? '' : 'disabled' %>>Generate draft</button>
+            <span class="muted" id="gen-status"></span>
+          </div>
+        </div>
+
+        <form id="gen-form" class="form form-card ai-card" hidden>
+          <h3 class="form-section">Review draft</h3>
+          <p class="muted" style="margin:-8px 0 16px">Edit anything that looks off. Save creates a <b>pending</b> listing the same way as Admin → Listings → New. The assistant never publishes on its own.</p>
+          <div id="gen-errors" class="alert alert-err" hidden></div>
+          <label><span>Name * <small>2–60</small></span><input type="text" name="name" id="f-name" required minlength="2" maxlength="60"></label>
+          <label><span>Tagline * <small>20–90, one sentence</small> <span class="count" id="c-tagline"></span></span>
+            <input type="text" name="tagline" id="f-tagline" required minlength="20" maxlength="90">
+          </label>
+          <label><span>Description * <small>100–1200</small> <span class="count" id="c-desc"></span></span>
+            <textarea name="description" id="f-description" rows="6" required minlength="100" maxlength="1200"></textarea>
+          </label>
+          <div class="grid-2">
+            <label><span>Type *</span>
+              <select name="type" id="f-type" required>
+                <% TYPES.forEach(function (t) { %><option value="<%= t.value %>"><%= t.label %></option><% }) %>
+              </select>
+            </label>
+            <label><span>Category *</span>
+              <input type="text" name="category" id="f-category" list="catlist" required maxlength="40" autocomplete="off">
+            </label>
+          </div>
+          <datalist id="catlist"><% allCats.forEach(function (c) { %><option value="<%= c.name %>"><% }) %></datalist>
+          <div class="grid-2">
+            <label><span>Website *</span><input type="url" name="website" id="f-website" required placeholder="https://"></label>
+            <label><span>Country *</span><input type="text" name="country" id="f-country" list="ctlist" required maxlength="60"></label>
+          </div>
+          <datalist id="ctlist"><% COUNTRIES.forEach(function (c) { %><option value="<%= c %>"><% }) %></datalist>
+          <div class="grid-3">
+            <label><span>Founded</span><input type="text" name="founded" id="f-founded" maxlength="12" placeholder="2019"></label>
+            <label><span>City</span><input type="text" name="city" id="f-city" maxlength="80"></label>
+            <label><span>Team size</span>
+              <select name="size" id="f-size">
+                <option value="">—</option>
+                <% SIZES.forEach(function (s) { %><option value="<%= s %>"><%= s %></option><% }) %>
+              </select>
+            </label>
+          </div>
+          <div class="grid-2">
+            <label><span>Tags</span><input type="text" name="tags" id="f-tags" maxlength="160" placeholder="logistics, cold-chain"></label>
+            <label><span>Public email</span><input type="email" name="email" id="f-email" maxlength="190"></label>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-primary" type="submit" id="save-btn">Save listing (pending)</button>
+            <button class="btn btn-ghost" type="button" id="gen-discard">Discard draft</button>
+            <span class="muted" id="save-status"></span>
+          </div>
+          <p class="fine-print">Saved listings enter the review queue. If AI auto-moderation is on, Groq will approve, reject, or leave them pending in the background.</p>
+        </form>
+      </div>
+
+      <!-- ================= Assistant ================= -->
+      <div class="ai-pane" data-pane="chat">
+        <div class="ai-card chat-window ai-chat">
+          <div class="chat-head">
+            <div class="chat-head-avatar">AI</div>
+            <div class="chat-head-meta">
+              <div class="chat-head-name">Admin assistant</div>
+              <div class="chat-head-sub">Real admin tools · confirm unless you auto-allow them</div>
+            </div>
+          </div>
+          <div class="chat-pane" id="chat-pane" role="log" aria-live="polite">
+            <div class="chat-day">Today</div>
+            <div class="wa-row wa-theirs">
+              <div class="wa-bubble">
+                <div class="wa-who">Assistant</div>
+                <div class="wa-text">Ask in plain language. I can run the same actions as the rest of this console — listings, users, billing, tickets, claims, blog, email, protection, status, and more. Lookups run immediately. Writes show a confirmation unless you auto-allow them in Settings.</div>
+              </div>
+            </div>
+          </div>
+          <form class="chat-composer" id="chat-form">
+            <div class="composer-box">
+              <textarea id="chat-input" rows="1" maxlength="4000" placeholder="e.g. How many listings are pending?" <%= settings.groq_configured ? '' : 'disabled' %>></textarea>
+            </div>
+            <button class="composer-send" type="submit" aria-label="Send" <%= settings.groq_configured ? '' : 'disabled' %>>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22 11 13 2 9 22 2z"/></svg>
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= Settings ================= -->
+    <div class="ai-pane" data-pane="set" id="ai-settings">
+      <form method="post" action="/admin3119Musa/ai/settings" class="form form-card">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <h3 class="form-section">Groq</h3>
+        <p class="muted" style="margin:-8px 0 16px">Environment variable <code>GROQ_API_KEY</code> always wins over the saved value. Keys are stored in the settings table, never sent to the browser after save.</p>
+        <div class="grid-2">
+          <label><span>API key</span>
+            <input type="password" name="groq_api_key" autocomplete="new-password" spellcheck="false" placeholder="gsk_…" <%= settings.groq_env ? 'disabled' : '' %>>
+            <small class="muted" style="display:block;margin-top:4px">
+              <% if (settings.groq_env) { %>✓ set in <code>.env</code> — rotate there<% } else if (settings.groq_key_set) { %>✓ saved — paste a new one to rotate<% } else { %>not saved yet<% } %>
+            </small>
+          </label>
+          <label><span>Model</span>
+            <select name="groq_model">
+              <% settings.models.forEach(function (m) { %><option value="<%= m.id %>" <%= settings.groq_model === m.id ? 'selected' : '' %>><%= m.label %></option><% }) %>
+            </select>
+          </label>
+        </div>
+        <% if (!settings.groq_env && settings.groq_key_set) { %>
+          <label class="check"><input type="checkbox" name="groq_api_key_clear" value="1"><span>Clear the saved Groq key</span></label>
+        <% } %>
+
+        <h3 class="form-section">AI auto-moderation</h3>
+        <label class="check check-lg">
+          <input type="checkbox" name="ai_moderation_on" value="1" <%= settings.moderation_on ? 'checked' : '' %>>
+          <span><strong>Evaluate every new pending listing with Groq</strong><br><small class="muted">Runs in the background after dashboard, API, admin, or generator creates a listing. Failures leave the record pending and never block creation. When this is on, it takes precedence over the simple auto-approve toggle.</small></span>
+        </label>
+        <label class="check check-lg">
+          <input type="checkbox" name="ai_moderation_email" value="1" <%= settings.moderation_email ? 'checked' : '' %>>
+          <span><strong>Email the admin inbox when the model is unsure</strong><br><small class="muted">Also writes an in-console notification either way.</small></span>
+        </label>
+        <label><span>Moderation rules / prompt</span>
+          <textarea name="ai_moderation_rules" rows="12" maxlength="8000"><%= settings.moderation_rules %></textarea>
+        </label>
+
+        <h3 class="form-section">Assistant auto-run</h3>
+        <p class="muted" style="margin:-8px 0 16px">Lookups always run without asking. Tick a write action to let the assistant execute it immediately. Unticked writes still propose first and wait for your confirm. Deleting a member account always confirms.</p>
+        <input type="hidden" name="ai_auto_tools_present" value="1">
+        <% (settings.tool_groups || []).forEach(function (g) { %>
+          <% var items = (settings.tools || []).filter(function (t) { return t.group === g.id; }); %>
+          <% if (!items.length) return; %>
+          <div class="ai-tool-group">
+            <h4><%= g.label %></h4>
+            <div class="ai-tool-grid">
+              <% items.forEach(function (t) { %>
+                <label class="check ai-tool-item <%= t.neverAuto ? 'is-locked' : '' %> <%= !t.mutating ? 'is-read' : '' %>">
+                  <input type="checkbox"
+                    <% if (t.mutating && !t.neverAuto) { %>name="ai_auto_tools" value="<%= t.name %>" <%= t.auto ? 'checked' : '' %><% } else { %>disabled <%= t.auto || !t.mutating ? 'checked' : '' %><% } %>>
+                  <span>
+                    <strong><%= t.label %></strong>
+                    <% if (t.neverAuto) { %><em class="ai-tool-tag">always confirm</em>
+                    <% } else if (!t.mutating) { %><em class="ai-tool-tag">lookup</em>
+                    <% } %>
+                    <small class="muted"><%= t.description.slice(0, 140) %></small>
+                  </span>
+                </label>
+              <% }) %>
+            </div>
+          </div>
+        <% }) %>
+
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit">Save settings</button>
+        </div>
+      </form>
+
+      <div class="form-card">
+        <h3 class="form-section">Moderation log</h3>
+        <% if (!moderationLog.length) { %>
+          <p class="muted">No AI moderation decisions yet.</p>
+        <% } else { %>
+          <div class="table-wrap">
+            <table class="table">
+              <thead><tr><th>When</th><th>Listing</th><th>Decision</th><th>Reason</th><th>Model</th></tr></thead>
+              <tbody>
+                <% moderationLog.forEach(function (r) { %>
+                  <tr>
+                    <td class="mono" style="white-space:nowrap"><%= (r.created_at || '').replace('T', ' ').slice(0, 16) %></td>
+                    <td>
+                      <% if (r.listing_id && r.slug) { %><a href="/admin3119Musa/listings/<%= r.listing_id %>/edit"><%= r.listing_name || r.slug %></a>
+                      <% } else { %><%= r.listing_name || ('#' + r.listing_id) %><% } %>
+                    </td>
+                    <td><span class="status <%= r.decision === 'approve' ? 'approved' : r.decision === 'reject' ? 'rejected' : 'pending' %>"><%= r.decision %></span></td>
+                    <td><%= r.reason %></td>
+                    <td class="mono"><%= r.model %></td>
+                  </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
+        <% } %>
+      </div>
+
+      <div class="form-card">
+        <h3 class="form-section">Audit log</h3>
+        <p class="muted" style="margin:-8px 0 14px">Every generate, publish, proposed tool, execution, cancellation and moderation write is stored here.</p>
+        <% if (!auditLog.length) { %>
+          <p class="muted">Nothing audited yet.</p>
+        <% } else { %>
+          <div class="table-wrap">
+            <table class="table">
+              <thead><tr><th>When</th><th>Kind</th><th>Action</th><th>Result</th><th>OK</th></tr></thead>
+              <tbody>
+                <% auditLog.forEach(function (r) { %>
+                  <tr>
+                    <td class="mono" style="white-space:nowrap"><%= (r.created_at || '').replace('T', ' ').slice(0, 16) %></td>
+                    <td><%= r.kind %></td>
+                    <td class="mono"><%= r.action %></td>
+                    <td><%= String(r.result || '').slice(0, 180) %></td>
+                    <td><%= r.ok ? 'yes' : 'no' %></td>
+                  </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
+        <% } %>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="ai-modal" id="ai-modal" hidden>
+  <div class="ai-modal-card" role="dialog" aria-modal="true" aria-labelledby="ai-modal-title">
+    <h3 id="ai-modal-title">Confirm action</h3>
+    <p class="muted" id="ai-modal-label"></p>
+    <pre class="ai-modal-args" id="ai-modal-args"></pre>
+    <div class="form-actions">
+      <button class="btn btn-primary" type="button" id="ai-modal-ok">Run action</button>
+      <button class="btn btn-ghost" type="button" id="ai-modal-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var csrf = <%- JSON.stringify(csrfToken) %>;
+  var configured = <%- settings.groq_configured ? 'true' : 'false' %>;
+
+  function $(id) { return document.getElementById(id); }
+  function api(path, body) {
+    return fetch(path, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-CSRF-Token': csrf
+      },
+      body: JSON.stringify(body || {})
+    }).then(function (res) {
+      return res.json().then(function (data) {
+        if (!res.ok || data.ok === false) {
+          throw new Error(data.error || ('Request failed (' + res.status + ')'));
+        }
+        return data;
+      }, function () {
+        throw new Error('The server returned a non-JSON response (' + res.status + '). Reload and try again.');
+      });
+    });
+  }
+  function count(el, out, min, max) {
+    function tick() {
+      var n = (el.value || '').length;
+      out.textContent = n + ' / ' + max;
+      out.className = 'count' + (n < min || n > max ? ' count-warn' : ' count-ok');
+    }
+    el.addEventListener('input', tick);
+    tick();
+  }
+
+  /* tabs */
+  var tabs = document.querySelectorAll('.ai-tab');
+  function showTab(name) {
+    tabs.forEach(function (t) {
+      var on = t.getAttribute('data-tab') === name;
+      t.classList.toggle('active', on);
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    document.querySelectorAll('.ai-pane').forEach(function (p) {
+      p.classList.toggle('is-on', p.getAttribute('data-pane') === name);
+    });
+  }
+  tabs.forEach(function (t) {
+    t.addEventListener('click', function () { showTab(t.getAttribute('data-tab')); });
+  });
+  if (location.hash === '#ai-settings') showTab('set');
+
+  /* generator */
+  var genBtn = $('gen-btn');
+  var genStatus = $('gen-status');
+  var genForm = $('gen-form');
+  function fillDraft(d) {
+    $('f-name').value = d.name || '';
+    $('f-tagline').value = d.tagline || '';
+    $('f-description').value = d.description || '';
+    $('f-type').value = d.type || 'company';
+    $('f-category').value = d.category || '';
+    $('f-website').value = d.website || '';
+    $('f-country').value = d.country || '';
+    $('f-founded').value = d.founded || '';
+    $('f-city').value = d.city || '';
+    $('f-size').value = d.size || '';
+    $('f-tags').value = Array.isArray(d.tags) ? d.tags.join(', ') : (d.tags || '');
+    $('f-email').value = d.email || '';
+    genForm.hidden = false;
+    count($('f-tagline'), $('c-tagline'), 20, 90);
+    count($('f-description'), $('c-desc'), 100, 1200);
+    genForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  if (genBtn) {
+    genBtn.addEventListener('click', function () {
+      if (!configured) return;
+      var prompt = ($('gen-prompt').value || '').trim();
+      if (prompt.length < 8) {
+        genStatus.textContent = 'Add a bit more detail first.';
+        return;
+      }
+      genBtn.disabled = true;
+      genStatus.textContent = 'Generating…';
+      api('/admin3119Musa/ai/generate-listing', { prompt: prompt }).then(function (data) {
+        fillDraft(data.draft || {});
+        genStatus.textContent = 'Draft ready' + (data.model ? ' · ' + data.model : '') + '. Review before saving.';
+      }).catch(function (e) {
+        genStatus.textContent = e.message;
+      }).then(function () { genBtn.disabled = !configured; });
+    });
+  }
+  if ($('gen-discard')) {
+    $('gen-discard').addEventListener('click', function () {
+      genForm.hidden = true;
+      genForm.reset();
+      genStatus.textContent = 'Draft discarded.';
+    });
+  }
+  if (genForm) {
+    genForm.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var errBox = $('gen-errors');
+      errBox.hidden = true;
+      var body = {
+        name: $('f-name').value,
+        tagline: $('f-tagline').value,
+        description: $('f-description').value,
+        type: $('f-type').value,
+        category: $('f-category').value,
+        website: $('f-website').value,
+        country: $('f-country').value,
+        founded: $('f-founded').value,
+        city: $('f-city').value,
+        size: $('f-size').value,
+        tags: $('f-tags').value,
+        email: $('f-email').value
+      };
+      $('save-btn').disabled = true;
+      $('save-status').textContent = 'Saving…';
+      api('/admin3119Musa/ai/publish-listing', body).then(function (data) {
+        var l = data.listing || {};
+        $('save-status').textContent = 'Saved as pending' + (l.slug ? ' · /listing/' + l.slug : '') + '.';
+        if (window.__flToast) window.__flToast('ok', 'Listing saved as pending.', 'AI Playground');
+      }).catch(function (e) {
+        errBox.hidden = false;
+        errBox.textContent = e.message;
+        $('save-status').textContent = '';
+      }).then(function () { $('save-btn').disabled = false; });
+    });
+  }
+
+  /* assistant */
+  var history = [];
+  var pane = $('chat-pane');
+  var pending = null;
+
+  function addBubble(role, text) {
+    var row = document.createElement('div');
+    row.className = 'wa-row ' + (role === 'user' ? 'wa-mine' : 'wa-theirs');
+    var bubble = document.createElement('div');
+    bubble.className = 'wa-bubble';
+    var who = document.createElement('div');
+    who.className = 'wa-who';
+    who.textContent = role === 'user' ? 'You' : 'Assistant';
+    var body = document.createElement('div');
+    body.className = 'wa-text';
+    body.textContent = text;
+    bubble.appendChild(who);
+    bubble.appendChild(body);
+    row.appendChild(bubble);
+    pane.appendChild(row);
+    pane.scrollTop = pane.scrollHeight;
+    return body;
+  }
+
+  var modal = $('ai-modal');
+  var modalLabel = $('ai-modal-label');
+  var modalArgs = $('ai-modal-args');
+  function openModal(tool) {
+    pending = tool;
+    modalLabel.textContent = tool.label || tool.name;
+    modalArgs.textContent = JSON.stringify(tool.args || {}, null, 2);
+    modal.hidden = false;
+  }
+  function closeModal() { modal.hidden = true; }
+
+  function handleReply(data) {
+    if (data.type === 'tool_proposal') {
+      addBubble('assistant', data.content || 'I have an action to confirm.');
+      openModal({ pending_id: data.pending_id, name: data.tool && data.tool.name, label: data.tool && data.tool.label, args: data.tool && data.tool.args });
+      return;
+    }
+    addBubble('assistant', data.content || 'Done.');
+    if (data.content) history.push({ role: 'assistant', content: data.content });
+  }
+
+  $('chat-form').addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    if (!configured) return;
+    var input = $('chat-input');
+    var text = (input.value || '').trim();
+    if (!text) return;
+    input.value = '';
+    addBubble('user', text);
+    history.push({ role: 'user', content: text });
+    api('/admin3119Musa/ai/chat', { messages: history }).then(handleReply).catch(function (e) {
+      addBubble('assistant', e.message);
+    });
+  });
+  $('chat-input').addEventListener('keydown', function (ev) {
+    if (ev.key === 'Enter' && !ev.shiftKey) {
+      ev.preventDefault();
+      $('chat-form').dispatchEvent(new Event('submit', { cancelable: true }));
+    }
+  });
+
+  $('ai-modal-ok').addEventListener('click', function () {
+    if (!pending) return;
+    var id = pending.pending_id;
+    closeModal();
+    addBubble('assistant', 'Running…');
+    api('/admin3119Musa/ai/execute', { pending_id: id }).then(function (data) {
+      var last = pane.querySelector('.wa-row:last-child .wa-text');
+      if (last && last.textContent === 'Running…') last.textContent = data.content || 'Done.';
+      else addBubble('assistant', data.content || 'Done.');
+      if (data.content) history.push({ role: 'assistant', content: data.content });
+      pending = null;
+    }).catch(function (e) {
+      addBubble('assistant', e.message);
+      pending = null;
+    });
+  });
+  $('ai-modal-cancel').addEventListener('click', function () {
+    if (!pending) { closeModal(); return; }
+    var id = pending.pending_id;
+    closeModal();
+    api('/admin3119Musa/ai/cancel', { pending_id: id }).then(function (data) {
+      addBubble('assistant', data.content || 'Cancelled. Nothing ran.');
+      if (data.content) history.push({ role: 'assistant', content: data.content });
+      pending = null;
+    }).catch(function (e) {
+      addBubble('assistant', e.message);
+      pending = null;
+    });
+  });
+  modal.addEventListener('click', function (ev) {
+    if (ev.target === modal) $('ai-modal-cancel').click();
+  });
+})();
+</script>
+
+<%- include('../partials/bottom') %>

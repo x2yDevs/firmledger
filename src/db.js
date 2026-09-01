@@ -617,6 +617,42 @@ CREATE TABLE IF NOT EXISTS status_subscribers (
 /* Status monitor keeps history tidy — anything older than 90 days is noise. */
 try { db.exec('DELETE FROM component_status_history WHERE checked_at < datetime(\'now\', \'-90 days\')'); } catch { /* ignore */ }
 
+/* ---- AI Playground: audit, moderation decisions, pending tool calls ---- */
+db.exec(`
+CREATE TABLE IF NOT EXISTS ai_audit_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind TEXT NOT NULL DEFAULT '',
+  action TEXT NOT NULL DEFAULT '',
+  listing_id INTEGER,
+  payload TEXT NOT NULL DEFAULT '{}',
+  result TEXT NOT NULL DEFAULT '',
+  ok INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_ai_audit_created ON ai_audit_log(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS ai_moderation_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  listing_id INTEGER,
+  listing_name TEXT NOT NULL DEFAULT '',
+  decision TEXT NOT NULL DEFAULT '',
+  reason TEXT NOT NULL DEFAULT '',
+  model TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_ai_mod_listing ON ai_moderation_log(listing_id);
+CREATE INDEX IF NOT EXISTS idx_ai_mod_created ON ai_moderation_log(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS ai_pending_actions (
+  id TEXT PRIMARY KEY,
+  tool TEXT NOT NULL,
+  args TEXT NOT NULL DEFAULT '{}',
+  messages TEXT NOT NULL DEFAULT '[]',
+  expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+`);
+
 /* Settings helpers */
 function getSetting(key, fallback = '') {
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
