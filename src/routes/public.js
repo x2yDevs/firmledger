@@ -764,15 +764,76 @@ router.post('/compare/clear', (req, res) => {
 
 /* ---------------- Advertise — Sponsored Content ---------------- */
 router.get('/advertise', (req, res) => {
+  const faqs = [
+    {
+      q: 'What exactly do I get when I advertise on FirmLedger?',
+      a: 'Your listing appears in the clearly-labelled "Sponsored" strip on the FirmLedger homepage for the duration of the package you purchase. Each card links straight to your verified company profile, so visitors who are already browsing the directory can discover your business in one click.',
+    },
+    {
+      q: 'How much does advertising cost?',
+      a: 'Packages start at $15 for 7 days, $40 for 30 days and $95 for 90 days (prices shown in USD). Longer placements deliver the best value per day. The exact packages available are listed on this page, and they can be changed by the FirmLedger team at any time.',
+    },
+    {
+      q: 'How do I pay, and is it secure?',
+      a: 'Payment is handled entirely by PayPal — cards, bank accounts or PayPal balance. You are redirected to PayPal to authorise the order, then back to FirmLedger. No card details ever touch FirmLedger servers; we only receive PayPal\'s payment confirmation.',
+    },
+    {
+      q: 'When does my sponsored placement go live?',
+      a: 'The moment PayPal confirms your payment. Our server verifies the order, flags your listing as sponsored for the purchased duration, and it appears in the homepage Sponsored Content strip immediately. You also receive an in-app notification and a receipt email.',
+    },
+    {
+      q: 'Do I need a Pro subscription or a verified listing to advertise?',
+      a: 'You need a free FirmLedger account and at least one approved listing that you own. Advertising is separate from FirmLedger Pro — Pro unlocks viewing full profiles, while advertising buys a homepage placement. Claiming and verifying your listing is free.',
+    },
+    {
+      q: 'Is sponsored content marked as an advertisement?',
+      a: 'Yes, always. Every sponsored placement carries a clear "Sponsored" label — it never masquerades as an editorial pick, and we never sell rankings inside the organic directory results.',
+    },
+  ];
   res.render('advertise', {
     meta: {
-      title: 'Advertise your listing — Sponsored Content | FirmLedger',
-      description: 'Put your verified FirmLedger listing on the homepage as clearly-labelled Sponsored Content. Choose a package and duration, pay securely by PayPal, and go live instantly.',
+      title: 'Advertise on FirmLedger — homepage Sponsored Content for your business',
+      description: 'Promote your verified business listing on the FirmLedger homepage. Transparent Sponsored Content packages from $15, PayPal-secured checkout, and instant activation the moment payment is confirmed.',
       canonical: siteUrl('/advertise'),
+      jsonld: {
+        '@context': 'https://schema.org',
+        '@graph': [
+          {
+            '@type': 'Service',
+            name: 'FirmLedger Sponsored Content — homepage advertising',
+            serviceType: 'Sponsored Content advertising',
+            description: 'Clearly-labelled homepage advertising placements for verified FirmLedger business listings, sold as time-based packages and paid through PayPal.',
+            url: siteUrl('/advertise'),
+            provider: { '@type': 'Organization', name: 'FirmLedger', url: siteUrl('/') },
+            areaServed: 'Worldwide',
+            offers: {
+              '@type': 'AggregateOffer',
+              priceCurrency: 'USD',
+              lowPrice: '15',
+              highPrice: '95',
+              offerCount: ad.allPackages(true).length,
+            },
+          },
+          {
+            '@type': 'FAQPage',
+            mainEntity: faqs.map((f) => ({
+              '@type': 'Question', name: f.q,
+              acceptedAnswer: { '@type': 'Answer', text: f.a },
+            })),
+          },
+        ],
+      },
+      breadcrumbs: [
+        { name: 'Home', url: siteUrl('/') },
+        { name: 'Advertise', url: siteUrl('/advertise') },
+      ],
     },
     packages: ad.allPackages(true),
     paypalReady: paypal.configured(),
     paypalMode: paypal.mode(),
+    faqs,
+    ok: req.query.ok || '',
+    err: req.query.err || '',
   });
 });
 
@@ -781,16 +842,63 @@ router.get('/careers', (req, res) => {
   const open = careers.listOpen();
   const all = careers.listAll();
   const activeAny = open.length > 0;
+  const EMPLOYMENT_MAP = {
+    'Full-time': 'FULL_TIME', 'Part-time': 'PART_TIME', 'Contract': 'CONTRACTOR',
+    'Internship': 'INTERN', 'Remote': 'FULL_TIME', 'Freelance': 'CONTRACTOR',
+  };
+  const faqs = [
+    {
+      q: 'What does FirmLedger do?',
+      a: 'FirmLedger is the business record layer for modern discovery: canonical, source-backed profiles for companies, startups, agencies, organizations, products, services and publishers — built with verification, provenance tracking and a unified intelligence API.',
+    },
+    {
+      q: 'How do I apply for a role at FirmLedger?',
+      a: 'If a role is listed above, hit the “Apply by email” button — it opens a pre-filled application addressed to careers@firmledger.co.ke with the role, your details and a short cover letter. If no role fits right now, you can still send a speculative application and we keep it on file.',
+    },
+    {
+      q: 'Does FirmLedger hire remotely?',
+      a: 'Each role states its location — many FirmLedger roles are remote-friendly. Where the listing says “Remote”, we welcome applicants from any timezone with a reliable connection; some roles are office-based in Nairobi and say so explicitly.',
+    },
+    {
+      q: 'What does the interview process look like?',
+      a: 'A short intro call to talk about the role and your background, a focused practical conversation (a real, small task in the area you are applying for — never a take-home marathon), then a final chat with the founders. We keep the whole process under two weeks wherever possible.',
+    },
+    {
+      q: 'What is it like to work at FirmLedger?',
+      a: 'A small, senior, high-trust team that ships to production every week. You own your area end-to-end, write to a public quality bar, and work directly with the people using what you build. We favour calm, focused weeks and honest communication over hours and heroics.',
+    },
+  ];
   res.render('careers', {
     meta: {
-      title: activeAny ? 'Careers — FirmLedger is hiring' : 'Careers — FirmLedger',
+      title: activeAny ? 'Careers — open roles at FirmLedger' : 'Careers — build the business record layer at FirmLedger',
       description: activeAny
-        ? 'Open roles at FirmLedger, the trusted business record layer. Apply by email in one click — every position has its requirements listed.'
-        : 'FirmLedger isn’t hiring right now. Get to know the team and the product while we grow.',
+        ? `${open.length} open role${open.length === 1 ? '' : 's'} at FirmLedger, the business record layer. See what we build, how we work and apply by email in one click.`
+        : 'Jobs at FirmLedger, the business record layer. See what we build, how we work, and apply by email — or send a speculative application for future roles.',
       canonical: siteUrl('/careers'),
+      jsonld: activeAny ? open.map((c) => ({
+        '@type': 'JobPosting',
+        title: c.title,
+        description: `${c.description}${c.requirements ? `\n\nRequirements:\n${c.requirements}` : ''}`.slice(0, 4000),
+        datePosted: (c.created_at || '').slice(0, 10) || new Date().toISOString().slice(0, 10),
+        employmentType: EMPLOYMENT_MAP[c.role_type] || 'FULL_TIME',
+        hiringOrganization: {
+          '@type': 'Organization',
+          name: 'FirmLedger',
+          sameAs: siteUrl('/'),
+          logo: siteUrl('/assets/logo-mark.png'),
+        },
+        jobLocation: { '@type': 'Place', address: { '@type': 'PostalAddress', addressLocality: c.location || 'Remote', addressCountry: 'KE' } },
+        url: siteUrl(`/careers#role-${c.id}`),
+        applicantLocationRequirements: { '@type': 'Country', name: c.location || 'Worldwide' },
+      })) : null,
+      breadcrumbs: [
+        { name: 'Home', url: siteUrl('/') },
+        { name: 'Careers', url: siteUrl('/careers') },
+      ],
     },
     open, all, activeAny, ROLE_TYPES: careers.ROLE_TYPES,
     applyMailto: careers.applyMailto,
+    faqs,
     ok: req.query.ok || '',
   });
 });
