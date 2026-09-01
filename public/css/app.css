@@ -1373,6 +1373,7 @@ h2.h-display { font-size: clamp(1.9rem, 3.4vw, 2.7rem); }
    tablet width, never a cramped one — and min(100%,268px) keeps phones free of sideways scroll. */
 .list-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 268px), 1fr)); gap: clamp(14px, 1.2vw, 20px); }
 .l-card { min-width: 0; }
+.l-card.hscroll { flex: 0 0 280px; }
 .l-top > div { min-width: 0; }
 .l-name { overflow-wrap: anywhere; }
 
@@ -1757,6 +1758,11 @@ h2.h-display { font-size: clamp(1.9rem, 3.4vw, 2.7rem); }
   flex: 0 0 40px;
 }
 .foot-soc .social-ico svg { width: 18px; height: 18px; }
+
+.foot-row { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(12px, 2vw, 24px); }
+@media (max-width: 760px) {
+  .foot-row { grid-template-columns: 1fr; }
+}
 
 /* At tablet width, give each footer area a predictable two-column layout;
    the brand gets a full row so its description and social icons never crowd
