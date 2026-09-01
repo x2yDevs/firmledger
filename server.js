@@ -23,6 +23,16 @@ const ASSET_V = '29';
 
 const app = express();
 app.set('trust proxy', true);
+
+// ===== REDIRECT onrender.com → firmledger.co.ke =====
+app.use((req, res, next) => {
+  const host = req.get('host');
+  if (host && host.toLowerCase() === 'firmledger.onrender.com') {
+    return res.redirect(301, `https://firmledger.co.ke${req.originalUrl}`);
+  }
+  next();
+});
+
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
