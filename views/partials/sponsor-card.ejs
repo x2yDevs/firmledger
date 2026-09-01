@@ -1,0 +1,21 @@
+<%#
+  One Sponsored Content card. Rendered twice per placement by the homepage marquee:
+  the second pass (`dup`) is the copy that keeps the loop seamless, so it is hidden
+  from assistive tech and from the tab order.
+%>
+<% const _dup = (typeof dup !== 'undefined' && dup); %>
+<a class="l-card sponsor-card<%= _dup ? ' sponsor-card--dup' : '' %>" href="/listing/<%= l.slug %>"<% if (_dup) { %> aria-hidden="true" tabindex="-1"<% } %>>
+  <div class="l-top">
+    <% if (l.logo_url) { %><img class="avatar" src="<%= l.logo_url %>" alt="<%= _dup ? '' : l.name + ' logo' %>" loading="lazy"><% } else { %><span class="avatar"><%= initials(l.name) %></span><% } %>
+    <div>
+      <div class="l-name"><%= l.name %><span class="sponsored-chip" title="Paid sponsored placement">Sponsored</span></div>
+      <div class="l-meta"><%= typeLabel(l.type) %> · <%= listingLoc(l) %></div>
+    </div>
+  </div>
+  <p class="l-desc"><%= l.tagline %></p>
+  <div class="l-foot">
+    <% if (l.claimed) { %><span class="vbadge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Verified</span><% } %>
+    <span class="tag"><%= typeLabel(l.type) %></span>
+    <%- dial(l.confidence) %>
+  </div>
+</a>

@@ -65,7 +65,9 @@ router.get('/', (req, res) => {
   const tickerItems = db.prepare(
     "SELECT name, slug, confidence FROM listings WHERE status='approved' ORDER BY updated_at DESC LIMIT 12"
   ).all();
-  const sponsored = ad.sponsoredStrip(4);
+  /* Every active sponsor is rendered: the homepage strip is a marquee that scrolls
+     the whole set through a fixed-width row instead of dropping all but the first four. */
+  const sponsored = ad.sponsoredStrip();
   const hasActiveSponsors = sponsored.length > 0;
 
   res.render('home', {
