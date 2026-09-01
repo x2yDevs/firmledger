@@ -672,10 +672,23 @@ CREATE TABLE IF NOT EXISTS ai_chat_messages (
   session_id INTEGER NOT NULL REFERENCES ai_chat_sessions(id) ON DELETE CASCADE,
   role TEXT NOT NULL DEFAULT '',
   content TEXT NOT NULL DEFAULT '',
+  model TEXT NOT NULL DEFAULT '',
+  tool TEXT NOT NULL DEFAULT '',
+  ok INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_ai_chat_msgs_session ON ai_chat_messages(session_id, created_at DESC);
 `);
+
+/* AI Playground chat transcript columns — mirrors
+   migrations/2026-09-01-ai-playground-chat.sql so existing deployments
+   pick them up at boot. model/tool/ok let the assistant's action results
+   be replayed in the transcript exactly as they happened. */
+try { db.exec("ALTER TABLE ai_chat_messages ADD COLUMN model TEXT NOT NULL DEFAULT ''"); } catch { /* column exists */ }
+try { db.exec("ALTER TABLE ai_chat_messages ADD COLUMN tool TEXT NOT NULL DEFAULT ''"); } catch { /* column exists */ }
+try { db.exec("ALTER TABLE ai_chat_messages ADD COLUMN ok INTEGER NOT NULL DEFAULT 1"); } catch { /* column exists */ }
+try { db.exec("ALTER TABLE ai_chat_sessions ADD COLUMN last_message_at TEXT NOT NULL DEFAULT ''"); } catch { /* column exists */ }
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_ai_chat_sessions_owner ON ai_chat_sessions(user_id, archived, updated_at DESC)'); } catch { /* ignore */ }
 
 /* Settings helpers */
 function getSetting(key, fallback = '') {
