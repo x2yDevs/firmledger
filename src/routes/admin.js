@@ -23,6 +23,9 @@ const { allPlans, getPlan, grantUserPro, revokeUserPro, isProUser } = plans;
 const notify = require('../lib/notify');
 const notifications = require('../lib/notifications');
 const { finalizeVerifiedClaim } = require('../lib/claimflow');
+const ad = require('../lib/advertising');
+const careers = require('../lib/careers');
+const mon = require('../lib/statusMonitor');
 
 const router = express.Router();
 const adminmail2fa = require('../lib/adminmail2fa');
@@ -310,6 +313,8 @@ router.get('/admin3119Musa/dashboard', (req, res) => {
   stats.suspended = db.prepare('SELECT COUNT(*) c FROM users WHERE suspended=1').get().c;
   stats.pendingDeletions = db.prepare("SELECT COUNT(*) c FROM deletion_requests WHERE status='pending'").get().c;
   stats.openTickets = db.prepare("SELECT COUNT(*) c FROM tickets WHERE status='open'").get().c;
+  stats.sponsored = ad.allSponsored().length;
+  stats.careersOpen = db.prepare("SELECT COUNT(*) c FROM careers WHERE status='open'").get().c;
   const recent = db.prepare("SELECT * FROM listings ORDER BY created_at DESC LIMIT 8").all();
   res.render('admin/dashboard', {
     meta: { title: 'Admin — FirmLedger', description: '', robots: 'noindex,nofollow' },
@@ -551,6 +556,9 @@ router.get('/admin3119Musa/listings/:id/edit', (req, res) => {
   let sources = [];
   try { sources = JSON.parse(l.sources); } catch {}
   const events = db.prepare('SELECT * FROM listing_events WHERE listing_id=? ORDER BY event_date ASC').all(l.id);
+  const ownerOptions = db.prepare(
+    'SELECT id, email, name FROM users ORDER BY COALESCE(nullif(name,\'\'), email) LIMIT 500'
+  ).all();
   res.render('admin/edit', {
     meta: { title: `Edit ${l.name} — FirmLedger Admin`, description: '', robots: 'noindex,nofollow' },
     l, sources: sources.join('\n'), events,
@@ -558,6 +566,7 @@ router.get('/admin3119Musa/listings/:id/edit', (req, res) => {
     allCats: catLib.all(),
     relations: graphLib.buildGraph(l).items,
     REL_TYPES: graphLib.REL_TYPES,
+    ownerOptions, ok: req.query.ok || '', err: req.query.err || '',
   });
 });
 
@@ -987,6 +996,9 @@ router.get('/admin3119Musa/settings', (req, res) => {
       nl_cadence: require('../lib/newsletter').digestCadence(),
       jobs_open: db.prepare("SELECT COUNT(*) c FROM jobs WHERE status='open'").get().c,
       favorites_total: db.prepare('SELECT COUNT(*) c FROM favorites').get().c,
+      ad_packages: db.prepare('SELECT COUNT(*) c FROM ad_packages WHERE active=1').get().c,
+      sponsored_active: ad.allSponsored().length,
+      careers_open: db.prepare("SELECT COUNT(*) c FROM careers WHERE status='open'").get().c,
     },
     payments,
     section: 'settings',
@@ -1763,5 +1775,236 @@ router.post('/admin3119Musa/pro-transfer/:id/reject', (req, res) => {
   res.redirect('/admin3119Musa/listings?ok=' + encodeURIComponent('Transfer request declined.'));
 });
 
+/* ================= Ownership: make anyone owner / remove owner ================= */
+router.post('/admin3119Musa/listings/:id/owner', (req, res) => {
+  const l = db.prepare('SELECT id, slug, name FROM listings WHERE id=?').get(req.params.id);
+  if (!l) return res.redirect('/admin3119Musa/listings?err=' + encodeURIComponent('Listing not found.'));
+  const userId = Number(req.body.owner_user_id) || 0;
+  let ownerName = 'nobody';
+  if (userId > 0) {
+    const u = db.prepare('SELECT id, email, name FROM users WHERE id=?').get(userId);
+    if (!u) return res.redirect(`/admin3119Musa/listings/${l.id}/edit?err=${encodeURIComponent('That user does not exist.')}`);
+    ownerName = u.name || u.email;
+  }
+  db.prepare('UPDATE listings SET owner_user_id = ? WHERE id = ?').run(userId || null, l.id);
+  // If we removed the owner, drop the claimed flag too — ownership is what carries it.
+  if (!userId) db.prepare('UPDATE listings SET claimed = 0 WHERE id = ?').run(l.id);
+  const msg = userId
+    ? `Ownership of “${l.name}” transferred to ${ownerName}.`
+    : `Owner removed from “${l.name}” — it is now unclaimed.`;
+  if (userId > 0) {
+    notify.notifyUser(userId, {
+      kind: 'listing',
+      title: `You now own “${l.name}”`,
+      body: 'An administrator transferred ownership of this listing to you. It appears in your dashboard.',
+      url: `/dashboard/listings/${l.id}/edit`,
+    });
+  }
+  res.redirect(`/admin3119Musa/listings/${l.id}/edit?ok=` + encodeURIComponent(msg));
+});
+
+/* ================= Advertising (Sponsored Content) ================= */
+function advertisingPage(req, res) {
+  const packages = ad.allPackages(false);
+  const sponsored = ad.allSponsored();
+  const listings = db.prepare(
+    `SELECT l.id, l.slug, l.name, l.category, l.status, l.claimed, l.sponsored, l.sponsored_expires_at, l.ad_reference,
+            u.email AS owner_email
+       FROM listings l LEFT JOIN users u ON u.id = l.owner_user_id
+      ORDER BY l.status='approved' DESC, l.updated_at DESC LIMIT 200`
+  ).all();
+  res.render('admin/advertising', {
+    meta: { title: 'Advertising — FirmLedger Admin', description: '', robots: 'noindex,nofollow' },
+    packages, sponsored, listings, section: 'advertising',
+    today: new Date().toISOString().slice(0, 10),
+    ad, ok: req.query.ok || '', err: req.query.err || '',
+  });
+}
+
+router.get('/admin3119Musa/advertising', advertisingPage);
+
+router.post('/admin3119Musa/advertising/packages', (req, res) => {
+  const name = String(req.body.name || '').trim().slice(0, 60);
+  const price = parseFloat(String(req.body.price_usd || '').replace(',', '.'));
+  const days = Math.round(Number(req.body.duration_days || 0));
+  const back = (q) => res.redirect('/admin3119Musa/advertising?' + q);
+  if (!name) return back('err=' + encodeURIComponent('The package needs a name.'));
+  if (!(price > 0) || price > 1e6) return back('err=' + encodeURIComponent('Enter a valid price above 0.'));
+  if (!(days >= 1) || days > 3650) return back('err=' + encodeURIComponent('Duration must be between 1 and 3650 days.'));
+  ad.createPackage({ name, blurb: req.body.blurb, priceCents: Math.round(price * 100), currency: req.body.currency || 'USD', durationDays: days, sort: req.body.sort });
+  return back('ok=' + encodeURIComponent(`Package \"${name}\" created — $${price.toFixed(2)} / ${days} days.`));
+});
+
+router.post('/admin3119Musa/advertising/packages/:id/toggle', (req, res) => {
+  const p = ad.togglePackage(req.params.id);
+  res.redirect('/admin3119Musa/advertising?ok=' + encodeURIComponent(p ? `\"${p.name}\" is now ${p.active ? 'live' : 'hidden'}.` : 'Package not found.'));
+});
+
+router.post('/admin3119Musa/advertising/packages/:id/delete', (req, res) => {
+  const p = ad.getPackage(req.params.id);
+  ad.deletePackage(req.params.id);
+  res.redirect('/admin3119Musa/advertising?ok=' + encodeURIComponent(p ? `\"${p.name}\" deleted.` : 'Package not found.'));
+});
+
+/* Sponsor / unsponsor any listing directly. */
+router.post('/admin3119Musa/listings/:id/sponsor', (req, res) => {
+  const daysRaw = String(req.body.days || '').trim();
+  const days = daysRaw === 'lifetime' ? null : (parseInt(daysRaw, 10) || 30);
+  const r = ad.grantSponsorship(req.params.id, days, 'admin');
+  res.redirect('/admin3119Musa/advertising?' + (r.ok
+    ? 'ok=' + encodeURIComponent(`“${r.listing}” is now sponsored${r.until === 'lifetime' ? ' (lifetime)' : ` until ${r.until}`}.`)
+    : 'err=' + encodeURIComponent(r.error)));
+});
+
+router.post('/admin3119Musa/listings/:id/unsponsor', (req, res) => {
+  const r = ad.revokeSponsorship(req.params.id);
+  res.redirect('/admin3119Musa/advertising?' + (r.ok
+    ? 'ok=' + encodeURIComponent(`Sponsored placement removed from “${r.listing}”.`)
+    : 'err=' + encodeURIComponent(r.error)));
+});
+
+/* ================= Careers — FirmLedger is hiring ================= */
+function careersPage(req, res) {
+  res.render('admin/careers', {
+    meta: { title: 'Careers — FirmLedger Admin', description: '', robots: 'noindex,nofollow' },
+    roles: careers.listAll(), section: 'careers',
+    ROLE_TYPES: careers.ROLE_TYPES,
+    errors: [], old: {}, ok: req.query.ok || '', err: req.query.err || '',
+  });
+}
+
+router.get('/admin3119Musa/careers', careersPage);
+
+router.post('/admin3119Musa/careers', (req, res) => {
+  const r = careers.create(req.body);
+  if (!r.ok) {
+    return res.status(422).render('admin/careers', {
+      meta: { title: 'Careers — FirmLedger Admin', description: '', robots: 'noindex,nofollow' },
+      roles: careers.listAll(), section: 'careers', ROLE_TYPES: careers.ROLE_TYPES,
+      errors: r.errors, old: req.body, ok: '', err: '',
+    });
+  }
+  res.redirect('/admin3119Musa/careers?ok=' + encodeURIComponent('Role published on /careers.'));
+});
+
+router.post('/admin3119Musa/careers/:id/toggle', (req, res) => {
+  const r = careers.toggleStatus(req.params.id);
+  res.redirect('/admin3119Musa/careers?ok=' + encodeURIComponent(r ? `Role is now ${r.status}.` : 'Role not found.'));
+});
+
+router.post('/admin3119Musa/careers/:id/delete', (req, res) => {
+  careers.remove(req.params.id);
+  res.redirect('/admin3119Musa/careers?ok=' + encodeURIComponent('Role removed.'));
+});
+
+/* ================= Incidents — public status page ================= */
+function incidentsPage(req, res, extra = {}) {
+  const incidents = mon.allIncidents();
+  res.render('admin/incidents', {
+    meta: { title: 'Incidents — FirmLedger Admin', description: '', robots: 'noindex,nofollow' },
+    section: 'incidents',
+    incidents,
+    components: mon.components(),
+    severityLabels: mon.SEVERITY_LABELS,
+    incidentStatusLabels: mon.INCIDENT_STATUS_LABELS,
+    errors: extra.errors || [],
+    old: extra.old || {},
+    weeklyReportOn: getSetting('status_weekly_report', '0') === '1',
+    ok: req.query.ok || '', err: req.query.err || '',
+  });
+}
+
+function incidentFull(id) {
+  return db.prepare(
+    `SELECT i.*, c.name AS component_name FROM incidents i LEFT JOIN status_components c ON c.id=i.component_id WHERE i.id=?`
+  ).get(Number(id) || 0) || null;
+}
+
+function incidentEmail(incident, update, params = {}) {
+  const statusLabel = (mon.INCIDENT_STATUS_LABELS[incident.status] || incident.status);
+  const component = incident.component_name ? `<b>${escHtml(incident.component_name)}</b>` : 'FirmLedger';
+  const severityWord = incident.severity === 'critical' ? 'A critical incident' : incident.severity === 'major' ? 'An incident' : 'A service disruption';
+  const tone = incident.status === 'resolved' ? 'ok' : (incident.status === 'monitoring' ? 'info' : 'warn');
+  const heading = incident.status === 'resolved'
+    ? `Resolved: ${incident.title}`
+    : `${statusLabel}: ${incident.title}`;
+  return {
+    kicker: 'Status update',
+    title: heading,
+    preheader: `FirmLedger status — ${statusLabel.toLowerCase()}.`,
+    alert: `${severityWord} affects ${component}.`,
+    alertTone: tone,
+    paragraphs: [
+      update && update.message ? update.message : (incident.description || incident.title),
+      `Current status: <b>${statusLabel}</b>${incident.resolved_at ? ` (resolved ${String(incident.resolved_at).slice(0, 16).replace('T', ' ')})` : ''}.`,
+    ],
+    cta: { label: 'View status', url: siteUrl('/status') },
+    note: 'You received this because you subscribed to FirmLedger status updates. Unsubscribe any time from the status page.',
+  };
+}
+
+router.get('/admin3119Musa/incidents', incidentsPage);
+
+/* Toggle the optional weekly status report email to subscribers. */
+router.post('/admin3119Musa/incidents/config/weekly', (req, res) => {
+  setSetting('status_weekly_report', req.body.weekly_on === '1' ? '1' : '0');
+  res.redirect('/admin3119Musa/incidents?ok=' + encodeURIComponent(
+    (req.body.weekly_on === '1' ? 'Weekly status report enabled' : 'Weekly status report disabled') + '.'));
+});
+
+router.post('/admin3119Musa/incidents', (req, res) => {
+  const r = mon.createIncident({
+    title: req.body.title,
+    description: req.body.description,
+    status: req.body.status,
+    severity: req.body.severity,
+    component_id: req.body.component_id || null,
+  });
+  if (!r.ok) { res.status(422); return incidentsPage(req, res, { errors: [r.error], old: req.body }); }
+  const incident = db.prepare(
+    `SELECT i.*, c.name AS component_name FROM incidents i LEFT JOIN status_components c ON c.id=i.component_id WHERE i.id=?`
+  ).get(r.id);
+  notify.notifyAdmin({
+    kind: 'status', title: `Incident opened: ${incident.title}`,
+    body: `${mon.INCIDENT_STATUS_LABELS[incident.status]} · ${incident.severity}${incident.component_name ? ' · ' + incident.component_name : ''}`,
+    url: '/admin3119Musa/incidents',
+  });
+  mon.notifySubscribers(`FirmLedger status: ${incident.title}`, incidentEmail(incident, null)).catch(() => {});
+  res.redirect('/admin3119Musa/incidents?ok=' + encodeURIComponent(`Incident opened — it's now live on /status.`));
+});
+
+/* GET view for a single incident's update form (renders the dashboard focused). */
+router.get('/admin3119Musa/incidents/:id/update', (req, res) => {
+  const inc = mon.incidentById(req.params.id);
+  if (!inc) return res.redirect('/admin3119Musa/incidents?err=' + encodeURIComponent('Incident not found.'));
+  return incidentsPage(req, res);
+});
+
+router.post('/admin3119Musa/incidents/:id/update', (req, res) => {
+  const r = mon.addIncidentUpdate(req.params.id, { status: req.body.status, message: req.body.message });
+  if (!r.ok) return res.redirect('/admin3119Musa/incidents?err=' + encodeURIComponent(r.error));
+  const inc = incidentFull(r.incident.id);
+  const newUpdate = r.newUpdate;
+  notify.notifyAdmin({
+    kind: 'status', title: `Incident updated: ${inc.title}`,
+    body: `${mon.INCIDENT_STATUS_LABELS[inc.status]} · ${newUpdate.message}`,
+    url: '/admin3119Musa/incidents',
+  });
+  mon.notifySubscribers(`FirmLedger status: ${inc.title}`, incidentEmail(inc, newUpdate)).catch(() => {});
+  res.redirect('/admin3119Musa/incidents?ok=' + encodeURIComponent(`Update posted — status is now “${mon.INCIDENT_STATUS_LABELS[inc.status]}”.`));
+});
+
+router.post('/admin3119Musa/incidents/:id/resolve', (req, res) => {
+  const r = mon.resolveIncident(req.params.id);
+  if (!r.ok) return res.redirect('/admin3119Musa/incidents?err=' + encodeURIComponent(r.error));
+  const inc = incidentFull(r.incident.id);
+  notify.notifyAdmin({
+    kind: 'status', title: `Incident resolved: ${inc.title}`,
+    body: `Resolved at ${String(inc.resolved_at || '').slice(0, 16).replace('T', ' ')}.`,
+    url: '/admin3119Musa/incidents',
+  });
+  mon.notifySubscribers(`FirmLedger status: ${inc.title} resolved`, incidentEmail(inc, null)).catch(() => {});
+  res.redirect('/admin3119Musa/incidents?ok=' + encodeURIComponent(`Incident resolved — marked live on /status.`));
+});
 
 module.exports = router;

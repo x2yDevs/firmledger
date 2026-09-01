@@ -12,6 +12,7 @@ const { sendMail, sendBranded } = require('../lib/mailer');
 const trialmail = require('../lib/trialmail');
 const notify = require('../lib/notify');
 const promos = require('../lib/promos');
+const ad = require('../lib/advertising');
 
 const router = express.Router();
 
@@ -124,25 +125,29 @@ router.get('/billing/cancel', (req, res) => {
   const payment = reference && db.prepare('SELECT * FROM payments WHERE reference = ?').get(reference);
   if (payment && (!req.user || payment.user_id === req.user.id) && payment.status === 'initialized') {
     db.prepare("UPDATE payments SET status = 'cancelled' WHERE reference = ?").run(reference);
-    const plan = getPlan(payment.plan_id);
+    const isAdCancel = payment.kind === 'ad';
+    const plan = isAdCancel ? ad.getPackage(payment.plan_id) : getPlan(payment.plan_id);
     const buyer = db.prepare('SELECT * FROM users WHERE id = ?').get(payment.user_id);
     const to = (buyer && buyer.email) || payment.email;
+    const dest = isAdCancel ? util.siteUrl('/dashboard/advertise') : util.siteUrl('/dashboard/upgrade');
+    const label = isAdCancel ? 'advertising' : 'upgrade';
     if (to) {
       sendBranded(to, 'Checkout cancelled — no charge was made', {
       kicker: 'Checkout update',
-      title: 'Your upgrade checkout was cancelled',
-      preheader: 'No charge was made — you can finish upgrading whenever you\'re ready.',
-      alert: `Your FirmLedger Pro checkout${plan ? ` (<b>${util.escHtml(plan.name)}</b> — ${plan.currency} ${paypal.decimal(payment.amount || plan.price_cents)})` : ''} was cancelled before payment. <b>No charge was made.</b>`,
+      title: `Your ${label} checkout was cancelled`,
+      preheader: 'No charge was made — you can finish whenever you\'re ready.',
+      alert: `Your FirmLedger ${label} checkout${plan ? ` (<b>${util.escHtml(plan.name)}</b> — ${plan.currency} ${paypal.decimal(payment.amount || plan.price_cents)})` : ''} was cancelled before payment. <b>No charge was made.</b>`,
       alertTone: 'info',
-      paragraphs: [
-        'Nothing was charged and your account is unchanged. You can return and complete the upgrade at any time — Pro unlocks every listing\'s full details (email, phone, website, events, relationship graph) plus the verified tick, Featured placement and gold badge on listings you own.',
-      ],
-      cta: { label: 'Return to upgrade', url: util.siteUrl('/dashboard/upgrade') },
-      note: `Reference <b>${util.escHtml(reference)}</b> — quote it if anything looks wrong. Questions? <a href="mailto:billing@firmledger.co.ke" style="color:#1D4ED8;">billing@firmledger.co.ke</a>`,
+      paragraphs: isAdCancel
+        ? ['Nothing was charged and your listing is unchanged. You can return and complete the advertising checkout at any time — once confirmed, your listing appears on the homepage Sponsored Content strip, clearly labelled as Sponsored.']
+        : ['Nothing was charged and your account is unchanged. You can return and complete the upgrade at any time — Pro unlocks every listing\'s full details (email, phone, website, events, relationship graph) plus the verified tick, Featured placement and gold badge on listings you own.'],
+      cta: { label: `Return to ${label}`, url: dest },
+      note: `Reference <b>${util.escHtml(reference)}</b> — quote it if anything looks wrong. Questions? ${isAdCancel ? '<a href="mailto:advertising@firmledger.co.ke" style="color:#1D4ED8;">advertising@firmledger.co.ke</a>' : '<a href="mailto:billing@firmledger.co.ke" style="color:#1D4ED8;">billing@firmledger.co.ke</a>'}`,
       }).catch(() => {});
     }
   }
-  res.redirect('/dashboard/upgrade?err=' + encodeURIComponent('Checkout cancelled — no charge was made.'));
+  const cancelDest = payment && payment.kind === 'ad' ? '/dashboard/advertise' : '/dashboard/upgrade';
+  return res.redirect(cancelDest + '?err=' + encodeURIComponent('Checkout cancelled — no charge was made.'));
 });
 
 /* ---------------- Return from PayPal — capture + verify, server-side ----------------
@@ -150,23 +155,33 @@ router.get('/billing/cancel', (req, res) => {
    the money is verified against PayPal (status/amount/currency/reference), so
    a session cookie that didn't survive the redirect can never lose a payment. */
 router.get('/billing/callback', async (req, res) => {
-  const fail = (m) => res.redirect('/dashboard/upgrade?err=' + encodeURIComponent(m));
   const reference = String(req.query.ref || '').trim();
   const orderId = String(req.query.token || '').trim(); // PayPal returns ?token=<ORDER-ID>
+  const payment = reference ? db.prepare('SELECT * FROM payments WHERE reference = ?').get(reference) : null;
+  // Advertising checkouts fail back to /dashboard/advertise; plan checkouts to /dashboard/upgrade.
+  const fail = (m) => res.redirect(((payment && payment.kind === 'ad') ? '/dashboard/advertise' : '/dashboard/upgrade') + '?err=' + encodeURIComponent(m));
   if (!reference || !orderId) return fail('Checkout was interrupted before payment completed.');
-
-  const payment = db.prepare('SELECT * FROM payments WHERE reference = ?').get(reference);
   if (!payment) return fail('Unknown payment reference.');
   if (req.user && payment.user_id !== req.user.id) return fail('This payment belongs to a different account.');
   const buyer = db.prepare('SELECT * FROM users WHERE id = ?').get(payment.user_id);
   if (!buyer) return fail('The account behind this payment no longer exists — contact support quoting reference ' + reference + '.');
   if (payment.order_id && payment.order_id !== orderId) return fail('Order mismatch — payment reference does not match PayPal.');
   if (payment.status === 'success') {
-    return res.redirect('/dashboard/upgrade?okmsg=' + encodeURIComponent('This payment was already applied to your account.'));
+    const okDest = payment.kind === 'ad' ? '/dashboard/advertise' : '/dashboard/upgrade';
+    return res.redirect(okDest + '?okmsg=' + encodeURIComponent('This payment was already applied.'));
   }
   if (!paypal.configured()) return fail('Payments are not configured on this installation.');
-  const plan = getPlan(payment.plan_id);
-  if (!plan) return fail('The plan attached to this payment is no longer available — contact support with reference ' + reference + '.');
+
+  /* Resolve what was bought: an account Pro plan (kind='pro') or a sponsored
+     advertising spot (kind='ad', where plan_id holds the ad_package id). */
+  const isAd = payment.kind === 'ad';
+  const plan = isAd ? ad.getPackage(payment.plan_id) : getPlan(payment.plan_id);
+  const planLike = plan ? {
+    name: plan.name, price_cents: plan.price_cents, currency: plan.currency, duration_days: plan.duration_days,
+  } : null;
+  if (!planLike) return fail(isAd
+    ? 'The advertising package for this payment is no longer available — contact support with reference ' + reference + '.'
+    : 'The plan attached to this payment is no longer available — contact support with reference ' + reference + '.');
 
   try {
     const cap = await paypal.captureOrder(orderId, { reference, plan, amountCents: payment.amount });
@@ -180,21 +195,55 @@ router.get('/billing/callback', async (req, res) => {
     if (payment.promo_id) {
       try { promos.redeem(buyer.id, payment.promo_id, payment.id); } catch { /* already redeemed */ }
     }
-    const granted = grantUserPro(buyer.id, payment.duration_days || plan.duration_days);
+
+    if (isAd) {
+      /* ---- Sponsored Content: mark the listing sponsored for the package duration ---- */
+      const listing = db.prepare('SELECT id, slug, name FROM listings WHERE id=?').get(payment.listing_id);
+      let until = '';
+      if (listing) {
+        const g = ad.grantSponsorship(listing.id, payment.duration_days || planLike.duration_days, reference);
+        until = g.until || '';
+      }
+      notify.notifyUser(buyer.id, {
+        kind: 'advertising',
+        title: 'Payment confirmed — your listing is now Sponsored',
+        body: `${planLike.name} is live on the homepage Sponsored Content strip${until !== 'lifetime' && until ? ` until ${until}` : '.'}. Reference ${reference}.`,
+        url: '/dashboard/advertise',
+      });
+      if (listing) {
+        sendBranded(cap.payer.email || payment.email || buyer.email, `Payment receipt — Sponsored Content (${planLike.name})`, {
+          kicker: 'Advertising receipt',
+          title: `Thank you${cap.payer.name ? `, ${util.escHtml(cap.payer.name)}` : ''} — your listing is sponsored`,
+          preheader: 'Your FirmLedger Sponsored Content placement was confirmed.',
+          alert: `<b>Package:</b> ${util.escHtml(planLike.name)} (${planLike.duration_days} days) &nbsp;·&nbsp; <b>Amount:</b> ${planLike.currency} ${paypal.decimal(payment.amount)} &nbsp;·&nbsp; <b>Listing:</b> ${util.escHtml(listing.name)}`,
+          alertTone: 'ok',
+          paragraphs: [
+            `Your payment was confirmed and <b>${util.escHtml(listing.name)}</b> is now live on the FirmLedger homepage <b>Sponsored Content</b> strip${until !== 'lifetime' && until ? ` until <b>${until}</b>` : ''}. It's clearly labelled <b>Sponsored</b>.`,
+            `Reference <b>${util.escHtml(reference)}</b> · PayPal order <b>${util.escHtml(orderId)}</b>.`,
+          ],
+          cta: { label: 'Manage your advertising', url: util.siteUrl('/dashboard/advertise') },
+          note: 'Keep this email as your receipt. Questions? Reply to <a href="mailto:advertising@firmledger.co.ke" style="color:#1D4ED8;">advertising@firmledger.co.ke</a> quoting your reference.',
+        }).catch(() => {});
+      }
+      return res.redirect('/dashboard/advertise?ok=' + encodeURIComponent(
+        `Payment confirmed — ${listing ? listing.name : 'your listing'} is now sponsored${until !== 'lifetime' && until ? ` until ${until}` : ''}.`));
+    }
+
+    const granted = grantUserPro(buyer.id, payment.duration_days || planLike.duration_days);
 
     if (granted) {
       const till = granted.expiry ? granted.expiry.toISOString().slice(0, 10) : '';
       notify.notifyUser(buyer.id, {
         kind: 'billing',
         title: 'Payment confirmed — FirmLedger Pro is active',
-        body: `${plan.name} (${plan.duration_days} days) is live on your account${till ? ` until ${till}` : ''}. Reference ${reference}.`,
+        body: `${planLike.name} (${planLike.duration_days} days) is live on your account${till ? ` until ${till}` : ''}. Reference ${reference}.`,
         url: '/dashboard/upgrade',
       });
-      sendBranded(cap.payer.email || payment.email || buyer.email, `Payment receipt — FirmLedger Pro (${plan.name})`, {
+      sendBranded(cap.payer.email || payment.email || buyer.email, `Payment receipt — FirmLedger Pro (${planLike.name})`, {
         kicker: 'Payment receipt',
         title: `Thank you${cap.payer.name ? `, ${util.escHtml(cap.payer.name)}` : ''} — Pro is active`,
         preheader: `Your FirmLedger Pro payment was confirmed.`,
-        alert: `<b>Plan:</b> ${util.escHtml(plan.name)} (${plan.duration_days} days) &nbsp;·&nbsp; <b>Amount:</b> ${plan.currency} ${paypal.decimal(payment.amount)}${payment.discount_cents ? ` <span style="opacity:.8">(saved ${plan.currency} ${paypal.decimal(payment.discount_cents)})</span>` : ''} &nbsp;·&nbsp; <b>Active to:</b> ${till}`,
+        alert: `<b>Plan:</b> ${util.escHtml(planLike.name)} (${planLike.duration_days} days) &nbsp;·&nbsp; <b>Amount:</b> ${planLike.currency} ${paypal.decimal(payment.amount)}${payment.discount_cents ? ` <span style="opacity:.8">(saved ${planLike.currency} ${paypal.decimal(payment.discount_cents)})</span>` : ''} &nbsp;·&nbsp; <b>Active to:</b> ${till}`,
         alertTone: 'ok',
         paragraphs: [
           `Your payment was confirmed and FirmLedger Pro is live on your account${till ? ` until <b>${till}</b>` : ''}. Here are your details: reference <b>${util.escHtml(reference)}</b>, PayPal order <b>${util.escHtml(orderId)}</b>.`,

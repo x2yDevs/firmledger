@@ -1,0 +1,134 @@
+<%- include('../partials/top') %>
+<%- include('../partials/adminnav') %>
+
+<section class="section-tight">
+  <div class="container">
+    <div class="section-head">
+      <h2>Advertising — Sponsored Content</h2>
+      <p class="muted" style="font-size:14px">Users buy these packages to place a listing on the homepage Sponsored Content strip. You can also sponsor or remove any listing directly.</p>
+    </div>
+
+    <% if (typeof ok !== 'undefined' && ok) { %><div class="alert alert-ok"><%= ok %></div><% } %>
+    <% if (typeof err !== 'undefined' && err) { %><div class="alert alert-err"><%= err %></div><% } %>
+
+    <div class="side-card">
+      <h3>Advert packages</h3>
+      <form method="post" action="/admin3119Musa/advertising/packages" class="jf-row" style="margin-bottom:16px">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <input type="text" name="name" placeholder="Package name" required maxlength="60">
+        <input type="text" name="blurb" placeholder="Short blurb" maxlength="240">
+        <input type="number" name="price_usd" placeholder="Price USD" step="0.01" min="0.01" required>
+        <input type="number" name="duration_days" placeholder="Days" min="1" max="3650" required>
+        <input type="number" name="sort" placeholder="Sort" min="0">
+        <button class="btn btn-primary" type="submit">+ Add package</button>
+      </form>
+
+      <% if (packages.length) { %>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Name</th><th>Price</th><th>Duration</th><th>State</th><th class="ta-right">Actions</th></tr></thead>
+          <tbody>
+            <% packages.forEach(function (p) { %>
+            <tr>
+              <td><strong><%= p.name %></strong><br><small class="muted"><%= p.blurb %></small></td>
+              <td>$<%= (p.price_cents / 100).toFixed(2) %></td>
+              <td><%= p.duration_days %> days</td>
+              <td><span class="pill pill-<%= p.active ? 'approved' : 'rejected' %>"><%= p.active ? 'live' : 'hidden' %></span></td>
+              <td class="ta-right actions-cell">
+                <form method="post" action="/admin3119Musa/advertising/packages/<%= p.id %>/toggle" class="inline">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <button class="btn btn-ghost btn-xs" type="submit"><%= p.active ? 'Hide' : 'Publish' %></button>
+                </form>
+                <form method="post" action="/admin3119Musa/advertising/packages/<%= p.id %>/delete" class="inline" onsubmit="return confirm('Delete package “<%= p.name.replace(/\"/g, '') %>”?');">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <button class="btn btn-danger btn-xs" type="submit">Delete</button>
+                </form>
+              </td>
+            </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+      <% } else { %>
+      <p class="muted">No packages yet — create one above.</p>
+      <% } %>
+    </div>
+
+    <div class="side-card">
+      <h3>Currently sponsored</h3>
+      <% if (sponsored.length) { %>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Listing</th><th>Until</th><th>Reference</th><th class="ta-right">Actions</th></tr></thead>
+          <tbody>
+            <% sponsored.forEach(function (l) { %>
+            <tr>
+              <td><a href="/listing/<%= l.slug %>" target="_blank" style="font-weight:600;color:var(--ink)"><%= l.name %></a></td>
+              <td><%= l.sponsored_expires_at || 'lifetime' %></td>
+              <td class="muted" style="font-size:12px"><%= l.ad_reference || '—' %></td>
+              <td class="ta-right actions-cell">
+                <form method="post" action="/admin3119Musa/listings/<%= l.id %>/unsponsor" class="inline" onsubmit="return confirm('Remove sponsorship from “<%= l.name.replace(/\"/g, '') %>”?');">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <button class="btn btn-danger btn-xs" type="submit">Remove</button>
+                </form>
+              </td>
+            </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+      <% } else { %>
+      <p class="muted">No listings are currently sponsored.</p>
+      <% } %>
+    </div>
+
+    <div class="side-card">
+      <h3>All listings — sponsor / remove</h3>
+      <div class="table-wrap scroll-table">
+        <table class="table">
+          <thead><tr><th>Listing</th><th>Owner</th><th>Status</th><th>Sponsored</th><th class="ta-right">Actions</th></tr></thead>
+          <tbody>
+            <% listings.forEach(function (l) { %>
+            <tr>
+              <td><a href="/admin3119Musa/listings/<%= l.id %>/edit" style="font-weight:600;color:var(--ink)"><%= l.name %></a></td>
+              <td class="muted"><%= l.owner_email || '—' %></td>
+              <td><span class="pill pill-<%= l.status %>"><%= l.status %></span></td>
+              <td>
+                <% if (l.sponsored && (l.sponsored_expires_at === '' || l.sponsored_expires_at >= today)) { %>
+                <span class="pill pill-featured">Sponsored<% if (l.sponsored_expires_at) { %> · <%= l.sponsored_expires_at %><% } %></span>
+                <% } else { %><span class="muted">—</span><% } %>
+              </td>
+              <td class="ta-right actions-cell">
+                <% if (l.sponsored && (l.sponsored_expires_at === '' || l.sponsored_expires_at >= today)) { %>
+                <form method="post" action="/admin3119Musa/listings/<%= l.id %>/unsponsor" class="inline">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <button class="btn btn-ghost btn-xs" type="submit">Unsponsor</button>
+                </form>
+                <% } else { %>
+                <form method="post" action="/admin3119Musa/listings/<%= l.id %>/sponsor" class="inline">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <input type="hidden" name="days" value="30">
+                  <button class="btn btn-accent btn-xs" type="submit">30d</button>
+                </form>
+                <form method="post" action="/admin3119Musa/listings/<%= l.id %>/sponsor" class="inline">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <input type="hidden" name="days" value="90">
+                  <button class="btn btn-accent btn-xs" type="submit">90d</button>
+                </form>
+                <form method="post" action="/admin3119Musa/listings/<%= l.id %>/sponsor" class="inline" title="Lifetime sponsored">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <input type="hidden" name="days" value="lifetime">
+                  <button class="btn btn-ghost btn-xs" type="submit">Lifetime</button>
+                </form>
+                <% } %>
+              </td>
+            </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<%- include('../partials/bottom') %>

@@ -1,0 +1,75 @@
+<%- include('../partials/top') %>
+<%- include('../partials/adminnav') %>
+
+<section class="section-tight">
+  <div class="container">
+    <div class="section-head">
+      <h2>Careers</h2>
+      <p class="muted" style="font-size:14px">Manage FirmLedger's own open roles. They appear on the public <a href="/careers">/careers</a> page and in the RSS feed. If there are none, the page says “We're not hiring”.</p>
+    </div>
+
+    <% if (typeof ok !== 'undefined' && ok) { %><div class="alert alert-ok"><%= ok %></div><% } %>
+    <% if (typeof err !== 'undefined' && err) { %><div class="alert alert-err"><%= err %></div><% } %>
+    <% if (typeof errors !== 'undefined' && errors && errors.length) { %>
+      <div class="alert alert-err"><% errors.forEach(function (e) { %><div><%= e %></div><% }); %></div>
+    <% } %>
+
+    <div class="side-card">
+      <h3>Post a role</h3>
+      <form method="post" action="/admin3119Musa/careers">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <div class="jf-row">
+          <input type="text" name="title" placeholder="Job title (e.g. Full-stack Engineer)" required maxlength="140" value="<%= typeof old !== 'undefined' && old.title ? old.title : '' %>">
+          <select name="role_type">
+            <% ROLE_TYPES.forEach(function (t) { %>
+            <option value="<%= t %>" <%= typeof old !== 'undefined' && old.role_type === t ? 'selected' : '' %>><%= t %></option>
+            <% }); %>
+          </select>
+          <input type="text" name="location" placeholder="Location (or Remote)" required maxlength="120" value="<%= typeof old !== 'undefined' && old.location ? old.location : '' %>">
+        </div>
+        <textarea name="description" placeholder="Role description (a few sentences, separate paragraphs with blank lines)" rows="5" class="input"><%= typeof old !== 'undefined' && old.description ? old.description : '' %></textarea>
+        <textarea name="requirements" placeholder="Requirements — one per line" rows="4" class="input"><%= typeof old !== 'undefined' && old.requirements ? old.requirements : '' %></textarea>
+        <div class="jf-row">
+          <input type="email" name="apply_email" placeholder="Apply-to email (default careers@firmledger.co.ke)" value="<%= typeof old !== 'undefined' && old.apply_email ? old.apply_email : 'careers@firmledger.co.ke' %>">
+          <button class="btn btn-primary" type="submit">Publish role</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="side-card">
+      <h3>Roles</h3>
+      <% if (roles.length) { %>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Title</th><th>Type</th><th>Location</th><th>Status</th><th class="ta-right">Actions</th></tr></thead>
+          <tbody>
+            <% roles.forEach(function (r) { %>
+            <tr>
+              <td><strong><%= r.title %></strong><br><small class="muted">posted <%= fmtDate(r.created_at) %></small></td>
+              <td><%= r.role_type %></td>
+              <td><%= r.location %></td>
+              <td><span class="pill pill-<%= r.status === 'open' ? 'approved' : 'closed' %>"><%= r.status %></span></td>
+              <td class="ta-right actions-cell">
+                <a class="btn btn-ghost btn-xs" href="/careers#role-<%= r.id %>" target="_blank">View</a>
+                <form method="post" action="/admin3119Musa/careers/<%= r.id %>/toggle" class="inline">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <button class="btn btn-ghost btn-xs" type="submit"><%= r.status === 'open' ? 'Close' : 'Reopen' %></button>
+                </form>
+                <form method="post" action="/admin3119Musa/careers/<%= r.id %>/delete" class="inline" onsubmit="return confirm('Remove role “<%= r.title.replace(/\"/g, '') %>”?');">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <button class="btn btn-danger btn-xs" type="submit">Delete</button>
+                </form>
+              </td>
+            </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+      <% } else { %>
+      <p class="muted">No roles yet — post one above. The public page will say “We're not hiring”.</p>
+      <% } %>
+    </div>
+  </div>
+</section>
+
+<%- include('../partials/bottom') %>

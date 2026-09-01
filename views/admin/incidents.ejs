@@ -1,0 +1,126 @@
+<%- include('../partials/top') %>
+<%- include('../partials/adminnav') %>
+
+<section class="section-tight">
+  <div class="container">
+    <div class="section-head">
+      <h2>Incidents — public status</h2>
+      <p class="muted" style="font-size:14px">Open a new incident and it appears on the public <a href="/status">/status</a> page instantly. You can update its timeline, change its status and resolve it from here.</p>
+    </div>
+
+    <% if (typeof ok !== 'undefined' && ok) { %><div class="alert alert-ok"><%= ok %></div><% } %>
+    <% if (typeof err !== 'undefined' && err) { %><div class="alert alert-err"><%= err %></div><% } %>
+    <% if (typeof errors !== 'undefined' && errors && errors.length) { %>
+      <div class="alert alert-err"><% errors.forEach(function (e) { %><div><%= e %></div><% }); %></div>
+    <% } %>
+
+    <div class="side-card" style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
+      <div>
+        <h3 style="margin-bottom:4px">Weekly status report</h3>
+        <p class="muted" style="font-size:14px;margin:0">Email a weekly uptime + incident summary to every status subscriber.</p>
+      </div>
+      <form method="post" action="/admin3119Musa/incidents/config/weekly" class="inline">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <input type="hidden" name="weekly_on" value="<%= weeklyReportOn ? '0' : '1' %>">
+        <button class="btn btn-ghost" type="submit"><%= weeklyReportOn ? 'Disable' : 'Enable' %></button>
+      </form>
+    </div>
+
+    <div class="side-card">
+      <h3>Open a new incident</h3>
+      <form method="post" action="/admin3119Musa/incidents">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <div class="jf-row" style="align-items:flex-end;flex-wrap:wrap">
+          <div style="display:flex;flex-direction:column;gap:4px;min-width:240px;flex:1">
+            <label class="muted" style="font-size:12px">Title *</label>
+            <input type="text" name="title" placeholder="e.g. Elevated API error rate" required maxlength="200" value="<%= typeof old !== 'undefined' && old.title ? old.title : '' %>">
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <label class="muted" style="font-size:12px">Affected component</label>
+            <select name="component_id">
+              <option value="">All systems</option>
+              <% components.forEach(function (c) { %>
+              <option value="<%= c.id %>" <%= typeof old !== 'undefined' && Number(old.component_id) === c.id ? 'selected' : '' %>><%= c.name %></option>
+              <% }); %>
+            </select>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <label class="muted" style="font-size:12px">Severity</label>
+            <select name="severity">
+              <% Object.keys(severityLabels).forEach(function (s) { %>
+              <option value="<%= s %>" <%= typeof old !== 'undefined' && old.severity === s ? 'selected' : '' %>><%= severityLabels[s] %></option>
+              <% }); %>
+            </select>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <label class="muted" style="font-size:12px">Initial status</label>
+            <select name="status">
+              <% Object.keys(incidentStatusLabels).forEach(function (s) { %>
+              <option value="<%= s %>" <%= typeof old !== 'undefined' && old.status === s ? 'selected' : '' %>><%= incidentStatusLabels[s] %></option>
+              <% }); %>
+            </select>
+          </div>
+          <button class="btn btn-primary" type="submit">+ Open incident</button>
+        </div>
+        <textarea name="description" class="input" style="margin-top:10px" rows="3" placeholder="What's going on? (optional, shown on the public page)"><%= typeof old !== 'undefined' && old.description ? old.description : '' %></textarea>
+      </form>
+    </div>
+
+    <div class="side-card">
+      <h3>Recent incidents</h3>
+      <% if (incidents.length) { %>
+      <div class="incident-list">
+        <% incidents.forEach(function (inc) { %>
+        <article class="incident-card">
+          <div class="section-head" style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
+            <div>
+              <div class="incident-title"><%= inc.title %></div>
+              <div class="incident-meta">
+                <span class="pill pill-<%= inc.status === 'resolved' ? 'approved' : (inc.status === 'monitoring' ? 'pending' : 'rejected') %>"><%= inc.status %></span>
+                <span class="pill pill-<%= inc.severity === 'critical' ? 'rejected' : inc.severity === 'major' ? 'pending' : 'approved' %>"><%= inc.severity %></span>
+                <% if (inc.component_name) { %><span class="muted" style="font-size:12px"><%= inc.component_name %></span><% } %>
+                <span class="muted" style="font-size:12px">opened <%= (inc.created_at || '').slice(0, 16).replace('T', ' ') %></span>
+              </div>
+            </div>
+            <% if (inc.status !== 'resolved') { %>
+            <form method="post" action="/admin3119Musa/incidents/<%= inc.id %>/resolve" class="inline" onsubmit="return confirm('Resolve “<%= inc.title.replace(/\"/g, '') %>”?');">
+              <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+              <button class="btn btn-primary btn-xs" type="submit">Resolve</button>
+            </form>
+            <% } %>
+          </div>
+          <% if (inc.description) { %><p class="muted" style="font-size:14px;margin-bottom:12px"><%= inc.description %></p><% } %>
+
+          <div class="incident-updates">
+            <% inc.updates.forEach(function (u) { %>
+            <div class="incident-update">
+              <span class="incident-update-dot" aria-hidden="true"></span>
+              <div>
+                <div class="incident-update-status"><%= u.status %> <span class="muted" style="font-size:11px;font-weight:400">· <%= (u.created_at || '').slice(0, 16).replace('T', ' ') %></span></div>
+                <div class="incident-update-msg"><%= u.message %></div>
+              </div>
+            </div>
+            <% }); %>
+          </div>
+
+          <form method="post" action="/admin3119Musa/incidents/<%= inc.id %>/update" class="incident-update-form">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <select name="status" aria-label="Update status">
+              <% Object.keys(incidentStatusLabels).forEach(function (s) { %>
+              <option value="<%= s %>" <%= inc.status === s ? 'selected' : '' %>><%= incidentStatusLabels[s] %></option>
+              <% }); %>
+            </select>
+            <textarea name="message" class="input" rows="2" placeholder="Add a public update…" required></textarea>
+            <button class="btn btn-primary btn-sm" type="submit">Post update</button>
+          </form>
+        </article>
+        <% }); %>
+      </div>
+      <% } else { %>
+      <p class="muted">No incidents yet — open one above. The public page will say “All Systems Normal”.</p>
+      <% } %>
+    </div>
+  </div>
+</section>
+
+<%- include('../partials/bottom') %>

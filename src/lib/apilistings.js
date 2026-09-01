@@ -168,6 +168,73 @@ function serialize(row) {
   };
 }
 
+/* ---------- PUBLIC directory (developers fetch listings, no key needed) ---------- */
+function publicSerialize(row) {
+  // Public profile fields mirror what a guest sees on the listing page.
+  // Full contact details (email/phone/address/socials) are a Pro/authenticated
+  // concern, so they are deliberately excluded here.
+  return {
+    id: row.id,
+    slug: row.slug,
+    name: row.name,
+    tagline: row.tagline,
+    description: row.description,
+    type: row.type,
+    category: row.category,
+    website: row.website,
+    country: row.country,
+    city: row.city,
+    region: row.region,
+    founded: row.founded,
+    size: row.size,
+    tags: row.tags ? row.tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
+    logo_url: row.logo_url,
+    sponsored: !!row.sponsored,
+    status: row.status,
+    claimed: !!row.claimed,
+    confidence: row.confidence,
+    url: siteUrl('/listing/' + row.slug),
+    last_verified_at: row.last_verified_at,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}
+
+/** Public directory — approved listings only, always available without a key. */
+function publicListings({ page = 1, per_page = 20, q = '', type = '', category = '', country = '', sort = 'featured' } = {}) {
+  page = Math.max(1, parseInt(page, 10) || 1);
+  per_page = Math.min(50, Math.max(1, parseInt(per_page, 10) || 20));
+  const clauses = ["l.status='approved'"];
+  const params = [];
+  if (q) {
+    const like = `%${String(q).slice(0, 80)}%`;
+    clauses.push('(l.name LIKE ? OR l.tagline LIKE ? OR l.description LIKE ? OR l.tags LIKE ? OR l.city LIKE ? OR l.category LIKE ?)');
+    params.push(like, like, like, like, like, like);
+  }
+  if (type) { clauses.push('l.type = ?'); params.push(String(type).slice(0, 40)); }
+  if (category) { clauses.push('l.category = ?'); params.push(String(category).slice(0, 60)); }
+  if (country) { clauses.push('l.country = ?'); params.push(String(country).slice(0, 60)); }
+  const order = sort === 'newest' ? 'l.created_at DESC'
+    : sort === 'name' ? 'l.name ASC'
+    : sort === 'confidence' ? 'l.confidence DESC'
+    : 'l.sponsored DESC, l.featured DESC, l.confidence DESC, l.name ASC';
+  const where = `WHERE ${clauses.join(' AND ')}`;
+  const total = db.prepare(`SELECT COUNT(*) c FROM listings l ${where}`).get(...params).c;
+  const rows = db.prepare(
+    `SELECT l.* FROM listings l ${where} ORDER BY ${order} LIMIT ? OFFSET ?`
+  ).all(...params, per_page, (page - 1) * per_page);
+  return {
+    data: rows.map(publicSerialize),
+    meta: { page, per_page, total, total_pages: Math.max(1, Math.ceil(total / per_page)) },
+  };
+}
+
+function publicListing(slug) {
+  const row = db.prepare("SELECT * FROM listings WHERE slug=? AND status='approved'").get(String(slug || '').slice(0, 120));
+  if (!row) return null;
+  return publicSerialize(row);
+}
+
 /* ---------- CRUD ---------- */
 function listMine(user, { page = 1, per_page = 20, status = '' } = {}) {
   page = Math.max(1, parseInt(page, 10) || 1);
@@ -245,4 +312,5 @@ function deleteListing(user, id) {
 module.exports = {
   ApiServiceError, LIMITS, FIELD_KEYS,
   parseFields, serialize, listMine, getOwned, createListing, updateListing, deleteListing,
+  publicSerialize, publicListings, publicListing,
 };
