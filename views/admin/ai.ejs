@@ -1,16 +1,35 @@
 <%- include('../partials/top') %>
 <%- include('../partials/adminnav') %>
 
+<%
+  const ready = Boolean(settings.groq_configured);
+  const offAttr = ready ? '' : ' disabled';
+  const tierLabel = { production: 'Production', preview: 'Preview', legacy: 'Legacy' };
+  const chatTitle = openSession ? openSession.title : 'Admin assistant';
+  const labelFor = (id) => { const hit = (settings.models || []).filter(function (m) { return m.id === id; })[0]; return hit ? hit.label : (id || 'no model'); };
+  const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const UTC_DAY = (offset) => new Date(Date.now() - (offset || 0) * 86400000).toISOString().slice(0, 10);
+  const dayChip = (day) => {
+    if (!day) return 'Today';
+    const today = UTC_DAY(0);
+    if (day === today) return 'Today';
+    if (day === UTC_DAY(1)) return 'Yesterday';
+    const p = String(day).split('-');
+    return parseInt(p[2], 10) + ' ' + MON[parseInt(p[1], 10) - 1] + (p[0] === today.slice(0, 4) ? '' : ' ' + p[0]);
+  };
+  const counts = settings.counts || { total: 0, live: 0, archived: 0 };
+%>
+
 <section class="section-tight ai-page">
   <div class="container">
     <div class="section-head">
       <div>
         <p class="klabel">Admin · Groq</p>
         <h2>AI Playground</h2>
-        <p class="muted" style="margin-top:6px;max-width:62ch">Draft listings from a prompt, run the admin assistant against real console actions, and optionally let Groq moderate new submissions. Writes ask first unless you tick them under Settings. The API key never leaves this server.</p>
+        <p class="muted ai-lede">Draft listings from a brief, run the admin assistant against real console actions, and let Groq pre-screen new submissions. Reads run immediately; writes ask first unless you allow them under Settings. The API key never leaves this server.</p>
       </div>
       <div class="ai-status-row">
-        <% if (settings.groq_configured) { %>
+        <% if (ready) { %>
           <span class="pill pill-approved">Groq ready · <%= settings.groq_key_source === 'env' ? '.env' : 'saved key' %></span>
         <% } else { %>
           <span class="pill pill-rejected">Groq key missing</span>
@@ -20,47 +39,95 @@
         <% } else { %>
           <span class="pill pill-pending">Auto-moderation off</span>
         <% } %>
-        <span class="pill"><%= settings.groq_model %></span>
+        <button class="btn btn-ghost btn-sm" type="button" id="test-key-btn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>
+          Check key &amp; sync models
+        </button>
+        <a class="btn btn-ghost btn-sm" href="/admin3119Musa/listings?status=pending">Review queue</a>
       </div>
     </div>
 
-    <% if (!settings.groq_configured) { %>
-      <div class="alert alert-warn">Add a Groq API key in <b>Settings</b> below, or set <code>GROQ_API_KEY</code> in <code>.env</code>. Create a key at <a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com/keys</a>.</div>
-    <% } %>
-    <% if (ok) { %><div class="alert alert-ok"><%= ok %></div><% } %>
-    <% if (err) { %><div class="alert alert-err"><%= err %></div><% } %>
-
-    <div class="ai-tabs" role="tablist">
-      <button type="button" class="ai-tab active" data-tab="gen" role="tab" aria-selected="true">Listing generator</button>
-      <button type="button" class="ai-tab" data-tab="chat" role="tab" aria-selected="false">Assistant</button>
-      <button type="button" class="ai-tab" data-tab="set" role="tab" aria-selected="false">Settings &amp; logs</button>
+    <div class="ai-keyline">
+      <span class="ai-keyline-item"><span class="ai-keyline-k">Model</span> <b class="mono"><%= settings.groq_model %></b></span>
+      <span class="ai-keyline-item"><span class="ai-keyline-k">Key</span> <b class="mono"><%= settings.groq_key_hint || 'none' %></b></span>
+      <span class="ai-keyline-item"><span class="ai-keyline-k">Chats</span> <b><%= counts.live || 0 %> open · <%= counts.archived || 0 %> archived</b></span>
+      <span class="ai-keyline-item"><span class="ai-keyline-k">Pending writes</span> <b><%= settings.pending_actions %></b></span>
+      <span class="ai-keyline-item ai-keyline-live"><span class="ai-keyline-k">Models seen</span>
+        <b><%= settings.live_models.length ? settings.live_models.length + ' on this key' : 'not checked yet' %></b>
+        <% if (settings.live_checked_at) { %><small class="muted"> · <%= settings.live_checked_at.slice(0, 16) %> UTC</small><% } %>
+      </span>
     </div>
 
-    <div class="ai-grid">
-      <!-- ================= Generator ================= -->
-      <div class="ai-pane is-on" data-pane="gen">
-        <div class="form-card ai-card">
-          <h3 class="form-section">Listing generator</h3>
-          <p class="muted" style="margin:-8px 0 16px">Describe a business (name, website, a snippet). Groq returns a draft that matches the public API field limits. Nothing is published until you review and save.</p>
+    <% if (!ready) { %>
+      <div class="alert alert-warn">Add a Groq API key under <b>Settings</b> below (or set <code>GROQ_API_KEY</code> in <code>.env</code>). Create one at <a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com/keys</a> — paste it in Settings, then press <b>Check key &amp; sync models</b>.</div>
+    <% } %>
+    <% if (ok) { %><div class="alert alert-ok" role="status"><%= ok %></div><% } %>
+    <% if (err) { %><div class="alert alert-err" role="alert"><%= err %></div><% } %>
+
+    <div class="ai-tabs" role="tablist" aria-label="AI Playground sections">
+      <button type="button" class="ai-tab active" data-tab="gen" role="tab" aria-selected="true" aria-controls="pane-gen">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v3M12 18v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M3 12h3M18 12h3M4.9 19.1 7 17M17 7l2.1-2.1"/><circle cx="12" cy="12" r="3.4"/></svg>
+        Listing generator
+      </button>
+      <button type="button" class="ai-tab" data-tab="chat" role="tab" aria-selected="false" aria-controls="pane-chat">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        Admin assistant
+        <% if (settings.pending_actions) { %><span class="ai-tab-badge"><%= settings.pending_actions %></span><% } %>
+      </button>
+      <button type="button" class="ai-tab" data-tab="set" role="tab" aria-selected="false" aria-controls="pane-set">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-2.9 1.2V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-2.9-1.2l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15H4.5a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.2-2.9l-.06-.06A2 2 0 1 1 8.57 4.2l.06.06A1.7 1.7 0 0 0 11.5 4.6V4.5a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 2.9 1.2l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 21.4 11h.1a2 2 0 1 1 0 4h-.1Z"/></svg>
+        Settings &amp; logs
+      </button>
+    </div>
+
+    <!-- ================= Listing generator ================= -->
+    <div class="ai-pane is-on" data-pane="gen" id="pane-gen" role="tabpanel" aria-label="Listing generator">
+      <div class="ai-gen-grid">
+        <div class="form-card ai-card ai-card-tight">
+          <div class="ai-card-head">
+            <h3 class="form-section">Brief</h3>
+            <div class="ai-card-head-actions">
+              <label class="ai-inline-select"><span class="sr-only">Model for this draft</span>
+                <select id="gen-model" class="ai-model-select">
+                  <% settings.models.forEach(function (m) { %>
+                    <option value="<%= m.id %>" <%= settings.groq_model === m.id ? 'selected' : '' %>><%= m.label %><%= m.available === false ? ' · not on this key' : '' %></option>
+                  <% }) %>
+                </select>
+              </label>
+            </div>
+          </div>
+          <p class="muted ai-card-note">Describe a business (name, website, a snippet). The draft respects the public API field limits — nothing is published until you review and save.</p>
           <label><span>Prompt</span>
-            <textarea id="gen-prompt" rows="5" maxlength="4000" placeholder="e.g. Acme Cold Chain Ltd, acmecold.co.ke — refrigerated freight between Mombasa and Kampala for horticulture exporters, founded 2019, ~40 staff, Nairobi."></textarea>
+            <textarea id="gen-prompt" rows="6" maxlength="4000" placeholder="e.g. Acme Cold Chain Ltd, acmecold.co.ke — refrigerated freight between Mombasa and Kampala for horticulture exporters, founded 2019, ~40 staff, Nairobi."<%= offAttr %>></textarea>
           </label>
+          <div class="ai-chips" role="group" aria-label="Example briefs">
+            <button type="button" class="ai-chip" data-seed="Northwind Analytics, northwind.co.ke — self-service BI dashboards for SACCOs and MFIs in Kenya, founded 2021, 12 staff, Nairobi.">Analytics SaaS</button>
+            <button type="button" class="ai-chip" data-seed="Acme Cold Chain Ltd, acmecold.co.ke — refrigerated freight between Mombasa and Kampala for horticulture exporters, founded 2019, about 40 staff, Nairobi.">Cold-chain logistics</button>
+            <button type="button" class="ai-chip" data-seed="Rift Valley Fabrication Ltd — steel fabrication and agricultural implements for smallholder co-operatives, Eldoret, founded 2016, 60 staff.">Manufacturer</button>
+            <button type="button" class="ai-chip" data-seed="Ubora Studio — brand and product design studio in Nairobi, founded 2022, 5 people, works with fintech and health clients.">Design studio</button>
+          </div>
           <div class="form-actions">
-            <button class="btn btn-primary" type="button" id="gen-btn" <%= settings.groq_configured ? '' : 'disabled' %>>Generate draft</button>
-            <span class="muted" id="gen-status"></span>
+            <button class="btn btn-primary" type="button" id="gen-btn"<%= offAttr %>>Generate draft</button>
+            <button class="btn btn-ghost" type="button" id="gen-clear">Clear</button>
+            <span class="muted ai-status" id="gen-status" role="status"></span>
           </div>
         </div>
 
-        <form id="gen-form" class="form form-card ai-card" hidden>
-          <h3 class="form-section">Review draft</h3>
-          <p class="muted" style="margin:-8px 0 16px">Edit anything that looks off. Save creates a <b>pending</b> listing the same way as Admin → Listings → New. The assistant never publishes on its own.</p>
+        <form id="gen-form" class="form form-card ai-card ai-card-tight" hidden>
+          <div class="ai-card-head">
+            <h3 class="form-section">Review draft</h3>
+            <span class="pill" id="gen-model-pill" hidden></span>
+          </div>
+          <p class="muted ai-card-note">Edit anything that looks off. Save creates a <b>pending</b> listing, exactly like Admin → Listings → New. The assistant never publishes on its own.</p>
           <div id="gen-errors" class="alert alert-err" hidden></div>
-          <label><span>Name * <small>2–60</small></span><input type="text" name="name" id="f-name" required minlength="2" maxlength="60"></label>
+          <label><span>Name * <small>2–60</small> <span class="count" id="c-name"></span></span>
+            <input type="text" name="name" id="f-name" required minlength="2" maxlength="60">
+          </label>
           <label><span>Tagline * <small>20–90, one sentence</small> <span class="count" id="c-tagline"></span></span>
             <input type="text" name="tagline" id="f-tagline" required minlength="20" maxlength="90">
           </label>
           <label><span>Description * <small>100–1200</small> <span class="count" id="c-desc"></span></span>
-            <textarea name="description" id="f-description" rows="6" required minlength="100" maxlength="1200"></textarea>
+            <textarea name="description" id="f-description" rows="7" required minlength="100" maxlength="1200"></textarea>
           </label>
           <div class="grid-2">
             <label><span>Type *</span>
@@ -94,216 +161,361 @@
           </div>
           <div class="form-actions">
             <button class="btn btn-primary" type="submit" id="save-btn">Save listing (pending)</button>
-            <button class="btn btn-ghost" type="button" id="gen-discard">Discard draft</button>
-            <span class="muted" id="save-status"></span>
+            <button class="btn btn-ghost" type="button" id="gen-redo">Regenerate</button>
+            <button class="btn btn-ghost" type="button" id="gen-discard">Discard</button>
+            <span class="muted ai-status" id="save-status" role="status"></span>
           </div>
-          <p class="fine-print">Saved listings enter the review queue. If AI auto-moderation is on, Groq will approve, reject, or leave them pending in the background.</p>
+          <p class="fine-print">Saved listings enter the review queue. With AI auto-moderation on, Groq approves, rejects, or leaves them pending in the background.</p>
         </form>
       </div>
+    </div>
 
-      <!-- ================= Assistant ================= -->
-      <div class="ai-pane" data-pane="chat">
-        <div class="ai-card chat-window ai-chat">
-          <div class="chat-head">
-            <div class="chat-head-avatar">AI</div>
-            <div class="chat-head-meta">
-              <div class="chat-head-name">Admin assistant</div>
-              <div class="chat-head-sub">Real admin tools · confirm unless you auto-allow them</div>
-            </div>
-            <div class="chat-head-actions">
-              <button class="btn btn-sm btn-ghost" type="button" id="new-chat-btn" <%= settings.groq_configured ? '' : 'disabled' %>>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22 11 13 2 9 22 2z"/></svg>
-                New Chat
-              </button>
-              <button class="btn btn-sm btn-ghost" type="button" id="toggle-chat-history" title="Show/hide chat history">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-              </button>
+    <!-- ================= Assistant ================= -->
+    <div class="ai-pane" data-pane="chat" id="pane-chat" role="tabpanel" aria-label="Admin assistant">
+      <div class="chat-window ai-chat<%= openSession ? ' has-session' : '' %>" id="ai-chat">
+        <header class="chat-head">
+          <div class="chat-head-avatar" aria-hidden="true">AI</div>
+          <div class="chat-head-meta">
+            <div class="chat-head-name" id="chat-head-title"><%= chatTitle %></div>
+            <div class="chat-head-sub">
+              <span class="ai-live-dot <%= ready ? 'is-on' : 'is-off' %>" aria-hidden="true"></span>
+              <span id="chat-head-sub"><%= ready ? 'Live · ' + settings.groq_model : 'Groq key required' %> · writes confirm first</span>
             </div>
           </div>
-          
-          <!-- Chat History Sidebar -->
-          <div class="chat-history-sidebar" id="chat-history-sidebar" hidden>
-            <div class="chat-history-head">
-              <h4>Chat History</h4>
-              <button class="btn btn-xs btn-ghost" type="button" id="refresh-chat-history" title="Refresh">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M23 16v6h-6"/><path d="M1 4v6h6"/><path d="M1 16v6h6"/><path d="M3 12a9 9 0 1 1 18 0"/></svg>
-              </button>
-              <button class="btn btn-xs btn-ghost" type="button" id="show-archived-chats" title="Show archived">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              </button>
-            </div>
-            <div class="chat-history-list" id="chat-history-list">
-              <p class="muted" style="padding: 12px; text-align: center;">Loading chat history...</p>
-            </div>
-            <div class="chat-history-footer">
-              <button class="btn btn-xs btn-danger" type="button" id="purge-old-chats" title="Purge chats older than 30 days">
-                Purge Old (>30d)
-              </button>
-            </div>
+          <div class="chat-head-actions">
+            <label class="chat-model-pick">
+              <span class="sr-only">Model for this chat</span>
+              <select id="chat-model" title="Model for this chat">
+                <% settings.models.forEach(function (m) { %>
+                  <option value="<%= m.id %>" <%= ((openSession && openSession.model) || settings.groq_model) === m.id ? 'selected' : '' %>><%= m.label %><%= m.available === false ? ' · not on this key' : '' %></option>
+                <% }) %>
+              </select>
+            </label>
+            <button class="btn btn-sm btn-ghost" type="button" id="new-chat-btn"<%= offAttr %> title="Start a new chat">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+              New chat
+            </button>
+            <button class="btn btn-sm btn-ghost btn-icon" type="button" id="toggle-history" aria-expanded="false" aria-controls="chat-rail" title="Show chat history" aria-label="Show chat history">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7.5V12l3 2"/></svg>
+              <span class="rail-count" id="rail-count"><%= counts.live || 0 %></span>
+            </button>
+            <button class="btn btn-sm btn-ghost btn-icon" type="button" id="chat-help" aria-label="How this assistant works" title="How this assistant works">?</button>
           </div>
-          
-          <div class="chat-pane" id="chat-pane" role="log" aria-live="polite">
-            <div class="chat-day">Today</div>
-            <div class="wa-row wa-theirs">
-              <div class="wa-bubble">
-                <div class="wa-who">Assistant</div>
-                <div class="wa-text">Ask in plain language. I can run the same actions as the rest of this console — listings, users, billing, tickets, claims, blog, email, protection, status, and more. Lookups run immediately. Writes show a confirmation unless you auto-allow them in Settings.</div>
+        </header>
+
+        <div class="ai-chat-body">
+          <div class="ai-rail-scrim" id="rail-scrim" hidden></div>
+          <aside class="chat-rail" id="chat-rail" aria-label="Chat history" hidden>
+            <div class="rail-head">
+              <h4>Chat history</h4>
+              <button class="icon-btn sm" type="button" id="rail-close" aria-label="Hide chat history">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+              </button>
+            </div>
+
+            <div class="rail-tools">
+              <label class="sr-only" for="chat-search">Search chats</label>
+              <input id="chat-search" type="search" placeholder="Search chats" autocomplete="off" maxlength="60">
+              <div class="rail-seg" role="group" aria-label="Which chats to list">
+                <button type="button" class="on" data-archived="0">Active</button>
+                <button type="button" data-archived="1">Archived</button>
+                <button type="button" data-archived="all">All</button>
               </div>
             </div>
-          </div>
-          <form class="chat-composer" id="chat-form">
-            <div class="composer-box">
-              <textarea id="chat-input" rows="1" maxlength="4000" placeholder="e.g. How many listings are pending?" <%= settings.groq_configured ? '' : 'disabled' %>></textarea>
+
+            <div class="rail-list" id="rail-list" role="list">
+              <% if (chatSessions && chatSessions.length) { %>
+                <% chatSessions.forEach(function (s) { %>
+                  <div class="rail-item <%= openSession && openSession.id === s.id ? 'active' : '' %><%= s.archived ? ' archived' : '' %>" data-id="<%= s.id %>" role="listitem">
+                    <button class="rail-item-main" type="button" data-open="<%= s.id %>">
+                      <span class="ri-title"><%= s.title || 'Untitled chat' %></span>
+                      <span class="ri-meta"><%= (s.message_count || 0) %> messages · <%= labelFor(s.model) %><%= s.archived ? ' · archived' : '' %></span>
+                      <% if (s.preview) { %><span class="ri-preview"><%= s.preview %></span><% } %>
+                    </button>
+                    <span class="rail-item-actions">
+                      <button class="icon-btn xs" type="button" data-act="rename" title="Rename" aria-label="Rename chat"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button>
+                      <button class="icon-btn xs" type="button" data-act="<%= s.archived ? 'unarchive' : 'archive' %>" title="<%= s.archived ? 'Restore' : 'Archive' %>" aria-label="<%= s.archived ? 'Restore chat' : 'Archive chat' %>"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8"/><path d="M10 12h4"/></svg></button>
+                      <button class="icon-btn xs danger" type="button" data-act="delete" title="Delete" aria-label="Delete chat"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg></button>
+                    </span>
+                  </div>
+                <% }) %>
+              <% } else { %>
+                <p class="rail-empty">No saved chats yet. Your conversations are stored here as soon as you send one.</p>
+              <% } %>
             </div>
-            <button class="composer-send" type="submit" aria-label="Send" <%= settings.groq_configured ? '' : 'disabled' %>>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22 11 13 2 9 22 2z"/></svg>
-            </button>
-          </form>
+
+            <div class="rail-foot">
+              <button class="btn btn-xs btn-ghost" type="button" id="rail-refresh" title="Reload the list">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>
+                Refresh
+              </button>
+              <button class="btn btn-xs btn-ghost danger" type="button" id="purge-archived" title="Hard-delete archived chats untouched for 30 days">Purge archived</button>
+            </div>
+          </aside>
+
+          <div class="ai-chat-main">
+            <div class="chat-pane" id="chat-pane" role="log" aria-live="polite">
+              <% if (messages && messages.length) { %>
+                <% if (hasMoreMessages) { %>
+                  <div class="ai-day-actions">
+                    <a class="btn btn-xs btn-ghost" href="?tab=chat&session=<%= openSession.id %>&limit=300">Load earlier messages</a>
+                  </div>
+                <% } %>
+                <% let prevChatDay = ''; %>
+                <% messages.forEach(function (m) { %>
+                  <% const chatDay = (m.created_at || '').slice(0, 10); %>
+                  <% if (chatDay !== prevChatDay) { prevChatDay = chatDay; %>
+                    <div class="chat-day"><%= dayChip(chatDay) %></div>
+                  <% } %>
+                  <div class="wa-row <%= m.role === 'user' ? 'wa-mine' : 'wa-theirs' %><%= Number(m.ok) === 0 ? ' ai-bad' : '' %>">
+                    <div class="wa-bubble">
+                      <div class="wa-who"><%= m.role === 'user' ? 'You' : 'Assistant' %></div>
+                      <div class="wa-text"><%= m.content %></div>
+                      <% if (m.tool) { %><div class="wa-tag"><%= m.tool %></div><% } %>
+                      <div class="wa-meta"><span><%= (m.created_at || '').slice(11, 16) %></span><% if (m.model) { %><span class="wa-meta-model"><%= labelFor(m.model) %></span><% } %></div>
+                    </div>
+                  </div>
+                <% }) %>
+              <% } else { %>
+                <div class="chat-day">Today</div>
+                <div class="wa-row wa-theirs">
+                  <div class="wa-bubble">
+                    <div class="wa-who">Assistant</div>
+                    <div class="wa-text">Ask in plain language. I can run the same actions as the rest of this console — listings, users, billing, tickets, claims, blog, email, protection, status, and more. Lookups run immediately; writes show a confirmation first unless you auto-allow them in Settings.</div>
+                  </div>
+                </div>
+                <div class="ai-starters" role="group" aria-label="Starter prompts">
+                  <button type="button" class="ai-starter" data-prompt="How many listings are pending right now?">Pending count</button>
+                  <button type="button" class="ai-starter" data-prompt="Summarise this week's signups and any suspended accounts.">Weekly signup summary</button>
+                  <button type="button" class="ai-starter" data-prompt="List the newest pending listings with their domains.">Newest pending</button>
+                  <button type="button" class="ai-starter" data-prompt="Are there open incidents on the status page?">Incident check</button>
+                </div>
+              <% } %>
+            </div>
+
+            <div class="chat-status-line" id="chat-status" role="status"></div>
+
+            <form class="chat-composer" id="chat-form">
+              <div class="composer-box">
+                <label class="sr-only" for="chat-input">Message the admin assistant</label>
+                <textarea id="chat-input" rows="1" maxlength="4000" placeholder="<%= ready ? 'e.g. How many listings are pending?' : 'Add a Groq key in Settings to use the assistant' %>"<%= offAttr %>></textarea>
+                <span class="composer-count" id="chat-count">0 / 4000</span>
+              </div>
+              <button class="composer-send" id="chat-send" type="submit" aria-label="Send message"<%= offAttr %>>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2 11 13"/><path d="M22 2 15 22 11 13 2 9 22 2z"/></svg>
+              </button>
+            </form>
+            <p class="composer-hint">Enter sends · Shift+Enter for a new line · every chat is saved to your history rail</p>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- ================= Settings ================= -->
-    <div class="ai-pane" data-pane="set" id="ai-settings">
-      <form method="post" action="/admin3119Musa/ai/settings" class="form form-card">
-        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-        <h3 class="form-section">Groq</h3>
-        <p class="muted" style="margin:-8px 0 16px">Environment variable <code>GROQ_API_KEY</code> always wins over the saved value. Keys are stored in the settings table, never sent to the browser after save.</p>
-        <div class="grid-2">
-          <label><span>API key</span>
-            <input type="password" name="groq_api_key" autocomplete="new-password" spellcheck="false" placeholder="gsk_…" <%= settings.groq_env ? 'disabled' : '' %>>
-            <small class="muted" style="display:block;margin-top:4px">
-              <% if (settings.groq_env) { %>✓ set in <code>.env</code> — rotate there<% } else if (settings.groq_key_set) { %>✓ saved — paste a new one to rotate<% } else { %>not saved yet<% } %>
-            </small>
-          </label>
-          <label><span>Model</span>
-            <select name="groq_model">
-              <% settings.models.forEach(function (m) { %><option value="<%= m.id %>" <%= settings.groq_model === m.id ? 'selected' : '' %>><%= m.label %></option><% }) %>
-            </select>
-          </label>
-        </div>
-        <% if (!settings.groq_env && settings.groq_key_set) { %>
-          <label class="check"><input type="checkbox" name="groq_api_key_clear" value="1"><span>Clear the saved Groq key</span></label>
-        <% } %>
+    <!-- ================= Settings & logs ================= -->
+    <div class="ai-pane" data-pane="set" id="pane-set" role="tabpanel" aria-label="Settings and logs">
+      <div class="ai-set-grid" id="ai-settings">
+        <form method="post" action="/admin3119Musa/ai/settings" class="form form-card ai-card ai-card-tight ai-set-main">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <h3 class="form-section">Groq connection</h3>
+          <p class="muted ai-card-note"><code>GROQ_API_KEY</code> in the environment always wins over the saved value. Only the masked hint is kept for display — the key itself is never sent back to the browser.</p>
+          <div class="grid-2">
+            <label><span>API key</span>
+              <input type="password" name="groq_api_key" autocomplete="new-password" spellcheck="false" placeholder="gsk_…" <%= settings.groq_env ? 'disabled' : '' %>>
+              <small class="muted ai-field-note">
+                <% if (settings.groq_env) { %>✓ set in <code>.env</code> — rotate there<% } else if (settings.groq_key_set) { %>✓ saved (<%= settings.groq_key_hint %>) — paste a new one to rotate<% } else { %>not saved yet<% } %>
+              </small>
+            </label>
+            <label><span>Default model</span>
+              <select name="groq_model" id="set-model">
+                <% settings.models.forEach(function (m) { %>
+                  <option value="<%= m.id %>" <%= settings.groq_model === m.id ? 'selected' : '' %>><%= m.label %></option>
+                <% }) %>
+              </select>
+              <small class="muted ai-field-note" id="set-model-note">Selected model: <span class="mono"><%= settings.groq_model %></span></small>
+            </label>
+          </div>
+          <% if (!settings.groq_env && settings.groq_key_set) { %>
+            <label class="check ai-clear-key"><input type="checkbox" name="groq_api_key_clear" value="1"><span>Clear the saved Groq key from this server (rotate it at console.groq.com first)</span></label>
+          <% } %>
+          <div class="ai-model-strip" id="model-strip">
+            <% settings.models.forEach(function (m) { %>
+              <button type="button" class="ai-model-chip <%= m.id === settings.groq_model ? 'on' : '' %>" data-model="<%= m.id %>" title="<%= m.note || '' %> · <%= (m.tools ? 'tools ' : 'no tools ') + (m.json ? '+ JSON mode' : 'no JSON mode') %>">
+                <span class="mc-label"><%= m.label %></span>
+                <span class="mc-meta"><%= tierLabel[m.tier] || m.tier %><%= m.available === false ? ' · unavailable' : '' %></span>
+              </button>
+            <% }) %>
+          </div>
+          <div class="form-actions form-actions-tight">
+            <button class="btn btn-primary" type="submit">Save settings</button>
+            <button class="btn btn-ghost" type="button" id="test-key-btn-2">Test &amp; sync models</button>
+            <span class="muted ai-status" id="test-status" role="status"></span>
+          </div>
+          <p class="fine-print">Endpoint: <span class="mono"><%= settings.groq_base_url %></span><% if (settings.groq_env) { %> · key source: <span class="mono">.env</span><% } else { %> · key source: settings table<% } %></p>
 
-        <h3 class="form-section">AI auto-moderation</h3>
-        <label class="check check-lg">
-          <input type="checkbox" name="ai_moderation_on" value="1" <%= settings.moderation_on ? 'checked' : '' %>>
-          <span><strong>Evaluate every new pending listing with Groq</strong><br><small class="muted">Runs in the background after dashboard, API, admin, or generator creates a listing. Failures leave the record pending and never block creation. When this is on, it takes precedence over the simple auto-approve toggle.</small></span>
-        </label>
-        <label class="check check-lg">
-          <input type="checkbox" name="ai_moderation_email" value="1" <%= settings.moderation_email ? 'checked' : '' %>>
-          <span><strong>Email the admin inbox when the model is unsure</strong><br><small class="muted">Also writes an in-console notification either way.</small></span>
-        </label>
-        <label><span>Moderation rules / prompt</span>
-          <textarea name="ai_moderation_rules" rows="12" maxlength="8000"><%= settings.moderation_rules %></textarea>
-        </label>
-
-        <h3 class="form-section">Assistant auto-run</h3>
-        <p class="muted" style="margin:-8px 0 16px">Lookups always run without asking. Tick a write action to let the assistant execute it immediately. Unticked writes still propose first and wait for your confirm. Deleting a member account always confirms.</p>
-        <input type="hidden" name="ai_auto_tools_present" value="1">
-        <% (settings.tool_groups || []).forEach(function (g) { %>
-          <% var items = (settings.tools || []).filter(function (t) { return t.group === g.id; }); %>
-          <% if (!items.length) return; %>
-          <div class="ai-tool-group">
-            <h4><%= g.label %></h4>
-            <div class="ai-tool-grid">
-              <% items.forEach(function (t) { %>
-                <label class="check ai-tool-item <%= t.neverAuto ? 'is-locked' : '' %> <%= !t.mutating ? 'is-read' : '' %>">
-                  <input type="checkbox"
-                    <% if (t.mutating && !t.neverAuto) { %>name="ai_auto_tools" value="<%= t.name %>" <%= t.auto ? 'checked' : '' %><% } else { %>disabled <%= t.auto || !t.mutating ? 'checked' : '' %><% } %>>
-                  <span>
-                    <strong><%= t.label %></strong>
-                    <% if (t.neverAuto) { %><em class="ai-tool-tag">always confirm</em>
-                    <% } else if (!t.mutating) { %><em class="ai-tool-tag">lookup</em>
-                    <% } %>
-                    <small class="muted"><%= t.description.slice(0, 140) %></small>
-                  </span>
-                </label>
-              <% }) %>
+          <h3 class="form-section">AI auto-moderation</h3>
+          <label class="check check-lg">
+            <input type="checkbox" name="ai_moderation_on" value="1" <%= settings.moderation_on ? 'checked' : '' %>>
+            <span><strong>Evaluate every new pending listing with Groq</strong><br><small class="muted">Runs in the background after dashboard, API, admin, or generator creates a listing. Failures leave the record pending and never block creation. Takes precedence over the simple auto-approve toggle.</small></span>
+          </label>
+          <label class="check check-lg">
+            <input type="checkbox" name="ai_moderation_email" value="1" <%= settings.moderation_email ? 'checked' : '' %>>
+            <span><strong>Email the admin inbox when the model is unsure</strong><br><small class="muted">Also writes an in-console notification either way.</small></span>
+          </label>
+          <div class="grid-2">
+            <label><span>Moderation model</span>
+              <select name="ai_moderation_model">
+                <option value="__default__" <%= !settings.moderation_model || settings.moderation_model === settings.groq_model ? 'selected' : '' %>>Same as default (<%= settings.groq_model %>)</option>
+                <% settings.models.forEach(function (m) { %>
+                  <option value="<%= m.id %>" <%= settings.moderation_model === m.id ? 'selected' : '' %>><%= m.label %></option>
+                <% }) %>
+              </select>
+              <small class="muted ai-field-note">GPT-OSS Safeguard 20B is trained for policy classification — the natural fit here. GPT-OSS 20B is the cheapest general option.</small>
+            </label>
+            <div class="ai-quick-card">
+              <h4 class="ai-quick-h">Review one now</h4>
+              <p class="muted ai-card-note">Run the moderation pass against one pending listing — useful right after editing the rules. <%= pendingSamples.length %> awaiting review.<% if (!pendingSamples.length) { %> (queue is empty)<% } %></p>
+              <div class="ai-quick-row">
+                <label class="sr-only" for="mod-listing-id">Listing id</label>
+                <input type="text" id="mod-listing-id" list="pending-ids" inputmode="numeric" pattern="[0-9]*" placeholder="listing id" maxlength="8" autocomplete="off">
+                <datalist id="pending-ids">
+                  <% pendingSamples.forEach(function (p) { %><option value="<%= p.id %>"><%= p.name %> · <%= p.category %></option><% }) %>
+                </datalist>
+                <button class="btn btn-sm btn-primary" type="button" id="mod-run-btn">Run</button>
+              </div>
+              <span class="muted ai-status" id="mod-status" role="status"></span>
             </div>
           </div>
-        <% }) %>
+          <label><span>Moderation rules / prompt <span class="count" id="c-rules"></span></span>
+            <textarea name="ai_moderation_rules" id="mod-rules" rows="12" maxlength="8000"><%= settings.moderation_rules %></textarea>
+          </label>
+          <div class="form-actions form-actions-tight">
+            <button class="btn btn-xs btn-ghost" type="button" id="rules-defaults">Restore the built-in rules</button>
+            <span class="muted" id="rules-defaults-hint">Replaces the text above — nothing is saved until you press Save settings.</span>
+          </div>
 
-        <div class="form-actions">
-          <button class="btn btn-primary" type="submit">Save settings</button>
+          <h3 class="form-section">Assistant auto-run</h3>
+          <p class="muted ai-card-note">Lookups always run without asking. Tick a write action to let the assistant execute it immediately. Unticked writes propose first and wait for your confirm. Deleting a member account always confirms.</p>
+          <input type="hidden" name="ai_auto_tools_present" value="1">
+          <div class="ai-run-summary" id="run-summary">
+            <b id="run-count">0</b> write actions will run without asking
+            <span class="ai-run-actions">
+              <button type="button" class="btn btn-xs btn-ghost" data-run-all="1">Allow all</button>
+              <button type="button" class="btn btn-xs btn-ghost" data-run-all="0">Ask for all</button>
+            </span>
+          </div>
+          <% (settings.tool_groups || []).forEach(function (g) { %>
+            <% var items = (settings.tools || []).filter(function (t) { return t.group === g.id; }); %>
+            <% if (!items.length) return; %>
+            <div class="ai-tool-group">
+              <h4><%= g.label %> <small class="muted"><%= items.filter(function (t) { return t.mutating && !t.neverAuto; }).length %> write actions</small></h4>
+              <div class="ai-tool-grid">
+                <% items.forEach(function (t) { %>
+                  <label class="check ai-tool-item <%= t.neverAuto ? 'is-locked' : '' %> <%= !t.mutating ? 'is-read' : '' %>">
+                    <input type="checkbox"
+                      <% if (t.mutating && !t.neverAuto) { %>name="ai_auto_tools" value="<%= t.name %>" <%= t.auto ? 'checked' : '' %><% } else { %>disabled <%= t.auto || !t.mutating ? 'checked' : '' %><% } %>>
+                    <span>
+                      <strong><%= t.label %></strong>
+                      <% if (t.neverAuto) { %><em class="ai-tool-tag">always confirm</em>
+                      <% } else if (!t.mutating) { %><em class="ai-tool-tag">lookup</em>
+                      <% } %>
+                      <small class="muted"><%= t.description.slice(0, 140) %></small>
+                    </span>
+                  </label>
+                <% }) %>
+              </div>
+            </div>
+          <% }) %>
+
+          <div class="form-actions">
+            <button class="btn btn-primary" type="submit">Save settings</button>
+            <span class="muted" id="settings-echo"></span>
+          </div>
+        </form>
+
+        <div class="ai-set-side">
+          <div class="form-card ai-card ai-card-tight">
+            <div class="ai-card-head">
+              <h3 class="form-section">Moderation log</h3>
+              <div class="ai-card-head-actions">
+                <label class="ai-inline-search"><span class="sr-only">Filter moderation log</span>
+                  <input type="search" id="mod-log-q" placeholder="Filter…" maxlength="60" autocomplete="off">
+                </label>
+                <button class="btn btn-xs btn-ghost" type="button" data-refresh-log="moderation" title="Reload">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>
+                </button>
+              </div>
+            </div>
+            <p class="muted ai-card-note"><span id="mod-total"><%= moderation.total %></span> decisions recorded · newest first</p>
+            <div class="table-wrap log-table-wrap" id="moderation-log-wrap" data-log="moderation" data-offset="<%= moderation.rows.length %>">
+              <table class="table">
+                <thead><tr><th>When</th><th>Listing</th><th>Decision</th><th>Reason</th><th>Model</th><th></th></tr></thead>
+                <tbody>
+                  <% moderation.rows.forEach(function (r) { %>
+                    <tr>
+                      <td class="mono" style="white-space:nowrap"><%= (r.created_at || '').replace('T', ' ').slice(0, 16) %></td>
+                      <td>
+                        <% if (r.listing_id && r.slug) { %><a href="/admin3119Musa/listings/<%= r.listing_id %>/edit"><%= r.listing_name || r.slug %></a>
+                        <% } else { %><%= r.listing_name || ('#' + r.listing_id) %><% } %>
+                      </td>
+                      <td><span class="status <%= r.decision === 'approve' ? 'approved' : r.decision === 'reject' ? 'rejected' : 'pending' %>"><%= r.decision %></span></td>
+                      <td class="ai-cell-wrap"><%= r.reason %></td>
+                      <td class="mono ai-cell-sm"><%= r.model %></td>
+                      <td class="ai-row-actions">
+                        <button class="btn btn-xs btn-danger log-delete-btn" type="button" data-log-type="moderation" data-log-id="<%= r.id %>" title="Delete entry" aria-label="Delete moderation entry">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg>
+                        </button>
+                      </td>
+                    </tr>
+                  <% }) %>
+                </tbody>
+              </table>
+            </div>
+            <div class="log-table-footer">
+              <button class="btn btn-sm btn-ghost" type="button" data-more-log="moderation" <%= moderation.has_more ? '' : 'disabled' %>>Load more</button>
+              <span class="muted" data-log-shown="moderation">Showing <%= moderation.rows.length %> of <%= moderation.total %></span>
+            </div>
+          </div>
+
+          <div class="form-card ai-card ai-card-tight">
+            <div class="ai-card-head">
+              <h3 class="form-section">Audit log</h3>
+              <div class="ai-card-head-actions">
+                <label class="ai-inline-search"><span class="sr-only">Filter audit log</span>
+                  <input type="search" id="audit-log-q" placeholder="Filter…" maxlength="60" autocomplete="off">
+                </label>
+                <button class="btn btn-xs btn-ghost" type="button" data-refresh-log="audit" title="Reload">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>
+                </button>
+              </div>
+            </div>
+            <p class="muted ai-card-note">Every generate, publish, proposed tool, execution, cancellation, moderation write and settings save. <span id="audit-total"><%= auditLog.total %></span> rows.</p>
+            <div class="table-wrap log-table-wrap" id="audit-log-wrap" data-log="audit" data-offset="<%= auditLog.rows.length %>">
+              <table class="table">
+                <thead><tr><th>When</th><th>Kind</th><th>Action</th><th>Result</th><th>OK</th><th></th></tr></thead>
+                <tbody>
+                  <% auditLog.rows.forEach(function (r) { %>
+                    <tr>
+                      <td class="mono" style="white-space:nowrap"><%= (r.created_at || '').replace('T', ' ').slice(0, 16) %></td>
+                      <td><%= r.kind %></td>
+                      <td class="mono ai-cell-sm"><%= r.action %></td>
+                      <td class="ai-cell-wrap"><span title="<%= String(r.result || '').slice(0, 400) %>"><%= String(r.result || '').slice(0, 120) %></span></td>
+                      <td><span class="status <%= r.ok ? 'approved' : 'rejected' %>"><%= r.ok ? 'yes' : 'no' %></span></td>
+                      <td class="ai-row-actions">
+                        <button class="btn btn-xs btn-danger log-delete-btn" type="button" data-log-type="audit" data-log-id="<%= r.id %>" title="Delete entry" aria-label="Delete audit entry">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg>
+                        </button>
+                      </td>
+                    </tr>
+                  <% }) %>
+                </tbody>
+              </table>
+            </div>
+            <div class="log-table-footer">
+              <button class="btn btn-sm btn-ghost" type="button" data-more-log="audit" <%= auditLog.has_more ? '' : 'disabled' %>>Load more</button>
+              <span class="muted" data-log-shown="audit">Showing <%= auditLog.rows.length %> of <%= auditLog.total %></span>
+            </div>
+          </div>
         </div>
-      </form>
-
-      <div class="form-card">
-        <h3 class="form-section">Moderation log
-          <button class="btn btn-sm btn-ghost" type="button" id="refresh-moderation-log" style="margin-left: 12px;" title="Refresh">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M23 16v6h-6"/><path d="M1 4v6h6"/><path d="M1 16v6h6"/><path d="M3 12a9 9 0 1 1 18 0"/></svg>
-          </button>
-        </h3>
-        <% if (!moderationLog.length) { %>
-          <p class="muted">No AI moderation decisions yet.</p>
-        <% } else { %>
-          <div class="table-wrap log-table-wrap" id="moderation-log-wrap">
-            <table class="table">
-              <thead><tr><th>When</th><th>Listing</th><th>Decision</th><th>Reason</th><th>Model</th><th>Actions</th></tr></thead>
-              <tbody>
-                <% moderationLog.forEach(function (r) { %>
-                  <tr>
-                    <td class="mono" style="white-space:nowrap"><%= (r.created_at || '').replace('T', ' ').slice(0, 16) %></td>
-                    <td>
-                      <% if (r.listing_id && r.slug) { %><a href="/admin3119Musa/listings/<%= r.listing_id %>/edit"><%= r.listing_name || r.slug %></a>
-                      <% } else { %><%= r.listing_name || ('#' + r.listing_id) %><% } %>
-                    </td>
-                    <td><span class="status <%= r.decision === 'approve' ? 'approved' : r.decision === 'reject' ? 'rejected' : 'pending' %>"><%= r.decision %></span></td>
-                    <td><%= r.reason %></td>
-                    <td class="mono"><%= r.model %></td>
-                    <td>
-                      <button class="btn btn-xs btn-danger log-delete-btn" type="button" data-log-type="moderation" data-log-id="<%= r.id %>" title="Delete">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                      </button>
-                    </td>
-                  </tr>
-                <% }) %>
-              </tbody>
-            </table>
-          </div>
-          <div class="log-table-footer">
-            <button class="btn btn-sm btn-primary" type="button" id="load-more-moderation" data-offset="50">Load More</button>
-          </div>
-        <% } %>
-      </div>
-
-      <div class="form-card">
-        <h3 class="form-section">Audit log
-          <button class="btn btn-sm btn-ghost" type="button" id="refresh-audit-log" style="margin-left: 12px;" title="Refresh">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M23 16v6h-6"/><path d="M1 4v6h6"/><path d="M1 16v6h6"/><path d="M3 12a9 9 0 1 1 18 0"/></svg>
-          </button>
-        </h3>
-        <p class="muted" style="margin:-8px 0 14px">Every generate, publish, proposed tool, execution, cancellation and moderation write is stored here.</p>
-        <% if (!auditLog.length) { %>
-          <p class="muted">Nothing audited yet.</p>
-        <% } else { %>
-          <div class="table-wrap log-table-wrap" id="audit-log-wrap">
-            <table class="table">
-              <thead><tr><th>When</th><th>Kind</th><th>Action</th><th>Result</th><th>OK</th><th>Actions</th></tr></thead>
-              <tbody>
-                <% auditLog.forEach(function (r) { %>
-                  <tr>
-                    <td class="mono" style="white-space:nowrap"><%= (r.created_at || '').replace('T', ' ').slice(0, 16) %></td>
-                    <td><%= r.kind %></td>
-                    <td class="mono"><%= r.action %></td>
-                    <td><%= String(r.result || '').slice(0, 180) %></td>
-                    <td><%= r.ok ? 'yes' : 'no' %></td>
-                    <td>
-                      <button class="btn btn-xs btn-danger log-delete-btn" type="button" data-log-type="audit" data-log-id="<%= r.id %>" title="Delete">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                      </button>
-                    </td>
-                  </tr>
-                <% }) %>
-              </tbody>
-            </table>
-          </div>
-          <div class="log-table-footer">
-            <button class="btn btn-sm btn-primary" type="button" id="load-more-audit" data-offset="40">Load More</button>
-          </div>
-        <% } %>
       </div>
     </div>
   </div>
@@ -311,660 +523,1181 @@
 
 <div class="ai-modal" id="ai-modal" hidden>
   <div class="ai-modal-card" role="dialog" aria-modal="true" aria-labelledby="ai-modal-title">
-    <h3 id="ai-modal-title">Confirm action</h3>
+    <p class="klabel" id="ai-modal-kicker">Confirm action</p>
+    <h3 id="ai-modal-title">Run this console action?</h3>
     <p class="muted" id="ai-modal-label"></p>
     <pre class="ai-modal-args" id="ai-modal-args"></pre>
+    <p class="ai-modal-note">The action runs with your admin privileges. It stays valid for 10 minutes.</p>
     <div class="form-actions">
       <button class="btn btn-primary" type="button" id="ai-modal-ok">Run action</button>
       <button class="btn btn-ghost" type="button" id="ai-modal-cancel">Cancel</button>
+      <span class="muted ai-status" id="ai-modal-status" role="status"></span>
     </div>
   </div>
 </div>
 
-<style>
-  .chat-history-sidebar {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 280px;
-    height: 100%;
-    background: var(--card-bg, #fff);
-    border-right: 1px solid var(--border-color, #e0e0e0);
-    z-index: 10;
-    display: flex;
-    flex-direction: column;
-    box-shadow: 2px 0 8px rgba(0,0,0,0.05);
-  }
-  .chat-history-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 12px 16px;
-    border-bottom: 1px solid var(--border-color, #e0e0e0);
-    background: var(--bg-alt, #f8f9fa);
-  }
-  .chat-history-head h4 {
-    margin: 0;
-    font-size: 14px;
-    font-weight: 600;
-  }
-  .chat-history-list {
-    flex: 1;
-    overflow-y: auto;
-    padding: 8px;
-    min-height: 200px;
-  }
-  .chat-history-item {
-    padding: 10px 12px;
-    border-radius: 6px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    transition: background 0.15s;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .chat-history-item:hover {
-    background: var(--hover-bg, #f0f0f0);
-  }
-  .chat-history-item.active {
-    background: var(--primary-light, #e8f4fd);
-  }
-  .chat-history-item.archived {
-    opacity: 0.7;
-  }
-  .chat-history-item .title {
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    font-size: 13px;
-  }
-  .chat-history-item .meta {
-    font-size: 11px;
-    color: var(--muted-color, #666);
-    margin-left: 8px;
-  }
-  .chat-history-item .actions {
-    display: flex;
-    gap: 4px;
-    margin-left: 8px;
-  }
-  .chat-history-item .actions button {
-    padding: 2px 4px;
-    opacity: 0.5;
-  }
-  .chat-history-item .actions button:hover {
-    opacity: 1;
-  }
-  .chat-history-footer {
-    padding: 8px 12px;
-    border-top: 1px solid var(--border-color, #e0e0e0);
-    background: var(--bg-alt, #f8f9fa);
-    text-align: center;
-  }
-  .chat-head {
-    display: flex;
-    align-items: center;
-    padding: 12px 16px;
-    border-bottom: 1px solid var(--border-color, #e0e0e0);
-    position: relative;
-  }
-  .chat-head-actions {
-    display: flex;
-    gap: 8px;
-    margin-left: auto;
-  }
-  .chat-head-avatar {
-    width: 36px;
-    height: 36px;
-    background: var(--primary, #0066cc);
-    color: white;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 600;
-    font-size: 14px;
-  }
-  .chat-head-meta {
-    margin-left: 12px;
-  }
-  .chat-head-name {
-    font-weight: 600;
-    font-size: 14px;
-  }
-  .chat-head-sub {
-    font-size: 12px;
-    color: var(--muted-color, #666);
-  }
-  .ai-grid {
-    position: relative;
-  }
-  .ai-pane {
-    display: none;
-  }
-  .ai-pane.is-on {
-    display: block;
-  }
-  .log-table-wrap {
-    max-height: 400px;
-    overflow-y: auto;
-    border: 1px solid var(--border-color, #e0e0e0);
-    border-radius: 6px;
-    margin-top: 12px;
-  }
-  .log-table-footer {
-    margin-top: 12px;
-    text-align: center;
-  }
-  .wa-row:hover {
-    background: rgba(0,0,0,0.02);
-  }
-</style>
+<div class="ai-modal ai-help-modal" id="ai-help" hidden>
+  <div class="ai-modal-card" role="dialog" aria-modal="true" aria-labelledby="ai-help-title">
+    <p class="klabel">Admin assistant</p>
+    <h3 id="ai-help-title">How this playground behaves</h3>
+    <ul class="ai-help-list">
+      <li><b>Reads run straight away.</b> Counts, lookups and status checks never change anything.</li>
+      <li><b>Writes are confirmed.</b> A proposal card appears with the exact arguments; nothing executes until you press Run — unless you allow that action under Settings → Assistant auto-run.</li>
+      <li><b>History is real.</b> Each chat is stored with its messages, so reopening the console brings the conversation (and the model you picked for it) back.</li>
+      <li><b>The rail is the archive.</b> Rename, search, archive, restore or delete chats from the history rail.</li>
+      <li><b>Nothing auto-publishes.</b> Generated listings are saved as <span class="mono">pending</span> and still pass the normal review queue.</li>
+    </ul>
+    <div class="form-actions">
+      <button class="btn btn-primary" type="button" id="ai-help-close">Got it</button>
+    </div>
+  </div>
+</div>
 
 <script>
 (function () {
-  var csrf = <%- JSON.stringify(csrfToken) %>;
-  var configured = <%- settings.groq_configured ? 'true' : 'false' %>;
+  'use strict';
+
+  var CSRF = <%- JSON.stringify(csrfToken || '') %>;
+  var BASE = '/admin3119Musa/ai';
+  var READY = <%- ready ? 'true' : 'false' %>;
+  var MODELS = <%- JSON.stringify(settings.models.map(function (m) { return { id: m.id, label: m.label, tier: m.tier, available: m.available == null ? null : !!m.available, note: m.note || '', tools: !!m.tools }; })) %>;
+  var START_SESSION = <%- JSON.stringify(openSession ? { id: openSession.id, title: openSession.title, model: openSession.model } : null) %>;
+  var START_MESSAGES = <%- JSON.stringify(messages || []) %>;
+  var START_MORE = <%- JSON.stringify(!!hasMoreMessages) %>;
+  var START_OLDEST = <%- JSON.stringify(oldestMessageId || 0) %>;
+  var START_TAB = <%- JSON.stringify(tab) %>;
+  var DEFAULT_RULES = <%- JSON.stringify(settings.default_rules) %>;
+
+  /* ---------------- tiny helpers ---------------- */
 
   function $(id) { return document.getElementById(id); }
-  function api(path, body) {
-    return fetch(path, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'X-CSRF-Token': csrf
-      },
-      body: JSON.stringify(body || {})
-    }).then(function (res) {
-      return res.json().then(function (data) {
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = String(text);
+    return n;
+  }
+  function svg(paths, size, fill) {
+    var s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    s.setAttribute('viewBox', '0 0 24 24');
+    s.setAttribute('width', String(size || 13));
+    s.setAttribute('height', String(size || 13));
+    s.setAttribute('fill', fill || 'none');
+    s.setAttribute('stroke', 'currentColor');
+    s.setAttribute('stroke-width', '2');
+    s.setAttribute('stroke-linecap', 'round');
+    s.setAttribute('stroke-linejoin', 'round');
+    s.setAttribute('aria-hidden', 'true');
+    paths.forEach(function (d) {
+      var p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      p.setAttribute('d', d);
+      s.appendChild(p);
+    });
+    return s;
+  }
+  function toast(kind, msg, title) {
+    if (window.__flToast) window.__flToast(kind, msg, title);
+  }
+  function icoBtn(label, paths, cls) {
+    var b = el('button', 'icon-btn xs ' + (cls || ''));
+    b.type = 'button';
+    b.title = label;
+    b.setAttribute('aria-label', label);
+    b.appendChild(svg(paths, 13));
+    return b;
+  }
+  function store(key, value) {
+    try {
+      if (value === undefined) return window.localStorage.getItem(key);
+      window.localStorage.setItem(key, value);
+    } catch (e) { /* private mode — the page still works */ }
+    return null;
+  }
+  function fmtTime(value) {
+    var t = String(value || '').replace(' ', 'T');
+    if (t && !/Z|[+-]\d\d:?\d\d$/.test(t)) t += 'Z';
+    var d = t ? new Date(t) : null;
+    return d && !isNaN(d.getTime()) ? d : null;
+  }
+  function hhmm(d) {
+    if (!d) return '';
+    return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+  }
+  function whenLabel(value) {
+    var d = fmtTime(value);
+    if (!d) return '—';
+    var now = new Date();
+    var days = Math.floor((new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 864e5);
+    if (days <= 0) return 'Today ' + hhmm(d);
+    if (days === 1) return 'Yesterday ' + hhmm(d);
+    if (days < 7) return days + ' days ago';
+    return d.toISOString().slice(0, 10);
+  }
+  function groupLabel(value) {
+    var d = fmtTime(value);
+    if (!d) return 'Earlier';
+    var now = new Date();
+    var days = Math.floor((new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 864e5);
+    if (days <= 0) return 'Today';
+    if (days === 1) return 'Yesterday';
+    if (days < 7) return 'This week';
+    if (days < 31) return 'Last 30 days';
+    return 'Older';
+  }
+
+  /* ---------------- fetch wrapper ---------------- */
+
+  function api(path, opts) {
+    var o = opts || {};
+    var init = {
+      method: o.method || (o.body ? 'POST' : 'GET'),
+      headers: { Accept: 'application/json' },
+      credentials: 'same-origin',
+    };
+    /* Every unsafe verb carries the token — body-less POSTs (activate, archive)
+       and DELETEs included, or the CSRF guard rejects them. */
+    if (init.method !== 'GET' && init.method !== 'HEAD') init.headers['X-CSRF-Token'] = CSRF;
+    if (o.body) {
+      init.headers['Content-Type'] = 'application/json';
+      init.body = JSON.stringify(o.body);
+    }
+    return fetch(BASE + path, init).then(function (res) {
+      return res.text().then(function (raw) {
+        var data = {};
+        if (raw) {
+          try { data = JSON.parse(raw); } catch (e) { data = { error: raw.slice(0, 200) }; }
+        }
+        if (res.status === 403 && /security check failed/i.test(String(data.error || ''))) {
+          var stale = new Error('Your console session expired. Reload the page and try again.');
+          stale.status = 403;
+          stale.reload = true;
+          throw stale;
+        }
         if (!res.ok || data.ok === false) {
-          throw new Error(data.error || ('Request failed (' + res.status + ')'));
+          var err = new Error(data.error || ('Request failed (' + res.status + ')'));
+          err.status = res.status;
+          err.code = data.code;
+          throw err;
         }
         return data;
-      }, function () {
-        throw new Error('The server returned a non-JSON response (' + res.status + '). Reload and try again.');
       });
     });
   }
-  function count(el, out, min, max) {
-    function tick() {
-      var n = (el.value || '').length;
-      out.textContent = n + ' / ' + max;
-      out.className = 'count' + (n < min || n > max ? ' count-warn' : ' count-ok');
-    }
-    el.addEventListener('input', tick);
-    tick();
+  function fail(where, e) {
+    var msg = e && e.message ? e.message : 'Something went wrong.';
+    if (e && e.reload) msg += ' (reload to sign back in)';
+    if (where) where.textContent = msg;
+    toast('err', msg, 'AI Playground');
+    return msg;
+  }
+  function esc(s) { return String(s == null ? '' : s); }
+
+  function modelLabel(id) {
+    for (var i = 0; i < MODELS.length; i++) if (MODELS[i].id === id) return MODELS[i].label;
+    return id || 'unknown';
   }
 
-  /* tabs */
-  var tabs = document.querySelectorAll('.ai-tab');
-  function showTab(name) {
+  /* ---------------- tabs ---------------- */
+
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.ai-tab'));
+  var panes = Array.prototype.slice.call(document.querySelectorAll('.ai-pane'));
+  function showTab(name, push) {
     tabs.forEach(function (t) {
       var on = t.getAttribute('data-tab') === name;
       t.classList.toggle('active', on);
       t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
     });
-    document.querySelectorAll('.ai-pane').forEach(function (p) {
+    panes.forEach(function (p) {
       p.classList.toggle('is-on', p.getAttribute('data-pane') === name);
     });
+    store('fl-ai-tab', name);
+    if (push !== false) {
+      var url = new URL(window.location.href);
+      url.searchParams.set('tab', name);
+      if (state.sessionId) url.searchParams.set('session', String(state.sessionId));
+      else url.searchParams.delete('session');
+      window.history.replaceState({}, '', url.toString());
+    }
+    if (name === 'chat') {
+      var input = $('chat-input');
+      if (input && READY && !input.disabled) input.focus();
+    }
   }
   tabs.forEach(function (t) {
     t.addEventListener('click', function () { showTab(t.getAttribute('data-tab')); });
+    t.addEventListener('keydown', function (ev) {
+      if (ev.key !== 'ArrowRight' && ev.key !== 'ArrowLeft') return;
+      ev.preventDefault();
+      var i = tabs.indexOf(t);
+      var next = tabs[(i + (ev.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
+      next.focus();
+      showTab(next.getAttribute('data-tab'));
+    });
   });
-  if (location.hash === '#ai-settings') showTab('set');
 
-  /* generator */
+  /* ---------------- shared state ---------------- */
+
+  var pane = $('chat-pane');
+  var rail = $('chat-rail');
+  var railList = $('rail-list');
+  var scrim = $('rail-scrim');
+  var statusLine = $('chat-status');
+  var state = {
+    sessionId: START_SESSION ? START_SESSION.id : 0,
+    sessionTitle: START_SESSION ? START_SESSION.title : 'Admin assistant',
+    model: START_SESSION ? START_SESSION.model : <%- JSON.stringify(settings.groq_model) %>,
+    busy: false,
+    railOpen: false,
+    archived: '0',
+    q: '',
+    pending: null,
+    lastUser: '',
+    transcript: [],
+  };
+
+  var genModel = $('gen-model');
+  if (genModel) genModel.value = state.model;
+  var chatModel = $('chat-model');
+  if (chatModel) chatModel.value = state.model;
+
+  /* ---------------- char counters ---------------- */
+
+  function bindCount(input, out, min, max) {
+    if (!input) return;
+    function tick() {
+      var n = (input.value || '').length;
+      if (out) {
+        out.textContent = n + ' / ' + max;
+        out.className = 'count' + (n > max || (min && n < min && n > 0) ? ' count-warn' : ' count-ok');
+      }
+      input.setAttribute('aria-invalid', n > max ? 'true' : 'false');
+    }
+    input.addEventListener('input', tick);
+    tick();
+  }
+  bindCount($('f-tagline'), $('c-tagline'), 20, 90);
+  bindCount($('f-description'), $('c-desc'), 100, 1200);
+  bindCount($('f-name'), $('c-name'), 2, 60);
+  bindCount($('mod-rules'), $('c-rules'), 0, 8000);
+  bindCount($('chat-input'), $('chat-count'), 0, 4000);
+
+  function autoGrow(node) {
+    if (!node) return;
+    function grow() {
+      node.style.height = 'auto';
+      node.style.height = Math.min(160, Math.max(22, node.scrollHeight)) + 'px';
+    }
+    node.addEventListener('input', grow);
+    grow();
+  }
+  autoGrow($('chat-input'));
+
+  /* ================= listing generator ================= */
+
   var genBtn = $('gen-btn');
   var genStatus = $('gen-status');
   var genForm = $('gen-form');
+  var genErrors = $('gen-errors');
+  var genPrompt = $('gen-prompt');
+  var genPill = $('gen-model-pill');
+
+  document.querySelectorAll('.ai-chip').forEach(function (chip) {
+    chip.addEventListener('click', function () {
+      if (!genPrompt) return;
+      genPrompt.value = chip.getAttribute('data-seed');
+      genPrompt.dispatchEvent(new Event('input'));
+      genPrompt.focus();
+    });
+  });
+
   function fillDraft(d) {
-    $('f-name').value = d.name || '';
-    $('f-tagline').value = d.tagline || '';
-    $('f-description').value = d.description || '';
-    $('f-type').value = d.type || 'company';
-    $('f-category').value = d.category || '';
-    $('f-website').value = d.website || '';
-    $('f-country').value = d.country || '';
-    $('f-founded').value = d.founded || '';
-    $('f-city').value = d.city || '';
-    $('f-size').value = d.size || '';
-    $('f-tags').value = Array.isArray(d.tags) ? d.tags.join(', ') : (d.tags || '');
-    $('f-email').value = d.email || '';
+    var model = {
+      'f-name': d.name, 'f-tagline': d.tagline, 'f-description': d.description,
+      'f-type': d.type, 'f-category': d.category, 'f-website': d.website,
+      'f-country': d.country, 'f-founded': d.founded, 'f-city': d.city,
+      'f-size': d.size, 'f-tags': Array.isArray(d.tags) ? d.tags.join(', ') : d.tags,
+      'f-email': d.email,
+    };
+    Object.keys(model).forEach(function (id) {
+      var node = $(id);
+      if (node) node.value = model[id] == null ? '' : model[id];
+    });
+    ['f-tagline', 'f-description', 'f-name'].forEach(function (id) {
+      var node = $(id);
+      if (node) node.dispatchEvent(new Event('input'));
+    });
     genForm.hidden = false;
-    count($('f-tagline'), $('c-tagline'), 20, 90);
-    count($('f-description'), $('c-desc'), 100, 1200);
-    genForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.querySelector('.ai-gen-grid').classList.add('is-wide');
+    if (genErrors) genErrors.hidden = true;
+    if (genPill) {
+      genPill.hidden = false;
+      genPill.textContent = 'Draft by ' + modelLabel(draftModelUsed);
+    }
+    genForm.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
+
+  var draftModelUsed = '';
+
   if (genBtn) {
     genBtn.addEventListener('click', function () {
-      if (!configured) return;
-      var prompt = ($('gen-prompt').value || '').trim();
-      if (prompt.length < 8) {
-        genStatus.textContent = 'Add a bit more detail first.';
-        return;
-      }
+      if (!READY) { fail(genStatus, new Error('Add a Groq key first (Settings tab).')); return; }
+      var prompt = (genPrompt.value || '').trim();
+      if (prompt.length < 8) { fail(genStatus, new Error('Add a bit more detail first — name, site, or a couple of facts.')); return; }
       genBtn.disabled = true;
       genStatus.textContent = 'Generating…';
-      api('/admin3119Musa/ai/generate-listing', { prompt: prompt }).then(function (data) {
-        fillDraft(data.draft || {});
-        genStatus.textContent = 'Draft ready' + (data.model ? ' · ' + data.model : '') + '. Review before saving.';
-      }).catch(function (e) {
-        genStatus.textContent = e.message;
-      }).then(function () { genBtn.disabled = !configured; });
+      api('/generate-listing', { body: { prompt: prompt, model: genModel ? genModel.value : '' } })
+        .then(function (data) {
+          draftModelUsed = data.model || (genModel ? genModel.value : '');
+          fillDraft(data.draft || {});
+          var tok = data.usage && data.usage.total_tokens ? ' · ' + data.usage.total_tokens + ' tokens' : '';
+          genStatus.textContent = 'Draft ready · ' + modelLabel(draftModelUsed) + tok;
+          toast('ok', 'Draft generated — review it before saving.', 'Listing generator');
+        })
+        .catch(function (e) { fail(genStatus, e); })
+        .then(function () { genBtn.disabled = !READY; });
     });
+  }
+  if ($('gen-redo')) {
+    $('gen-redo').addEventListener('click', function () { if (genBtn) genBtn.click(); });
+  }
+  function resetDraft() {
+    if (!genForm) return;
+    genForm.reset();
+    genForm.hidden = true;
+    document.querySelector('.ai-gen-grid').classList.remove('is-wide');
+    if (genErrors) genErrors.hidden = true;
+    if (genPill) genPill.hidden = true;
   }
   if ($('gen-discard')) {
     $('gen-discard').addEventListener('click', function () {
-      genForm.hidden = true;
-      genForm.reset();
+      resetDraft();
       genStatus.textContent = 'Draft discarded.';
+    });
+  }
+  if ($('gen-clear')) {
+    $('gen-clear').addEventListener('click', function () {
+      genPrompt.value = '';
+      genPrompt.dispatchEvent(new Event('input'));
+      resetDraft();
+      genStatus.textContent = '';
+      genPrompt.focus();
     });
   }
   if (genForm) {
     genForm.addEventListener('submit', function (ev) {
       ev.preventDefault();
-      var errBox = $('gen-errors');
-      errBox.hidden = true;
+      if (genErrors) genErrors.hidden = true;
       var body = {
-        name: $('f-name').value,
-        tagline: $('f-tagline').value,
-        description: $('f-description').value,
-        type: $('f-type').value,
-        category: $('f-category').value,
-        website: $('f-website').value,
-        country: $('f-country').value,
-        founded: $('f-founded').value,
-        city: $('f-city').value,
-        size: $('f-size').value,
-        tags: $('f-tags').value,
-        email: $('f-email').value
+        name: $('f-name').value, tagline: $('f-tagline').value, description: $('f-description').value,
+        type: $('f-type').value, category: $('f-category').value, website: $('f-website').value,
+        country: $('f-country').value, founded: $('f-founded').value, city: $('f-city').value,
+        size: $('f-size').value, tags: $('f-tags').value, email: $('f-email').value,
       };
       $('save-btn').disabled = true;
       $('save-status').textContent = 'Saving…';
-      api('/admin3119Musa/ai/publish-listing', body).then(function (data) {
+      api('/publish-listing', { body: body }).then(function (data) {
         var l = data.listing || {};
-        $('save-status').textContent = 'Saved as pending' + (l.slug ? ' · /listing/' + l.slug : '') + '.';
-        if (window.__flToast) window.__flToast('ok', 'Listing saved as pending.', 'AI Playground');
+        $('save-status').textContent = 'Saved as pending.';
+        toast('ok', 'Listing saved as pending' + (l.slug ? ' · /listing/' + l.slug : '') + '.', 'AI Playground');
+        genStatus.textContent = 'Published to the review queue.' + (l.id ? ' · #' + l.id : '');
+        resetDraft();
+        if (data.meta && data.meta.note) genStatus.textContent += ' ' + data.meta.note;
       }).catch(function (e) {
-        errBox.hidden = false;
-        errBox.textContent = e.message;
+        if (genErrors) {
+          genErrors.hidden = false;
+          genErrors.textContent = e.message;
+        }
         $('save-status').textContent = '';
       }).then(function () { $('save-btn').disabled = false; });
     });
   }
 
-  /* assistant */
-  var history = [];
-  var currentSessionId = null;
-  var pane = $('chat-pane');
-  var pending = null;
+  /* ================= assistant ================= */
 
-  function addBubble(role, text) {
-    var row = document.createElement('div');
-    row.className = 'wa-row ' + (role === 'user' ? 'wa-mine' : 'wa-theirs');
-    var bubble = document.createElement('div');
-    bubble.className = 'wa-bubble';
-    var who = document.createElement('div');
-    who.className = 'wa-who';
-    who.textContent = role === 'user' ? 'You' : 'Assistant';
-    var body = document.createElement('div');
-    body.className = 'wa-text';
-    body.textContent = text;
-    bubble.appendChild(who);
+  var input = $('chat-input');
+  var sendBtn = $('chat-send');
+
+  function setBusy(busy, label) {
+    state.busy = !!busy;
+    if (input) input.disabled = !READY || !!busy;
+    if (sendBtn) sendBtn.disabled = !READY || !!busy;
+    if (statusLine) {
+      statusLine.textContent = busy ? (label || 'Thinking…') : '';
+      statusLine.classList.toggle('is-live', !!busy);
+    }
+    var chat = $('ai-chat');
+    if (chat) chat.classList.toggle('is-busy', !!busy);
+  }
+
+  function renderRich(target, text) {
+    /* Safe by construction: only textContent + explicit <pre>/<code> nodes, never innerHTML. */
+    var raw = esc(text);
+    var fence = raw.split('```');
+    fence.forEach(function (chunk, idx) {
+      if (idx % 2 === 1) {
+        var pre = el('pre', 'wa-code');
+        var nl = chunk.indexOf('\n');
+        if (nl > -1 && nl < 20) chunk = chunk.slice(nl + 1);
+        pre.textContent = chunk.replace(/^\s+|\s+$/g, '\n').trim();
+        target.appendChild(pre);
+        return;
+      }
+      chunk.split(/\n/).forEach(function (line) {
+        if (!line.trim()) return;
+        var row = el('div', 'wa-line');
+        var parts = line.split(/(\*\*[^*]+\*\*|`[^`]+`)/);
+        parts.forEach(function (part) {
+          if (/^\*\*[^*]+\*\*$/.test(part)) row.appendChild(el('b', null, part.slice(2, -2)));
+          else if (/^`[^`]+`$/.test(part)) row.appendChild(el('code', null, part.slice(1, -1)));
+          else row.appendChild(document.createTextNode(part));
+        });
+        target.appendChild(row);
+      });
+    });
+  }
+
+  /* Day separators follow the message timestamps, so an old chat never claims to be "Today". */
+  /* Stored stamps are UTC "YYYY-MM-DD HH:MM:SS"; label them the same way the
+     server markup does so hydration never shifts a message to another day. */
+  var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  function utcDay(offset) { return new Date(Date.now() - (offset || 0) * 86400000).toISOString().slice(0, 10); }
+  function stampOf(value) {
+    var s = String(value || '');
+    if (!s) { s = new Date().toISOString().slice(0, 16).replace('T', ' '); }
+    return { day: s.slice(0, 10), time: s.slice(11, 16) };
+  }
+  function dayLabel(value) {
+    var day = stampOf(value).day;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return 'Today';
+    var today = utcDay(0);
+    if (day === today) return 'Today';
+    if (day === utcDay(1)) return 'Yesterday';
+    var p = day.split('-');
+    return parseInt(p[2], 10) + ' ' + MON[parseInt(p[1], 10) - 1] + (p[0] === today.slice(0, 4) ? '' : ' ' + p[0]);
+  }
+
+  function addBubble(role, text, meta) {
+    var chips = pane.querySelectorAll('.chat-day');
+    var lastChip = chips.length ? chips[chips.length - 1] : null;
+    var label = dayLabel(meta && meta.when);
+    if (!lastChip || lastChip.textContent !== label) pane.appendChild(el('div', 'chat-day', label));
+    var row = el('div', 'wa-row ' + (role === 'user' ? 'wa-mine' : 'wa-theirs') + (meta && meta.kind ? ' ai-' + meta.kind : ''));
+    var bubble = el('div', 'wa-bubble');
+    bubble.appendChild(el('div', 'wa-who', role === 'user' ? 'You' : 'Assistant'));
+    var body = el('div', 'wa-text');
+    if (role === 'user') body.textContent = text;
+    else renderRich(body, text);
     bubble.appendChild(body);
+    if (meta && meta.tool) bubble.appendChild(el('div', 'wa-tag ai-tag-' + (meta.ok === false ? 'bad' : 'ok'), meta.tool));
+    var foot = el('div', 'wa-meta');
+    foot.appendChild(el('span', null, stampOf(meta && meta.when).time));
+    if (meta && meta.model) foot.appendChild(el('span', 'wa-meta-model', modelLabel(meta.model)));
+    bubble.appendChild(foot);
     row.appendChild(bubble);
     pane.appendChild(row);
     pane.scrollTop = pane.scrollHeight;
-    return body;
+    return bubble;
   }
 
-  /* Chat history management */
-  var chatHistorySidebar = $('chat-history-sidebar');
-  var chatHistoryList = $('chat-history-list');
-  var showArchivedChats = false;
-
-  function loadChatSessions() {
-    api('/admin3119Musa/ai/chat/sessions' + (showArchivedChats ? '?include_archived=1' : '')).then(function (data) {
-      renderChatHistory(data.sessions || []);
-    }).catch(function (e) {
-      chatHistoryList.innerHTML = '<p class="muted" style="padding: 12px;">Error loading chat history.</p>';
-    });
+  function addTyping() {
+    var row = el('div', 'wa-row wa-theirs ai-typing-row');
+    var bubble = el('div', 'wa-bubble');
+    var dots = el('div', 'ai-typing');
+    dots.setAttribute('aria-label', 'Assistant is typing');
+    [0, 1, 2].forEach(function () { dots.appendChild(el('span', 'dot')); });
+    bubble.appendChild(dots);
+    row.appendChild(bubble);
+    pane.appendChild(row);
+    pane.scrollTop = pane.scrollHeight;
+    return row;
   }
+  function killTyping(node) { if (node && node.parentNode) node.parentNode.removeChild(node); }
 
-  function renderChatHistory(sessions) {
-    if (!sessions.length) {
-      chatHistoryList.innerHTML = '<p class="muted" style="padding: 12px; text-align: center;">No chat sessions yet.</p>';
-      return;
-    }
-    var html = '';
-    sessions.forEach(function (s) {
-      var isActive = s.is_active === 1;
-      var isArchived = s.archived === 1;
-      var date = (s.updated_at || s.created_at || '').replace('T', ' ').slice(0, 16);
-      var title = escHtml(s.title || 'Untitled Chat');
-      var model = escHtml(s.model || 'unknown');
-      html += '<div class="chat-history-item ' + (isActive ? 'active' : '') + (isArchived ? ' archived' : '') + '" data-session-id="' + s.id + '">';
-      html += '<span class="title">' + title + '</span>';
-      html += '<span class="meta">' + model + ' · ' + date + '</span>';
-      html += '<div class="actions">';
-      if (!isActive) {
-        html += '<button class="btn btn-xs btn-primary" type="button" data-action="activate" title="Activate">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-        </button>';
-      }
-      if (isArchived) {
-        html += '<button class="btn btn-xs btn-success" type="button" data-action="unarchive" title="Unarchive">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        </button>';
-      } else {
-        html += '<button class="btn btn-xs btn-warning" type="button" data-action="archive" title="Archive">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        </button>';
-      }
-      html += '<button class="btn btn-xs btn-danger" type="button" data-action="delete" title="Delete">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-      </button>';
-      html += '</div>';
-      html += '</div>';
-    });
-    chatHistoryList.innerHTML = html;
-    
-    // Add event listeners
-    chatHistoryList.querySelectorAll('.chat-history-item').forEach(function (item) {
-      item.addEventListener('click', function (ev) {
-        if (ev.target.closest('button')) return; // Don't activate when clicking buttons
-        var sessionId = Number(item.getAttribute('data-session-id'));
-        activateChatSession(sessionId);
-      });
-      
-      item.querySelectorAll('button').forEach(function (btn) {
-        btn.addEventListener('click', function (ev) {
-          ev.stopPropagation();
-          var sessionId = Number(item.getAttribute('data-session-id'));
-          var action = btn.getAttribute('data-action');
-          handleSessionAction(sessionId, action);
-        });
+  var starters = $('chat-pane').querySelector('.ai-starters');
+  if (starters) {
+    starters.querySelectorAll('.ai-starter').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (!READY) return;
+        input.value = b.getAttribute('data-prompt');
+        input.dispatchEvent(new Event('input'));
+        send();
       });
     });
   }
 
-  function activateChatSession(sessionId) {
-    api('/admin3119Musa/ai/chat/session/' + sessionId + '/activate').then(function (data) {
-      currentSessionId = sessionId;
-      loadChatHistory();
-      // Clear current chat and start fresh with this session
-      pane.innerHTML = '<div class="chat-day">Continuing chat...</div>';
-      loadSessionMessages(sessionId);
-      chatHistorySidebar.hidden = true;
-    }).catch(function (e) {
-      alert(e.message || 'Failed to activate session');
-    });
+  function proposalCard(tool, pendingId) {
+    var wrap = el('div', 'ai-proposal');
+    wrap.appendChild(el('h5', null, 'Confirm before this runs'));
+    wrap.appendChild(el('p', null, tool.label || tool.name));
+    var args = el('pre', 'ai-proposal-args');
+    args.textContent = JSON.stringify(tool.args || {}, null, 2);
+    wrap.appendChild(args);
+    var actions = el('div', 'ai-proposal-actions');
+    var run = el('button', 'btn btn-sm btn-primary', 'Review in dialog');
+    run.type = 'button';
+    run.addEventListener('click', function () { openModal({ pending_id: pendingId, name: tool.name, label: tool.label, args: tool.args }); });
+    actions.appendChild(run);
+    var drop = el('button', 'btn btn-sm btn-ghost', 'Discard');
+    drop.type = 'button';
+    drop.addEventListener('click', function () { cancelProposal(); });
+    actions.appendChild(drop);
+    wrap.appendChild(actions);
+    return wrap;
   }
-
-  function loadSessionMessages(sessionId) {
-    api('/admin3119Musa/ai/chat/session/' + sessionId + '/messages?limit=100').then(function (data) {
-      if (data.messages && data.messages.length) {
-        data.messages.forEach(function (msg) {
-          addBubble(msg.role === 'user' ? 'user' : 'assistant', msg.content);
-        });
-      }
-    }).catch(function (e) {
-      console.error('Failed to load messages:', e);
-    });
-  }
-
-  function handleSessionAction(sessionId, action) {
-    var endpoint = '';
-    switch (action) {
-      case 'activate': endpoint = '/activate'; break;
-      case 'archive': endpoint = '/archive'; break;
-      case 'unarchive': endpoint = '/unarchive'; break;
-      case 'delete': 
-        if (!confirm('Are you sure you want to delete this chat session? This cannot be undone.')) return;
-        endpoint = '/delete';
-        break;
-    }
-    if (!endpoint) return;
-    
-    api('/admin3119Musa/ai/chat/session/' + sessionId + endpoint).then(function (data) {
-      loadChatSessions();
-      if (action === 'activate') {
-        currentSessionId = sessionId;
-        pane.innerHTML = '<div class="chat-day">Chat activated</div>';
-        loadSessionMessages(sessionId);
-        chatHistorySidebar.hidden = true;
-      }
-    }).catch(function (e) {
-      alert(e.message || 'Action failed');
-    });
-  }
-
-  function escHtml(text) {
-    var div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-  }
-
-  var modal = $('ai-modal');
-  var modalLabel = $('ai-modal-label');
-  var modalArgs = $('ai-modal-args');
-  function openModal(tool) {
-    pending = tool;
-    modalLabel.textContent = tool.label || tool.name;
-    modalArgs.textContent = JSON.stringify(tool.args || {}, null, 2);
-    modal.hidden = false;
-  }
-  function closeModal() { modal.hidden = true; }
 
   function handleReply(data) {
+    var content = data.content || 'Done.';
     if (data.type === 'tool_proposal') {
-      addBubble('assistant', data.content || 'I have an action to confirm.');
-      openModal({ pending_id: data.pending_id, name: data.tool && data.tool.name, label: data.tool && data.tool.label, args: data.tool && data.tool.args });
+      var bubble = addBubble('assistant', content, { kind: 'await', model: data.model });
+      bubble.appendChild(proposalCard(data.tool || {}, data.pending_id));
+      state.pending = { pending_id: data.pending_id, name: data.tool && data.tool.name, label: data.tool && data.tool.label, args: data.tool && data.tool.args };
+      openModal(state.pending, true);
       return;
     }
-    addBubble('assistant', data.content || 'Done.');
-    if (data.content) history.push({ role: 'assistant', content: data.content });
+    addBubble('assistant', content, { model: data.model, kind: data.executed ? 'ran' : (data.error ? 'bad' : null), tool: data.tool || '', ok: data.executed !== false });
+    if (data.session_id && !state.sessionId) {
+      state.sessionId = data.session_id;
+      loadRail();
+    }
+    refreshHeadTitle();
+  }
+
+  function send() {
+    if (!READY) { fail(statusLine, new Error('Add a Groq key first (Settings tab).')); return; }
+    if (state.busy) return;
+    var text = (input.value || '').trim();
+    if (!text) return;
+    input.value = '';
+    input.dispatchEvent(new Event('input'));
+    state.lastUser = text;
+    addBubble('user', text);
+    var typing = addTyping();
+    setBusy(true, 'Thinking…');
+    api('/chat', {
+      body: { text: text, session_id: state.sessionId || 0, model: chatModel ? chatModel.value : '' },
+    }).then(function (data) {
+      killTyping(typing);
+      if (data.session && data.session.id) {
+        state.sessionId = data.session.id;
+        state.sessionTitle = data.session.title;
+      }
+      handleReply(data);
+      refreshHeadTitle();
+      syncUrl();
+      if (state.railOpen) loadRail(); else state.railDirty = true;
+    }).catch(function (e) {
+      killTyping(typing);
+      var bubble = addBubble('assistant', 'Groq could not answer: ' + e.message, { kind: 'bad', ok: false });
+      var retry = el('button', 'btn btn-xs btn-ghost', 'Try again');
+      retry.type = 'button';
+      retry.addEventListener('click', function () {
+        input.value = state.lastUser;
+        input.dispatchEvent(new Event('input'));
+        send();
+      });
+      bubble.appendChild(retry);
+      if (e.status === 429) statusLine.textContent = e.message;
+    }).then(function () { setBusy(false); });
   }
 
   $('chat-form').addEventListener('submit', function (ev) {
     ev.preventDefault();
-    if (!configured) return;
-    var input = $('chat-input');
-    var text = (input.value || '').trim();
-    if (!text) return;
-    input.value = '';
-    addBubble('user', text);
-    history.push({ role: 'user', content: text });
-    api('/admin3119Musa/ai/chat', { messages: history }).then(handleReply).catch(function (e) {
-      addBubble('assistant', e.message);
-    });
+    send();
   });
-  $('chat-input').addEventListener('keydown', function (ev) {
-    if (ev.key === 'Enter' && !ev.shiftKey) {
+  input.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey ? true : !ev.shiftKey)) {
       ev.preventDefault();
-      $('chat-form').dispatchEvent(new Event('submit', { cancelable: true }));
+      send();
     }
   });
+  if (chatModel) {
+    chatModel.addEventListener('change', function () {
+      state.model = chatModel.value;
+      if (!state.sessionId) return;
+      api('/chat/sessions/' + state.sessionId + '/model', { body: { model: chatModel.value } })
+        .then(function () { toast('ok', 'This chat now uses ' + modelLabel(chatModel.value) + '.', 'Model switched'); })
+        .catch(function (e) { fail(statusLine, e); });
+    });
+  }
+  function syncUrl() {
+    var url = new URL(window.location.href);
+    if (state.sessionId) url.searchParams.set('session', String(state.sessionId));
+    else url.searchParams.delete('session');
+    url.searchParams.set('tab', 'chat');
+    window.history.replaceState({}, '', url.toString());
+  }
+  function refreshHeadTitle() {
+    var head = $('chat-head-title');
+    if (head) head.textContent = state.sessionId ? state.sessionTitle : 'Admin assistant';
+    var sub = $('chat-head-sub');
+    if (sub) {
+      var bits = [];
+      bits.push(READY ? 'Live · ' + modelLabel(chatModel ? chatModel.value : state.model) : 'Groq key required');
+      if (state.sessionId) bits.push('Chat #' + state.sessionId);
+      bits.push('writes confirm first');
+      sub.textContent = bits.join(' · ');
+    }
+  }
+  refreshHeadTitle();
 
+  /* ---------- confirmation modal ---------- */
+
+  var modal = $('ai-modal');
+  var modalLabel = $('ai-modal-label');
+  var modalArgs = $('ai-modal-args');
+  var modalStatus = $('ai-modal-status');
+  var lastFocus = null;
+
+  function openModal(tool, silent) {
+    if (!tool) return;
+    state.pending = tool;
+    modalLabel.textContent = tool.label || tool.name;
+    modalArgs.textContent = JSON.stringify(tool.args || {}, null, 2);
+    modalStatus.textContent = silent ? 'Awaiting your confirm · expires in 10 minutes' : '';
+    lastFocus = document.activeElement;
+    modal.hidden = false;
+    document.body.classList.add('ai-modal-open');
+    $('ai-modal-ok').focus();
+  }
+  function closeModal() {
+    modal.hidden = true;
+    document.body.classList.remove('ai-modal-open');
+    if (lastFocus && lastFocus.focus) lastFocus.focus();
+  }
+  function cancelProposal() {
+    if (!state.pending) { closeModal(); return; }
+    var id = state.pending.pending_id;
+    var cancelledName = state.pending.name || '';
+    closeModal();
+    api('/cancel', { body: { pending_id: id, session_id: state.sessionId || 0 } }).then(function (data) {
+      addBubble('assistant', data.content || 'Cancelled. Nothing ran.', { kind: 'muted', tool: cancelledName ? 'cancelled: ' + cancelledName : 'cancelled', model: data.model });
+      state.pending = null;
+    }).catch(function (e) {
+      addBubble('assistant', e.message, { kind: 'bad', ok: false });
+      state.pending = null;
+    });
+  }
   $('ai-modal-ok').addEventListener('click', function () {
-    if (!pending) return;
-    var id = pending.pending_id;
-    closeModal();
-    addBubble('assistant', 'Running…');
-    api('/admin3119Musa/ai/execute', { pending_id: id }).then(function (data) {
-      var last = pane.querySelector('.wa-row:last-child .wa-text');
-      if (last && last.textContent === 'Running…') last.textContent = data.content || 'Done.';
-      else addBubble('assistant', data.content || 'Done.');
-      if (data.content) history.push({ role: 'assistant', content: data.content });
-      pending = null;
-    }).catch(function (e) {
-      addBubble('assistant', e.message);
-      pending = null;
-    });
-  });
-  $('ai-modal-cancel').addEventListener('click', function () {
-    if (!pending) { closeModal(); return; }
-    var id = pending.pending_id;
-    closeModal();
-    api('/admin3119Musa/ai/cancel', { pending_id: id }).then(function (data) {
-      addBubble('assistant', data.content || 'Cancelled. Nothing ran.');
-      if (data.content) history.push({ role: 'assistant', content: data.content });
-      pending = null;
-    }).catch(function (e) {
-      addBubble('assistant', e.message);
-      pending = null;
-    });
-  });
-  modal.addEventListener('click', function (ev) {
-    if (ev.target === modal) $('ai-modal-cancel').click();
-  });
-
-  /* Chat history sidebar toggle */
-  if ($('toggle-chat-history')) {
-    $('toggle-chat-history').addEventListener('click', function () {
-      chatHistorySidebar.hidden = !chatHistorySidebar.hidden;
-      if (!chatHistorySidebar.hidden) {
-        loadChatSessions();
-      }
-    });
-  }
-
-  if ($('new-chat-btn')) {
-    $('new-chat-btn').addEventListener('click', function () {
-      if (!configured) return;
-      if (confirm('Start a new chat? Your current conversation will be saved.')) {
-        api('/admin3119Musa/ai/chat/session/create', { title: 'New Chat ' + new Date().toLocaleTimeString() }).then(function (data) {
-          currentSessionId = data.session.id;
-          pane.innerHTML = '<div class="chat-day">New chat started</div>';
-          history = [];
-          loadChatSessions();
-          chatHistorySidebar.hidden = true;
-        }).catch(function (e) {
-          alert(e.message || 'Failed to create new chat');
-        });
-      }
-    });
-  }
-
-  if ($('refresh-chat-history')) {
-    $('refresh-chat-history').addEventListener('click', function () {
-      loadChatSessions();
-    });
-  }
-
-  if ($('show-archived-chats')) {
-    $('show-archived-chats').addEventListener('click', function () {
-      showArchivedChats = !showArchivedChats;
-      loadChatSessions();
-    });
-  }
-
-  if ($('purge-old-chats')) {
-    $('purge-old-chats').addEventListener('click', function () {
-      if (confirm('Purge all archived chats older than 30 days? This cannot be undone.')) {
-        api('/admin3119Musa/ai/chat/purge-old').then(function (data) {
-          loadChatSessions();
-          alert('Old archived chats purged successfully.');
-        }).catch(function (e) {
-          alert(e.message || 'Failed to purge old chats');
-        });
-      }
-    });
-  }
-
-  /* Log deletion handlers */
-  document.querySelectorAll('.log-delete-btn').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      var logType = btn.getAttribute('data-log-type');
-      var logId = btn.getAttribute('data-log-id');
-      if (confirm('Are you sure you want to delete this log entry? This cannot be undone.')) {
-        var endpoint = logType === 'moderation' 
-          ? '/admin3119Musa/ai/moderation/' + logId + '/delete'
-          : '/admin3119Musa/ai/audit/' + logId + '/delete';
-        api(endpoint).then(function (data) {
-          location.reload();
-        }).catch(function (e) {
-          alert(e.message || 'Failed to delete log entry');
-        });
-      }
-    });
-  });
-
-  /* Log refresh handlers */
-  if ($('refresh-moderation-log')) {
-    $('refresh-moderation-log').addEventListener('click', function () {
-      location.reload();
-    });
-  }
-  if ($('refresh-audit-log')) {
-    $('refresh-audit-log').addEventListener('click', function () {
-      location.reload();
-    });
-  }
-
-  /* Load more logs */
-  if ($('load-more-moderation')) {
-    $('load-more-moderation').addEventListener('click', function () {
-      var btn = $('load-more-moderation');
-      var offset = Number(btn.getAttribute('data-offset')) || 50;
-      var nextOffset = offset + 50;
-      btn.setAttribute('data-offset', nextOffset);
-      btn.disabled = true;
-      btn.textContent = 'Loading...';
-      
-      // This would need a server endpoint to load more - for now just reload
-      location.href = '/admin3119Musa/ai#ai-settings';
-    });
-  }
-  if ($('load-more-audit')) {
-    $('load-more-audit').addEventListener('click', function () {
-      var btn = $('load-more-audit');
-      var offset = Number(btn.getAttribute('data-offset')) || 40;
-      var nextOffset = offset + 40;
-      btn.setAttribute('data-offset', nextOffset);
-      btn.disabled = true;
-      btn.textContent = 'Loading...';
-      
-      location.href = '/admin3119Musa/ai#ai-settings';
-    });
-  }
-
-  /* Update chat form to save messages to session */
-  var originalChatSubmit = $('chat-form').querySelector('button[type="submit"]');
-  if ($('chat-form')) {
-    var chatFormSubmit = function (ev) {
-      ev.preventDefault();
-      if (!configured) return;
-      var input = $('chat-input');
-      var text = (input.value || '').trim();
-      if (!text) return;
-      input.value = '';
-      addBubble('user', text);
-      history.push({ role: 'user', content: text });
-      
-      // Save to current session if available
-      if (currentSessionId) {
-        api('/admin3119Musa/ai/chat/session/' + currentSessionId + '/messages', {
-          messages: [{ role: 'user', content: text }]
-        }).catch(function (e) {
-          console.error('Failed to save message:', e);
-        });
-      }
-      
-      api('/admin3119Musa/ai/chat', { messages: history }).then(handleReply).catch(function (e) {
-        addBubble('assistant', e.message);
+    if (!state.pending) { closeModal(); return; }
+    var id = state.pending.pending_id;
+    var toolName = state.pending.name;
+    $('ai-modal-ok').disabled = true;
+    modalStatus.textContent = 'Running…';
+    api('/execute', { body: { pending_id: id, session_id: state.sessionId || 0 } }).then(function (data) {
+      closeModal();
+      addBubble('assistant', data.content || 'Done.', {
+        kind: data.executed === false ? 'bad' : 'ran',
+        ok: data.executed !== false,
+        tool: toolName,
+        model: data.model,
       });
-    };
-    
-    // Replace the existing submit handler
-    var chatForm = $('chat-form');
-    var newForm = chatForm.cloneNode(true);
-    newForm.addEventListener('submit', chatFormSubmit);
-    chatForm.parentNode.replaceChild(newForm, chatForm);
+      state.pending = null;
+      toast(data.executed === false ? 'err' : 'ok', (data.content || 'Action finished').slice(0, 140), 'Assistant');
+    }).catch(function (e) {
+      modalStatus.textContent = e.message;
+      toast('err', e.message, 'Action failed');
+      state.pending = null;
+    }).then(function () { $('ai-modal-ok').disabled = false; });
+  });
+  $('ai-modal-cancel').addEventListener('click', cancelProposal);
+  modal.addEventListener('click', function (ev) { if (ev.target === modal) cancelProposal(); });
+
+  var help = $('ai-help');
+  $('chat-help').addEventListener('click', function () { help.hidden = false; });
+  $('ai-help-close').addEventListener('click', function () { help.hidden = true; });
+  help.addEventListener('click', function (ev) { if (ev.target === help) help.hidden = true; });
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key !== 'Escape') return;
+    if (!help.hidden) { help.hidden = true; return; }
+    if (!modal.hidden) cancelProposal();
+    else if (state.railOpen && window.matchMedia('(max-width: 900px)').matches) setRail(false);
+  });
+
+  /* ---------- history rail ---------- */
+
+  function setRail(open) {
+    state.railOpen = !!open;
+    rail.hidden = !open;
+    if (scrim) scrim.hidden = !open;
+    var win = $('ai-chat');
+    if (win) win.classList.toggle('has-rail', !!open);
+    if (open) state.railDirty = false;
+    var btn = $('toggle-history');
+    if (btn) {
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      btn.title = open ? 'Hide chat history' : 'Show chat history';
+      btn.setAttribute('aria-label', btn.title);
+    }
+    store('fl-ai-rail', open ? '1' : '0');
+    if (open && (!state.railLoaded || state.railDirty)) loadRail();
+  }
+  $('toggle-history').addEventListener('click', function () { setRail(!state.railOpen); });
+  $('rail-close').addEventListener('click', function () { setRail(false); });
+  if (scrim) scrim.addEventListener('click', function () { setRail(false); });
+
+  var searchTimer = null;
+  $('chat-search').addEventListener('input', function () {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(function () {
+      state.q = $('chat-search').value.trim();
+      loadRail();
+    }, 260);
+  });
+  document.querySelectorAll('.rail-seg button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      state.archived = b.getAttribute('data-archived');
+      document.querySelectorAll('.rail-seg button').forEach(function (x) { x.classList.toggle('on', x === b); });
+      loadRail();
+    });
+  });
+  $('rail-refresh').addEventListener('click', function () { loadRail(); });
+
+  function railItemNode(s) {
+    var item = el('div', 'rail-item' + (Number(s.id) === Number(state.sessionId) ? ' active' : '') + (s.archived ? ' archived' : ''));
+    item.setAttribute('data-id', String(s.id));
+    item.setAttribute('role', 'listitem');
+    var main = el('button', 'rail-item-main');
+    main.type = 'button';
+    main.appendChild(el('span', 'ri-title', s.title || 'Untitled chat'));
+    main.appendChild(el('span', 'ri-meta', (s.message_count || 0) + ' messages · ' + modelLabel(s.model) + ' · ' + whenLabel(s.updated_at || s.created_at)));
+    if (s.preview) main.appendChild(el('span', 'ri-preview', s.preview));
+    main.addEventListener('click', function () { openSession(s.id); });
+    item.appendChild(main);
+
+    var actions = el('span', 'rail-item-actions');
+    var rename = icoBtn('Rename chat', ['M12 20h9', 'M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z']);
+    rename.addEventListener('click', function () {
+      var next = window.prompt('Rename chat', s.title || 'Untitled chat');
+      if (next == null) return;
+      api('/chat/sessions/' + s.id + '/rename', { body: { title: next } })
+        .then(function () { loadRail(); refreshHeadTitle(); toast('ok', 'Chat renamed.', 'History'); })
+        .catch(function (e) { fail(statusLine, e); });
+    });
+    actions.appendChild(rename);
+    var arch = icoBtn(s.archived ? 'Restore chat' : 'Archive chat', ['M3 4h18v4H3z', 'M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8', 'M10 12h4']);
+    arch.addEventListener('click', function () {
+      api('/chat/sessions/' + s.id + '/' + (s.archived ? 'unarchive' : 'archive'), { method: 'POST', body: {} })
+        .then(function (data) {
+          if (data.counts) $('rail-count').textContent = String(data.counts.live || 0);
+          if (Number(state.sessionId) === Number(s.id) && !s.archived) state.sessionId = 0;
+          loadRail();
+          toast('ok', s.archived ? 'Chat restored.' : 'Chat archived.', 'History');
+        })
+        .catch(function (e) { fail(statusLine, e); });
+    });
+    actions.appendChild(arch);
+    var del = icoBtn('Delete chat', ['M4 7h16', 'M9 7V5h6v2', 'M6 7l1 13h10l1-13'], 'danger');
+    del.addEventListener('click', function () {
+      if (!window.confirm('Delete this chat and all its messages? This cannot be undone.')) return;
+      api('/chat/sessions/' + s.id, { method: 'DELETE' }).then(function (data) {
+        if (data.counts) $('rail-count').textContent = String(data.counts.live || 0);
+        if (Number(state.sessionId) === Number(s.id)) {
+          state.sessionId = 0;
+          startFresh();
+        }
+        loadRail();
+        toast('ok', 'Chat deleted.', 'History');
+      }).catch(function (e) { fail(statusLine, e); });
+    });
+    actions.appendChild(del);
+    item.appendChild(actions);
+    return item;
+  }
+
+  function loadRail() {
+    state.railLoaded = true;
+    state.railDirty = false;
+    var url = '/chat/sessions?archived=' + encodeURIComponent(state.archived)
+      + (state.q ? '&q=' + encodeURIComponent(state.q) : '');
+    return api(url).then(function (data) {
+      $('rail-count').textContent = String((data.counts && data.counts.live) || 0);
+      var list = data.sessions || [];
+      railList.textContent = '';
+      if (!list.length) {
+        railList.appendChild(el('p', 'rail-empty', state.q
+          ? 'No chats match “' + state.q + '”.'
+          : (state.archived === '1' ? 'Nothing archived yet.' : 'No saved chats yet. Your conversations are stored here as soon as you send one.')));
+        return;
+      }
+      var group = '';
+      list.forEach(function (s) {
+        var label = s.archived ? 'Archived' : groupLabel(s.updated_at || s.created_at);
+        if (label !== group) {
+          group = label;
+          railList.appendChild(el('div', 'rail-group', group));
+        }
+        railList.appendChild(railItemNode(s));
+      });
+    }).catch(function (e) {
+      railList.textContent = '';
+      railList.appendChild(el('p', 'rail-empty', 'Could not load history — ' + e.message));
+    });
+  }
+
+  function paintTranscript(messages, keepAnchor) {
+    var anchor = pane.scrollHeight - pane.scrollTop;
+    state.transcript = messages || [];
+    pane.textContent = '';
+    if (!state.transcript.length) pane.appendChild(el('div', 'ai-empty-transcript', 'This chat has no messages yet.'));
+    state.transcript.forEach(function (m) {
+      addBubble(m.role === 'user' ? 'user' : 'assistant', m.content, {
+        model: m.model, tool: m.tool, ok: Number(m.ok) !== 0, kind: Number(m.ok) === 0 ? 'bad' : null,
+        when: m.created_at,
+      });
+    });
+    if (keepAnchor) pane.scrollTop = Math.max(0, pane.scrollHeight - anchor);
+    else pane.scrollTop = pane.scrollHeight;
+  }
+
+  /* Long chats page one screen at a time; each click widens the same render so day
+     separators and per-message styling stay consistent. */
+  function renderPager(id, data) {
+    var wrap = pane.querySelector('.ai-day-actions');
+    if (wrap && wrap.parentNode) wrap.parentNode.removeChild(wrap);
+    if (!data || !data.has_more || !state.transcript.length) return;
+    wrap = el('div', 'ai-day-actions');
+    var btn = el('button', 'btn btn-xs btn-ghost', 'Load earlier messages');
+    btn.type = 'button';
+    btn.addEventListener('click', function () {
+      btn.disabled = true;
+      btn.textContent = 'Loading\u2026';
+      api('/chat/sessions/' + id + '?limit=120&before=' + (data.oldest_id || 0)).then(function (page) {
+        data.oldest_id = page.oldest_id || 0;
+        data.has_more = !!page.has_more;
+        paintTranscript((page.messages || []).concat(state.transcript), true);
+        renderPager(id, data);
+      }).catch(function (e) { btn.disabled = false; btn.textContent = e.message; });
+    });
+    wrap.appendChild(btn);
+    pane.insertBefore(wrap, pane.firstChild);
+  }
+
+  function openSession(id) {
+    api('/chat/sessions/' + id).then(function (data) {
+      state.sessionId = data.session.id;
+      state.sessionTitle = data.session.title;
+      if (chatModel) chatModel.value = data.session.model;
+      state.model = data.session.model;
+      paintTranscript(data.messages);
+      renderPager(id, data);
+      if (data.session.archived) {
+        api('/chat/sessions/' + id + '/unarchive', { method: 'POST', body: {} }).catch(function () { /* non-fatal */ });
+      }
+      refreshHeadTitle();
+      loadRail();
+      if (window.matchMedia('(max-width: 900px)').matches) setRail(false);
+      syncUrl();
+    }).catch(function (e) { fail(statusLine, e); });
+  }
+
+  function startFresh(silent) {
+    state.sessionId = 0;
+    state.sessionTitle = 'Admin assistant';
+    pane.textContent = '';
+    state.transcript = [];
+    var bubble = addBubble('assistant', 'New chat. Ask anything about the ledger — counts, pending queues, suspensions, incidents. Writes still confirm first.', {});
+    var grid = el('div', 'ai-starters');
+    ['How many listings are pending right now?', 'List the newest pending listings with their domains.', 'Summarise this week of signups.'].forEach(function (p) {
+      var b = el('button', 'ai-starter', p.split(' ')[0] + ' …');
+      b.type = 'button';
+      b.setAttribute('data-prompt', p);
+      b.addEventListener('click', function () {
+        input.value = p;
+        input.dispatchEvent(new Event('input'));
+        send();
+      });
+      grid.appendChild(b);
+    });
+    pane.appendChild(grid);
+    if (input) { input.disabled = !READY; input.focus(); }
+    refreshHeadTitle();
+    var url = new URL(window.location.href);
+    url.searchParams.delete('session');
+    window.history.replaceState({}, '', url.toString());
+    syncUrl();
+    if (!silent) toast('ok', 'Started a new chat.', 'Admin assistant');
+  }
+
+  $('new-chat-btn').addEventListener('click', function () {
+    if (!READY) { fail(statusLine, new Error('Add a Groq key first (Settings tab).')); return; }
+    if (state.sessionId) {
+      api('/chat/sessions', { body: { title: 'New chat', model: chatModel ? chatModel.value : '' } }).then(function (data) {
+        state.sessionId = data.session.id;
+        state.sessionTitle = data.session.title;
+        startFresh(true);
+        loadRail();
+        toast('ok', 'New chat ready. Earlier ones stay in the history rail.', 'Admin assistant');
+      }).catch(function (e) { fail(statusLine, e); });
+      return;
+    }
+    startFresh();
+  });
+  $('purge-archived').addEventListener('click', function () {
+    if (!window.confirm('Hard-delete every archived chat older than 30 days? This cannot be undone.')) return;
+    api('/chat/purge-archived', { body: { days: 30 } }).then(function (data) {
+      loadRail();
+      toast('ok', (data.purged || 0) + ' archived chat(s) purged.', 'History');
+    }).catch(function (e) { fail(statusLine, e); });
+  });
+
+  /* ================= settings tab ================= */
+
+  function markModelChips() {
+    document.querySelectorAll('.ai-model-chip').forEach(function (c) {
+      c.classList.toggle('on', c.getAttribute('data-model') === (chatModel ? chatModel.value : ''));
+    });
+  }
+  document.querySelectorAll('.ai-model-chip').forEach(function (chip) {
+    chip.addEventListener('click', function () {
+      var id = chip.getAttribute('data-model');
+      if (chatModel) chatModel.value = id;
+      if (genModel) genModel.value = id;
+      var setSel = $('set-model');
+      if (setSel) setSel.value = id;
+      var note = $('set-model-note');
+      if (note) note.innerHTML = '';
+      if (note) note.appendChild(document.createTextNode('Selected model: '));
+      if (note) note.appendChild(el('span', 'mono', id));
+      state.model = id;
+      markModelChips();
+      refreshHeadTitle();
+      if (state.sessionId) {
+        api('/chat/sessions/' + state.sessionId + '/model', { body: { model: id } }).catch(function () { /* the select retries on next change */ });
+      }
+    });
+  });
+  markModelChips();
+
+  if ($('rules-defaults')) {
+    $('rules-defaults').addEventListener('click', function () {
+      $('mod-rules').value = DEFAULT_RULES;
+      $('mod-rules').dispatchEvent(new Event('input'));
+      $('rules-defaults-hint').textContent = 'Built-in rules restored in the textarea — press Save settings to keep them.';
+    });
+  }
+
+  var runBoxes = Array.prototype.slice.call(document.querySelectorAll('input[name="ai_auto_tools"]'));
+  function recountRuns() {
+    var n = runBoxes.filter(function (b) { return b.checked; }).length;
+    var out = $('run-count');
+    if (out) out.textContent = String(n);
+    var hint = $('run-summary');
+    if (hint) hint.classList.toggle('is-hot', n > 0);
+  }
+  runBoxes.forEach(function (b) { b.addEventListener('change', recountRuns); });
+  recountRuns();
+  document.querySelectorAll('[data-run-all]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var on = b.getAttribute('data-run-all') === '1';
+      if (on && !window.confirm('Allow every write action listed here to run without a confirm? Account deletion always still asks.')) return;
+      runBoxes.forEach(function (x) { x.checked = on; });
+      recountRuns();
+    });
+  });
+
+  function testConnection() {
+    var btns = [$('test-key-btn'), $('test-key-btn-2')];
+    btns.forEach(function (b) { if (b) { b.dataset.was = b.textContent.trim(); b.textContent = 'Checking…'; b.disabled = true; } });
+    var out = $('test-status');
+    if (out) out.textContent = 'Asking Groq for the live model list…';
+    api('/test', { method: 'POST', body: { model: chatModel ? chatModel.value : '' } }).then(function (data) {
+      var t = data.test || {};
+      var line;
+      if (t.ok) {
+        line = 'Groq reachable · model ' + (t.used_model || t.model) + ' replied "' + (t.reply || 'ok') + '"'
+          + (t.models ? ' · ' + t.models.length + ' ids available' : '')
+          + (t.model_available === false ? ' · selected id not on this key' : '');
+      } else {
+        line = 'Groq test failed: ' + (t.error || t.list_error || 'unknown error');
+      }
+      if (out) {
+        out.textContent = line;
+        out.className = 'ai-status ' + (t.ok ? 'ai-status-ok' : 'ai-status-bad');
+      }
+      if (data.settings && data.settings.live_models) {
+        MODELS = MODELS.map(function (m) {
+          m.available = data.settings.live_models.indexOf(m.id) > -1;
+          return m;
+        });
+      }
+      toast(t.ok ? 'ok' : 'err', line.slice(0, 180), 'Groq connection');
+    }).catch(function (e) {
+      if (out) { out.textContent = e.message; out.className = 'ai-status ai-status-bad'; }
+    }).then(function () {
+      btns.forEach(function (b) { if (b) { b.textContent = b.dataset.was || b.textContent; b.disabled = false; } });
+    });
+  }
+  [$('test-key-btn'), $('test-key-btn-2')].forEach(function (b) { if (b) b.addEventListener('click', testConnection); });
+
+  if ($('mod-run-btn')) {
+    $('mod-run-btn').addEventListener('click', function () {
+      var id = Number($('mod-listing-id').value) || 0;
+      if (!id) { $('mod-status').textContent = 'Enter a listing id first.'; return; }
+      $('mod-run-btn').disabled = true;
+      $('mod-status').textContent = 'Sending to the moderation model…';
+      api('/moderate', { body: { listing_id: id } }).then(function (data) {
+        var r = data.result || {};
+        $('mod-status').textContent = r.skipped
+          ? ('Skipped — ' + (r.reason === 'not_pending' ? 'that listing is no longer pending' : (r.reason || 'not eligible')) + '.')
+          : ((r.decision || 'done') + ' — ' + (r.reason || '')).slice(0, 240);
+        renderLog('moderation', data.moderation);
+        toast('ok', 'Moderation pass finished.', 'Auto-moderation');
+      }).catch(function (e) { $('mod-status').textContent = e.message; })
+        .then(function () { $('mod-run-btn').disabled = false; });
+    });
+  }
+
+  /* ================= logs ================= */
+
+  function logRow(kind, r) {
+    var tr = document.createElement('tr');
+    var tdWhen = el('td', 'mono'); tdWhen.textContent = esc(r.created_at || '').replace('T', ' ').slice(0, 16);
+    tr.appendChild(tdWhen);
+    if (kind === 'moderation') {
+      var tdListing = document.createElement('td');
+      if (r.listing_id && r.slug) {
+        var a = el('a', null, r.listing_name || r.slug);
+        a.href = '/admin3119Musa/listings/' + r.listing_id + '/edit';
+        tdListing.appendChild(a);
+      } else {
+        tdListing.textContent = r.listing_name || ('#' + r.listing_id);
+      }
+      tr.appendChild(tdListing);
+      var tdDec = document.createElement('td');
+      var span = el('span', 'status ' + (r.decision === 'approve' ? 'approved' : r.decision === 'reject' ? 'rejected' : 'pending'), r.decision);
+      tdDec.appendChild(span);
+      tr.appendChild(tdDec);
+      tr.appendChild(el('td', 'ai-cell-wrap', r.reason));
+      tr.appendChild(el('td', 'mono ai-cell-sm', r.model));
+    } else {
+      tr.appendChild(el('td', null, r.kind));
+      tr.appendChild(el('td', 'mono ai-cell-sm', r.action));
+      var tdRes = el('td', 'ai-cell-wrap', String(r.result || '').slice(0, 120));
+      tdRes.title = String(r.result || '').slice(0, 400);
+      tr.appendChild(tdRes);
+      var okTd = document.createElement('td');
+      okTd.appendChild(el('span', 'status ' + (r.ok ? 'approved' : 'rejected'), r.ok ? 'yes' : 'no'));
+      tr.appendChild(okTd);
+    }
+    var tdAct = el('td', 'ai-row-actions');
+    var del = icoBtn('Delete entry', ['M4 7h16', 'M9 7V5h6v2', 'M6 7l1 13h10l1-13']);
+    del.classList.add('log-delete-btn');
+    del.setAttribute('data-log-type', kind);
+    del.setAttribute('data-log-id', String(r.id));
+    tdAct.appendChild(del);
+    tr.appendChild(tdAct);
+    return tr;
+  }
+
+  function renderLog(kind, page, append) {
+    var wrap = $(kind === 'moderation' ? 'moderation-log-wrap' : 'audit-log-wrap');
+    if (!wrap) return;
+    var tbody = wrap.querySelector('tbody');
+    var rows = page.rows || [];
+    if (!append) tbody.textContent = '';
+    if (!rows.length && !append) {
+      var tr = document.createElement('tr');
+      var td = el('td', 'ai-empty-row', 'Nothing logged yet.');
+      td.colSpan = 6;
+      tr.appendChild(td);
+      tbody.appendChild(tr);
+    }
+    rows.forEach(function (r) { tbody.appendChild(logRow(kind, r)); });
+    wrap.setAttribute('data-offset', String((Number(wrap.getAttribute('data-offset')) || 0) + rows.length));
+    var shown = document.querySelector('[data-log-shown="' + kind + '"]');
+    if (shown) shown.textContent = 'Showing ' + Math.min(page.total || 0, Number(wrap.getAttribute('data-offset'))) + ' of ' + (page.total || 0);
+    var total = $(kind === 'moderation' ? 'mod-total' : 'audit-total');
+    if (total) total.textContent = String(page.total || 0);
+    var more = document.querySelector('[data-more-log="' + kind + '"]');
+    if (more) { more.disabled = !page.has_more; more.textContent = page.has_more ? 'Load more' : 'All loaded'; }
+  }
+
+  function fetchLog(kind, offset) {
+    var q = $(kind === 'moderation' ? 'mod-log-q' : 'audit-log-q');
+    var url = '/logs?kind=' + kind + '&limit=' + (kind === 'moderation' ? 50 : 40) + '&offset=' + (offset || 0)
+      + (q && q.value.trim() ? '&q=' + encodeURIComponent(q.value.trim()) : '');
+    return api(url);
+  }
+
+  document.querySelectorAll('[data-more-log]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var kind = b.getAttribute('data-more-log');
+      var wrap = $(kind === 'moderation' ? 'moderation-log-wrap' : 'audit-log-wrap');
+      b.disabled = true;
+      b.textContent = 'Loading…';
+      fetchLog(kind, Number(wrap.getAttribute('data-offset')) || 0).then(function (page) {
+        renderLog(kind, page, true);
+      }).catch(function (e) { b.textContent = e.message.slice(0, 40); b.disabled = false; });
+    });
+  });
+  document.querySelectorAll('[data-refresh-log]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var kind = b.getAttribute('data-refresh-log');
+      var wrap = $(kind === 'moderation' ? 'moderation-log-wrap' : 'audit-log-wrap');
+      wrap.setAttribute('data-offset', '0');
+      b.classList.add('is-spin');
+      fetchLog(kind, 0).then(function (page) { renderLog(kind, page, false); })
+        .catch(function (e) { toast('err', e.message, 'Logs'); })
+        .then(function () { b.classList.remove('is-spin'); });
+    });
+  });
+  ['mod', 'audit'].forEach(function (p) {
+    var node = $(p + '-log-q');
+    if (!node) return;
+    var timer = null;
+    node.addEventListener('input', function () {
+      clearTimeout(timer);
+      timer = setTimeout(function () {
+        var kind = p === 'mod' ? 'moderation' : 'audit';
+        var wrap = $(kind === 'moderation' ? 'moderation-log-wrap' : 'audit-log-wrap');
+        wrap.setAttribute('data-offset', '0');
+        fetchLog(kind, 0).then(function (page) { renderLog(kind, page, false); }).catch(function (e) { toast('err', e.message, 'Logs'); });
+      }, 300);
+    });
+  });
+
+  /* Delete is delegated so freshly loaded rows are covered too. */
+  document.addEventListener('click', function (ev) {
+    var btn = ev.target.closest ? ev.target.closest('.log-delete-btn') : null;
+    if (!btn) return;
+    var kind = btn.getAttribute('data-log-type');
+    var id = btn.getAttribute('data-log-id');
+    if (!window.confirm('Delete this ' + kind + ' log entry? This cannot be undone.')) return;
+    api('/logs/' + kind + '/' + id + '/delete', { method: 'POST', body: {} }).then(function () {
+      var row = btn.closest('tr');
+      if (row) row.parentNode.removeChild(row);
+      toast('ok', 'Log entry deleted.', 'Logs');
+    }).catch(function (e) { toast('err', e.message, 'Logs'); });
+  });
+
+  /* ---------------- boot ---------------- */
+
+  if (START_SESSION) {
+    state.sessionId = START_SESSION.id;
+    paintTranscript(START_MESSAGES);
+    renderPager(START_SESSION.id, { has_more: START_MORE, oldest_id: START_OLDEST });
+  }
+  state.railDirty = true;
+  var wantTab = START_TAB || store('fl-ai-tab') || 'gen';
+  if (window.location.hash === '#ai-settings') wantTab = 'set';
+  showTab(wantTab, false);
+  var wantRail = store('fl-ai-rail') === '1' || (state.sessionId && store('fl-ai-rail') === null);
+  if (wantRail && window.matchMedia('(min-width: 901px)').matches) setRail(true);
+  setBusy(false);
+  refreshHeadTitle();
+  ['moderation', 'audit'].forEach(function (kind) {
+    var page = kind === 'moderation'
+      ? <%- JSON.stringify({ rows: moderation.rows, total: moderation.total, has_more: moderation.has_more }) %>
+      : <%- JSON.stringify({ rows: auditLog.rows, total: auditLog.total, has_more: auditLog.has_more }) %>;
+    var more = document.querySelector('[data-more-log="' + kind + '"]');
+    if (more) more.disabled = !page.has_more;
+  });
+  if (!READY) {
+    var s = $('chat-head-sub');
+    if (s) s.textContent = 'Groq key required — add one in Settings';
   }
 })();
 </script>
