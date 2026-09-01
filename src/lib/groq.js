@@ -15,13 +15,17 @@ const { getSetting } = require('../db');
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
 const MODELS = [
-  { id: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B (recommended)' },
-  { id: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B Instant' },
+  { id: 'openai/gpt-oss-20b', label: 'OpenAI GPT-OSS 20B' },
+  { id: 'openai/gpt-oss-120b', label: 'OpenAI GPT-OSS 120B' },
+  { id: 'qwen/qwen3.8-27b', label: 'Qwen 3.8 27B' },
+  { id: 'qwen/qwen3.6-27b', label: 'Qwen 3.6 27B' },
+  { id: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B (legacy)' },
+  { id: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B Instant (legacy)' },
   { id: 'llama3-70b-8192', label: 'Llama 3 70B 8k (legacy)' },
   { id: 'mixtral-8x7b-32768', label: 'Mixtral 8×7B (legacy)' },
 ];
 
-const FALLBACKS = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'];
+const FALLBACKS = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'qwen/qwen3.8-27b', 'llama-3.3-70b-versatile', 'llama-3.1-8b-instant'];
 
 function groqKey() {
   const env = String(process.env.GROQ_API_KEY || '').trim();
