@@ -423,6 +423,34 @@ CREATE TABLE IF NOT EXISTS pro_transfer_requests (
 CREATE INDEX IF NOT EXISTS idx_protx_user ON pro_transfer_requests(user_id);
 `);
 
+/* ---- Notification archiving (trash with an expiry) ----
+   archived_at         when the user/admin moved it to trash
+   deleted_at          when it left the active inbox (same moment as archived_at)
+   archive_expires_at  when purgeExpired() hard-deletes it
+   Mirrors migrations/2026-09-01-notifications-archive.sql. */
+try { db.exec('ALTER TABLE notifications ADD COLUMN archived_at DATETIME'); } catch { /* column exists */ }
+try { db.exec('ALTER TABLE notifications ADD COLUMN deleted_at DATETIME'); } catch { /* column exists */ }
+try { db.exec('ALTER TABLE notifications ADD COLUMN archive_expires_at DATETIME'); } catch { /* column exists */ }
+db.exec(`
+CREATE INDEX IF NOT EXISTS idx_notif_trash ON notifications(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_notif_expiry ON notifications(archive_expires_at);
+`);
+
+/* ---- Free trials (automatic on upgrade + admin-granted) ----
+   Mirrors migrations/2026-09-01-user-trials.sql. */
+try { db.exec('ALTER TABLE users ADD COLUMN trial_started_at DATETIME'); } catch { /* column exists */ }
+try { db.exec('ALTER TABLE users ADD COLUMN trial_expires_at DATETIME'); } catch { /* column exists */ }
+try { db.exec('ALTER TABLE users ADD COLUMN trial_days INTEGER'); } catch { /* column exists */ }
+try { db.exec('ALTER TABLE users ADD COLUMN subscription_status TEXT'); } catch { /* column exists */ }
+db.exec('CREATE INDEX IF NOT EXISTS idx_users_trial ON users(trial_expires_at)');
+
+/* ---- OAuth identities (Google / LinkedIn) ----
+   Mirrors migrations/2026-09-01-oauth-providers.sql. */
+try { db.exec('ALTER TABLE users ADD COLUMN provider TEXT'); } catch { /* column exists */ }
+try { db.exec('ALTER TABLE users ADD COLUMN provider_id TEXT'); } catch { /* column exists */ }
+try { db.exec('ALTER TABLE users ADD COLUMN avatar_url TEXT'); } catch { /* column exists */ }
+db.exec('CREATE INDEX IF NOT EXISTS idx_users_provider ON users(provider, provider_id)');
+
 require('./lib/blogseed').seedBlog(db);
 
 /* ---- Ops: spam lists, SMTP failover accounts, promo codes ---- */

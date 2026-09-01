@@ -1,0 +1,59 @@
+<%- include('../partials/top') %>
+
+<section class="page-head">
+  <div class="container dash-head">
+    <div>
+      <h1>Archived notifications</h1>
+      <p class="muted">Anything here is deleted automatically when its archive window runs out. Restore it before then and it goes back to your inbox.</p>
+    </div>
+    <div class="notif-head-actions">
+      <a class="btn btn-ghost btn-sm" href="/dashboard/notifications">← Inbox</a>
+    </div>
+  </div>
+</section>
+
+<section class="section-tight">
+  <div class="container container-narrow">
+    <% if (typeof ok !== 'undefined' && ok) { %><div class="alert alert-ok"><%= ok %></div><% } %>
+    <% if (typeof err !== 'undefined' && err) { %><div class="alert alert-err"><%= err %></div><% } %>
+    <% if (!items.length) { %>
+      <div class="empty-state">
+        <h3>Trash is empty</h3>
+        <p>Archive a notification from your inbox and it waits here — for 1 week or 1 month — before it is deleted for good.</p>
+      </div>
+    <% } else { %>
+      <div class="notif-list">
+        <% items.forEach(function (n) { const left = daysLeft(n); %>
+          <div class="notif-item">
+            <div class="notif-row notif-row-static">
+              <div>
+                <span class="notif-dot" aria-hidden="true"></span>
+                <span class="notif-copy">
+                  <b><%= n.title %></b>
+                  <% if (n.body) { %><span class="muted"><%= n.body %></span><% } %>
+                  <small class="muted">
+                    Archived <%= fmtDate(n.archived_at) %> ·
+                    <% if (left === null) { %>no expiry<% } else if (left === 0) { %>deletes today<% } else { %>deletes in <%= left %> day<%= left === 1 ? '' : 's' %><% } %>
+                  </small>
+                </span>
+              </div>
+            </div>
+            <div class="notif-actions">
+              <form method="post" action="/dashboard/notifications/<%= n.id %>/restore" class="inline">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                <button class="btn btn-ghost btn-xs" type="submit">Restore</button>
+              </form>
+              <form method="post" action="/dashboard/notifications/<%= n.id %>/delete" class="inline" onsubmit="return confirm('Permanently delete this notification? This cannot be undone.');">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                <input type="hidden" name="from" value="trash">
+                <button class="btn btn-danger btn-xs" type="submit">Delete now</button>
+              </form>
+            </div>
+          </div>
+        <% }) %>
+      </div>
+    <% } %>
+  </div>
+</section>
+
+<%- include('../partials/bottom') %>

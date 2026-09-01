@@ -70,7 +70,7 @@
       <h3 class="form-section">Logo — uniform 256 × 256</h3>
       <div class="logo-row">
         <div class="logo-preview" id="logoPreviewWrap">
-          <% if (l.logo_url) { %><img src="<%= l.logo_url %>" alt="" id="logoPreview"><% } else { %><span class="logo-tile" id="logoPlaceholder"><%= (l.name || 'F').slice(0, 1) %></span><img src="" alt="" id="logoPreview" hidden><% } %>
+          <% if (l.logo_url) { %><img src="<%= l.logo_url %>" alt="<%= l.name %> logo" id="logoPreview"><% } else { %><span class="logo-tile" id="logoPlaceholder"><%= (l.name || 'F').slice(0, 1) %></span><img src="" alt="Logo preview" id="logoPreview" hidden><% } %>
         </div>
         <div class="logo-controls">
           <label><span>Logo URL <small class="muted">direct link to a PNG, JPG, WebP or SVG — rendered 256×256</small></span>

@@ -9,6 +9,8 @@ const {
 } = require('../lib/session');
 
 const spam = require('../lib/spam');
+const oauth = require('../lib/oauth');
+oauth.register();
 
 const router = express.Router();
 
@@ -144,10 +146,16 @@ router.post('/register/verify/resend', (req, res) => {
 function escBuzz(s) { return String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
 
 /* ---------------- Login ---------------- */
+/* Which social buttons the login page may show. */
+const oauthLocals = () => ({
+  oauthGoogle: oauth.googleConfigured(),
+  oauthLinkedIn: oauth.linkedinConfigured(),
+});
+
 router.get('/login', (req, res) => {
   res.render('auth/login', {
     meta: { title: 'Sign in — FirmLedger', description: 'Sign in to manage your FirmLedger listings.', canonical: siteUrl('/login'), robots: 'noindex,follow' },
-    errors: [], old: {}, next: req.query.next || '',
+    errors: [], old: {}, next: req.query.next || '', ...oauthLocals(),
   });
 });
 
@@ -157,13 +165,13 @@ router.post('/login', spam.gate('login'), (req, res) => {
   if (!user || !passwords.verify(String(req.body.password || ''), user.password_hash)) {
     return res.status(422).render('auth/login', {
       meta: { title: 'Sign in — FirmLedger', description: '', robots: 'noindex' },
-      errors: ['Incorrect email or password.'], old: { email }, next: req.body.next || '',
+      errors: ['Incorrect email or password.'], old: { email }, next: req.body.next || '', ...oauthLocals(),
     });
   }
   if (user.suspended) {
     return res.status(403).render('auth/login', {
       meta: { title: 'Sign in — FirmLedger', description: '', robots: 'noindex' },
-      errors: ['This account is suspended. Contact support@firmledger.co.ke if you believe this is a mistake.'], old: { email }, next: req.body.next || '',
+      errors: ['This account is suspended. Contact support@firmledger.co.ke if you believe this is a mistake.'], old: { email }, next: req.body.next || '', ...oauthLocals(),
     });
   }
   const sess = createSession(user.id, 'user');
@@ -171,6 +179,75 @@ router.post('/login', spam.gate('login'), (req, res) => {
   const next = String(req.body.next || '');
   res.redirect(next.startsWith('/') ? next : '/dashboard');
 });
+
+/* ================= OAuth — Google & LinkedIn =================
+   Stateless Passport (session: false): the strategy resolves the account and
+   we mint a normal FirmLedger session cookie. The intended destination rides
+   in a short-lived cookie so ?next= survives the round trip to the provider. */
+const OAUTH_NEXT_COOKIE = 'fl_oauth_next';
+
+function rememberNext(req, res) {
+  const raw = String(req.query.next || '');
+  const dest = raw.startsWith('/') && !raw.startsWith('//') ? raw : '/dashboard';
+  res.cookie(OAUTH_NEXT_COOKIE, dest, {
+    httpOnly: true, sameSite: 'lax', secure: req.secure, maxAge: 10 * 60 * 1000, path: '/',
+  });
+}
+
+function takeNext(req, res) {
+  const raw = String(req.cookies[OAUTH_NEXT_COOKIE] || '');
+  res.clearCookie(OAUTH_NEXT_COOKIE, { path: '/' });
+  return raw.startsWith('/') && !raw.startsWith('//') ? raw : '/dashboard';
+}
+
+const OAUTH_ERRORS = {
+  suspended: 'This account is suspended. Contact support@firmledger.co.ke if you believe this is a mistake.',
+  'no-email': 'Your provider did not share an email address, so we could not match or create an account. Sign in with your email and password instead.',
+};
+
+/** Shared callback handler for both providers. */
+function oauthCallback(strategy, label) {
+  return (req, res, nextFn) => {
+    oauth.passport.authenticate(strategy, { session: false }, (err, user, info) => {
+      const dest = takeNext(req, res);
+      if (err) {
+        console.error(`[oauth:${strategy}]`, err.message || err);
+        return res.redirect('/login?err=' + encodeURIComponent(`${label} sign-in failed. Please try again.`));
+      }
+      if (!user) {
+        const msg = OAUTH_ERRORS[(info && info.message) || ''] || `${label} sign-in was cancelled or could not be completed.`;
+        return res.redirect('/login?err=' + encodeURIComponent(msg));
+      }
+      const sess = createSession(user.id, 'user');
+      setSessionCookie(req, res, USER_COOKIE, sess.token);
+      return res.redirect(dest);
+    })(req, res, nextFn);
+  };
+}
+
+/* Google */
+router.get('/auth/google', (req, res, nextFn) => {
+  if (!oauth.googleConfigured()) {
+    return res.redirect('/login?err=' + encodeURIComponent('Google sign-in is not configured on this installation.'));
+  }
+  rememberNext(req, res);
+  return oauth.passport.authenticate('google', {
+    session: false, scope: ['profile', 'email'], prompt: 'select_account',
+  })(req, res, nextFn);
+});
+router.get('/auth/google/callback', oauthCallback('google', 'Google'));
+
+/* LinkedIn */
+router.get('/auth/linkedin', (req, res, nextFn) => {
+  if (!oauth.linkedinConfigured()) {
+    return res.redirect('/login?err=' + encodeURIComponent('LinkedIn sign-in is not configured on this installation.'));
+  }
+  rememberNext(req, res);
+  return oauth.passport.authenticate('linkedin', {
+    session: false, scope: ['openid', 'profile', 'email'],
+  })(req, res, nextFn);
+});
+router.get('/auth/linkedin/callback', oauthCallback('linkedin', 'LinkedIn'));
 
 /* ---------------- Logout ---------------- */
 router.post('/logout', (req, res) => {

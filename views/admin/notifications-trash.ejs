@@ -1,0 +1,93 @@
+<%- include('../partials/top') %>
+<%- include('../partials/adminnav') %>
+
+<section class="section-tight">
+  <div class="container">
+    <div class="section-head">
+      <div>
+        <p class="klabel"><%= global ? 'Moderation' : 'Console inbox' %></p>
+        <h2><%= global ? "All archived notifications" : 'Archived notifications' %></h2>
+        <p class="muted" style="font-size:14px;margin-top:4px">
+          <% if (global) { %>
+            Every archived notification across all accounts. Each one is hard-deleted when its archive window runs out — or immediately, here.
+          <% } else { %>
+            The console's own trash. Restore before the window runs out, or delete now.
+          <% } %>
+        </p>
+      </div>
+      <div class="notif-head-actions">
+        <a class="btn btn-ghost btn-sm" href="/admin3119Musa/notifications">← Inbox</a>
+        <% if (global) { %>
+          <a class="btn btn-ghost btn-sm" href="/admin3119Musa/notifications/trash">My archive</a>
+        <% } else { %>
+          <a class="btn btn-ghost btn-sm" href="/admin3119Musa/notifications/trash/global">All users' archive</a>
+        <% } %>
+      </div>
+    </div>
+
+    <% if (typeof ok !== 'undefined' && ok) { %><div class="alert alert-ok"><%= ok %></div><% } %>
+    <% if (typeof err !== 'undefined' && err) { %><div class="alert alert-err"><%= err %></div><% } %>
+
+    <% if (!items.length) { %>
+      <p class="muted"><%= global ? 'No archived notifications anywhere yet.' : 'The console trash is empty.' %></p>
+    <% } else if (global) { %>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Owner</th><th>Notification</th><th>Archived</th><th>Auto-delete</th><th></th></tr></thead>
+          <tbody>
+            <% items.forEach(function (n) { const left = daysLeft(n); %>
+            <tr>
+              <td>
+                <% if (n.audience === 'admin') { %><span class="pill pill-approved">admin console</span>
+                <% } else { %><b><%= n.owner_email || ('user #' + n.user_id) %></b><% if (n.owner_name) { %><div class="score-hint"><%= n.owner_name %></div><% } %><% } %>
+              </td>
+              <td><b><%= n.title %></b><% if (n.body) { %><div class="score-hint"><%= truncate(n.body, 120) %></div><% } %></td>
+              <td class="muted"><%= fmtDate(n.archived_at) %></td>
+              <td class="muted"><% if (left === null) { %>—<% } else if (left === 0) { %>today<% } else { %><%= left %> day<%= left === 1 ? '' : 's' %><% } %></td>
+              <td class="ta-right" style="white-space:nowrap">
+                <form method="post" action="/admin3119Musa/notifications/<%= n.id %>/delete-any" class="inline" onsubmit="return confirm('Permanently delete this notification? This cannot be undone.');">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <button class="btn btn-danger btn-xs" type="submit">Delete now</button>
+                </form>
+              </td>
+            </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    <% } else { %>
+      <div class="notif-list">
+        <% items.forEach(function (n) { const left = daysLeft(n); %>
+          <div class="notif-item">
+            <div class="notif-row notif-row-static">
+              <div>
+                <span class="notif-dot" aria-hidden="true"></span>
+                <span class="notif-copy">
+                  <b><%= n.title %></b>
+                  <% if (n.body) { %><span class="muted"><%= n.body %></span><% } %>
+                  <small class="muted">
+                    Archived <%= fmtDate(n.archived_at) %> ·
+                    <% if (left === null) { %>no expiry<% } else if (left === 0) { %>deletes today<% } else { %>deletes in <%= left %> day<%= left === 1 ? '' : 's' %><% } %>
+                  </small>
+                </span>
+              </div>
+            </div>
+            <div class="notif-actions">
+              <form method="post" action="/admin3119Musa/notifications/<%= n.id %>/restore" class="inline">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                <button class="btn btn-ghost btn-xs" type="submit">Restore</button>
+              </form>
+              <form method="post" action="/admin3119Musa/notifications/<%= n.id %>/delete" class="inline" onsubmit="return confirm('Permanently delete this notification? This cannot be undone.');">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                <input type="hidden" name="from" value="trash">
+                <button class="btn btn-danger btn-xs" type="submit">Delete now</button>
+              </form>
+            </div>
+          </div>
+        <% }) %>
+      </div>
+    <% } %>
+  </div>
+</section>
+
+<%- include('../partials/bottom') %>

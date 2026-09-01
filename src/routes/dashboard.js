@@ -23,6 +23,7 @@ const { isProUser, perksActive, allPlans, isProListingActive } = require('../lib
 const nl = require('../lib/newsletter');
 const paypal = require('../lib/paypal');
 const notify = require('../lib/notify');
+const notifications = require('../lib/notifications');
 const spam = require('../lib/spam');
 
 const router = express.Router();
@@ -1016,8 +1017,44 @@ router.get('/dashboard/notifications', (req, res) => {
   res.render('dashboard/notifications', {
     meta: { title: 'Notifications — FirmLedger', description: '', robots: 'noindex' },
     items,
+    trashCount: notifications.getTrash(req.user.id).length,
     ok: req.query.ok || '',
+    err: req.query.err || '',
   });
+});
+
+/* ---- Archive / trash ---- */
+router.get('/dashboard/notifications/trash', (req, res) => {
+  res.render('dashboard/notifications-trash', {
+    meta: { title: 'Archived notifications — FirmLedger', description: '', robots: 'noindex' },
+    items: notifications.getTrash(req.user.id),
+    daysLeft: notifications.daysLeft,
+    ok: req.query.ok || '',
+    err: req.query.err || '',
+  });
+});
+
+router.post('/dashboard/notifications/:id/archive', (req, res) => {
+  const r = notifications.archive(Number(req.params.id), req.user.id, req.body.duration);
+  const msg = r.ok
+    ? `ok=${encodeURIComponent(`Archived — it will be deleted automatically in ${r.days} day${r.days === 1 ? '' : 's'}.`)}`
+    : `err=${encodeURIComponent(r.error)}`;
+  res.redirect('/dashboard/notifications?' + msg);
+});
+
+router.post('/dashboard/notifications/:id/restore', (req, res) => {
+  const r = notifications.restore(Number(req.params.id), req.user.id);
+  res.redirect('/dashboard/notifications/trash?' + (r.ok
+    ? 'ok=' + encodeURIComponent('Notification restored to your inbox.')
+    : 'err=' + encodeURIComponent(r.error)));
+});
+
+router.post('/dashboard/notifications/:id/delete', (req, res) => {
+  const r = notifications.permanentDelete(Number(req.params.id), req.user.id);
+  const back = String(req.body.from || '') === 'trash' ? '/dashboard/notifications/trash' : '/dashboard/notifications';
+  res.redirect(back + '?' + (r.ok
+    ? 'ok=' + encodeURIComponent('Notification permanently deleted.')
+    : 'err=' + encodeURIComponent(r.error)));
 });
 
 router.post('/dashboard/notifications/:id/read', (req, res) => {

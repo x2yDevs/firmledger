@@ -55,6 +55,7 @@ function grantUserPro(userId, durationDays) {
   if (!u) return null;
   if (durationDays === null) {           // lifetime grant
     db.prepare("UPDATE users SET plan='pro', plan_expires_at='' WHERE id=?").run(u.id);
+    startTrial(u.id, TRIAL_ON_UPGRADE_DAYS, { onlyIfNone: true });
     return { user: u, expiry: null };
   }
   const now = new Date();
@@ -63,11 +64,142 @@ function grantUserPro(userId, durationDays) {
   const expiry = new Date(base.getTime() + Number(durationDays) * 24 * 3600 * 1000);
   db.prepare('UPDATE users SET plan=?, plan_expires_at=? WHERE id=?')
     .run('pro', expiry.toISOString().slice(0, 10), u.id);
+  /* Going Pro always opens a 30-day free trial (FirmLedger policy) — an
+     already-running trial is left alone so a renewal can't shorten it. */
+  startTrial(u.id, TRIAL_ON_UPGRADE_DAYS, { onlyIfNone: true });
   return { user: u, expiry };
 }
 
 function revokeUserPro(userId) {
   db.prepare("UPDATE users SET plan='free', plan_expires_at='' WHERE id=?").run(userId);
+  db.prepare("UPDATE users SET subscription_status='free' WHERE id=? AND (subscription_status IS NULL OR subscription_status<>'trialing')").run(userId);
+}
+
+/* ============================================================================
+ * Free trials
+ *
+ * Two triggers:
+ *   A) automatic — grantUserPro() opens a 30-day trial the moment a user
+ *      upgrades to a paid subscription (PayPal capture or an admin grant);
+ *   B) manual — Admin → Pricing grants 1–90 days to any email address.
+ *
+ * Columns (migrations/2026-09-01-user-trials.sql):
+ *   trial_started_at, trial_expires_at, trial_days, subscription_status
+ * subscription_status: 'trialing' while the trial runs, then 'active' if the
+ * account still holds paid Pro, otherwise 'free'.
+ * ==========================================================================*/
+const TRIAL_ON_UPGRADE_DAYS = 30;   // automatic trial when a user goes Pro
+const TRIAL_DEFAULT_DAYS = 14;      // default in the admin grant form
+const TRIAL_MAX_DAYS = 90;
+
+/** SQLite 'YYYY-MM-DD HH:MM:SS' (UTC) → Date. */
+function parseSqlDate(v) {
+  if (!v) return null;
+  const s = String(v).trim();
+  const d = new Date(/[T ]/.test(s) && !/[zZ]|[+-]\d\d:?\d\d$/.test(s) ? s.replace(' ', 'T') + 'Z' : s);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function trialActive(user, now = new Date()) {
+  if (!user || !user.trial_expires_at) return false;
+  const exp = parseSqlDate(user.trial_expires_at);
+  return Boolean(exp) && exp.getTime() > now.getTime();
+}
+
+/** Whole days left on the trial (0 when it ends today). */
+function trialDaysRemaining(user, now = new Date()) {
+  if (!trialActive(user, now)) return 0;
+  const exp = parseSqlDate(user.trial_expires_at);
+  return Math.max(0, Math.ceil((exp.getTime() - now.getTime()) / 864e5));
+}
+
+/**
+ * Open a trial on an account.
+ * @param {number} userId
+ * @param {number} days 1–90
+ * @param {{onlyIfNone?: boolean}} opts  skip when a trial is already running
+ */
+function startTrial(userId, days = TRIAL_DEFAULT_DAYS, opts = {}) {
+  const u = db.prepare('SELECT id, trial_expires_at FROM users WHERE id=?').get(userId);
+  if (!u) return { ok: false, error: 'No account with that id.' };
+  const d = Math.round(Number(days));
+  if (!(d >= 1) || d > TRIAL_MAX_DAYS) {
+    return { ok: false, error: `Trial length must be between 1 and ${TRIAL_MAX_DAYS} days.` };
+  }
+  if (opts.onlyIfNone && trialActive(u)) return { ok: false, error: 'A trial is already running.' };
+  db.prepare(
+    `UPDATE users
+        SET trial_started_at = datetime('now'),
+            trial_expires_at = datetime('now', '+' || ? || ' days'),
+            trial_days = ?,
+            subscription_status = 'trialing'
+      WHERE id = ?`
+  ).run(d, d, u.id);
+  const row = db.prepare('SELECT trial_expires_at FROM users WHERE id=?').get(u.id);
+  return { ok: true, days: d, expiresAt: row ? row.trial_expires_at : '' };
+}
+
+/** Clear a trial. subscription_status falls back to paid 'active' or 'free'. */
+function revokeTrial(userId) {
+  const u = db.prepare('SELECT id, plan, plan_expires_at FROM users WHERE id=?').get(userId);
+  if (!u) return { ok: false, error: 'No account with that id.' };
+  db.prepare(
+    `UPDATE users
+        SET trial_started_at = NULL, trial_expires_at = NULL, trial_days = NULL,
+            subscription_status = ?
+      WHERE id = ?`
+  ).run(isProUser(u) ? 'active' : 'free', u.id);
+  return { ok: true };
+}
+
+/** Effective status shown in the console: 'trialing' | 'active' | 'free'. */
+function statusOf(user, now = new Date()) {
+  if (trialActive(user, now)) return 'trialing';
+  if (isProUser(user, now)) return 'active';
+  return 'free';
+}
+
+/**
+ * Flip every finished trial back to 'active' (still paying) or 'free'.
+ * Runs hourly from server.js and on each request through trialMiddleware.
+ */
+function expireTrials() {
+  const rows = db.prepare(
+    "SELECT id, plan, plan_expires_at FROM users WHERE subscription_status='trialing' AND trial_expires_at IS NOT NULL AND trial_expires_at <= datetime('now')"
+  ).all();
+  const upd = db.prepare('UPDATE users SET subscription_status=? WHERE id=?');
+  for (const u of rows) upd.run(isProUser(u) ? 'active' : 'free', u.id);
+  return rows.length;
+}
+
+/**
+ * Per-request trial state. Mount after session.attach:
+ *   app.use(require('./src/lib/plans').trialMiddleware);
+ * Sets res.locals.isTrialUser, res.locals.trialDaysRemaining,
+ * res.locals.trialExpiresAt and res.locals.subscriptionStatus.
+ */
+function trialMiddleware(req, res, next) {
+  res.locals.isTrialUser = false;
+  res.locals.trialDaysRemaining = 0;
+  res.locals.trialExpiresAt = '';
+  res.locals.subscriptionStatus = 'free';
+  const u = req.user;
+  if (!u) return next();
+  try {
+    if (u.subscription_status === 'trialing' && !trialActive(u)) {
+      /* Trial just ran out — revert immediately so the very next render is honest. */
+      const status = isProUser(u) ? 'active' : 'free';
+      db.prepare('UPDATE users SET subscription_status=? WHERE id=?').run(status, u.id);
+      u.subscription_status = status;
+    }
+    const isTrial = trialActive(u);
+    res.locals.isTrialUser = isTrial;
+    res.locals.trialDaysRemaining = isTrial ? trialDaysRemaining(u) : 0;
+    res.locals.trialExpiresAt = isTrial ? u.trial_expires_at : '';
+    res.locals.subscriptionStatus = statusOf(u);
+    req.isTrialUser = isTrial;
+  } catch { /* never block a request on trial bookkeeping */ }
+  next();
 }
 
 /* Viewing full detail scope — guests see basic profile; Pro members see all.
@@ -83,4 +215,8 @@ module.exports = {
   isProUser, isProListingActive, perksActive,
   PRO_USER_SQL, PRO_LISTING_SQL,
   grantUserPro, revokeUserPro, canViewFull,
+  /* trials */
+  TRIAL_ON_UPGRADE_DAYS, TRIAL_DEFAULT_DAYS, TRIAL_MAX_DAYS,
+  startTrial, revokeTrial, trialActive, trialDaysRemaining,
+  statusOf, expireTrials, trialMiddleware,
 };

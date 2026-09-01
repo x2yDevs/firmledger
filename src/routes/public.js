@@ -718,22 +718,78 @@ router.get('/robots.txt', (req, res) => {
     );
     return;
   }
-  res.type('text/plain').send(
-    [
-      'User-agent: *',
-      'Allow: /',
-      'Disallow: /dashboard',
-      'Disallow: /admin3119Musa',
-      'Disallow: /claim',
-      'Disallow: /search',
-      'Disallow: /removal/',
-      'Disallow: /forgot',
-      'Disallow: /login',
-      '',
-      `Sitemap: ${siteUrl('/sitemap.xml')}\n`,
-    ].join('\n')
-  );
+  res.type('text/plain').send(robotsTxt());
 });
+
+/* Paths no crawler may index — repeated inside every allowed group so that a
+   named search-engine group never loses them by overriding "User-agent: *". */
+const ROBOTS_PRIVATE_PATHS = [
+  '/dashboard',
+  '/admin3119Musa',
+  '/claim',
+  '/search',
+  '/removal/',
+  '/forgot',
+  '/login',
+];
+
+/* Crawlers that train / ground generative models. Blocked outright — each one
+   gets a Disallow: / that a later "User-agent: *" group can never undo. */
+const ROBOTS_AI_BOTS = [
+  'GPTBot',
+  'Amazonbot',
+  'Applebot-Extended',
+  'Bytespider',
+  'CCBot',
+  'ClaudeBot',
+  'CloudflareBrowserRenderingCrawler',
+  'Google-Extended',
+  'meta-externalagent',
+];
+
+/* Legitimate search crawlers — indexing is welcome, private paths are not.
+   Applebot (search) is listed here; Applebot-Extended (AI training) is blocked. */
+const ROBOTS_SEARCH_BOTS = [
+  'Googlebot',
+  'Googlebot-Image',
+  'Googlebot-News',
+  'Bingbot',
+  'Slurp',
+  'DuckDuckBot',
+  'YandexBot',
+  'Baiduspider',
+  'Applebot',
+];
+
+/**
+ * robots.txt for the public site.
+ *
+ * Group order matters: the AI blocks come first and each has its own
+ * User-agent section, so nothing they match is re-opened by the catch-all.
+ * Every User-agent token appears exactly once in the file.
+ */
+function robotsTxt() {
+  const disallows = ROBOTS_PRIVATE_PATHS.map((p) => `Disallow: ${p}`);
+  return [
+    '# FirmLedger — https://firmledger.co.ke',
+    '# Content signals: search indexing yes, AI training no, reference use only.',
+    '',
+    '# ---- AI scrapers / model trainers: blocked site-wide ----',
+    ...ROBOTS_AI_BOTS.flatMap((ua) => [`User-agent: ${ua}`, 'Disallow: /', '']),
+    '# ---- Search engines: full crawl minus private paths ----',
+    ...ROBOTS_SEARCH_BOTS.map((ua) => `User-agent: ${ua}`),
+    'Allow: /',
+    ...disallows,
+    '',
+    '# ---- Everyone else ----',
+    'User-agent: *',
+    'Content-Signal: search=yes, ai-train=no, use=reference',
+    'Allow: /',
+    ...disallows,
+    '',
+    `Sitemap: ${siteUrl('/sitemap.xml')}\n`,
+  ].join('\n');
+}
 
 /* ---- Sitemap index (sitemapindex pattern, same way Crunchbase segments by content type) ---- */
 function catSlugsInUse(listings) {

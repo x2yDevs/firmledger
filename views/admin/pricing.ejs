@@ -1,0 +1,92 @@
+<%- include('../partials/top') %>
+<%- include('../partials/adminnav') %>
+
+<section class="section-tight">
+  <div class="container">
+    <div class="section-head">
+      <div>
+        <p class="klabel">Pricing</p>
+        <h2>Free trials</h2>
+        <p class="muted" style="font-size:14px;margin-top:4px">
+          Every user who upgrades to a paid subscription automatically starts a
+          <b><%= TRIAL_ON_UPGRADE_DAYS %>-day</b> trial. Grant one by hand below for anyone else.
+        </p>
+      </div>
+      <span class="idx">TRIALS</span>
+    </div>
+
+    <% if (ok) { %><div class="alert alert-ok"><%= ok %></div><% } %>
+    <% if (err) { %><div class="alert alert-err"><%= err %></div><% } %>
+
+    <div class="form-card">
+      <h3 class="form-section">Grant a free trial</h3>
+      <form class="form" method="post" action="/admin3119Musa/pricing/free-trial">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <div class="grid-2">
+          <label><span>Account email</span>
+            <input type="email" name="email" required maxlength="254" placeholder="member@company.com" value="<%= prefillEmail %>" autocomplete="off">
+          </label>
+          <label><span>Duration (days, 1–<%= TRIAL_MAX_DAYS %>)</span>
+            <input type="number" name="days" min="1" max="<%= TRIAL_MAX_DAYS %>" value="<%= TRIAL_DEFAULT_DAYS %>" inputmode="numeric" required>
+          </label>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit">Grant trial</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="table-wrap" style="margin-top:22px">
+      <table class="table">
+        <thead>
+          <tr><th>Email</th><th>Name</th><th>Status</th><th>Trial expires</th><th class="ta-right">Actions</th></tr>
+        </thead>
+        <tbody>
+          <% users.forEach(function (u) {
+               const status = statusOf(u);
+               const left = trialDaysRemaining(u);
+          %>
+          <tr>
+            <td><b><%= u.email %></b></td>
+            <td class="muted"><%= u.name || '—' %></td>
+            <td>
+              <span class="pill <%= status === 'active' ? 'pill-approved' : (status === 'trialing' ? 'pill-pending' : '') %>"><%= status %></span>
+            </td>
+            <td class="muted">
+              <% if (u.trial_expires_at) { %>
+                <%= String(u.trial_expires_at).slice(0, 10) %>
+                <% if (left > 0) { %><div class="score-hint"><%= left %> day<%= left === 1 ? '' : 's' %> left</div><% } else { %><div class="score-hint">expired</div><% } %>
+              <% } else { %>—<% } %>
+            </td>
+            <td class="ta-right" style="white-space:nowrap">
+              <form method="post" action="/admin3119Musa/pricing/free-trial" class="inline">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                <input type="hidden" name="email" value="<%= u.email %>">
+                <input type="hidden" name="days" value="<%= TRIAL_DEFAULT_DAYS %>">
+                <button class="btn btn-ghost btn-xs" type="submit">Grant <%= TRIAL_DEFAULT_DAYS %>d</button>
+              </form>
+              <form method="post" action="/admin3119Musa/pricing/revoke-trial" class="inline">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                <input type="hidden" name="email" value="<%= u.email %>">
+                <button class="btn btn-danger btn-xs" type="submit"<%= u.trial_expires_at ? '' : ' disabled' %>>Revoke</button>
+              </form>
+            </td>
+          </tr>
+          <% }) %>
+          <% if (!users.length) { %>
+          <tr><td colspan="5" class="muted">No registered users yet.</td></tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="fine-print" style="margin-top:18px">
+      Revoking clears <code>trial_started_at</code>, <code>trial_expires_at</code> and <code>trial_days</code>, and puts
+      <code>subscription_status</code> back to <code>active</code> (paid Pro still running) or <code>free</code>.
+      Trials that run out are reverted automatically — hourly, and on the user's next request.
+      Paid plan offers live on <b>Plan offers →</b>.
+    </p>
+  </div>
+</section>
+
+<%- include('../partials/bottom') %>
