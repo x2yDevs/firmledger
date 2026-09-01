@@ -1505,7 +1505,7 @@ h2.h-display { font-size: clamp(1.9rem, 3.4vw, 2.7rem); }
 
 /* ===== Sponsored Content (advertising) ===== */
 .section-sponsored { border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); background: linear-gradient(180deg, rgba(29,78,216,.02), rgba(29,78,216,0)); }
-.sponsored-grid { --cols: 4; }
+/* (`.sponsored-grid { --cols: 4 }` retired in r34 — the strip is a marquee now, see below.) */
 .sponsored-chip { display: inline-flex; align-items: center; margin-left: 8px; padding: 1px 8px; border-radius: 999px; background: #F3B93A; color: #50340a; font: 600 10.5px/1.8 var(--fm); letter-spacing: .02em; text-transform: uppercase; vertical-align: middle; white-space: nowrap; }
 
 /* ===== Compare ===== */
@@ -1808,3 +1808,127 @@ h2.h-display { font-size: clamp(1.9rem, 3.4vw, 2.7rem); }
   }
 }
 .feature-grid > * { min-width: 0; }
+
+/* ================= r34: footer that fits every width + sponsored marquee ================= */
+
+/* Footer body — one explicit grid instead of r33's `auto-fit` strip, which minted
+   ~8 tracks for 4 children on a 1200px screen: the link rows were squeezed into
+   ~110px columns while the right half of the footer sat empty.
+   Mobile first, the grid is the square the layout asks for —
+
+     brand
+     Platform   | Browse by
+     Categories | Resources
+     News (full width)
+
+   — and from 1024px the brand keeps the left column with the two link rows side by
+   side on the right (four columns across) and News spanning underneath. Every track
+   is minmax(0, …) and every label may wrap, so nothing scrolls sideways at any width. */
+.foot-scroll,
+.foot-scroll-in { overflow: visible; }
+.foot-scroll-in {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: clamp(28px, 3.6vw, 42px) clamp(20px, 2.4vw, 36px);
+  padding-block: clamp(38px, 5vw, 62px);
+  align-items: start;
+}
+.foot-scroll-in > * { min-width: 0; }
+.foot-scroll-in .foot-brand { max-width: 440px; }
+.foot-brand p { max-width: 46ch; }
+
+/* The 2×2 link block. It stays two-up all the way down to the smallest phone —
+   collapsing it to one column is what turned the mobile footer into a wall of
+   links; instead the type tightens a little under 400px. */
+.foot-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(16px, 2.4vw, 32px);
+  align-items: start;
+}
+.foot-col { min-width: 0; }
+@media (max-width: 400px) {
+  .foot-col h4 { font-size: 10.5px; letter-spacing: .12em; }
+  .foot-col a { font-size: 13px; }
+  .foot-news li a { font-size: 13px; }
+}
+
+/* News keeps its place below the link block, spanning the full width so the latest
+   posts read as a row on wide screens rather than one long column under the grid. */
+.foot-scroll-in .foot-news {
+  grid-column: 1 / -1;
+  border-top: 1px solid var(--hair);
+  padding-top: clamp(22px, 2.8vw, 32px);
+  margin-top: clamp(2px, .6vw, 8px);
+}
+.foot-news ul { grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr)); gap: 16px clamp(18px, 2.2vw, 30px); }
+.foot-news li { min-width: 0; }
+
+/* Desktop / laptop: brand left, the four link columns across the right, News full
+   width underneath — the whole footer on screen from 1024px upward. */
+@media (min-width: 1024px) {
+  .foot-scroll-in {
+    grid-template-columns: minmax(220px, 1.05fr) repeat(2, minmax(0, 1.45fr));
+    gap: clamp(28px, 3.2vw, 46px) clamp(24px, 2.8vw, 40px);
+  }
+}
+
+/* --- Sponsored Content marquee --------------------------------------------------
+   The strip used to stop at four placements. It now shows every active sponsor on a
+   seamless loop: the track holds two identical passes of the same cards (each card
+   carries a trailing margin, so a pass is exactly half the track) and slides one
+   pass to the left. Hovering, focusing a card or pressing Pause freezes it; with
+   prefers-reduced-motion the duplicate pass is dropped and the row becomes a plain
+   swipeable strip. Too few sponsors to overflow and it just wraps as a grid. */
+.sponsor-rail {
+  --sponsor-gap: 14px;
+  --sponsor-card-w: clamp(238px, 24vw, 300px);
+  --sponsor-fade: clamp(16px, 4vw, 46px);
+  position: relative;
+  overflow: hidden;
+  padding: 4px 0 10px;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 var(--sponsor-fade), #000 calc(100% - var(--sponsor-fade)), transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0, #000 var(--sponsor-fade), #000 calc(100% - var(--sponsor-fade)), transparent 100%);
+}
+.sponsor-track { display: flex; align-items: stretch; width: max-content; }
+.sponsor-card { flex: 0 0 var(--sponsor-card-w); margin-inline-end: var(--sponsor-gap); }
+.sponsor-rail.is-marquee .sponsor-track {
+  animation: sponsor-marquee var(--sponsor-dur, 60s) linear infinite;
+  will-change: transform;
+}
+@keyframes sponsor-marquee {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-50%, 0, 0); }
+}
+.sponsor-rail:hover .sponsor-track,
+.sponsor-rail:focus-within .sponsor-track,
+.sponsor-rail.is-paused .sponsor-track { animation-play-state: paused; }
+/* Pause/play control in the section head (WCAG 2.2.2 — moving content is stoppable). */
+.sec-head-actions { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.sponsor-toggle {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 7px 13px; border: 1px solid var(--hair2); border-radius: 999px;
+  background: var(--surface); color: var(--ink2);
+  font: 500 12px/1 var(--fm); letter-spacing: .04em; cursor: pointer;
+  transition: border-color .15s, color .15s, background .15s;
+}
+.sponsor-toggle:hover { border-color: var(--accent); color: var(--accent2); background: var(--soft); }
+.sponsor-toggle .sponsor-toggle-ico { display: inline-flex; }
+
+/* Not enough sponsors to overflow: plain wrapped row, no mask, no loop. */
+.sponsor-rail:not(.is-marquee) { overflow: visible; -webkit-mask-image: none; mask-image: none; }
+.sponsor-rail:not(.is-marquee) .sponsor-track { width: 100%; flex-wrap: wrap; gap: 14px; }
+.sponsor-rail:not(.is-marquee) .sponsor-card { flex: 1 1 clamp(238px, 24vw, 300px); max-width: 340px; margin-inline-end: 0; }
+
+/* Reduced motion: no auto-scroll — swipe the single pass instead. */
+@media (prefers-reduced-motion: reduce) {
+  .sponsor-rail {
+    overflow-x: auto; overflow-y: hidden;
+    -webkit-mask-image: none; mask-image: none;
+    scroll-snap-type: x proximity;
+    scrollbar-width: thin;
+  }
+  .sponsor-rail .sponsor-track { animation: none; }
+  .sponsor-card { scroll-snap-align: start; }
+  .sponsor-card--dup, .sponsor-toggle { display: none; }
+}

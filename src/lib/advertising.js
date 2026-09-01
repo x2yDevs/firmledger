@@ -95,9 +95,15 @@ function revokeSponsorship(listingId) {
   return { ok: true, listing: l.name };
 }
 
-/** Homepage Sponsored Content strip — active placements, highest value first. */
-function sponsoredStrip(limit = 4) {
+/**
+ * Homepage Sponsored Content strip — every active placement, newest first.
+ * `limit` is optional: pass a positive number to cap the result (SQLite's
+ * `LIMIT -1` means "no limit"). The homepage marquee scrolls the whole strip,
+ * so it asks for all of them rather than the first four.
+ */
+function sponsoredStrip(limit = 0) {
   const today = new Date().toISOString().slice(0, 10);
+  const cap = Number(limit) > 0 ? Math.floor(Number(limit)) : -1;
   return db.prepare(
     `SELECT l.*, u.plan AS owner_plan, u.plan_expires_at AS owner_plan_expires
        FROM listings l
@@ -105,7 +111,7 @@ function sponsoredStrip(limit = 4) {
       WHERE l.status='approved' AND l.sponsored=1
         AND (l.sponsored_expires_at='' OR l.sponsored_expires_at >= ?)
       ORDER BY l.updated_at DESC LIMIT ?`
-  ).all(today, Number(limit) || 0);
+  ).all(today, cap);
 }
 
 /** Current sponsored listings (admin console + sanity). */

@@ -38,7 +38,11 @@
       <div class="foot-brand">
         <p>The business record layer for modern discovery — canonical, source-backed profiles for companies, startups, agencies, organizations, products, services and publishers.</p>
         <div class="foot-socials" aria-label="FirmLedger on social media">
-          <% SITE_SOCIALS.forEach(function(s){ %>\n          <a class="foot-soc" href="<%= s.url %>" <% if (!s.url.startsWith('mailto:')) { %>target=" _blank" rel="noopener noreferrer me"<% } %> aria-label="<%= s.label %>" title="<%= s.label %>"><span class="social-ico"><%- ICONS[s.key] || ICONS.website %></span></a>\n          <% }); %>\n        </div>\n      </div>
+          <% SITE_SOCIALS.forEach(function(s){ %>
+          <a class="foot-soc" href="<%= s.url %>"<% if (!s.url.startsWith('mailto:')) { %> target="_blank" rel="noopener noreferrer me"<% } %> aria-label="<%= s.label %>" title="<%= s.label %>"><span class="social-ico"><%- ICONS[s.key] || ICONS.website %></span></a>
+          <% }); %>
+        </div>
+      </div>
       <!-- Row 1: Platform + Browse by -->
       <div class="foot-row">
         <div class="foot-col">
@@ -67,7 +71,10 @@
         <div class="foot-col">
           <h4>Categories</h4>
           <ul>
-            <% footerCats.forEach(function(c){ %>\n            <li><a href="/directory/c/<%= c.slug %>"><%= c.name %></a></li>\n            <% }); %>\n            <li><a href="/directory?sort=newest">Recently added</a></li>
+            <% footerCats.forEach(function(c){ %>
+            <li><a href="/directory/c/<%= c.slug %>"><%= c.name %></a></li>
+            <% }); %>
+            <li><a href="/directory?sort=newest">Recently added</a></li>
             <li><a href="/directory">Search &amp; discovery</a></li>
           </ul>
         </div>

@@ -144,6 +144,12 @@
 </section>
 
 <% if (hasActiveSponsors) { %>
+<% /* Every active placement is shown, on a seamless marquee — the strip holds two
+      identical passes of the same cards and slides exactly one pass to the left, so
+      nothing is ever cut off and the loop has no seam. With too few sponsors to
+      overflow the row it renders as a plain wrapped grid instead. */ %>
+<% const _sponsorMarquee = sponsored.length > 3; %>
+<% const _sponsorDur = Math.min(240, Math.max(22, Math.round(sponsored.length * 5.7))); %>
 <section class="section section-sponsored">
   <div class="container">
     <div class="sec-head rv">
@@ -152,26 +158,25 @@
         <h2>Promoted on the ledger</h2>
         <p>These verified listings are advertising on FirmLedger. Each is clearly labelled <b>Sponsored</b> — it's paid placement, not an editorial pick.</p>
       </div>
-      <span class="idx">AD / SPONSORED</span>
+      <div class="sec-head-actions">
+        <span class="idx">AD / SPONSORED</span>
+        <% if (_sponsorMarquee) { %>
+        <button class="sponsor-toggle" type="button" data-sponsor-toggle aria-pressed="false" aria-label="Pause the sponsored listings scroll">
+          <span class="sponsor-toggle-ico" aria-hidden="true"><svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></span>
+          <span class="sponsor-toggle-txt">Pause</span>
+        </button>
+        <% } %>
+      </div>
     </div>
-    <div class="hscroll sponsored-grid">
-      <% sponsored.forEach(function (l) { %>
-      <a class="l-card" href="/listing/<%= l.slug %>">
-        <div class="l-top">
-          <% if (l.logo_url) { %><img class="avatar" src="<%= l.logo_url %>" alt="<%= l.name %> logo" loading="lazy"><% } else { %><span class="avatar"><%= initials(l.name) %></span><% } %>
-          <div>
-            <div class="l-name"><%= l.name %><span class="sponsored-chip" title="Paid sponsored placement">Sponsored</span></div>
-            <div class="l-meta"><%= typeLabel(l.type) %> · <%= listingLoc(l) %></div>
-          </div>
-        </div>
-        <p class="l-desc"><%= l.tagline %></p>
-        <div class="l-foot">
-          <% if (l.claimed) { %><span class="vbadge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Verified</span><% } %>
-          <span class="tag"><%= typeLabel(l.type) %></span>
-          <%- dial(l.confidence) %>
-        </div>
-      </a>
-      <% }); %>
+    <div class="sponsor-rail<%= _sponsorMarquee ? ' is-marquee' : '' %>"<% if (_sponsorMarquee) { %> style="--sponsor-dur:<%= _sponsorDur %>s" role="region" aria-label="Sponsored listings — auto-scrolling"<% } %>>
+      <div class="sponsor-track">
+        <% sponsored.forEach(function (l) { %>
+          <%- include('partials/sponsor-card', { l: l }) %>
+        <% }); %>
+        <% if (_sponsorMarquee) { sponsored.forEach(function (l) { %>
+          <%- include('partials/sponsor-card', { l: l, dup: true }) %>
+        <% }); } %>
+      </div>
     </div>
     <p class="fine-print" style="margin-top:14px"><a href="/advertise">Advertise your listing here →</a></p>
   </div>

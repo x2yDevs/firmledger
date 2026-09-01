@@ -314,3 +314,30 @@
     box.closest('.flash-wrap').remove();
   });
 })();
+
+// ---- Sponsored Content marquee: pause / play control
+// The strip auto-scrolls on CSS alone, so this is pure progressive enhancement —
+// it only freezes the same animation for anyone who wants to read a card in place.
+(function () {
+  'use strict';
+
+  var ICO_PAUSE = '<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>';
+  var ICO_PLAY = '<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true"><path d="M8 5.2v13.6a1 1 0 0 0 1.53.85l10.6-6.8a1 1 0 0 0 0-1.7L9.53 4.35A1 1 0 0 0 8 5.2z"/></svg>';
+
+  document.querySelectorAll('[data-sponsor-toggle]').forEach(function (btn) {
+    var section = btn.closest('.section-sponsored');
+    var rail = section ? section.querySelector('.sponsor-rail') : null;
+    if (!rail) return;
+    var ico = btn.querySelector('.sponsor-toggle-ico');
+    var txt = btn.querySelector('.sponsor-toggle-txt');
+    btn.addEventListener('click', function () {
+      var paused = rail.classList.toggle('is-paused');
+      btn.setAttribute('aria-pressed', paused ? 'true' : 'false');
+      btn.setAttribute('aria-label', paused
+        ? 'Resume the sponsored listings scroll'
+        : 'Pause the sponsored listings scroll');
+      if (ico) ico.innerHTML = paused ? ICO_PLAY : ICO_PAUSE;
+      if (txt) txt.textContent = paused ? 'Play' : 'Pause';
+    });
+  });
+})();
