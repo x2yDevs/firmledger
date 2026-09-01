@@ -19,20 +19,10 @@ const session = require('./src/lib/session');
 const util = require('./src/lib/util');
 
 /* Bumped on every deploy that changes public/ assets — defeats the 7-day static cache. */
-const ASSET_V = '30';
+const ASSET_V = '29';
 
 const app = express();
 app.set('trust proxy', true);
-
-// ===== REDIRECT onrender.com → firmledger.co.ke =====
-app.use((req, res, next) => {
-  const host = req.get('host');
-  if (host && host.toLowerCase() === 'firmledger.onrender.com') {
-    return res.redirect(301, `https://firmledger.co.ke${req.originalUrl}`);
-  }
-  next();
-});
-
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
@@ -69,8 +59,6 @@ app.use('/uploads', express.static(uploadsDir, { maxAge: '30d', immutable: true 
 
 /* Per-request context + CSRF */
 app.use(session.attach);
-/* Trial state (res.locals.isTrialUser / trialDaysRemaining) + lazy expiry. */
-app.use(require('./src/lib/plans').trialMiddleware);
 app.use((req, res, next) => {
   res.locals.SITE = util.siteUrl('');
   res.locals.nlFlash = req.query.nl ? String(req.query.nl).slice(0, 200) : '';
@@ -163,19 +151,12 @@ app.use((err, req, res, next) => {
 const PORT = Number(process.env.PORT) || 3000;
 
 /* Weekly newsletter digest — checked hourly, fires when the last send is >6.5 days old.
-   Ticket auto-close runs on the same hourly tick: solved >7d, unanswered admin replies >14d.
-   Archived notifications past their archive_expires_at are hard-deleted on the same tick. */
+   Ticket auto-close runs on the same hourly tick: solved >7d, unanswered admin replies >14d. */
 const newsletter = require('./src/lib/newsletter');
 const supportLib = require('./src/lib/support');
-const notificationsLib = require('./src/lib/notifications');
 function hourlyJobs() {
   newsletter.sendWeeklyDigest().catch(() => {});
   try { supportLib.autoCloseStale(); } catch (e) { console.error('[auto-close]', e.message); }
-  try {
-    const purged = notificationsLib.purgeExpired();
-    if (purged) console.log(`[notifications] purged ${purged} expired archived notification(s)`);
-  } catch (e) { console.error('[notif-purge]', e.message); }
-  try { require('./src/lib/plans').expireTrials(); } catch (e) { console.error('[trials]', e.message); }
 }
 setInterval(hourlyJobs, 3600e3);
 setTimeout(hourlyJobs, 90e3);
