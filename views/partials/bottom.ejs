@@ -22,37 +22,48 @@
   </div>
 </section>
 <footer class="site-footer">
-  <div class="container foot-grid">
-    <div class="foot-brand">
-      <a class="brand" href="/">
+  <div class="foot-top">
+    <div class="container foot-top-in">
+      <a class="brand" href="/" aria-label="FirmLedger home">
         <img src="/assets/logo-mark.png" alt="FirmLedger logo" class="logo-img" width="34" height="34">
         <span class="brand-name">Firm<b>Ledger</b></span>
       </a>
-      <p>The business record layer for modern discovery — canonical, source-backed profiles for companies, startups, agencies, organizations, products, services and publishers.</p>
-      <div class="foot-socials" aria-label="FirmLedger on social media">
-        <% SITE_SOCIALS.forEach(function(s){ %>
-        <a class="foot-soc" href="<%= s.url %>" <% if (!s.url.startsWith('mailto:')) { %>target="_blank" rel="noopener noreferrer me"<% } %> aria-label="<%= s.label %>" title="<%= s.label %>">
-          <span class="social-ico"><%- ICONS[s.key] || ICONS.website %></span>
-        </a>
-        <% }); %>
+      <nav class="foot-quick" aria-label="Popular destinations">
+        <a href="/advertise">Advertise</a>
+        <a href="/status">System status</a>
+        <a href="/dashboard/watchlist">Watchlist</a>
+        <a href="/dashboard/listings/new">Add a listing</a>
+        <a href="/claim">Claim a listing</a>
+        <a href="/api">API</a>
+      </nav>
+      <form class="hdr-search search-hero foot-search" action="/search" method="get" role="search">
+        <input class="input search-hero-in" type="search" name="q" placeholder="Search businesses, topics, docs…" aria-label="Search FirmLedger" maxlength="120">
+        <button class="btn btn-gold" type="submit">Search</button>
+      </form>
+    </div>
+  </div>
+  <div class="foot-scroll">
+    <div class="container foot-scroll-in">
+      <div class="foot-brand">
+        <p>The business record layer for modern discovery — canonical, source-backed profiles for companies, startups, agencies, organizations, products, services and publishers.</p>
+        <div class="foot-socials" aria-label="FirmLedger on social media">
+          <% SITE_SOCIALS.forEach(function(s){ %>
+          <a class="foot-soc" href="<%= s.url %>" <% if (!s.url.startsWith('mailto:')) { %>target="_blank" rel="noopener noreferrer me"<% } %> aria-label="<%= s.label %>" title="<%= s.label %>">
+            <span class="social-ico"><%- ICONS[s.key] || ICONS.website %></span>
+          </a>
+          <% }); %>
+        </div>
       </div>
-    </div>
-    <div class="foot-col">
-      <h4>Platform</h4>
-      <ul>
-        <li><a href="/directory">Directory</a></li>
-        <li><a href="/pricing">Pricing</a></li>
-        <li><a href="/compare">Compare</a></li>
-        <li><a href="/jobs">Jobs board</a></li>
-        <li><a href="/careers">Careers</a></li>
-        <li><a href="/advertise">Advertise</a></li>
-        <li><a href="/status">System status</a></li>
-        <li><a href="/dashboard/watchlist">Watchlist</a></li>
-        <li><a href="/dashboard/listings/new">Add a listing</a></li>
-        <li><a href="/claim">Claim a listing</a></li>
-        <li><a href="/api">API</a></li>
-      </ul>
-    </div>
+      <div class="foot-col">
+        <h4>Platform</h4>
+        <ul>
+          <li><a href="/directory">Directory</a></li>
+          <li><a href="/pricing">Pricing</a></li>
+          <li><a href="/compare">Compare</a></li>
+          <li><a href="/jobs">Jobs board</a></li>
+          <li><a href="/careers">Careers</a></li>
+        </ul>
+      </div>
     <div class="foot-col">
       <h4>Browse by</h4>
       <ul>
@@ -95,6 +106,7 @@
       </ul>
     </div>
     <% } %>
+    </div>
   </div>
   <div class="foot-bottom">
     <div class="container" style="display:flex;align-items:center;gap:18px;flex-wrap:wrap">

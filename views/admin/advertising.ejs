@@ -89,25 +89,25 @@
     </div>
 
     <div class="side-card">
-      <div class="section-head" style="align-items:center">
+      <div class="section-head">
         <div>
           <h3 style="margin-bottom:4px">All listings — sponsor / remove</h3>
           <p class="muted" style="font-size:13px;margin:0">
             <%= totalListings %> listings total — showing <%= listings.length %> (<%= q || status ? 'filtered' : 'latest' %>). Search by company name, category, tagline or owner email.
           </p>
         </div>
-        <form method="get" action="/admin3119Musa/advertising" class="ad-search-form" role="search">
-          <input type="search" name="q" value="<%= q %>" placeholder="Search listings…" aria-label="Search listings" maxlength="80">
-          <select name="status" aria-label="Filter by status">
-            <option value="">All statuses</option>
-            <option value="approved" <%= status === 'approved' ? 'selected' : '' %>>Approved</option>
-            <option value="pending" <%= status === 'pending' ? 'selected' : '' %>>Pending</option>
-            <option value="rejected" <%= status === 'rejected' ? 'selected' : '' %>>Rejected</option>
-          </select>
-          <button class="btn btn-primary btn-sm" type="submit">Search</button>
-          <% if (q || status) { %><a class="btn btn-ghost btn-sm" href="/admin3119Musa/advertising">Clear</a><% } %>
-        </form>
       </div>
+      <form method="get" action="/admin3119Musa/advertising" class="ad-search-form" role="search">
+        <input type="search" name="q" value="<%= q %>" placeholder="Search listings by name, category, tagline or owner email…" aria-label="Search listings" maxlength="80">
+        <select name="status" aria-label="Filter by status">
+          <option value="">All statuses</option>
+          <option value="approved" <%= status === 'approved' ? 'selected' : '' %>>Approved</option>
+          <option value="pending" <%= status === 'pending' ? 'selected' : '' %>>Pending</option>
+          <option value="rejected" <%= status === 'rejected' ? 'selected' : '' %>>Rejected</option>
+        </select>
+        <button class="btn btn-gold" type="submit">Search</button>
+        <% if (q || status) { %><a class="btn btn-ghost" href="/admin3119Musa/advertising">Clear</a><% } %>
+      </form>
       <div class="table-wrap scroll-table">
         <table class="table" id="adListingsTable">
           <thead><tr><th>Listing</th><th>Owner</th><th>Status</th><th>Sponsored</th><th class="ta-right">Actions</th></tr></thead>
