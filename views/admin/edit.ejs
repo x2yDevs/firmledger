@@ -85,6 +85,25 @@
       </div>
     </form>
 
+    <div class="form-card" id="ownership">
+      <h3 class="form-section">Ownership — make anyone the owner, or remove the owner</h3>
+      <% if (typeof ok !== 'undefined' && ok) { %><div class="alert alert-ok"><%= ok %></div><% } %>
+      <% if (typeof err !== 'undefined' && err) { %><div class="alert alert-err"><%= err %></div><% } %>
+      <p class="muted" style="font-size:13.5px;margin-bottom:12px">Transfer this listing to any account, or clear the owner to return it to unclaimed. Removing the owner also clears the verified flag.</p>
+      <form method="post" action="/admin3119Musa/listings/<%= l.id %>/owner">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <div class="jf-row">
+          <select name="owner_user_id">
+            <option value="0">— No owner (unclaimed) —</option>
+            <% ownerOptions.forEach(function (u) { %>
+            <option value="<%= u.id %>" <%= l.owner_user_id === u.id ? 'selected' : '' %>><%= (u.name || u.email) %> — <%= u.email %></option>
+            <% }); %>
+          </select>
+          <button class="btn btn-primary" type="submit">Set owner</button>
+        </div>
+      </form>
+    </div>
+
     <%- include('../partials/relations', { relations, REL_TYPES, actionUrl: '/admin3119Musa/listings/' + l.id, deleteUrl: '/admin3119Musa/relations', csrfToken }) %>
 
     <div class="form-card" id="timeline">

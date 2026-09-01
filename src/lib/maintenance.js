@@ -21,6 +21,7 @@ function gate(req, res, next) {
   if (req.admin) return next();
   const p = req.path || '';
   if (p.startsWith('/admin3119Musa')) return next();
+  if (p.startsWith('/status')) return next(); // the status page must stay up during an outage
   if (p.startsWith('/uploads') || p.startsWith('/fonts') || p.startsWith('/assets')) return next();
   if (/\.(css|js|png|jpg|jpeg|svg|woff2?|ico|txt|xml)$/i.test(p)) return next();
   res.set('Retry-After', '3600');

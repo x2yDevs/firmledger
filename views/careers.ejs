@@ -1,0 +1,60 @@
+<%- include('partials/top') %>
+
+<section class="page-head">
+  <div class="container" style="text-align:center">
+    <p class="kicker kicker-center">Careers</p>
+    <h1 class="h-display">Build the record layer for <em style="font-style:normal;color:var(--accent2)">modern discovery.</em></h1>
+    <p class="lede" style="margin-left:auto;margin-right:auto">FirmLedger is the trusted business record layer — canonical, source-backed company profiles. We work on verification, entity resolution, and a unified intelligence API.</p>
+  </div>
+</section>
+
+<section class="section-tight">
+  <div class="container">
+    <% if (activeAny) { %>
+      <div class="compare-note rv" style="--d:60ms">
+        <span class="cn-dot" aria-hidden="true"></span>
+        <p><b><%= open.length %> open role<%= open.length === 1 ? '' : 's' %></b> at FirmLedger right now. Tap <b>Apply by email</b> to open a pre-filled application in your mail app — addressed to <b>careers@firmledger.co.ke</b>.</p>
+      </div>
+
+      <div class="jobs-list">
+        <% open.forEach(function (c, i) { %>
+        <article class="panel rv" id="role-<%= c.id %>" style="--d:<%= i * 60 %>ms">
+          <div class="section-head" style="margin-bottom:14px;display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap">
+            <div>
+              <h2 style="font-size:22px"><%= c.title %></h2>
+              <p style="color:var(--muted);margin:4px 0 0"><%= c.role_type %> · <%= c.location %> · posted <%= fmtDate(c.created_at) %></p>
+            </div>
+            <a class="btn btn-primary" href="<%= applyMailto(c) %>">Apply by email</a>
+          </div>
+          <div class="prose">
+            <% (c.description || '').split(/\n{2,}/).forEach(function (p) { %><p><%= p %></p><% }) %>
+          </div>
+          <% if (c.requirements) { %>
+          <div class="panel" style="background:var(--bg);border:1px solid var(--hair);margin-top:14px">
+            <h4 style="font-size:14px;margin:0 0 8px">What we're looking for</h4>
+            <ul class="careers-requirements">
+              <% c.requirements.split(/\n/).map(function (l) { return l.trim(); }).filter(Boolean).forEach(function (r) { %>
+              <li><%= r %></li>
+              <% }); %>
+            </ul>
+          </div>
+          <% } %>
+          <p class="fine-print" style="margin-top:16px">Application comes to <a href="mailto:<%= c.apply_email %>"><%= c.apply_email %></a> as a ready-to-send draft — add your details and hit send.</p>
+        </article>
+        <% }); %>
+      </div>
+    <% } else { %>
+      <div class="panel" style="text-align:center;padding:56px 24px">
+        <div class="lede-empty" style="font-size:34px;margin-bottom:10px">🌱</div>
+        <h3 style="font-family:var(--fd);font-size:24px;margin-bottom:8px">We're not hiring right now</h3>
+        <p class="muted" style="max-width:480px;margin:0 auto">We're a small, focused team and post roles as they open. Drop us a note at <a href="mailto:careers@firmledger.co.ke" style="color:var(--accent2)">careers@firmledger.co.ke</a> — we keep great candidates on file and reach out when something fits.</p>
+        <div style="display:flex;gap:12px;justify-content:center;margin-top:20px;flex-wrap:wrap">
+          <a class="btn btn-ghost" href="mailto:careers@firmledger.co.ke?subject=Open%20application%20—%20FirmLedger">Send a speculative application</a>
+          <a class="btn btn-primary" href="/about">About FirmLedger</a>
+        </div>
+      </div>
+    <% } %>
+  </div>
+</section>
+
+<%- include('partials/bottom') %>

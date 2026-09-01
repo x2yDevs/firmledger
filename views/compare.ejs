@@ -1,0 +1,85 @@
+<%- include('partials/top') %>
+
+<section class="section-tight">
+  <div class="container">
+    <nav class="crumb rv" aria-label="Breadcrumb">
+      <a href="/">Home</a><span class="sep">/</span><span>Compare</span>
+    </nav>
+
+    <div class="section-head" style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap">
+      <div>
+        <p class="kicker">Compare &amp; decide</p>
+        <h1>Compare companies side by side</h1>
+        <p class="lede" style="margin:6px 0 0">Pick up to <%= max %> listings and compare category, location, founding year, team size, confidence, ownership and more — in one clean table.</p>
+      </div>
+      <% if (rows.length) { %>
+      <form method="post" action="/compare/clear" onsubmit="return confirm('Clear your comparison?');">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <button class="btn btn-ghost" type="submit">Clear all</button>
+      </form>
+      <% } %>
+    </div>
+
+    <% if (ok) { %><div class="alert alert-ok"><%= ok %></div><% } %>
+    <% if (err) { %><div class="alert alert-err"><%= err %></div><% } %>
+
+    <% if (!rows.length) { %>
+      <div class="panel" style="text-align:center;padding:56px 24px">
+        <h3 style="font-family:var(--fd);font-size:22px;margin-bottom:8px">Nothing to compare yet</h3>
+        <p class="muted" style="max-width:480px;margin:0 auto">Open any company in the directory and press the <b>Compare</b> button. Add up to <%= max %> at a time and we'll line them up here.</p>
+        <a class="btn btn-primary" style="margin-top:18px" href="/directory">Browse the directory</a>
+      </div>
+    <% } else { %>
+
+      <div class="table-wrap compare-table-wrap">
+        <table class="table compare-table">
+          <thead>
+            <tr>
+              <th class="cmp-fixed">Listing</th>
+              <% rows.forEach(function (r) { %>
+                <th>
+                  <div class="cmp-head">
+                    <% if (r.logo_url) { %><img class="avatar" src="<%= r.logo_url %>" alt="<%= r.name %> logo" loading="lazy"><% } else { %><span class="avatar"><%= initials(r.name) %></span><% } %>
+                    <a class="cmp-name" href="/listing/<%= r.slug %>"><%= r.name %></a>
+                    <form method="post" action="/compare/toggle" style="margin-top:8px">
+                      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                      <input type="hidden" name="listing_id" value="<%= r.id %>">
+                      <input type="hidden" name="back" value="/compare">
+                      <button class="btn btn-ghost btn-xs" type="submit" title="Remove from comparison">Remove</button>
+                    </form>
+                  </div>
+                </th>
+              <% }); %>
+            </tr>
+          </thead>
+          <tbody>
+            <% var fields = [
+              { label: 'Entity type', v: function (r) { return typeLabel(r.type); } },
+              { label: 'Category', v: function (r) { return r.category; } },
+              { label: 'Location', v: function (r) { return [r.city, r.region, r.country].filter(Boolean).join(', ') || '—'; } },
+              { label: 'Founded', v: function (r) { return r.founded || '—'; } },
+              { label: 'Team size', v: function (r) { return r.size || '—'; } },
+              { label: 'Website', v: function (r) { return r.website ? '<a href="' + r.website + '" rel="noopener nofollow" target="_blank">' + (r.website.replace(/^https?:\/\//,'').replace(/\/$/,'')) + '</a>' : '—'; } },
+              { label: 'Tagline', v: function (r) { return '<div class="cmp-prose">' + truncate(r.tagline || '—', 90) + '</div>'; } },
+              { label: 'Registered', v: function (r) { return fmtDate(r.created_at); } },
+              { label: 'Ownership', v: function (r) { return r.claimed ? 'Verified owner' : 'Unclaimed'; } },
+              { label: 'Confidence', v: function (r) { return dial(r.confidence); } },
+              { label: 'Sponsored', v: function (r) { return r.sponsored ? 'Yes' : 'No'; } },
+            ]; %>
+            <% fields.forEach(function (f) { %>
+              <tr>
+                <th class="cmp-fixed"><%= f.label %></th>
+                <% rows.forEach(function (r) { %>
+                  <td><%- f.v(r) %></td>
+                <% }); %>
+              </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+      <p class="wl-export-note"><%= rows.length %> listing<%= rows.length === 1 ? '' : 's' %> compared · add or remove more from any listing page.</p>
+    <% } %>
+  </div>
+</section>
+
+<%- include('partials/bottom') %>

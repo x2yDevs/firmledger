@@ -1,0 +1,95 @@
+<%- include('../partials/top') %>
+
+<section class="section-tight">
+  <div class="container">
+    <nav class="crumb rv" aria-label="Breadcrumb">
+      <a href="/dashboard">Dashboard</a><span class="sep">›</span><span>Advertise</span>
+    </nav>
+
+    <div class="section-head" style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap">
+      <div>
+        <h1>Advertise a listing</h1>
+        <p class="lede" style="margin:6px 0 0">Put one of your verified listings on the homepage <b>Sponsored Content</b> strip — clearly labelled as Sponsored, paid by PayPal.</p>
+      </div>
+      <a class="btn btn-ghost" href="/advertise">View public package page</a>
+    </div>
+
+    <% if (ok) { %><div class="alert alert-ok"><%= ok %></div><% } %>
+    <% if (err) { %><div class="alert alert-err"><%= err %></div><% } %>
+    <% if (typeof okmsg !== 'undefined' && okmsg) { %><div class="alert alert-ok"><%= okmsg %></div><% } %>
+
+    <% if (!ownApproved.length) { %>
+      <div class="panel" style="text-align:center;padding:48px 24px">
+        <h3 style="font-family:var(--fd);font-size:22px;margin-bottom:8px">You need an approved listing first</h3>
+        <p class="muted" style="max-width:460px;margin:0 auto">You can only advertise a listing you own that's been approved and is live in the directory.</p>
+        <div style="display:flex;gap:12px;justify-content:center;margin-top:18px;flex-wrap:wrap">
+          <a class="btn btn-primary" href="/dashboard/listings/new">Add a listing</a>
+          <a class="btn btn-ghost" href="/dashboard">View dashboard</a>
+        </div>
+      </div>
+    <% } else { %>
+
+    <% if (packages.length) { %>
+    <div class="side-card rv" style="margin-bottom:20px">
+      <h3>Available packages</h3>
+      <div class="plan-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px">
+        <% packages.forEach(function (p, i) { %>
+        <div class="plan-card" style="--d:<%= i * 50 %>ms">
+          <h3 style="font-size:16px"><%= p.name %></h3>
+          <p class="plan-price" style="font-size:20px">$<%= (p.price_cents / 100).toFixed(2) %> <small>/ <%= p.duration_days %> days</small></p>
+          <p class="muted" style="font-size:12.5px;margin:0"><%= p.blurb || 'Homepage Sponsored Content.' %></p>
+        </div>
+        <% }); %>
+      </div>
+      <p class="fine-print" style="margin-top:12px"><%= paypalReady ? 'Payments run through PayPal (' + paypalMode + ' mode).' : 'Online payments are not configured yet — contact support to place an ad.' %></p>
+    </div>
+    <% } %>
+
+    <div class="side-card rv">
+      <h3>Your listings</h3>
+      <p class="muted" style="margin-bottom:12px">Pick a listing and a package, then check out. The spot activates the moment PayPal confirms.</p>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Listing</th><th>Status</th><th>Sponsored</th><th style="text-align:right">Sponsor it</th></tr></thead>
+          <tbody>
+            <% ownApproved.forEach(function (l) { %>
+            <tr>
+              <td>
+                <a href="/listing/<%= l.slug %>" style="font-weight:600;color:var(--ink)"><%= l.name %></a>
+                <div class="muted" style="font-size:12px"><%= l.category %><% if (l.city || l.country) { %> · <%= [l.city, l.country].filter(Boolean).join(', ') %><% } %></div>
+              </td>
+              <td><span class="pill pill-approved">Live</span></td>
+              <td>
+                <% if (isSponsored(l)) { %>
+                  <span class="pill pill-featured">Sponsored<% if (l.sponsored_expires_at && l.sponsored_expires_at >= today) { %> · until <%= l.sponsored_expires_at %><% } else if (!l.sponsored_expires_at) { %> · lifetime<% } %></span>
+                <% } else { %>
+                  <span class="muted">—</span>
+                <% } %>
+              </td>
+              <td style="text-align:right;white-space:nowrap">
+                <% if (packages.length) { %>
+                <form method="post" action="/dashboard/advertise/checkout" class="inline" onsubmit="return confirm('Start PayPal checkout to sponsor “<%= l.name.replace(/\"/g, '') %>”?');">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <input type="hidden" name="listing_id" value="<%= l.id %>">
+                  <select name="package_id" style="font-size:12px;padding:5px 8px;border:1px solid var(--hair);border-radius:8px">
+                    <% packages.forEach(function (p, idx) { %>
+                    <option value="<%= p.id %>" <%= (pick && pick === p.id) || (!pick && idx === 0) ? 'selected' : '' %>><%= p.name %> — $<%= (p.price_cents / 100).toFixed(2) %></option>
+                    <% }); %>
+                  </select>
+                  <button class="btn btn-primary btn-xs" type="submit" <%= paypalReady ? '' : 'disabled' %>>Sponsor</button>
+                </form>
+                <% } else { %>
+                <span class="muted">No packages yet</span>
+                <% } %>
+              </td>
+            </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <% } %>
+  </div>
+</section>
+
+<%- include('../partials/bottom') %>

@@ -5,8 +5,8 @@
     <div class="sec-head rv">
       <div class="l">
         <p class="klabel">Developer platform</p>
-        <h2>The FirmLedger API — <span style="color:var(--accent)">live</span> for Pro members</h2>
-        <p>A unified, source-backed business intelligence API — create, read, update and delete the records you own over clean REST endpoints with API-key authentication. <strong style="color:var(--accent)">Access is included with FirmLedger Pro</strong> — alongside the unlocked directory, verified ticks and Featured placement.</p>
+        <h2>The FirmLedger API — <span style="color:var(--accent)">live</span></h2>
+        <p>A unified, source-backed business intelligence API. A <b>free public directory API</b> lets any developer pull FirmLedger's approved listings into their own site <b>with no key</b>, and Pro members get key-authenticated CRUD over the records they own. <strong style="color:var(--accent)">Key access is included with FirmLedger Pro</strong> — alongside the unlocked directory, verified ticks and Featured placement.</p>
       </div>
       <span class="idx">API / V1</span>
     </div>
@@ -58,6 +58,9 @@ curl <%= SITE %>/api/v1/listings \
         <thead><tr><th>Method</th><th>Endpoint</th><th>Description</th><th>Status</th></tr></thead>
         <tbody>
           <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1</code></td><td>Discovery — versions, endpoints, limits</td><td><span class="pill pill-approved">Live</span></td></tr>
+          <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1/health</code></td><td>Liveness probe — no key, returns 200 when the API is up</td><td><span class="pill pill-approved">Live</span></td></tr>
+          <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1/directory</code></td><td>Public listings — no key, free, filterable</td><td><span class="pill pill-approved">Live</span></td></tr>
+          <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1/directory/:slug</code></td><td>Public single listing by slug — no key</td><td><span class="pill pill-approved">Live</span></td></tr>
           <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1/me</code></td><td>Your account, plan, key usage and limits</td><td><span class="pill pill-approved">Live</span></td></tr>
           <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1/listings</code></td><td>Your listings, paginated (status filter)</td><td><span class="pill pill-approved">Live</span></td></tr>
           <tr><td><span class="m-chip m-post">POST</span></td><td><code>/api/v1/listings</code></td><td>Create a listing — enters moderation as <code>pending</code></td><td><span class="pill pill-approved">Live</span></td></tr>
@@ -84,6 +87,7 @@ curl <%= SITE %>/api/v1/listings \
     </div>
     <div class="rv" style="--d:100ms">
       <div class="code-block" style="margin:0"><span class="code-label">today</span><span class="c"># live endpoints, no key needed</span>
+GET /api/v1/directory <span class="c"># public listings — pull into your site</span>
 GET /sitemap.xml      <span class="c"># auto-indexed</span>
 GET /feed.xml         <span class="c"># new + updated records</span>
 GET /listing/:slug    <span class="c"># canonical profiles</span></div>

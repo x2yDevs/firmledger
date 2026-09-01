@@ -46,6 +46,63 @@ router.use((req, res, next) => {
   next();
 });
 
+/* ============================================================================
+ * PUBLIC endpoints — no API key required.
+ *
+ * The directory read endpoints let any developer pull FirmLedger's public,
+ * approved listings into their own site (and - importantly - non-sensitive
+ * pages are indexable). They are rate-limited per IP and only ever return
+ * approved, public profile fields. Key-authenticated CRUD lives below.
+ * ==========================================================================*/
+
+function clientIp(req) {
+  return (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.ip || 'unknown';
+}
+
+/* ---- liveness probe: public, no key; returns 200 when the API is up ---- */
+router.get('/health', (req, res) => {
+  res.json({ ok: true, service: 'FirmLedger API', version: 'v1', time: new Date().toISOString() });
+});
+
+/* ---- discovery: public index of the surface (used to advertise the API) ---- */
+router.get('/', (req, res) => {
+  const g = lim.charge('pub:' + clientIp(req), false);
+  lim.rateHeaders(res, g, false);
+  if (!g.ok) return lim.apiError(res, 429, 'rate_limited', `Slow down — ${g.limit} requests per minute per address.`, { retryAfterSec: g.resetInSec });
+  res.json({
+    name: 'FirmLedger API', version: 'v1',
+    docs: DocsURL(),
+    endpoints: {
+      health: 'GET /api/v1/health',
+      directory: ['GET /api/v1/directory', 'GET /api/v1/directory/:slug'],
+      me: 'GET /api/v1/me',
+      listings: ['GET /api/v1/listings', 'POST /api/v1/listings', 'GET /api/v1/listings/:id', 'PUT /api/v1/listings/:id', 'DELETE /api/v1/listings/:id'],
+    },
+    limits: { public_requests_per_minute: lim.READ_RPM, read_requests_per_minute: lim.READ_RPM, write_requests_per_minute: lim.WRITE_RPM, max_concurrent_per_key: lim.MAX_INFLIGHT, max_keys_per_account: apikeys.MAX_ACTIVE_KEYS },
+    note: 'The /health and /directory endpoints are PUBLIC — health for liveness, the directory to pull FirmLedger listings into your own site. Everything else needs a FirmLedger Pro API key.',
+  });
+});
+
+/* ---- public directory listings (paginated + filterable) ---- */
+router.get('/directory', (req, res) => {
+  const g = lim.charge('pub:' + clientIp(req), false);
+  lim.rateHeaders(res, g, false);
+  if (!g.ok) return lim.apiError(res, 429, 'rate_limited', `Slow down — ${g.limit} requests per minute per address.`, { retryAfterSec: g.resetInSec });
+  res.set('Cache-Control', 'public, max-age=60');
+  res.json(svc.publicListings(req.query));
+});
+
+/* ---- public single listing by slug ---- */
+router.get('/directory/:slug', (req, res) => {
+  const g = lim.charge('pub:' + clientIp(req), false);
+  lim.rateHeaders(res, g, false);
+  if (!g.ok) return lim.apiError(res, 429, 'rate_limited', `Slow down — ${g.limit} requests per minute per address.`, { retryAfterSec: g.resetInSec });
+  const row = svc.publicListing(req.params.slug);
+  if (!row) return lim.apiError(res, 404, 'not_found', 'No public listing with that slug.');
+  res.set('Cache-Control', 'public, max-age=300');
+  res.json({ data: row });
+});
+
 /* ---------- API key authentication ---------- */
 function extractKey(req) {
   const h = String(req.headers.authorization || '');
@@ -139,19 +196,6 @@ function serviceError(res, e, req) {
   }
   throw e;
 }
-
-/* ---------- discovery ---------- */
-router.get('/', (req, res) => {
-  res.json({
-    name: 'FirmLedger API', version: 'v1',
-    docs: DocsURL(),
-    endpoints: {
-      me: 'GET /api/v1/me',
-      listings: ['GET /api/v1/listings', 'POST /api/v1/listings', 'GET /api/v1/listings/:id', 'PUT /api/v1/listings/:id', 'DELETE /api/v1/listings/:id'],
-    },
-    limits: { read_requests_per_minute: lim.READ_RPM, write_requests_per_minute: lim.WRITE_RPM, max_concurrent_per_key: lim.MAX_INFLIGHT, max_keys_per_account: apikeys.MAX_ACTIVE_KEYS },
-  });
-});
 
 /* ---------- me ---------- */
 router.get('/me', (req, res) => {

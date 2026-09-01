@@ -64,7 +64,11 @@
           <li>Verified claim flow</li>
           <li>Company embed badge</li>
         </ul>
+        <% if (user) { %>
+        <a class="btn btn-ghost" href="/dashboard">Open your dashboard</a>
+        <% } else { %>
         <a class="btn btn-ghost" href="/register">Create free account</a>
+        <% } %>
       </div>
       <% if (offers.length) { offers.forEach(function (p, i) { %>
       <div class="plan-card plan-pro rv" style="--d:<%= (i + 1) * 60 %>ms">
@@ -90,7 +94,11 @@
         <h3>Pro offers</h3>
         <p class="plan-price">—</p>
         <p class="muted">No Pro offers configured yet. Check back soon.</p>
+        <% if (user) { %>
+        <a class="btn btn-ghost" href="/dashboard">Open your dashboard</a>
+        <% } else { %>
         <a class="btn btn-ghost" href="/register">Create free account</a>
+        <% } %>
       </div>
       <% } %>
     </div>
@@ -146,7 +154,11 @@
   <div class="container" style="text-align:center">
     <h2 class="h-display">Two minutes to verified.</h2>
     <p class="lede" style="margin:0 auto 2rem">Ready to unlock everything?</p>
-    <a class="btn btn-light btn-lg" href="<%= user ? '/dashboard/upgrade' : '/register' %>">Create your account — it's free</a>
+    <% if (user) { %>
+    <a class="btn btn-light btn-lg" href="/dashboard/upgrade">Upgrade to Pro</a>
+    <% } else { %>
+    <a class="btn btn-light btn-lg" href="/register">Create your account — it's free</a>
+    <% } %>
   </div>
 </section>
 

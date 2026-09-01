@@ -143,23 +143,59 @@
   </div>
 </section>
 
+<% if (hasActiveSponsors) { %>
+<section class="section section-sponsored">
+  <div class="container">
+    <div class="sec-head rv">
+      <div class="l">
+        <p class="klabel">Sponsored Content</p>
+        <h2>Promoted on the ledger</h2>
+        <p>These verified listings are advertising on FirmLedger. Each is clearly labelled <b>Sponsored</b> — it's paid placement, not an editorial pick.</p>
+      </div>
+      <span class="idx">AD / SPONSORED</span>
+    </div>
+    <div class="list-grid sponsored-grid">
+      <% sponsored.forEach(function (l) { %>
+      <a class="l-card" href="/listing/<%= l.slug %>">
+        <div class="l-top">
+          <% if (l.logo_url) { %><img class="avatar" src="<%= l.logo_url %>" alt="<%= l.name %> logo" loading="lazy"><% } else { %><span class="avatar"><%= initials(l.name) %></span><% } %>
+          <div>
+            <div class="l-name"><%= l.name %><span class="sponsored-chip" title="Paid sponsored placement">Sponsored</span></div>
+            <div class="l-meta"><%= typeLabel(l.type) %> · <%= listingLoc(l) %></div>
+          </div>
+        </div>
+        <p class="l-desc"><%= l.tagline %></p>
+        <div class="l-foot">
+          <% if (l.claimed) { %><span class="vbadge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Verified</span><% } %>
+          <span class="tag"><%= typeLabel(l.type) %></span>
+          <%- dial(l.confidence) %>
+        </div>
+      </a>
+      <% }); %>
+    </div>
+    <p class="fine-print" style="margin-top:14px"><a href="/advertise">Advertise your listing here →</a></p>
+  </div>
+</section>
+<% } %>
+
 <section class="band">
   <div class="container band-grid">
     <div class="rv">
       <p class="klabel">FirmLedger API</p>
       <h2 style="margin-top:12px">A unified, source-backed business intelligence API</h2>
-      <p>Create, read, update and delete the records you own over clean REST endpoints — API-key authentication, honest rate limits, full docs and a live playground. <strong>Included with FirmLedger Pro.</strong></p>
+      <p>A <b>free, keyless directory API</b> pulls FirmLedger's public listings into your own site, and Pro members get key-authenticated CRUD over the records they own — honest rate limits, full docs and a live playground. <strong>Directory API is free; key access is included with Pro.</strong></p>
       <div class="band-cta">
         <a class="btn btn-accent" href="/api">Explore the API</a>
         <a class="btn btn-ghost" href="/api/docs">Read the docs</a>
       </div>
     </div>
     <div class="rv" style="--d:100ms">
-      <div class="code-block" style="margin:0"><span class="code-label">live</span><span class="c"># GET /api/v1/listings</span>
-Authorization: Bearer fl_live_…
+      <div class="code-block" style="margin:0"><span class="code-label">free · no key</span><span class="c"># GET /api/v1/directory — public listings</span>
+curl <%= SITE %>/api/v1/directory?category=Logistics
+
 {
   <span class="k">"data"</span>: [ { <span class="k">"slug"</span>: <span class="s">"acme-ltd"</span>,
-    <span class="k">"status"</span>: <span class="s">"approved"</span>,
+    <span class="k">"name"</span>: <span class="s">"Acme Ltd"</span>,
     <span class="k">"confidence"</span>: <span class="s">84</span> } ],
   <span class="k">"meta"</span>: { <span class="k">"total"</span>: <span class="s">3</span> }
 }</div>
