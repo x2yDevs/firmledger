@@ -121,6 +121,32 @@
       <p class="muted" style="margin:0">FirmLedger has been running smoothly. We'll post here the moment anything changes.</p>
     </div>
     <% } %>
+
+    <!-- What this page monitors -->
+    <div class="st-subscribe rv" style="--d:300ms">
+      <div>
+        <h3 class="st-sub-title">What we monitor</h3>
+        <p class="muted" style="margin:4px 0 0">Every component below is probed from outside the platform: the web application, the REST API, the database, background jobs and email delivery. Each probe records latency and success, and the uptime figures on this page are calculated from the actual checks — not estimates.</p>
+        <p class="muted" style="margin:4px 0 0"><b>24h / 7d / 30d / 90d</b> uptime is the percentage of successful checks in each window. A component is marked degraded when checks fail or time out, and an incident is opened the moment a degradation is detected.</p>
+      </div>
+    </div>
+
+    <!-- How alerts work -->
+    <div class="st-subscribe rv" id="how-it-works" style="--d:360ms">
+      <div>
+        <h3 class="st-sub-title">How you'll hear about problems</h3>
+        <p class="muted" style="margin:4px 0 0">Subscribe above and we email you when an incident opens and again when it resolves — one confirmation click, one click to stop. You'll never receive routine updates: no daily digests, no “all clear” noise unless something actually changed.</p>
+        <p class="muted" style="margin:4px 0 0">For teams that need programmatic access, the same live snapshot is available as JSON at <a href="/status/api" style="color:var(--accent2)"><code>/status/api</code></a>.</p>
+      </div>
+    </div>
+
+    <!-- Trust & transparency -->
+    <div class="st-subscribe rv" style="--d:420ms">
+      <div>
+        <h3 class="st-sub-title">Why we publish this page</h3>
+        <p class="muted" style="margin:4px 0 0">FirmLedger is the record layer for business discovery — companies depend on our profiles, our API and our verification. Publishing real status, real incident timelines and real uptime numbers is part of the same promise we make with our data: <b>source-backed, verifiable, honest</b>. If something is degraded, you'll see it here first, and every incident keeps its full update trail after resolution.</p>
+      </div>
+    </div>
   </div>
 </section>
 

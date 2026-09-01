@@ -14,24 +14,29 @@
       <div class="alert alert-err"><% errors.forEach(function (e) { %><div><%= e %></div><% }); %></div>
     <% } %>
 
-    <div class="side-card">
-      <h3>Post a role</h3>
-      <form method="post" action="/admin3119Musa/careers">
+    <div class="form-card">
+      <h3 class="form-section">Post a role</h3>
+      <form class="form" method="post" action="/admin3119Musa/careers">
         <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-        <div class="jf-row">
-          <input type="text" name="title" placeholder="Job title (e.g. Full-stack Engineer)" required maxlength="140" value="<%= typeof old !== 'undefined' && old.title ? old.title : '' %>">
-          <select name="role_type">
-            <% ROLE_TYPES.forEach(function (t) { %>
-            <option value="<%= t %>" <%= typeof old !== 'undefined' && old.role_type === t ? 'selected' : '' %>><%= t %></option>
-            <% }); %>
-          </select>
-          <input type="text" name="location" placeholder="Location (or Remote)" required maxlength="120" value="<%= typeof old !== 'undefined' && old.location ? old.location : '' %>">
+        <div class="grid-2">
+          <label><span>Job title *</span><input type="text" name="title" placeholder="e.g. Full-stack Engineer" required maxlength="140" value="<%= typeof old !== 'undefined' && old.title ? old.title : '' %>"></label>
+          <label><span>Role type</span>
+            <select name="role_type">
+              <% ROLE_TYPES.forEach(function (t) { %>
+              <option value="<%= t %>" <%= typeof old !== 'undefined' && old.role_type === t ? 'selected' : '' %>><%= t %></option>
+              <% }); %>
+            </select>
+          </label>
         </div>
-        <textarea name="description" placeholder="Role description (a few sentences, separate paragraphs with blank lines)" rows="5" class="input"><%= typeof old !== 'undefined' && old.description ? old.description : '' %></textarea>
-        <textarea name="requirements" placeholder="Requirements — one per line" rows="4" class="input"><%= typeof old !== 'undefined' && old.requirements ? old.requirements : '' %></textarea>
-        <div class="jf-row">
-          <input type="email" name="apply_email" placeholder="Apply-to email (default careers@firmledger.co.ke)" value="<%= typeof old !== 'undefined' && old.apply_email ? old.apply_email : 'careers@firmledger.co.ke' %>">
+        <div class="grid-2">
+          <label><span>Location *</span><input type="text" name="location" placeholder="Nairobi, or Remote" required maxlength="120" value="<%= typeof old !== 'undefined' && old.location ? old.location : '' %>"></label>
+          <label><span>Apply-to email</span><input type="email" name="apply_email" placeholder="careers@firmledger.co.ke" value="<%= typeof old !== 'undefined' && old.apply_email ? old.apply_email : 'careers@firmledger.co.ke' %>"></label>
+        </div>
+        <label><span>Role description</span><textarea name="description" rows="5" placeholder="A few sentences about the role — separate paragraphs with blank lines. Shown on the public /careers page."><%= typeof old !== 'undefined' && old.description ? old.description : '' %></textarea></label>
+        <label><span>Requirements — one per line</span><textarea name="requirements" rows="4" placeholder="e.g. 4+ years building production web apps&#10;Strong SQL and API design skills"><%= typeof old !== 'undefined' && old.requirements ? old.requirements : '' %></textarea></label>
+        <div class="form-actions">
           <button class="btn btn-primary" type="submit">Publish role</button>
+          <span class="fine-print" style="margin:0">Published roles appear instantly on <a href="/careers">/careers</a> and in the site feed.</span>
         </div>
       </form>
     </div>

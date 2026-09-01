@@ -2,39 +2,68 @@
 
 <section class="page-head">
   <div class="container" style="text-align:center">
-    <p class="kicker kicker-center">Sponsored Content</p>
-    <h1 class="h-display">Put your listing on the <em style="font-style:normal;color:var(--accent2)">homepage.</em></h1>
-    <p class="lede" style="margin-left:auto;margin-right:auto">Advertise a listing you own as clearly-labelled <b>Sponsored Content</b> on the FirmLedger homepage. Pick a package, choose how long it runs, and pay securely by <b>PayPal</b> — your spot goes live the moment payment is confirmed.</p>
+    <p class="kicker kicker-center">Sponsored Content — advertising packages</p>
+    <h1 class="h-display">Put your verified listing on the <em style="font-style:normal;color:var(--accent2)">homepage.</em></h1>
+    <p class="lede" style="margin-left:auto;margin-right:auto">FirmLedger is where people go to find verified companies — and the homepage is where they start. Sponsor a listing you own as clearly-labelled <b>Sponsored Content</b>, choose how long it runs, pay securely by <b>PayPal</b>, and go live the moment payment is confirmed.</p>
   </div>
 </section>
 
 <% if (ok) { %><div class="container"><div class="alert alert-ok"><%= ok %></div></div><% } %>
+<% if (err) { %><div class="container"><div class="alert alert-err"><%= err %></div></div><% } %>
 
 <section class="section-tight">
   <div class="container">
+    <!-- Why advertise here -->
+    <div class="feature-grid" style="margin-bottom:26px">
+      <div class="panel" style="padding:22px">
+        <h3 style="font-size:17px;margin-bottom:8px">Reach the right audience</h3>
+        <p class="muted" style="margin:0;font-size:14px">Homepage visitors are researchers, buyers and partners actively looking for verified businesses. A sponsored card puts you in front of them before they even open the directory.</p>
+      </div>
+      <div class="panel" style="padding:22px">
+        <h3 style="font-size:17px;margin-bottom:8px">Transparent and honest</h3>
+        <p class="muted" style="margin:0;font-size:14px">Every placement carries a clear “Sponsored” label. We never sell organic rankings — sponsorships are a separate, clearly-marked strip, so your placement is honest at the same time as it is visible.</p>
+      </div>
+      <div class="panel" style="padding:22px">
+        <h3 style="font-size:17px;margin-bottom:8px">Live the moment payment clears</h3>
+        <p class="muted" style="margin:0;font-size:14px">No waiting for a campaign manager. Our server verifies your PayPal payment, activates the sponsorship for the full duration, and notifies you by email and in your dashboard — automatically.</p>
+      </div>
+    </div>
+
     <div class="compare-note rv" style="--d:60ms">
       <span class="cn-dot" aria-hidden="true"></span>
       <p><b>Honest by design.</b> Every sponsored placement is labelled <b>“Sponsored”</b> on the homepage — it never masquerades as an editorial pick. You advertise one of your own verified listings, on the packages and durations below.</p>
     </div>
 
+    <!-- How it works -->
+    <div class="side-card rv" style="margin-top:22px">
+      <h3 style="margin-bottom:6px">How advertising works</h3>
+      <p class="muted" style="font-size:14px;margin:0 0 16px">Three steps, no campaign manager required.</p>
+      <ol class="steps" style="margin:0">
+        <li><b>Pick a package.</b> Choose the duration that fits your goals — weekly launches, monthly pushes or a full quarter of visibility.</li>
+        <li><b>Check out with PayPal.</b> You are redirected to PayPal to authorise the order; no card details ever touch FirmLedger.</li>
+        <li><b>Go live instantly.</b> The moment PayPal confirms, your listing appears in the homepage Sponsored Content strip with a clear label and a link straight to your profile.</li>
+      </ol>
+    </div>
+
     <% if (packages.length) { %>
-    <div class="plan-grid" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr))">
+    <div class="plan-grid" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr));margin-top:22px">
       <% packages.forEach(function (p, i) { %>
       <div class="plan-card rv" style="--d:<%= (i + 1) * 60 %>ms">
         <h3><%= p.name %></h3>
         <p class="plan-price">$<%= (p.price_cents / 100).toFixed(2) %> <small>/ <%= p.duration_days %> days</small></p>
         <p class="muted" style="font-size:13.5px;margin:0 0 .6rem"><%= p.blurb || 'Homepage Sponsored Content.' %></p>
-        <ul class="plan-feats">
-          <li>Homepage <b>Sponsored Content</b> strip</li>
-          <li>Runs for <b><%= p.duration_days %> days</b> from payment</li>
-          <li>Clearly labelled <b>Sponsored</b></li>
-          <li>Links straight to your listing</li>
-          <li>PayPal secured payment</li>
+        <ul class="plan-list">
+          <li class="on">Homepage <b>Sponsored Content</b> strip</li>
+          <li class="on">Runs for <b><%= p.duration_days %> days</b> from payment</li>
+          <li class="on">Clearly labelled <b>Sponsored</b></li>
+          <li class="on">Links straight to your listing</li>
+          <li class="on">PayPal secured payment</li>
+          <li class="on">In-app notification + receipt email</li>
         </ul>
         <% if (user) { %>
-        <a class="btn btn-ghost" href="/dashboard/advertise?package=<%= p.id %>">Choose this package</a>
+        <a class="btn btn-primary" href="/dashboard/advertise?package=<%= p.id %>" style="margin-top:16px">Choose this package</a>
         <% } else { %>
-        <a class="btn btn-ghost" href="/register?next=/dashboard/advertise">Sign in to place</a>
+        <a class="btn btn-primary" href="/register?next=/dashboard/advertise" style="margin-top:16px">Sign in to place</a>
         <% } %>
       </div>
       <% }); %>
@@ -53,10 +82,35 @@
   </div>
 </section>
 
+<!-- Explanations for visitors + search engines -->
+<section class="section-tight" style="padding-top:0">
+  <div class="container container-narrow">
+    <h2 class="h-section" style="margin-bottom:1.4rem">Advertising on FirmLedger, in detail</h2>
+    <div class="faq-list">
+      <% faqs.forEach(function (f) { %>
+      <details class="faq">
+        <summary><%= f.q %><span class="faq-tgl" aria-hidden="true">+</span></summary>
+        <div class="faq-a"><p><%= f.a %></p></div>
+      </details>
+      <% }); %>
+    </div>
+    <div class="panel" style="margin-top:26px;padding:24px">
+      <h3 style="margin-bottom:8px">Who can advertise</h3>
+      <p class="muted" style="font-size:14.5px;margin:0 0 12px">Any business can appear in the FirmLedger directory for free. To sponsor a homepage placement you need:</p>
+      <ul class="plan-list">
+        <li class="on">A free FirmLedger account</li>
+        <li class="on">An <b>approved, live</b> listing for a business you own</li>
+        <li class="on">A way to pay with PayPal (cards, bank or balance)</li>
+      </ul>
+      <p class="muted" style="font-size:14px;margin:14px 0 0">Claiming your free listing takes minutes using domain verification — DNS record, meta tag or the FirmLedger badge. <a href="/claim">Learn about claiming a listing</a>.</p>
+    </div>
+  </div>
+</section>
+
 <section class="cta-band">
   <div class="container" style="text-align:center">
     <h2 class="h-display">Own a listing?</h2>
-    <p class="lede" style="margin:0 auto 2rem">Claim it, verify it, then spotlight it.</p>
+    <p class="lede" style="margin:0 auto 2rem">Claim it, verify it, then spotlight it on the homepage.</p>
     <a class="btn btn-light btn-lg" href="<%= user ? '/dashboard/advertise' : '/login?next=/dashboard/advertise' %>">Start advertising</a>
   </div>
 </section>

@@ -26,43 +26,43 @@
       </form>
     </div>
 
-    <div class="side-card">
-      <h3>Open a new incident</h3>
-      <form method="post" action="/admin3119Musa/incidents">
+    <div class="form-card">
+      <h3 class="form-section">Open a new incident</h3>
+      <form class="form" method="post" action="/admin3119Musa/incidents">
         <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-        <div class="jf-row" style="align-items:flex-end;flex-wrap:wrap">
-          <div style="display:flex;flex-direction:column;gap:4px;min-width:240px;flex:1">
-            <label class="muted" style="font-size:12px">Title *</label>
-            <input type="text" name="title" placeholder="e.g. Elevated API error rate" required maxlength="200" value="<%= typeof old !== 'undefined' && old.title ? old.title : '' %>">
-          </div>
-          <div style="display:flex;flex-direction:column;gap:4px">
-            <label class="muted" style="font-size:12px">Affected component</label>
+        <div class="grid-2">
+          <label style="grid-column:1 / -1"><span>Title *</span><input type="text" name="title" placeholder="e.g. Elevated API error rate" required maxlength="200" value="<%= typeof old !== 'undefined' && old.title ? old.title : '' %>"></label>
+        </div>
+        <div class="grid-3">
+          <label><span>Affected component</span>
             <select name="component_id">
               <option value="">All systems</option>
               <% components.forEach(function (c) { %>
               <option value="<%= c.id %>" <%= typeof old !== 'undefined' && Number(old.component_id) === c.id ? 'selected' : '' %>><%= c.name %></option>
               <% }); %>
             </select>
-          </div>
-          <div style="display:flex;flex-direction:column;gap:4px">
-            <label class="muted" style="font-size:12px">Severity</label>
+          </label>
+          <label><span>Severity</span>
             <select name="severity">
               <% Object.keys(severityLabels).forEach(function (s) { %>
               <option value="<%= s %>" <%= typeof old !== 'undefined' && old.severity === s ? 'selected' : '' %>><%= severityLabels[s] %></option>
               <% }); %>
             </select>
-          </div>
-          <div style="display:flex;flex-direction:column;gap:4px">
-            <label class="muted" style="font-size:12px">Initial status</label>
+          </label>
+          <label><span>Initial status</span>
             <select name="status">
               <% Object.keys(incidentStatusLabels).forEach(function (s) { %>
               <option value="<%= s %>" <%= typeof old !== 'undefined' && old.status === s ? 'selected' : '' %>><%= incidentStatusLabels[s] %></option>
               <% }); %>
             </select>
-          </div>
-          <button class="btn btn-primary" type="submit">+ Open incident</button>
+          </label>
         </div>
-        <textarea name="description" class="input" style="margin-top:10px" rows="3" placeholder="What's going on? (optional, shown on the public page)"><%= typeof old !== 'undefined' && old.description ? old.description : '' %></textarea>
+        <label><span>Description (shown on the public page)</span>
+          <textarea name="description" rows="3" placeholder="What's going on? — optional, but incidents with context are far more useful to subscribers."><%= typeof old !== 'undefined' && old.description ? old.description : '' %></textarea>
+        </label>
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit">Open incident</button>
+        </div>
       </form>
     </div>
 
@@ -103,15 +103,23 @@
             <% }); %>
           </div>
 
-          <form method="post" action="/admin3119Musa/incidents/<%= inc.id %>/update" class="incident-update-form">
+          <form method="post" action="/admin3119Musa/incidents/<%= inc.id %>/update" class="form incident-update-form">
             <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-            <select name="status" aria-label="Update status">
-              <% Object.keys(incidentStatusLabels).forEach(function (s) { %>
-              <option value="<%= s %>" <%= inc.status === s ? 'selected' : '' %>><%= incidentStatusLabels[s] %></option>
-              <% }); %>
-            </select>
-            <textarea name="message" class="input" rows="2" placeholder="Add a public update…" required></textarea>
-            <button class="btn btn-primary btn-sm" type="submit">Post update</button>
+            <div class="grid-2" style="align-items:end">
+              <label><span>New status</span>
+                <select name="status" aria-label="Update status">
+                  <% Object.keys(incidentStatusLabels).forEach(function (s) { %>
+                  <option value="<%= s %>" <%= inc.status === s ? 'selected' : '' %>><%= incidentStatusLabels[s] %></option>
+                  <% }); %>
+                </select>
+              </label>
+              <label><span>Public update</span>
+                <textarea name="message" rows="2" placeholder="e.g. We've identified the cause and are deploying a fix…" required></textarea>
+              </label>
+            </div>
+            <div class="form-actions" style="margin-top:6px">
+              <button class="btn btn-primary btn-sm" type="submit">Post update</button>
+            </div>
           </form>
         </article>
         <% }); %>

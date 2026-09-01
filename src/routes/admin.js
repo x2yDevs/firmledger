@@ -1807,17 +1807,29 @@ router.post('/admin3119Musa/listings/:id/owner', (req, res) => {
 function advertisingPage(req, res) {
   const packages = ad.allPackages(false);
   const sponsored = ad.allSponsored();
+  const q = String(req.query.q || '').trim().slice(0, 80);
+  const status = ['pending', 'approved', 'rejected'].includes(req.query.status) ? req.query.status : '';
+  const where = [];
+  const params = [];
+  if (q) {
+    where.push('(l.name LIKE ? OR l.category LIKE ? OR l.tagline LIKE ? OR u.email LIKE ?)');
+    const like = `%${q.replace(/[%_]/g, '')}%`;
+    params.push(like, like, like, like);
+  }
+  if (status) { where.push('l.status = ?'); params.push(status); }
   const listings = db.prepare(
-    `SELECT l.id, l.slug, l.name, l.category, l.status, l.claimed, l.sponsored, l.sponsored_expires_at, l.ad_reference,
+    `SELECT l.id, l.slug, l.name, l.category, l.tagline, l.status, l.claimed, l.sponsored, l.sponsored_expires_at, l.ad_reference,
             u.email AS owner_email
        FROM listings l LEFT JOIN users u ON u.id = l.owner_user_id
+      ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
       ORDER BY l.status='approved' DESC, l.updated_at DESC LIMIT 200`
-  ).all();
+  ).all(...params);
   res.render('admin/advertising', {
     meta: { title: 'Advertising — FirmLedger Admin', description: '', robots: 'noindex,nofollow' },
     packages, sponsored, listings, section: 'advertising',
     today: new Date().toISOString().slice(0, 10),
     ad, ok: req.query.ok || '', err: req.query.err || '',
+    q, status, totalListings: db.prepare("SELECT COUNT(*) c FROM listings").get().c,
   });
 }
 

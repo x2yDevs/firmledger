@@ -21,9 +21,22 @@ router.get('/', (req, res) => {
   const snap = mon.snapshot();
   res.render('status/index', {
     meta: {
-      title: 'System status — FirmLedger',
-      description: 'Live status of FirmLedger — the web application, API, database and email delivery. Incident history, uptime percentages and email subscriptions.',
+      title: 'FirmLedger status — live system uptime and incident history',
+      description: 'Live operational status of FirmLedger: the web application, API, database and email delivery. Uptime percentages, active incidents, 30-day history and email alerts.',
       canonical: siteUrl('/status'),
+      jsonld: {
+        '@context': 'https://schema.org',
+        '@type': 'WebPage',
+        name: 'FirmLedger system status',
+        description: 'Live status, uptime and incident history for the FirmLedger platform.',
+        url: siteUrl('/status'),
+        about: { '@type': 'Organization', name: 'FirmLedger', url: siteUrl('/') },
+        dateModified: (snap.last_checked || snap.timestamp || new Date().toISOString()).slice(0, 10),
+      },
+      breadcrumbs: [
+        { name: 'Home', url: siteUrl('/') },
+        { name: 'Status', url: siteUrl('/status') },
+      ],
     },
     snap,
     labels: mon.OVERALL_LABELS,
