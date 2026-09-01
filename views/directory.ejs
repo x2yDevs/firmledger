@@ -61,7 +61,7 @@
     <% listings.forEach(function(l){ %>
     <a class="row-line" href="/listing/<%= l.slug %>">
       <span class="rw-c-name">
-        <% if (l.logo_url) { %><img class="avatar" src="<%= l.logo_url %>" alt="" loading="lazy"><% } else { %><span class="avatar"><%= initials(l.name) %></span><% } %>
+        <% if (l.logo_url) { %><img class="avatar" src="<%= l.logo_url %>" alt="<%= l.name %> logo" loading="lazy"><% } else { %><span class="avatar"><%= initials(l.name) %></span><% } %>
         <span class="rw-t"><b><%= l.name %><% if (perksActive(l)) { %> <span class="ptick ptick-sm" title="FirmLedger Pro — enhanced verified profile"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 2.4 3.3-.5 1 3.3L22 9l-1.7 3 1.7 3-3.3 1.8-1 3.3-3.3-.5L12 22l-2.4-2.4-3.3.5-1-3.3L2 15l1.7-3L2 9l3.3-1.8 1-3.3 3.3.5L12 2z" fill="#1D4ED8"/><path d="M10.6 15.4l-3-3 1.5-1.5 1.5 1.5 4.3-4.3 1.5 1.5-5.8 5.8z" fill="#fff"/></svg></span><% } %></b><small><%= typeLabel(l.type) %></small></span>
       </span>
       <span class="rw-c-cat"><%= l.category %></span>
@@ -76,7 +76,7 @@
     <% listings.forEach(function(l){ %>
     <a class="l-card" href="/listing/<%= l.slug %>">
       <div class="l-top">
-        <% if (l.logo_url) { %><img class="avatar" src="<%= l.logo_url %>" alt="" loading="lazy"><% } else { %><span class="avatar"><%= initials(l.name) %></span><% } %>
+        <% if (l.logo_url) { %><img class="avatar" src="<%= l.logo_url %>" alt="<%= l.name %> logo" loading="lazy"><% } else { %><span class="avatar"><%= initials(l.name) %></span><% } %>
         <div>
           <div class="l-name"><%= l.name %><% if (perksActive(l)) { %><span class="ptick ptick-sm" title="FirmLedger Pro — enhanced verified profile"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 2.4 3.3-.5 1 3.3L22 9l-1.7 3 1.7 3-3.3 1.8-1 3.3-3.3-.5L12 22l-2.4-2.4-3.3.5-1-3.3L2 15l1.7-3L2 9l3.3-1.8 1-3.3 3.3.5L12 2z" fill="#1D4ED8"/><path d="M10.6 15.4l-3-3 1.5-1.5 1.5 1.5 4.3-4.3 1.5 1.5-5.8 5.8z" fill="#fff"/></svg></span><% } %></div>
           <div class="l-meta"><%= typeLabel(l.type) %> · <%= listingLoc(l) %></div>

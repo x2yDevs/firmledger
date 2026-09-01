@@ -48,7 +48,7 @@
       <h3 class="form-section">Logo — uniform 256 × 256</h3>
       <div class="logo-row">
         <div class="logo-preview">
-          <% if (l.logo_url) { %><img src="<%= l.logo_url %>" alt=""><% } else { %><span class="logo-tile"><%= l.name.slice(0, 1) %></span><% } %>
+          <% if (l.logo_url) { %><img src="<%= l.logo_url %>" alt="<%= l.name %> logo"><% } else { %><span class="logo-tile"><%= l.name.slice(0, 1) %></span><% } %>
         </div>
         <div class="logo-controls">
           <label><span>Logo URL <small class="muted">direct link to a PNG, JPG, WebP or SVG</small></span>

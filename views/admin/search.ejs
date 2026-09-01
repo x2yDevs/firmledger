@@ -85,7 +85,7 @@
           <h3>Listings <span class="sg-n"><%= r.listings.length %></span></h3>
           <% r.listings.forEach(function (l) { %>
             <a class="search-row" href="/admin3119Musa/listings/<%= l.id %>/edit">
-              <% if (l.logo_url) { %><img src="<%= l.logo_url %>" alt="" width="34" height="34" loading="lazy"><% } else { %><span class="ph"><%= initials(l.name) %></span><% } %>
+              <% if (l.logo_url) { %><img src="<%= l.logo_url %>" alt="<%= l.name %> logo" width="34" height="34" loading="lazy"><% } else { %><span class="ph"><%= initials(l.name) %></span><% } %>
               <span class="sr-t"><b><%- hl(l.name) %></b><small><%= l.status %><%= l.claimed ? ' · claimed' : '' %> · <%= l.category %> · <%= loc(l) %></small></span>
               <span class="sr-arrow">&rsaquo;</span>
             </a>

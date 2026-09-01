@@ -21,6 +21,7 @@ const plans = require('../lib/plans');
 const paypal = require('../lib/paypal');
 const { allPlans, getPlan, grantUserPro, revokeUserPro, isProUser } = plans;
 const notify = require('../lib/notify');
+const notifications = require('../lib/notifications');
 const { finalizeVerifiedClaim } = require('../lib/claimflow');
 
 const router = express.Router();
@@ -889,6 +890,71 @@ router.post('/admin3119Musa/plans/:id/delete', (req, res) => {
   res.redirect('/admin3119Musa/plans?ok=' + encodeURIComponent(p ? `"${p.name}" deleted.` : 'Offer not found.'));
 });
 
+/* ---------------- Free trials (Admin → Pricing) ----------------
+   Canonical path is /admin3119Musa/pricing; /admin/pricing is kept as an
+   alias (same handlers, same admin session guard) so the documented URLs
+   work too. */
+function pricingPage(req, res) {
+  const users = db.prepare(
+    `SELECT id, email, name, plan, plan_expires_at, subscription_status,
+            trial_started_at, trial_expires_at, trial_days
+       FROM users ORDER BY created_at DESC LIMIT 50`
+  ).all();
+  res.render('admin/pricing', {
+    meta: { title: 'Pricing & trials — FirmLedger Admin', description: '', robots: 'noindex,nofollow' },
+    section: 'pricing',
+    users,
+    statusOf: plans.statusOf,
+    trialDaysRemaining: plans.trialDaysRemaining,
+    TRIAL_DEFAULT_DAYS: plans.TRIAL_DEFAULT_DAYS,
+    TRIAL_MAX_DAYS: plans.TRIAL_MAX_DAYS,
+    TRIAL_ON_UPGRADE_DAYS: plans.TRIAL_ON_UPGRADE_DAYS,
+    prefillEmail: String(req.query.email || ''),
+    ok: req.query.ok || '', err: req.query.err || '',
+  });
+}
+
+function grantTrial(req, res) {
+  const back = (q) => res.redirect('/admin3119Musa/pricing?' + q);
+  const email = String(req.body.email || '').trim().toLowerCase();
+  const days = Math.round(Number(req.body.days || plans.TRIAL_DEFAULT_DAYS));
+  if (!email) return back('err=' + encodeURIComponent('Enter the account email address.'));
+  if (!(days >= 1) || days > plans.TRIAL_MAX_DAYS) {
+    return back('err=' + encodeURIComponent(`Trial length must be between 1 and ${plans.TRIAL_MAX_DAYS} days.`));
+  }
+  const u = db.prepare('SELECT id, email, name FROM users WHERE email = ?').get(email);
+  if (!u) return back('err=' + encodeURIComponent(`No account found for ${email}.`));
+  const r = plans.startTrial(u.id, days);
+  if (!r.ok) return back('err=' + encodeURIComponent(r.error));
+  notify.notifyUser(u.id, {
+    kind: 'billing',
+    title: `Your ${days}-day FirmLedger Pro trial is active`,
+    body: `A free trial was activated on your account. It runs until ${String(r.expiresAt).slice(0, 10)}.`,
+    url: '/dashboard/upgrade',
+  });
+  return back('ok=' + encodeURIComponent(`${days}-day trial granted to ${email} (ends ${String(r.expiresAt).slice(0, 10)}).`));
+}
+
+function revokeTrialRoute(req, res) {
+  const back = (q) => res.redirect('/admin3119Musa/pricing?' + q);
+  const email = String(req.body.email || '').trim().toLowerCase();
+  const u = email
+    ? db.prepare('SELECT id, email FROM users WHERE email = ?').get(email)
+    : db.prepare('SELECT id, email FROM users WHERE id = ?').get(Number(req.body.user_id || 0));
+  if (!u) return back('err=' + encodeURIComponent('No account found for that user.'));
+  const r = plans.revokeTrial(u.id);
+  if (!r.ok) return back('err=' + encodeURIComponent(r.error));
+  return back('ok=' + encodeURIComponent(`Trial revoked for ${u.email}.`));
+}
+
+router.get('/admin3119Musa/pricing', pricingPage);
+router.post('/admin3119Musa/pricing/free-trial', grantTrial);
+router.post('/admin3119Musa/pricing/revoke-trial', revokeTrialRoute);
+
+router.get('/admin/pricing', requireAdmin, pricingPage);
+router.post('/admin/pricing/free-trial', requireAdmin, grantTrial);
+router.post('/admin/pricing/revoke-trial', requireAdmin, revokeTrialRoute);
+
 /* ---------------- Settings ---------------- */
 router.get('/admin3119Musa/settings', (req, res) => {
   const payments = db.prepare(
@@ -1563,8 +1629,63 @@ router.get('/admin3119Musa/notifications', (req, res) => {
   res.render('admin/notifications', {
     meta: { title: 'Notifications — FirmLedger Admin', description: '', robots: 'noindex,nofollow' },
     items, section: 'notifications',
-    ok: req.query.ok || '',
+    trashCount: notifications.getTrash(null).length,
+    ok: req.query.ok || '', err: req.query.err || '',
   });
+});
+
+/* ---- Admin's own archived notifications ---- */
+router.get('/admin3119Musa/notifications/trash', (req, res) => {
+  res.render('admin/notifications-trash', {
+    meta: { title: 'Archived notifications — FirmLedger Admin', description: '', robots: 'noindex,nofollow' },
+    section: 'notifications',
+    global: false,
+    items: notifications.getTrash(null),
+    daysLeft: notifications.daysLeft,
+    ok: req.query.ok || '', err: req.query.err || '',
+  });
+});
+
+/* ---- Moderation: every archived notification, all accounts ---- */
+router.get('/admin3119Musa/notifications/trash/global', (req, res) => {
+  res.render('admin/notifications-trash', {
+    meta: { title: 'All archived notifications — FirmLedger Admin', description: '', robots: 'noindex,nofollow' },
+    section: 'notifications',
+    global: true,
+    items: notifications.getGlobalTrash(),
+    daysLeft: notifications.daysLeft,
+    ok: req.query.ok || '', err: req.query.err || '',
+  });
+});
+
+router.post('/admin3119Musa/notifications/:id/archive', (req, res) => {
+  const r = notifications.archive(Number(req.params.id), null, req.body.duration);
+  res.redirect('/admin3119Musa/notifications?' + (r.ok
+    ? 'ok=' + encodeURIComponent(`Archived — it will be deleted automatically in ${r.days} day${r.days === 1 ? '' : 's'}.`)
+    : 'err=' + encodeURIComponent(r.error)));
+});
+
+router.post('/admin3119Musa/notifications/:id/restore', (req, res) => {
+  const r = notifications.restore(Number(req.params.id), null);
+  res.redirect('/admin3119Musa/notifications/trash?' + (r.ok
+    ? 'ok=' + encodeURIComponent('Notification restored to the console inbox.')
+    : 'err=' + encodeURIComponent(r.error)));
+});
+
+router.post('/admin3119Musa/notifications/:id/delete', (req, res) => {
+  const r = notifications.permanentDelete(Number(req.params.id), null);
+  const back = String(req.body.from || '') === 'trash' ? '/admin3119Musa/notifications/trash' : '/admin3119Musa/notifications';
+  res.redirect(back + '?' + (r.ok
+    ? 'ok=' + encodeURIComponent('Notification permanently deleted.')
+    : 'err=' + encodeURIComponent(r.error)));
+});
+
+/* Moderation delete — any archived notification, whoever owns it. */
+router.post('/admin3119Musa/notifications/:id/delete-any', (req, res) => {
+  const r = notifications.adminDeleteAny(Number(req.params.id));
+  res.redirect('/admin3119Musa/notifications/trash/global?' + (r.ok
+    ? 'ok=' + encodeURIComponent('Notification permanently deleted.')
+    : 'err=' + encodeURIComponent(r.error)));
 });
 
 router.post('/admin3119Musa/notifications/:id/read', (req, res) => {

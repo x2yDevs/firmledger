@@ -59,7 +59,10 @@ function attach(req, res, next) {
   req.userSession = userSess;
   req.adminSession = adminSess;
   req.user = userSess
-    ? db.prepare('SELECT id, email, name, role, created_at, suspended, plan, plan_expires_at FROM users WHERE id = ?').get(userSess.user_id)
+    ? db.prepare(`SELECT id, email, name, role, created_at, suspended, plan, plan_expires_at,
+                         subscription_status, trial_started_at, trial_expires_at, trial_days,
+                         provider, provider_id, avatar_url
+                    FROM users WHERE id = ?`).get(userSess.user_id)
     : null;
   if (req.user && req.user.suspended) {
     destroySession(userSess.token);

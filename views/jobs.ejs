@@ -56,7 +56,7 @@
           <article class="job-card">
             <div class="job-head">
               <% if (j.logo_url) { %>
-                <img class="job-logo" src="<%= j.logo_url %>" alt="" loading="lazy" width="46" height="46">
+                <img class="job-logo" src="<%= j.logo_url %>" alt="<%= j.company %> logo" loading="lazy" width="46" height="46">
               <% } else { %>
                 <span class="job-logo job-logo-fb"><%= (j.company || 'C').trim().slice(0,1).toUpperCase() %></span>
               <% } %>

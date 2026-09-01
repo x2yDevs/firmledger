@@ -31,26 +31,26 @@ function notifyAdmin(opts) {
 function unreadUser(userId) {
   if (!userId) return 0;
   return db.prepare(
-    "SELECT COUNT(*) c FROM notifications WHERE audience='user' AND user_id=? AND (read_at IS NULL OR read_at='')"
+    "SELECT COUNT(*) c FROM notifications WHERE audience='user' AND user_id=? AND deleted_at IS NULL AND (read_at IS NULL OR read_at='')"
   ).get(userId).c;
 }
 
 function unreadAdmin() {
   return db.prepare(
-    "SELECT COUNT(*) c FROM notifications WHERE audience='admin' AND (read_at IS NULL OR read_at='')"
+    "SELECT COUNT(*) c FROM notifications WHERE audience='admin' AND deleted_at IS NULL AND (read_at IS NULL OR read_at='')"
   ).get().c;
 }
 
 function listUser(userId, limit = 60) {
   return db.prepare(
-    `SELECT * FROM notifications WHERE audience='user' AND user_id=?
+    `SELECT * FROM notifications WHERE audience='user' AND user_id=? AND deleted_at IS NULL
      ORDER BY created_at DESC LIMIT ?`
   ).all(userId, limit);
 }
 
 function listAdmin(limit = 80) {
   return db.prepare(
-    `SELECT * FROM notifications WHERE audience='admin'
+    `SELECT * FROM notifications WHERE audience='admin' AND deleted_at IS NULL
      ORDER BY created_at DESC LIMIT ?`
   ).all(limit);
 }

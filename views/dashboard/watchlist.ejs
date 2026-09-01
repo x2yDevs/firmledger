@@ -38,7 +38,7 @@
               <tr>
                 <td>
                   <div style="display:flex;align-items:center;gap:10px">
-                    <% if (r.logo_url) { %><img src="<%= r.logo_url %>" alt="" width="32" height="32" style="border-radius:8px;border:1px solid var(--hair);object-fit:cover"><% } %>
+                    <% if (r.logo_url) { %><img src="<%= r.logo_url %>" alt="<%= r.name %> logo" width="32" height="32" style="border-radius:8px;border:1px solid var(--hair);object-fit:cover"><% } %>
                     <div>
                       <a href="/listing/<%= r.slug %>" style="font-weight:600;color:var(--ink)"><%= r.name %></a>
                       <% if (r.claimed) { %><span class="job-vtick" title="Verified owner" style="margin-left:6px"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><% } %>

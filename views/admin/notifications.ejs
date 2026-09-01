@@ -5,30 +5,54 @@
   <div class="container">
     <div class="section-head">
       <h2>Notifications</h2>
-      <% if (items && items.length) { %>
-      <form method="post" action="/admin3119Musa/notifications/read-all">
-        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-        <button class="btn btn-ghost btn-sm" type="submit">Mark all read</button>
-      </form>
-      <% } %>
+      <div class="notif-head-actions">
+        <a class="btn btn-ghost btn-sm" href="/admin3119Musa/notifications/trash">Archived<% if (typeof trashCount !== 'undefined' && trashCount) { %> (<%= trashCount %>)<% } %></a>
+        <a class="btn btn-ghost btn-sm" href="/admin3119Musa/notifications/trash/global">All users' archive</a>
+        <% if (items && items.length) { %>
+        <form method="post" action="/admin3119Musa/notifications/read-all">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <button class="btn btn-ghost btn-sm" type="submit">Mark all read</button>
+        </form>
+        <% } %>
+      </div>
     </div>
     <% if (typeof ok !== 'undefined' && ok) { %><div class="alert alert-ok"><%= ok %></div><% } %>
+    <% if (typeof err !== 'undefined' && err) { %><div class="alert alert-err"><%= err %></div><% } %>
     <% if (!items.length) { %>
       <p class="muted">Nothing waiting — new listings, claims, tickets and deletion requests will land here.</p>
     <% } else { %>
       <div class="notif-list">
         <% items.forEach(function (n) { const unread = !n.read_at; %>
-          <form method="post" action="/admin3119Musa/notifications/<%= n.id %>/read" class="notif-row<%= unread ? ' unread' : '' %>">
-            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-            <button type="submit">
-              <span class="notif-dot<%= unread ? ' on' : '' %>" aria-hidden="true"></span>
-              <span class="notif-copy">
-                <b><%= n.title %></b>
-                <% if (n.body) { %><span class="muted"><%= n.body %></span><% } %>
-                <small class="muted"><%= fmtDate(n.created_at) %><% if (n.kind) { %> · <%= n.kind %><% } %></small>
-              </span>
-            </button>
-          </form>
+          <div class="notif-item">
+            <form method="post" action="/admin3119Musa/notifications/<%= n.id %>/read" class="notif-row<%= unread ? ' unread' : '' %>">
+              <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+              <button type="submit">
+                <span class="notif-dot<%= unread ? ' on' : '' %>" aria-hidden="true"></span>
+                <span class="notif-copy">
+                  <b><%= n.title %></b>
+                  <% if (n.body) { %><span class="muted"><%= n.body %></span><% } %>
+                  <small class="muted"><%= fmtDate(n.created_at) %><% if (n.kind) { %> · <%= n.kind %><% } %></small>
+                </span>
+              </button>
+            </form>
+            <div class="notif-actions">
+              <span class="notif-actions-label">Archive:</span>
+              <form method="post" action="/admin3119Musa/notifications/<%= n.id %>/archive" class="inline">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                <input type="hidden" name="duration" value="1week">
+                <button class="btn btn-ghost btn-xs" type="submit" title="Move to trash — auto-deletes in 7 days">1 week</button>
+              </form>
+              <form method="post" action="/admin3119Musa/notifications/<%= n.id %>/archive" class="inline">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                <input type="hidden" name="duration" value="1month">
+                <button class="btn btn-ghost btn-xs" type="submit" title="Move to trash — auto-deletes in 30 days">1 month</button>
+              </form>
+              <form method="post" action="/admin3119Musa/notifications/<%= n.id %>/delete" class="inline" onsubmit="return confirm('Permanently delete this notification? This cannot be undone.');">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                <button class="btn btn-danger btn-xs" type="submit">Delete now</button>
+              </form>
+            </div>
+          </div>
         <% }) %>
       </div>
     <% } %>

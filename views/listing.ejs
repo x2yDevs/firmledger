@@ -256,7 +256,7 @@
         <div class="hscroll" role="region" aria-label="More listings in <%= l.category %>">
           <% related.forEach(function (r) { %>
           <a class="related-card hcard" href="/listing/<%= r.slug %>">
-            <% if (r.logo_url) { %><img class="avatar" style="width:36px;height:36px;font-size:13px" src="<%= r.logo_url %>" alt="" loading="lazy"><% } else { %><span class="avatar" style="width:36px;height:36px;font-size:13px"><%= initials(r.name) %></span><% } %>
+            <% if (r.logo_url) { %><img class="avatar" style="width:36px;height:36px;font-size:13px" src="<%= r.logo_url %>" alt="<%= r.name %> logo" loading="lazy"><% } else { %><span class="avatar" style="width:36px;height:36px;font-size:13px"><%= initials(r.name) %></span><% } %>
             <div><strong style="font-size:14px"><%= r.name %></strong>
               <p><%= truncate(r.tagline, 64) %></p>
             </div>
@@ -273,7 +273,7 @@
         <div class="hscroll" role="region" aria-label="Competitors of <%= l.name %>">
           <% competitors.forEach(function (c) { %>
           <a class="related-card hcard" href="/listing/<%= c.slug %>">
-            <% if (c.logo_url) { %><img class="avatar" style="width:36px;height:36px;font-size:13px" src="<%= c.logo_url %>" alt="" loading="lazy"><% } else { %><span class="avatar" style="width:36px;height:36px;font-size:13px"><%= initials(c.name) %></span><% } %>
+            <% if (c.logo_url) { %><img class="avatar" style="width:36px;height:36px;font-size:13px" src="<%= c.logo_url %>" alt="<%= c.name %> logo" loading="lazy"><% } else { %><span class="avatar" style="width:36px;height:36px;font-size:13px"><%= initials(c.name) %></span><% } %>
             <div><strong style="font-size:14px"><%= c.name %></strong>
               <p><%= truncate(c.tagline || '', 64) %></p>
               <p class="hcard-m"><% if (c.city || c.country) { %><%= [c.city, c.country].filter(Boolean).join(', ') %><% } %></p>
