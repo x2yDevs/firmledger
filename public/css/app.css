@@ -1696,3 +1696,109 @@ h2.h-display { font-size: clamp(1.9rem, 3.4vw, 2.7rem); }
 .foot-soc .social-ico { color: inherit; display: inline-flex; align-items: center; justify-content: center; }
 .foot-soc .social-ico svg { width: 15px; height: 15px; display: block; }
 .foot-soc:hover { background: var(--soft); }
+
+/* ================= r33: footer layout polish ================= */
+/* Keep the newsletter as one clear horizontal unit on desktop.  The copy and
+   form may shrink, but neither can force the band wider than its container. */
+.news-band .container { padding-block: clamp(22px, 3vw, 34px); }
+.news-inner {
+  width: 100%;
+  grid-template-columns: 46px minmax(0, 1fr) minmax(280px, 420px);
+  gap: clamp(18px, 2.6vw, 34px);
+  min-width: 0;
+}
+.news-copy,
+.news-form,
+.news-ok { min-width: 0; }
+.news-form { display: flex; align-items: center; flex-wrap: nowrap; }
+.news-form input[type="email"] { min-width: 0; flex: 1 1 auto; }
+.news-form .news-subscribe-btn { flex: 0 0 auto; }
+
+/* The quick destinations sit immediately under the digest and distribute evenly
+   across the available measure instead of bunching up in the middle. */
+.foot-top-in { display: block; padding-block: clamp(18px, 2.4vw, 26px); }
+.foot-quick {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  width: 100%;
+  gap: 10px clamp(10px, 1.5vw, 18px);
+  align-items: stretch;
+}
+.foot-quick a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  padding: 10px 12px;
+  text-align: center;
+}
+
+/* Footer columns use the full width without a horizontal scrollbar.  Long
+   labels wrap inside their own column, while the brand and social row remain
+   aligned with the same grid. */
+.foot-scroll-in {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.35fr) repeat(auto-fit, minmax(110px, 1fr));
+  gap: clamp(24px, 2.8vw, 38px);
+  overflow: visible;
+}
+.foot-scroll-in > * { min-width: 0; }
+.foot-scroll-in .foot-brand { flex: none; max-width: none; }
+.foot-col a { white-space: normal; overflow-wrap: anywhere; }
+.foot-col ul { gap: 10px; }
+
+/* Slightly larger touch targets for the social row, with restrained icon
+   sizing so the footer still reads as a professional brand surface. */
+.foot-socials { gap: 8px; margin-top: 22px; }
+.foot-soc {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  flex: 0 0 40px;
+}
+.foot-soc .social-ico svg { width: 18px; height: 18px; }
+
+/* At tablet width, give each footer area a predictable two-column layout;
+   the brand gets a full row so its description and social icons never crowd
+   the navigation links. */
+@media (max-width: 900px) {
+  .news-inner { grid-template-columns: auto minmax(0, 1fr); }
+  .news-form, .news-ok { grid-column: 1 / -1; max-width: 560px; }
+  .foot-quick { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .foot-scroll-in { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px 24px; }
+  .foot-scroll-in .foot-brand { grid-column: 1 / -1; }
+}
+@media (max-width: 640px) {
+  .news-inner { grid-template-columns: 1fr; gap: 16px; }
+  .foot-quick { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .foot-scroll-in { grid-template-columns: 1fr; gap: 28px; }
+  .foot-scroll-in .foot-brand { grid-column: auto; }
+}
+@media (max-width: 360px) {
+  .foot-quick { grid-template-columns: 1fr; }
+}
+
+/* Advertising and product feature cards keep a balanced left-to-right row on
+   normal desktop widths, then step down before the copy becomes cramped. */
+.feature-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(16px, 2vw, 24px);
+}
+@media (min-width: 641px) and (max-width: 900px) {
+  .feature-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .feature-grid { grid-template-columns: 1fr; }
+}
+
+/* Keep the compact newsletter controls stacked rather than allowing the
+   nowrap desktop form to create a narrow-screen overflow. */
+@media (max-width: 480px) {
+  .news-form { flex-wrap: wrap; }
+  .news-form input[type="email"],
+  .news-form .news-subscribe-btn {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+}
+.feature-grid > * { min-width: 0; }
