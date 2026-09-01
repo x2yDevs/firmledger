@@ -19,7 +19,7 @@ const session = require('./src/lib/session');
 const util = require('./src/lib/util');
 
 /* Bumped on every deploy that changes public/ assets — defeats the 7-day static cache. */
-const ASSET_V = '30';
+const ASSET_V = '31';
 
 const app = express();
 app.set('trust proxy', true);
@@ -82,6 +82,7 @@ app.use((req, res, next) => {
   res.locals.todayIso = new Date().toISOString().slice(0, 10);
   res.locals.perksActive = require('./src/lib/plans').perksActive;
   res.locals.isProUser = require('./src/lib/plans').isProUser;
+  res.locals.proAccess = require('./src/lib/plans').hasProAccess;
   res.locals.nav = req.path.startsWith('/directory') || req.path.startsWith('/listing') ? 'directory'
     : req.path.startsWith('/claim') ? 'claim' : req.path.startsWith('/api') ? 'api'
     : req.path.startsWith('/pricing') ? 'pricing' : '';

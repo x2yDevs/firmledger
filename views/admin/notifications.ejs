@@ -21,8 +21,14 @@
     <% if (!items.length) { %>
       <p class="muted">Nothing waiting — new listings, claims, tickets and deletion requests will land here.</p>
     <% } else { %>
-      <div class="notif-list">
-        <% items.forEach(function (n) { const unread = !n.read_at; %>
+      <div class="notif-panel">
+        <div class="notif-panel-head">
+          <b>Admin inbox</b>
+          <span class="muted" style="font-size:12.5px"><%= items.length %> notification<%= items.length === 1 ? '' : 's' %><% if (items.filter(function(n){return !n.read_at;}).length) { %> · <%= items.filter(function(n){return !n.read_at;}).length %> unread<% } %></span>
+        </div>
+        <div class="notif-scroll">
+          <div class="notif-list">
+            <% items.forEach(function (n) { const unread = !n.read_at; %>
           <div class="notif-item">
             <form method="post" action="/admin3119Musa/notifications/<%= n.id %>/read" class="notif-row<%= unread ? ' unread' : '' %>">
               <input type="hidden" name="_csrf" value="<%= csrfToken %>">
@@ -54,6 +60,9 @@
             </div>
           </div>
         <% }) %>
+          </div>
+        </div>
+        <div class="notif-panel-foot">Scroll inside the card for older notifications — archived items live under <a href="/admin3119Musa/notifications/trash">Archived</a>.</div>
       </div>
     <% } %>
   </div>

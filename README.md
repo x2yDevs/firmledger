@@ -686,5 +686,5 @@ No platform can guarantee a fixed indexing deadline — crawling is the search e
 - `listing_events` → company timelines (done — Pro feature, rendered publicly) → can power change alerts later
 - `relationships` → the graph (done) → API `/:slug/relationships` endpoint is a read away
 - `listings.plan` / `plan_expires_at` + `payments` ledger → Pro subscriptions (done) → renewal reminders / monthly analytics are queries away
-- `waitlist` → API launch list
+- `waitlist` → early-access list (the developer API itself is live — Pro accounts get keys, docs and a playground)
 - Field-level `sources` (JSON array) → provenance shown publicly (admin-editable today)

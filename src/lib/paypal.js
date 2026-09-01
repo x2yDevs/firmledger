@@ -22,6 +22,9 @@ function configured() {
   return Boolean(clientId() && clientSecret());
 }
 function base() {
+  /* Test/integration override — point the client at a mock Orders API
+     (never set in production; sandbox/live below are the real endpoints). */
+  if (process.env.PAYPAL_API_BASE) return String(process.env.PAYPAL_API_BASE).replace(/\/+$/, '');
   return mode() === 'live' ? 'https://api-m.paypal.com' : 'https://api-m.sandbox.paypal.com';
 }
 
@@ -34,10 +37,15 @@ async function http(path, opts = {}) {
   return { ok: res.ok, data, http: res.status };
 }
 
-/* OAuth2 client-credential token (cached briefly per process). */
-let _token = { value: '', expiresAt: 0 };
+/* OAuth2 client-credential token (cached briefly per process, invalidated
+   automatically when the credentials or mode change — e.g. after an admin
+   rotates keys in Settings). */
+let _token = { value: '', expiresAt: 0, key: '' };
+function credKey() {
+  return `${mode()}:${clientId()}`;
+}
 async function accessToken() {
-  if (_token.value && Date.now() < _token.expiresAt - 30000) return _token.value;
+  if (_token.value && _token.key === credKey() && Date.now() < _token.expiresAt - 30000) return _token.value;
   const res = await fetch(base() + '/v1/oauth2/token', {
     method: 'POST',
     headers: {
@@ -53,7 +61,7 @@ async function accessToken() {
     e.statusCode = res.status;
     throw e;
   }
-  _token = { value: data.access_token, expiresAt: Date.now() + (data.expires_in || 300) * 1000 };
+  _token = { value: data.access_token, expiresAt: Date.now() + (data.expires_in || 300) * 1000, key: credKey() };
   return _token.value;
 }
 
@@ -98,7 +106,10 @@ async function createOrder({ reference, plan, returnUrl, cancelUrl, payerEmail =
     }),
   });
   if (!r.ok || !r.data || !r.data.id) {
-    return { ok: false, id: '', approveUrl: '', error: (r.data && (r.data.message || r.data.name)) || `HTTP ${r.http}` };
+    const d = r.data || {};
+    const detail = Array.isArray(d.details) && d.details[0]
+      ? ` — ${d.details[0].issue || ''} ${d.details[0].description || ''}`.trimEnd() : '';
+    return { ok: false, id: '', approveUrl: '', error: `${d.message || d.name || `HTTP ${r.http}`}${detail}` };
   }
   const approveUrl = (r.data.links || []).filter((l) => l.rel === 'approve').map((l) => l.href)[0] || '';
   return { ok: true, id: r.data.id, approveUrl, error: '' };
@@ -107,10 +118,16 @@ async function createOrder({ reference, plan, returnUrl, cancelUrl, payerEmail =
 /* Capture an approved order, then verify the money server-side
    (status COMPLETED + exact amount + currency + our reference). */
 async function captureOrder(orderId, { reference, plan, amountCents }) {
-  const r = await authed(`/v2/checkout/orders/${encodeURIComponent(orderId)}/capture`, {
+  let r = await authed(`/v2/checkout/orders/${encodeURIComponent(orderId)}/capture`, {
     method: 'POST',
     body: JSON.stringify({}),
   });
+  /* Double-visit safety: if this order was already captured (user refreshed
+     the return page), read it back and verify instead of failing. */
+  const issue = r.data && Array.isArray(r.data.details) && r.data.details[0] && r.data.details[0].issue;
+  if (!r.ok && issue === 'ORDER_ALREADY_CAPTURED') {
+    r = await authed(`/v2/checkout/orders/${encodeURIComponent(orderId)}`);
+  }
   const d = r.data || {};
   if (!r.ok) {
     return { ok: false, reason: d.message || d.name || `HTTP ${r.http}`, channel: 'paypal', payer: {} };

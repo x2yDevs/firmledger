@@ -20,7 +20,7 @@ const crypto = require('crypto');
 const apikeys = require('../lib/apikeys');
 const lim = require('../lib/apilimit');
 const svc = require('../lib/apilistings');
-const { isProUser } = require('../lib/plans');
+const { hasProAccess } = require('../lib/plans');
 const { siteUrl } = require('../lib/util');
 
 const router = express.Router();
@@ -85,7 +85,7 @@ router.use((req, res, next) => {
   if (!hit.user || hit.user.suspended) {
     return lim.apiError(res, 403, 'account_suspended', 'The account behind this API key is suspended. Contact support.');
   }
-  if (!isProUser(hit.user)) {
+  if (!hasProAccess(hit.user)) {
     return lim.apiError(res, 403, 'pro_required', `API access is a FirmLedger Pro feature. Renew or upgrade at ${siteUrl('/pricing')} — your key works again the moment Pro is active.`, { details: { upgrade_url: siteUrl('/pricing') } });
   }
 

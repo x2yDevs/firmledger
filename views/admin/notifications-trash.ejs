@@ -56,7 +56,7 @@
         </table>
       </div>
     <% } else { %>
-      <div class="notif-list">
+      <div class="notif-panel"><div class="notif-scroll"><div class="notif-list">
         <% items.forEach(function (n) { const left = daysLeft(n); %>
           <div class="notif-item">
             <div class="notif-row notif-row-static">
@@ -85,7 +85,7 @@
             </div>
           </div>
         <% }) %>
-      </div>
+      </div></div></div>
     <% } %>
   </div>
 </section>

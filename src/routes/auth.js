@@ -10,6 +10,7 @@ const {
 
 const spam = require('../lib/spam');
 const oauth = require('../lib/oauth');
+const trialmail = require('../lib/trialmail');
 oauth.register();
 
 const router = express.Router();
@@ -126,11 +127,14 @@ router.post('/register/verify', (req, res) => {
     alertTone: 'ok',
     paragraphs: [
       `From here you can submit a company listing, claim your business record, and upgrade to FirmLedger Pro whenever you're ready. Security-sensitive changes are confirmed to <b>${escBuzz(email)}</b> automatically.`,
+      `Your account also includes a <b>free Pro trial</b> — a separate email with the activation link is on its way, or head straight to the <a href="${siteUrl('/pricing#free-trial')}" style="color:#1D4ED8;">pricing page</a> to switch it on.`,
     ],
     cta: { label: 'Open your dashboard', url: siteUrl('/dashboard') },
     note: `Tip: add your first listing at <a href="${siteUrl('/dashboard/listings/new')}" style="color:#1D4ED8;">/dashboard/listings/new</a>.`,
   }).catch(() => {});
-  res.redirect('/dashboard?ok=' + encodeURIComponent('Email verified — welcome to FirmLedger, your account is ready.'));
+  /* Free-trial invite — activated by the member on /pricing. */
+  trialmail.sendTrialInvite({ id: info.lastInsertRowid, email, name: row.name }).catch(() => {});
+  res.redirect('/dashboard?ok=' + encodeURIComponent('Email verified — welcome to FirmLedger. Check your inbox: your free Pro trial is waiting on the pricing page.'));
 });
 
 router.post('/register/verify/resend', (req, res) => {
@@ -220,6 +224,26 @@ function oauthCallback(strategy, label) {
       }
       const sess = createSession(user.id, 'user');
       setSessionCookie(req, res, USER_COOKIE, sess.token);
+      if (info && info.created) {
+        /* Brand-new account via Google/LinkedIn — same welcome as email
+           sign-up: a free-trial invite the member activates on /pricing. */
+        sendBranded(user.email, 'Welcome to FirmLedger', {
+          kicker: 'Account created',
+          title: `Welcome, ${escBuzz(user.name || user.email)}`,
+          preheader: `Your FirmLedger account is ready — created with ${label}.`,
+          alert: `Your account was created with <b>${escBuzz(label)}</b> sign-in and is live.`,
+          alertTone: 'ok',
+          paragraphs: [
+            `From here you can submit a company listing, claim your business record, and upgrade to FirmLedger Pro whenever you're ready.`,
+            `Your account also includes a <b>free Pro trial</b> — a separate email with the activation link is on its way, or head straight to the <a href="${siteUrl('/pricing#free-trial')}" style="color:#1D4ED8;">pricing page</a> to switch it on.`,
+          ],
+          cta: { label: 'Open your dashboard', url: siteUrl('/dashboard') },
+          note: `Tip: add your first listing at <a href="${siteUrl('/dashboard/listings/new')}" style="color:#1D4ED8;">/dashboard/listings/new</a>.`,
+        }).catch(() => {});
+        trialmail.sendTrialInvite(user).catch(() => {});
+        return res.redirect('/dashboard?ok=' + encodeURIComponent(
+          `Welcome to FirmLedger — your account was created with ${label}. Check your inbox: your free Pro trial is waiting on the pricing page.`));
+      }
       return res.redirect(dest);
     })(req, res, nextFn);
   };

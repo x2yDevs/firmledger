@@ -58,7 +58,7 @@ function revokeKey(id, userId) {
 function lookup(raw) {
   const key = db.prepare('SELECT * FROM api_keys WHERE key_hash=?').get(hashKey(raw));
   if (!key) return null;
-  const user = db.prepare('SELECT id, email, name, plan, plan_expires_at, suspended FROM users WHERE id=?').get(key.user_id);
+  const user = db.prepare('SELECT id, email, name, plan, plan_expires_at, trial_expires_at, subscription_status, suspended FROM users WHERE id=?').get(key.user_id);
   return { key, user };
 }
 

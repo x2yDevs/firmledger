@@ -243,10 +243,11 @@
     <div class="side-card center-col" style="max-width:640px">
       <div class="upgrade-status">
         <div class="us-title">
-          <b><% if (accountPro) { %>FirmLedger Pro<span class="pill pill-pro" style="margin-left:8px">ACTIVE</span><% } else { %>Free plan<span class="pill pill-free" style="margin-left:8px">CURRENT</span><% } %></b>
+          <b><% if (accountPro) { %>FirmLedger Pro<span class="pill pill-pro" style="margin-left:8px"><%= (typeof isTrialUser !== 'undefined' && isTrialUser && !isProUser(user)) ? 'FREE TRIAL' : 'ACTIVE' %></span><% } else { %>Free plan<span class="pill pill-free" style="margin-left:8px">CURRENT</span><% } %></b>
           <span class="muted" style="font-size:13px">
-            <% if (accountPro && accountExpires) { %>Active until <b><%= accountExpires %></b> · paying again extends it.<% } %>
-            <% if (accountPro && !accountExpires) { %>Lifetime — admin-granted.<% } %>
+            <% if (typeof isTrialUser !== 'undefined' && isTrialUser && !isProUser(user)) { %>Free trial — <b><%= trialDaysRemaining %> day<%= trialDaysRemaining === 1 ? '' : 's' %> left</b> (until <%= String(trialExpiresAt).slice(0, 10) %>). Upgrade to keep Pro when it ends.<% } %>
+            <% if (accountPro && isProUser(user) && accountExpires) { %>Active until <b><%= accountExpires %></b> · paying again extends it.<% } %>
+            <% if (accountPro && isProUser(user) && !accountExpires) { %>Lifetime — admin-granted.<% } %>
             <% if (!accountPro) { %>Upgrade to unlock every listing's full details — and give your own listings the blue tick, homepage Featured slot and premium badge.<% } %>
           </span>
         </div>

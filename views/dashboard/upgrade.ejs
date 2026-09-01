@@ -19,7 +19,8 @@
       <div class="us-title">
         <b><%= user.name %></b>
         <span class="muted" style="font-size:13px">
-          Current plan: <b><%= isPro ? 'FirmLedger Pro' : 'Free' %></b>
+          Current plan: <b><%= isPro ? 'FirmLedger Pro' : ((typeof isTrialUser !== 'undefined' && isTrialUser) ? 'Pro — free trial' : 'Free') %></b>
+          <% if (!isPro && typeof isTrialUser !== 'undefined' && isTrialUser) { %> · <b><%= trialDaysRemaining %> day<%= trialDaysRemaining === 1 ? '' : 's' %> left</b> (until <%= String(trialExpiresAt).slice(0, 10) %>) — pay below to keep Pro after the trial<% } %>
           <% if (isPro && planExpires) { %> · active until <b><%= planExpires %></b> — paying again extends it<% } %>
           <% if (isPro && !planExpires) { %> · lifetime<% } %>
         </span>

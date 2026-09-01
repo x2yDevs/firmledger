@@ -3,12 +3,25 @@ const crypto = require('crypto');
 const { db } = require('../db');
 const { requireUser, validCsrf } = require('../lib/session');
 const paypal = require('../lib/paypal');
-const { allPlans, getPlan, isProUser, grantUserPro } = require('../lib/plans');
+const {
+  allPlans, getPlan, isProUser, grantUserPro,
+  startTrial, trialEligible, trialActive, trialDaysRemaining, TRIAL_SIGNUP_DAYS,
+} = require('../lib/plans');
 const util = require('../lib/util');
 const { sendMail, sendBranded } = require('../lib/mailer');
+const trialmail = require('../lib/trialmail');
+const notify = require('../lib/notify');
 const promos = require('../lib/promos');
 
 const router = express.Router();
+
+/* Absolute URL PayPal redirects back to. When BASE_URL is a real public
+   origin we use it; otherwise (dev, staging, previews) we derive the origin
+   from the request so the round-trip works wherever the app is running. */
+function returnBase(req, path) {
+  if (util.isPublicBaseUrl()) return util.siteUrl(path);
+  return `${req.protocol}://${req.get('host')}${path}`;
+}
 
 /* ---------------- Upgrade page — pick an offer, pay with PayPal ---------------- */
 router.get('/dashboard/upgrade', requireUser, (req, res) => {
@@ -84,8 +97,8 @@ router.post('/dashboard/upgrade', requireUser, async (req, res) => {
   try {
     const order = await paypal.createOrder({
       reference, plan, amountCents: amount,
-      returnUrl: util.siteUrl(`/billing/callback?ref=${encodeURIComponent(reference)}`),
-      cancelUrl: util.siteUrl(`/billing/cancel?ref=${encodeURIComponent(reference)}`),
+      returnUrl: returnBase(req, `/billing/callback?ref=${encodeURIComponent(reference)}`),
+      cancelUrl: returnBase(req, `/billing/cancel?ref=${encodeURIComponent(reference)}`),
       payerEmail: req.user.email,
     });
     if (!order.ok) {
@@ -103,14 +116,19 @@ router.post('/dashboard/upgrade', requireUser, async (req, res) => {
   }
 });
 
-/* ---------------- Return from PayPal — user cancelled (no charge) ---------------- */
-router.get('/billing/cancel', requireUser, (req, res) => {
+/* ---------------- Return from PayPal — user cancelled (no charge) ----------------
+   No login required: the session cookie may not survive the round trip to
+   PayPal, and this route only flips an 'initialized' record to 'cancelled'. */
+router.get('/billing/cancel', (req, res) => {
   const reference = String(req.query.ref || '').trim();
   const payment = reference && db.prepare('SELECT * FROM payments WHERE reference = ?').get(reference);
-  if (payment && payment.user_id === req.user.id && payment.status === 'initialized') {
+  if (payment && (!req.user || payment.user_id === req.user.id) && payment.status === 'initialized') {
     db.prepare("UPDATE payments SET status = 'cancelled' WHERE reference = ?").run(reference);
     const plan = getPlan(payment.plan_id);
-    sendBranded(req.user.email, 'Checkout cancelled — no charge was made', {
+    const buyer = db.prepare('SELECT * FROM users WHERE id = ?').get(payment.user_id);
+    const to = (buyer && buyer.email) || payment.email;
+    if (to) {
+      sendBranded(to, 'Checkout cancelled — no charge was made', {
       kicker: 'Checkout update',
       title: 'Your upgrade checkout was cancelled',
       preheader: 'No charge was made — you can finish upgrading whenever you\'re ready.',
@@ -121,13 +139,17 @@ router.get('/billing/cancel', requireUser, (req, res) => {
       ],
       cta: { label: 'Return to upgrade', url: util.siteUrl('/dashboard/upgrade') },
       note: `Reference <b>${util.escHtml(reference)}</b> — quote it if anything looks wrong. Questions? <a href="mailto:billing@firmledger.co.ke" style="color:#1D4ED8;">billing@firmledger.co.ke</a>`,
-    }).catch(() => {});
+      }).catch(() => {});
+    }
   }
   res.redirect('/dashboard/upgrade?err=' + encodeURIComponent('Checkout cancelled — no charge was made.'));
 });
 
-/* ---------------- Return from PayPal — capture + verify, server-side ---------------- */
-router.get('/billing/callback', requireUser, async (req, res) => {
+/* ---------------- Return from PayPal — capture + verify, server-side ----------------
+   No login required: the account is resolved from our own payment record and
+   the money is verified against PayPal (status/amount/currency/reference), so
+   a session cookie that didn't survive the redirect can never lose a payment. */
+router.get('/billing/callback', async (req, res) => {
   const fail = (m) => res.redirect('/dashboard/upgrade?err=' + encodeURIComponent(m));
   const reference = String(req.query.ref || '').trim();
   const orderId = String(req.query.token || '').trim(); // PayPal returns ?token=<ORDER-ID>
@@ -135,7 +157,9 @@ router.get('/billing/callback', requireUser, async (req, res) => {
 
   const payment = db.prepare('SELECT * FROM payments WHERE reference = ?').get(reference);
   if (!payment) return fail('Unknown payment reference.');
-  if (payment.user_id !== req.user.id) return fail('This payment belongs to a different account.');
+  if (req.user && payment.user_id !== req.user.id) return fail('This payment belongs to a different account.');
+  const buyer = db.prepare('SELECT * FROM users WHERE id = ?').get(payment.user_id);
+  if (!buyer) return fail('The account behind this payment no longer exists — contact support quoting reference ' + reference + '.');
   if (payment.order_id && payment.order_id !== orderId) return fail('Order mismatch — payment reference does not match PayPal.');
   if (payment.status === 'success') {
     return res.redirect('/dashboard/upgrade?okmsg=' + encodeURIComponent('This payment was already applied to your account.'));
@@ -154,13 +178,19 @@ router.get('/billing/callback', requireUser, async (req, res) => {
     db.prepare("UPDATE payments SET status = 'success', channel = ?, paid_at = ?, order_id = ? WHERE reference = ?")
       .run(cap.channel || 'paypal', cap.paidAt || new Date().toISOString(), orderId, reference);
     if (payment.promo_id) {
-      try { promos.redeem(req.user.id, payment.promo_id, payment.id); } catch { /* already redeemed */ }
+      try { promos.redeem(buyer.id, payment.promo_id, payment.id); } catch { /* already redeemed */ }
     }
-    const granted = grantUserPro(req.user.id, payment.duration_days || plan.duration_days);
+    const granted = grantUserPro(buyer.id, payment.duration_days || plan.duration_days);
 
     if (granted) {
-      const till = granted.expiry.toISOString().slice(0, 10);
-      sendBranded(cap.payer.email || payment.email || req.user.email, `Payment receipt — FirmLedger Pro (${plan.name})`, {
+      const till = granted.expiry ? granted.expiry.toISOString().slice(0, 10) : '';
+      notify.notifyUser(buyer.id, {
+        kind: 'billing',
+        title: 'Payment confirmed — FirmLedger Pro is active',
+        body: `${plan.name} (${plan.duration_days} days) is live on your account${till ? ` until ${till}` : ''}. Reference ${reference}.`,
+        url: '/dashboard/upgrade',
+      });
+      sendBranded(cap.payer.email || payment.email || buyer.email, `Payment receipt — FirmLedger Pro (${plan.name})`, {
         kicker: 'Payment receipt',
         title: `Thank you${cap.payer.name ? `, ${util.escHtml(cap.payer.name)}` : ''} — Pro is active`,
         preheader: `Your FirmLedger Pro payment was confirmed.`,
@@ -175,10 +205,43 @@ router.get('/billing/callback', requireUser, async (req, res) => {
       }).catch(() => {});
     }
     return res.redirect('/dashboard/upgrade?okmsg=' + encodeURIComponent(
-      `Payment confirmed — FirmLedger Pro is active on your account${granted ? ` until ${granted.expiry.toISOString().slice(0, 10)}` : ''}.`));
+      `Payment confirmed — FirmLedger Pro is active on your account${granted && granted.expiry ? ` until ${granted.expiry.toISOString().slice(0, 10)}` : ''}.`));
   } catch (e) {
+    console.error('[billing] capture failed:', e.message);
     return fail('PayPal could not verify the payment just now. If you were charged, contact support quoting reference ' + reference + '.');
   }
+});
+
+/* ================= Self-serve free trial (activated on /pricing) =================
+   Every new account (email, Google or LinkedIn) receives an email inviting it
+   to activate a free Pro trial. The button lives on /pricing — one click, no
+   payment details, and the trial is REAL Pro access until it expires. */
+router.post('/pricing/free-trial', requireUser, (req, res) => {
+  if (!validCsrf(req)) return res.status(403).redirect('/pricing#free-trial');
+  const u = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+  if (trialActive(u)) {
+    return res.redirect('/pricing?trial_ok=' + encodeURIComponent(
+      `Your free trial is already running — ${trialDaysRemaining(u)} day(s) left.`) + '#free-trial');
+  }
+  if (!trialEligible(u)) {
+    return res.redirect('/pricing?trial_err=' + encodeURIComponent(
+      isProUser(u)
+        ? 'You already have an active Pro subscription — no trial needed.'
+        : 'Your account has already used its free trial. Upgrade to keep Pro access.') + '#free-trial');
+  }
+  const r = startTrial(u.id, TRIAL_SIGNUP_DAYS);
+  if (!r.ok) {
+    return res.redirect('/pricing?trial_err=' + encodeURIComponent(r.error || 'Could not start the trial — please try again.') + '#free-trial');
+  }
+  notify.notifyUser(u.id, {
+    kind: 'billing',
+    title: `Your ${r.days}-day FirmLedger Pro trial is active`,
+    body: `Full Pro access until ${String(r.expiresAt).slice(0, 10)} — every listing's details, the verified tick, Featured placement and the developer API.`,
+    url: '/dashboard',
+  });
+  trialmail.sendTrialActivated(u, { days: r.days, expiresAt: r.expiresAt }).catch(() => {});
+  return res.redirect('/pricing?trial_ok=' + encodeURIComponent(
+    `Your ${r.days}-day free trial is active — full Pro access until ${String(r.expiresAt).slice(0, 10)}. Enjoy!`) + '#free-trial');
 });
 
 module.exports = router;
