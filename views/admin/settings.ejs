@@ -53,7 +53,9 @@
   <% if (payments && payments.length) { %>
   <div class="form-card" style="margin-top:24px">
     <h3 class="form-section">Recent Pro payments</h3>
-    <div class="table-wrap">
+    <p class="muted" style="margin:0 0 10px;font-size:13px">Last <%= payments.length %> payments — the list scrolls inside this card.</p>
+    <div class="scroll-table">
+      <div class="table-wrap">
       <table class="table">
         <thead><tr><th>Reference</th><th>Plan</th><th>Amount</th><th>Status</th><th>Channel</th><th>Date</th></tr></thead>
         <tbody>
@@ -69,6 +71,7 @@
           <% }) %>
         </tbody>
       </table>
+      </div>
     </div>
   </div>
   <% } %>

@@ -37,16 +37,17 @@ function isProListingActive(listing, now = new Date()) {
 }
 
 /* Perks render on the listing when EITHER the listing boost is pro or the
-   owner account has an active Pro subscription. */
+   owner account has an active Pro subscription (paid or free trial). */
 function perksActive(listing, now = new Date()) {
   if (isProListingActive(listing, now)) return true;
   if (!listing || !listing.owner_user_id) return false;
-  const u = db.prepare('SELECT plan, plan_expires_at FROM users WHERE id=?').get(listing.owner_user_id);
-  return active(u && u.plan, u && u.plan_expires_at, now);
+  const u = db.prepare('SELECT plan, plan_expires_at, trial_expires_at FROM users WHERE id=?').get(listing.owner_user_id);
+  return active(u && u.plan, u && u.plan_expires_at, now) || trialActive(u, now);
 }
 
-/* SQL fragment (alias l/u) used where a JOIN users is possible. */
-const PRO_USER_SQL = "(u.plan='pro' AND (u.plan_expires_at='' OR u.plan_expires_at IS NULL OR u.plan_expires_at >= date('now')))";
+/* SQL fragment (alias l/u) used where a JOIN users is possible.
+   An active free trial counts exactly like a paid Pro subscription. */
+const PRO_USER_SQL = "((u.plan='pro' AND (u.plan_expires_at='' OR u.plan_expires_at IS NULL OR u.plan_expires_at >= date('now'))) OR (u.trial_expires_at IS NOT NULL AND u.trial_expires_at > datetime('now')))";
 const PRO_LISTING_SQL = "(l.plan='pro' AND (l.plan_expires_at='' OR l.plan_expires_at IS NULL OR l.plan_expires_at >= date('now')))";
 
 /* Grant a plan duration to a user, stacking on top of unexpired time. */
@@ -54,19 +55,15 @@ function grantUserPro(userId, durationDays) {
   const u = db.prepare('SELECT id, plan, plan_expires_at FROM users WHERE id = ?').get(userId);
   if (!u) return null;
   if (durationDays === null) {           // lifetime grant
-    db.prepare("UPDATE users SET plan='pro', plan_expires_at='' WHERE id=?").run(u.id);
-    startTrial(u.id, TRIAL_ON_UPGRADE_DAYS, { onlyIfNone: true });
+    db.prepare("UPDATE users SET plan='pro', plan_expires_at='', subscription_status='active' WHERE id=?").run(u.id);
     return { user: u, expiry: null };
   }
   const now = new Date();
   const base = active(u.plan, u.plan_expires_at, now) && u.plan_expires_at
     ? new Date(Math.max(new Date(u.plan_expires_at).getTime(), now.getTime())) : now;
   const expiry = new Date(base.getTime() + Number(durationDays) * 24 * 3600 * 1000);
-  db.prepare('UPDATE users SET plan=?, plan_expires_at=? WHERE id=?')
+  db.prepare("UPDATE users SET plan=?, plan_expires_at=?, subscription_status='active' WHERE id=?")
     .run('pro', expiry.toISOString().slice(0, 10), u.id);
-  /* Going Pro always opens a 30-day free trial (FirmLedger policy) — an
-     already-running trial is left alone so a renewal can't shorten it. */
-  startTrial(u.id, TRIAL_ON_UPGRADE_DAYS, { onlyIfNone: true });
   return { user: u, expiry };
 }
 
@@ -76,19 +73,24 @@ function revokeUserPro(userId) {
 }
 
 /* ============================================================================
- * Free trials
+ * Free trials — REAL Pro access, time-boxed.
  *
  * Two triggers:
- *   A) automatic — grantUserPro() opens a 30-day trial the moment a user
- *      upgrades to a paid subscription (PayPal capture or an admin grant);
+ *   A) self-serve — every new account (email, Google or LinkedIn sign-up) is
+ *      invited by email to activate its own free trial on /pricing;
  *   B) manual — Admin → Pricing grants 1–90 days to any email address.
+ *
+ * While trial_expires_at is in the future the account has FULL Pro access:
+ * hasProAccess() is true, canViewFull() opens every listing, PRO_USER_SQL
+ * matches (tick / Featured / gold badge on owned listings) and the developer
+ * API accepts the account's keys. Nothing about it is a demo.
  *
  * Columns (migrations/2026-09-01-user-trials.sql):
  *   trial_started_at, trial_expires_at, trial_days, subscription_status
  * subscription_status: 'trialing' while the trial runs, then 'active' if the
  * account still holds paid Pro, otherwise 'free'.
  * ==========================================================================*/
-const TRIAL_ON_UPGRADE_DAYS = 30;   // automatic trial when a user goes Pro
+const TRIAL_SIGNUP_DAYS = 14;       // self-serve trial for new accounts (activated on /pricing)
 const TRIAL_DEFAULT_DAYS = 14;      // default in the admin grant form
 const TRIAL_MAX_DAYS = 90;
 
@@ -111,6 +113,24 @@ function trialDaysRemaining(user, now = new Date()) {
   if (!trialActive(user, now)) return 0;
   const exp = parseSqlDate(user.trial_expires_at);
   return Math.max(0, Math.ceil((exp.getTime() - now.getTime()) / 864e5));
+}
+
+/**
+ * REAL Pro access — paid subscription OR a running free trial.
+ * This is the single gate every Pro feature checks.
+ */
+function hasProAccess(user, now = new Date()) {
+  return isProUser(user, now) || trialActive(user, now);
+}
+
+/**
+ * Can this account still activate the self-serve free trial?
+ * One trial per account, and paid Pro members don't need one.
+ */
+function trialEligible(user, now = new Date()) {
+  if (!user) return false;
+  if (user.trial_started_at || user.trial_expires_at) return false; // already used (or running)
+  return !isProUser(user, now);
 }
 
 /**
@@ -183,6 +203,7 @@ function trialMiddleware(req, res, next) {
   res.locals.trialDaysRemaining = 0;
   res.locals.trialExpiresAt = '';
   res.locals.subscriptionStatus = 'free';
+  res.locals.hasProAccess = false;
   const u = req.user;
   if (!u) return next();
   try {
@@ -197,26 +218,28 @@ function trialMiddleware(req, res, next) {
     res.locals.trialDaysRemaining = isTrial ? trialDaysRemaining(u) : 0;
     res.locals.trialExpiresAt = isTrial ? u.trial_expires_at : '';
     res.locals.subscriptionStatus = statusOf(u);
+    res.locals.hasProAccess = hasProAccess(u);
     req.isTrialUser = isTrial;
   } catch { /* never block a request on trial bookkeeping */ }
   next();
 }
 
-/* Viewing full detail scope — guests see basic profile; Pro members see all.
-   Owners/admins always see their own listing's full story. */
+/* Viewing full detail scope — guests see basic profile; Pro members (paid or
+   on a free trial) see all. Owners/admins always see their own listing's full
+   story. */
 function canViewFull({ user, admin, listing }) {
   if (admin) return true;
   if (user && listing && listing.owner_user_id === user.id) return true;
-  return isProUser(user);
+  return hasProAccess(user);
 }
 
 module.exports = {
   allPlans, getPlan, active,
-  isProUser, isProListingActive, perksActive,
+  isProUser, isProListingActive, perksActive, hasProAccess,
   PRO_USER_SQL, PRO_LISTING_SQL,
   grantUserPro, revokeUserPro, canViewFull,
   /* trials */
-  TRIAL_ON_UPGRADE_DAYS, TRIAL_DEFAULT_DAYS, TRIAL_MAX_DAYS,
-  startTrial, revokeTrial, trialActive, trialDaysRemaining,
+  TRIAL_SIGNUP_DAYS, TRIAL_DEFAULT_DAYS, TRIAL_MAX_DAYS,
+  startTrial, revokeTrial, trialActive, trialDaysRemaining, trialEligible,
   statusOf, expireTrials, trialMiddleware,
 };

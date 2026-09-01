@@ -1459,3 +1459,30 @@ h2.h-display { font-size: clamp(1.9rem, 3.4vw, 2.7rem); }
 /* Directory list view: let the name/status cells actually shrink so the ellipsis on
    long company names engages instead of relying on clipping alone. */
 .rw-t b, .rw-t small, .rw-c-name { min-width: 0; }
+
+/* ================= r31: free-trial band, contained notifications, scrollable admin payments ================= */
+
+/* Pricing — self-serve free trial activation band */
+.trial-band { display: flex; align-items: center; justify-content: space-between; gap: 28px; padding: 26px 30px; margin: 0 0 26px; border: 1px solid var(--hair); border-left: 4px solid var(--accent2, #C8A24A); border-radius: var(--r); background: var(--surface); box-shadow: 0 1px 2px rgba(10,22,40,.04); }
+.trial-band h3 { font-family: var(--fd); font-size: 21px; margin: 0 0 6px; }
+.trial-band .trial-copy { min-width: 0; }
+.trial-band .trial-copy p { margin: 0; max-width: 640px; }
+.trial-band .trial-cta { flex: 0 0 auto; text-align: center; }
+@media (max-width: 720px) {
+  .trial-band { flex-direction: column; align-items: stretch; text-align: left; }
+  .trial-band .trial-cta .btn { width: 100%; justify-content: center; }
+}
+
+/* Notifications — contained, card-like inbox that scrolls internally instead
+   of stretching the page as items accumulate. */
+.notif-panel { border: 1px solid var(--hair); border-radius: var(--r); background: var(--paper); box-shadow: 0 1px 2px rgba(10,22,40,.04); overflow: hidden; }
+.notif-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--hair); background: var(--surface); }
+.notif-panel-head b { font: 600 13px/1.4 var(--fm); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.notif-scroll { max-height: min(62vh, 560px); overflow-y: auto; overscroll-behavior: contain; padding: 12px; scrollbar-width: thin; }
+.notif-scroll .notif-list { gap: 10px; }
+.notif-panel-foot { padding: 10px 16px; border-top: 1px solid var(--hair); background: var(--surface); font: 500 12px/1.5 var(--fm); color: var(--muted); }
+
+/* Admin — recent payments table scrolls inside its card instead of growing the page */
+.scroll-table { max-height: 380px; overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--hair); border-radius: var(--r); scrollbar-width: thin; }
+.scroll-table .table-wrap { border: 0; border-radius: 0; margin: 0; }
+.scroll-table table thead th { position: sticky; top: 0; z-index: 1; background: var(--surface); box-shadow: 0 1px 0 var(--hair); }

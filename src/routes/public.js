@@ -434,6 +434,8 @@ router.get('/badge/:slug.svg', (req, res) => {
 
 /* ---------------- Pricing ---------------- */
 router.get('/pricing', (req, res) => {
+  const plansLib = require('../lib/plans');
+  const freshUser = req.user ? db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id) : null;
   res.render('pricing', {
     meta: {
       title: 'Pricing — FirmLedger Pro unlocks everything',
@@ -443,6 +445,17 @@ router.get('/pricing', (req, res) => {
     offers: allPlans(true),
     paypalReady: paypal.configured(),
     paypalMode: paypal.mode(),
+    trial: {
+      days: plansLib.TRIAL_SIGNUP_DAYS,
+      eligible: Boolean(freshUser) && plansLib.trialEligible(freshUser),
+      active: Boolean(freshUser) && plansLib.trialActive(freshUser),
+      daysLeft: freshUser ? plansLib.trialDaysRemaining(freshUser) : 0,
+      expiresAt: freshUser && freshUser.trial_expires_at ? String(freshUser.trial_expires_at).slice(0, 10) : '',
+      used: Boolean(freshUser && freshUser.trial_started_at) && !(freshUser && plansLib.trialActive(freshUser)),
+      isPaidPro: Boolean(freshUser) && plansLib.isProUser(freshUser),
+    },
+    trialOk: req.query.trial_ok || '',
+    trialErr: req.query.trial_err || '',
   });
 });
 
@@ -530,7 +543,7 @@ router.get('/docs', (req, res) => {
   res.render('docs', {
     meta: {
       title: 'Documentation — FirmLedger',
-      description: 'How to use FirmLedger: adding listings, Wikipedia enrichment, ownership verification, confidence scoring, the relationship graph and the API roadmap.',
+      description: 'How to use FirmLedger: adding listings, Wikipedia enrichment, ownership verification, confidence scoring, the relationship graph and the live developer API.',
       canonical: siteUrl('/docs'),
     },
     sections: docs.SECTIONS,
