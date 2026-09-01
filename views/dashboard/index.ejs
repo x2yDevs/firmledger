@@ -325,11 +325,20 @@
         <a class="btn btn-danger btn-sm" href="/dashboard/delete-account"><%= pendingDeletion ? 'View deletion request' : 'Request deletion' %></a>
       </div>
       <div class="side-card">
-        <h3 style="margin:0 0 10px">Watchlist</h3>
-        <p class="muted" style="margin-bottom:14px">Star companies to track them — email digests when their record changes<% if (accountPro) { %>, plus CSV export for your CRM<% } %>.</p>
+        <h3 style="margin:0 0 10px">Save · Compare · Watchlist</h3>
+        <p class="muted" style="margin-bottom:14px">Save companies to your watchlist for in-app notifications, and compare them side by side<% if (accountPro) { %>; Pro also gets CSV export for your CRM<% } %>.</p>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <a class="btn btn-ghost btn-sm" href="/dashboard/watchlist">Open watchlist</a>
+          <a class="btn btn-ghost btn-sm" href="/compare">Compare</a>
           <a class="btn btn-ghost btn-sm" href="/jobs">Jobs board</a>
+        </div>
+      </div>
+      <div class="side-card">
+        <h3 style="margin:0 0 10px">Advertise</h3>
+        <p class="muted" style="margin-bottom:14px">Put a listing you own on the homepage as clearly-labelled <b>Sponsored Content</b> — pick a package and pay securely by PayPal.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <a class="btn btn-primary btn-sm" href="/dashboard/advertise">Advertise a listing</a>
+          <a class="btn btn-ghost btn-sm" href="/advertise">See packages</a>
         </div>
       </div>
       <div class="side-card">

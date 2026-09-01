@@ -1,0 +1,64 @@
+<%- include('partials/top') %>
+
+<section class="page-head">
+  <div class="container" style="text-align:center">
+    <p class="kicker kicker-center">Sponsored Content</p>
+    <h1 class="h-display">Put your listing on the <em style="font-style:normal;color:var(--accent2)">homepage.</em></h1>
+    <p class="lede" style="margin-left:auto;margin-right:auto">Advertise a listing you own as clearly-labelled <b>Sponsored Content</b> on the FirmLedger homepage. Pick a package, choose how long it runs, and pay securely by <b>PayPal</b> — your spot goes live the moment payment is confirmed.</p>
+  </div>
+</section>
+
+<% if (ok) { %><div class="container"><div class="alert alert-ok"><%= ok %></div></div><% } %>
+
+<section class="section-tight">
+  <div class="container">
+    <div class="compare-note rv" style="--d:60ms">
+      <span class="cn-dot" aria-hidden="true"></span>
+      <p><b>Honest by design.</b> Every sponsored placement is labelled <b>“Sponsored”</b> on the homepage — it never masquerades as an editorial pick. You advertise one of your own verified listings, on the packages and durations below.</p>
+    </div>
+
+    <% if (packages.length) { %>
+    <div class="plan-grid" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr))">
+      <% packages.forEach(function (p, i) { %>
+      <div class="plan-card rv" style="--d:<%= (i + 1) * 60 %>ms">
+        <h3><%= p.name %></h3>
+        <p class="plan-price">$<%= (p.price_cents / 100).toFixed(2) %> <small>/ <%= p.duration_days %> days</small></p>
+        <p class="muted" style="font-size:13.5px;margin:0 0 .6rem"><%= p.blurb || 'Homepage Sponsored Content.' %></p>
+        <ul class="plan-feats">
+          <li>Homepage <b>Sponsored Content</b> strip</li>
+          <li>Runs for <b><%= p.duration_days %> days</b> from payment</li>
+          <li>Clearly labelled <b>Sponsored</b></li>
+          <li>Links straight to your listing</li>
+          <li>PayPal secured payment</li>
+        </ul>
+        <% if (user) { %>
+        <a class="btn btn-ghost" href="/dashboard/advertise?package=<%= p.id %>">Choose this package</a>
+        <% } else { %>
+        <a class="btn btn-ghost" href="/register?next=/dashboard/advertise">Sign in to place</a>
+        <% } %>
+      </div>
+      <% }); %>
+    </div>
+    <% } else { %>
+    <div class="panel" style="text-align:center;padding:48px 24px">
+      <h3>Advertising packages are coming soon</h3>
+      <p class="muted" style="max-width:460px;margin:0 auto">We're finalising sponsorship options. Check back shortly — or <a href="mailto:advertising@firmledger.co.ke">email advertising@firmledger.co.ke</a> to be first in line.</p>
+    </div>
+    <% } %>
+
+    <div class="compare-note rv" style="--d:150px;margin-top:22px">
+      <span class="cn-dot" aria-hidden="true"></span>
+      <p>All advertising is paid through <b>PayPal</b> (cards, bank, or PayPal balance). <%= paypalReady ? 'Checkout runs in ' + paypalMode + ' mode — no card details ever touch FirmLedger.' : 'Online payments use PayPal; you\'ll be redirected to PayPal to complete the order.' %></p>
+    </div>
+  </div>
+</section>
+
+<section class="cta-band">
+  <div class="container" style="text-align:center">
+    <h2 class="h-display">Own a listing?</h2>
+    <p class="lede" style="margin:0 auto 2rem">Claim it, verify it, then spotlight it.</p>
+    <a class="btn btn-light btn-lg" href="<%= user ? '/dashboard/advertise' : '/login?next=/dashboard/advertise' %>">Start advertising</a>
+  </div>
+</section>
+
+<%- include('partials/bottom') %>

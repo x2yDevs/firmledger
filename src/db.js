@@ -453,6 +453,50 @@ db.exec('CREATE INDEX IF NOT EXISTS idx_users_provider ON users(provider, provid
 
 require('./lib/blogseed').seedBlog(db);
 
+/* ---- Advertising (Sponsored Content) + FirmLedger careers ---- */
+db.exec(`
+CREATE TABLE IF NOT EXISTS ad_packages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  blurb TEXT NOT NULL DEFAULT '',
+  price_cents INTEGER NOT NULL,
+  currency TEXT NOT NULL DEFAULT 'USD',
+  duration_days INTEGER NOT NULL,
+  active INTEGER NOT NULL DEFAULT 1,
+  sort INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS careers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  role_type TEXT NOT NULL DEFAULT 'Full-time',
+  location TEXT NOT NULL DEFAULT '',
+  description TEXT NOT NULL DEFAULT '',
+  requirements TEXT NOT NULL DEFAULT '',
+  apply_email TEXT NOT NULL DEFAULT 'careers@firmledger.co.ke',
+  status TEXT NOT NULL DEFAULT 'open',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_careers_status ON careers(status);
+`);
+
+/* Listing sponsorship (advertised / sponsored content) columns. */
+try { db.exec("ALTER TABLE listings ADD COLUMN sponsored INTEGER NOT NULL DEFAULT 0"); } catch { /* column exists */ }
+try { db.exec("ALTER TABLE listings ADD COLUMN sponsored_expires_at TEXT NOT NULL DEFAULT ''"); } catch { /* column exists */ }
+try { db.exec("ALTER TABLE listings ADD COLUMN ad_reference TEXT NOT NULL DEFAULT ''"); } catch { /* column exists */ }
+/* A payment can buy account Pro (kind='pro') OR spot advertising (kind='ad'). */
+try { db.exec("ALTER TABLE payments ADD COLUMN kind TEXT NOT NULL DEFAULT 'pro'"); } catch { /* column exists */ }
+
+/* Seed the default sponsored-advert packages on a fresh boot (admin can edit/add more). */
+if (!db.prepare('SELECT id FROM ad_packages LIMIT 1').get()) {
+  const ins = db.prepare('INSERT INTO ad_packages (name, blurb, price_cents, currency, duration_days, active, sort) VALUES (?,?,?,?,?,1,?)');
+  ins.run('Featured Spotlight — 7 days', 'Your listing appears in the homepage Sponsored Content strip with a clear “Sponsored” label for one week.', 1500, 'USD', 7, 1);
+  ins.run('Featured Spotlight — 30 days', 'A full month of homepage Sponsored Content placement — best value for launches and seasonal pushes.', 4000, 'USD', 30, 2);
+  ins.run('Featured Spotlight — 90 days', 'A quarter of Sponsored Content placement across the homepage for brand awareness.', 9500, 'USD', 90, 3);
+}
+
 /* ---- Ops: spam lists, SMTP failover accounts, promo codes ---- */
 db.exec(`
 CREATE TABLE IF NOT EXISTS spam_ip (
@@ -513,6 +557,65 @@ CREATE TABLE IF NOT EXISTS promo_redemptions (
 `);
 try { db.exec('ALTER TABLE payments ADD COLUMN promo_id INTEGER NOT NULL DEFAULT 0'); } catch { /* column exists */ }
 try { db.exec('ALTER TABLE payments ADD COLUMN discount_cents INTEGER NOT NULL DEFAULT 0'); } catch { /* column exists */ }
+
+/* ---- Public status page: monitored components, incidents, subscribers ----
+   Mirrors migrations/2026-09-01-status-page.sql so existing deployments can
+   apply the same DDL against a live database without a full re-seed. */
+db.exec(`
+CREATE TABLE IF NOT EXISTS status_components (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  slug TEXT NOT NULL UNIQUE,
+  description TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'operational',
+  display_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS component_status_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  component_id INTEGER NOT NULL REFERENCES status_components(id) ON DELETE CASCADE,
+  status TEXT NOT NULL,
+  checked_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_status_hist_component ON component_status_history(component_id, checked_at);
+
+CREATE TABLE IF NOT EXISTS incidents (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'investigating',
+  severity TEXT NOT NULL DEFAULT 'minor',
+  component_id INTEGER REFERENCES status_components(id) ON DELETE SET NULL,
+  resolved_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_incidents_status ON incidents(status);
+CREATE INDEX IF NOT EXISTS idx_incidents_component ON incidents(component_id);
+CREATE INDEX IF NOT EXISTS idx_incidents_created ON incidents(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS incident_updates (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  incident_id INTEGER NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
+  status TEXT NOT NULL,
+  message TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_incident_updates_incident ON incident_updates(incident_id, id);
+
+CREATE TABLE IF NOT EXISTS status_subscribers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  email TEXT NOT NULL UNIQUE,
+  verified INTEGER NOT NULL DEFAULT 1,
+  verification_token TEXT NOT NULL DEFAULT '',
+  subscribed_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+`);
+
+/* Status monitor keeps history tidy — anything older than 90 days is noise. */
+try { db.exec('DELETE FROM component_status_history WHERE checked_at < datetime(\'now\', \'-90 days\')'); } catch { /* ignore */ }
 
 /* Settings helpers */
 function getSetting(key, fallback = '') {

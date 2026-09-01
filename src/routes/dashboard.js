@@ -1,4 +1,5 @@
 const express = require('express');
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { db, getSetting } = require('../db');
@@ -25,6 +26,7 @@ const paypal = require('../lib/paypal');
 const notify = require('../lib/notify');
 const notifications = require('../lib/notifications');
 const spam = require('../lib/spam');
+const ad = require('../lib/advertising');
 
 const router = express.Router();
 router.use('/dashboard', requireUser);
@@ -779,7 +781,7 @@ router.post('/dashboard/watchlist/toggle', requireUser, (req, res) => {
   if (!l) return res.redirect('/dashboard/watchlist?err=' + encodeURIComponent('That listing could not be found.'));
   const r = nl.toggleFavorite(req.user.id, listingId);
   const msg = r.watching
-    ? `${l.name} added to your watchlist — you'll get an email digest when its record changes.`
+    ? `${l.name} saved to your watchlist — you'll get a notification here when its record changes.`
     : `${l.name} removed from your watchlist.`;
   res.redirect(back + (back.includes('?') ? '&' : '?') + 'ok=' + encodeURIComponent(msg));
 });
@@ -993,6 +995,73 @@ router.post('/dashboard/api/playground', (req, res) => {
   }
   const ms = Number(process.hrtime.bigint() - t0) / 1e6;
   return render({ result: { status: outcome.status, headers, json: outcome.json, ms: Math.round(ms * 10) / 10 } });
+});
+
+/* ================= Advertise — Sponsored Content (owner) ================= */
+function returnBaseAd(req, path) {
+  const util2 = require('../lib/util');
+  if (util2.isPublicBaseUrl()) return util2.siteUrl(path);
+  return `${req.protocol}://${req.get('host')}${path}`;
+}
+
+router.get('/dashboard/advertise', (req, res) => {
+  const pick = Number(req.query.package) || 0;
+  const listings = db.prepare(
+    "SELECT id, slug, name, category, city, country, status, sponsored, sponsored_expires_at FROM listings WHERE owner_user_id = ? ORDER BY created_at DESC"
+  ).all(req.user.id);
+  const ownApproved = listings.filter((l) => l.status === 'approved');
+  const today = new Date().toISOString().slice(0, 10);
+  res.render('dashboard/advertise', {
+    meta: { title: 'Advertise a listing — FirmLedger', description: '', robots: 'noindex' },
+    packages: ad.allPackages(true),
+    listings, ownApproved,
+    paypalReady: paypal.configured(),
+    paypalMode: paypal.mode(),
+    pick, today,
+    isSponsored: (l) => ad.isSponsored(l),
+    ok: req.query.ok || '', err: req.query.err || '',
+  });
+});
+
+router.post('/dashboard/advertise/checkout', (req, res) => {
+  if (!validCsrf(req)) return res.status(403).redirect('/dashboard/advertise');
+  const back = (m) => res.redirect('/dashboard/advertise?err=' + encodeURIComponent(m));
+  if (!paypal.configured()) return back('Online payments are not configured yet — contact support.');
+  const listingId = Number(req.body.listing_id) || 0;
+  const pkgId = Number(req.body.package_id) || 0;
+  const listing = db.prepare("SELECT id, slug, name FROM listings WHERE id=? AND owner_user_id=? AND status='approved'").get(listingId, req.user.id);
+  if (!listing) return back('That listing does not exist or is not yours.');
+  const pkg = ad.getPackage(pkgId);
+  if (!pkg || !pkg.active) return back('That advertising package is no longer available.');
+
+  const reference = `FLAD-${req.user.id}-${pkg.id}-${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`;
+  try {
+    db.prepare(
+      "INSERT INTO payments (listing_id, user_id, plan_id, duration_days, reference, amount, currency, status, email, kind) VALUES (?,?,?,?,?,?,?,?,?, 'ad')"
+    ).run(listing.id, req.user.id, pkg.id, pkg.duration_days, reference, pkg.price_cents, pkg.currency, 'initialized', req.user.email);
+  } catch (e) {
+    console.error('[advertise] payment insert failed:', e.message);
+    return back('Internal error starting your advertising checkout — no charge was made.');
+  }
+
+  const planLike = { name: pkg.name, price_cents: pkg.price_cents, currency: pkg.currency, duration_days: pkg.duration_days };
+  paypal.createOrder({
+    reference, plan: planLike, amountCents: pkg.price_cents,
+    returnUrl: returnBaseAd(req, `/billing/callback?ref=${encodeURIComponent(reference)}`),
+    cancelUrl: returnBaseAd(req, `/billing/cancel?ref=${encodeURIComponent(reference)}`),
+    payerEmail: req.user.email,
+  }).then((order) => {
+    if (!order.ok) {
+      db.prepare("UPDATE payments SET status='failed' WHERE reference=?").run(reference);
+      return res.redirect('/dashboard/advertise?err=' + encodeURIComponent('PayPal could not start the checkout: ' + order.error));
+    }
+    db.prepare('UPDATE payments SET order_id=? WHERE reference=?').run(order.id, reference);
+    if (!order.approveUrl) return res.redirect('/dashboard/advertise?err=' + encodeURIComponent('PayPal did not return an approval link.'));
+    return res.redirect(order.approveUrl);
+  }).catch(() => {
+    db.prepare("UPDATE payments SET status='failed' WHERE reference=?").run(reference);
+    return res.redirect('/dashboard/advertise?err=' + encodeURIComponent('Could not reach PayPal — try again shortly.'));
+  });
 });
 
 /* ================= Claimable search (JSON) ================= */

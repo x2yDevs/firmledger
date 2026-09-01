@@ -4,7 +4,7 @@
   <div class="container">
     <p class="kicker">API reference</p>
     <h1 class="h-display">FirmLedger <em style="font-style:normal;color:var(--accent2)">API v1</em></h1>
-    <p class="lede">REST access to the records you own — API-key authentication, predictable JSON, honest rate limits. <b>Available with FirmLedger Pro.</b></p>
+    <p class="lede">REST access to FirmLedger — a <b>free public directory API</b> to fetch listings into your own site, plus key-authenticated CRUD over the records you own. Predictable JSON, honest rate limits. <b>Key-authenticated endpoints are included with FirmLedger Pro.</b></p>
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">
       <% if (user) { %><a class="btn btn-primary" href="/dashboard/api">Open your API console</a><% } else { %><a class="btn btn-primary" href="/pricing">Get Pro &amp; an API key</a><% } %>
       <a class="btn btn-ghost" href="<%= user ? '/dashboard/api/playground' : '/login?next=/dashboard/api/playground' %>">Open the playground</a>
@@ -22,6 +22,7 @@
         <a href="#limits">Rate limits &amp; protection</a>
         <a href="#errors">Errors</a>
         <a href="#ep-discovery">GET /api/v1</a>
+        <a href="#ep-public">Public directory (no key)</a>
         <a href="#ep-me">GET /api/v1/me</a>
         <a href="#ep-list">GET /api/v1/listings</a>
         <a href="#ep-create">POST /api/v1/listings</a>
@@ -96,8 +97,26 @@
 
       <div class="form-card docs-anchor" id="ep-discovery">
         <h3 class="form-section"><span class="m-chip m-get">GET</span>&nbsp; <code>/api/v1</code> — discovery</h3>
-        <p class="muted">Returns the API name, version, endpoint list and live limits. Handy for health checks.</p>
-        <div class="code-block"><span class="code-label">curl</span>curl <%= SITE %>/api/v1 -H "Authorization: Bearer fl_live_your_key"</div>
+        <p class="muted">Returns the API name, version, endpoint list and live limits. <b>Public — no key needed.</b> Handy for health checks.</p>
+        <div class="code-block"><span class="code-label">curl</span>curl <%= SITE %>/api/v1</div>
+      </div>
+
+      <div class="form-card docs-anchor" id="ep-public">
+        <h3 class="form-section"><span class="m-chip m-get">GET</span>&nbsp; <code>/api/v1/directory</code> — public listings (no key)</h3>
+        <p class="muted">Pull FirmLedger's <b>public, approved listings</b> into your own site. <b>No API key required</b> and it's <b>free</b> — just rate-limited per IP (the same <code>X-RateLimit-*</code> headers apply). These are the same non-sensitive pages engines crawl.</p>
+        <table class="facts">
+          <tr><th><code>page</code> · <code>per_page</code></th><td>Pagination — default <code>1</code> / <code>20</code>, max <code>50</code></td></tr>
+          <tr><th><code>q</code></th><td>Free-text search over name, tagline, description, tags, city &amp; category</td></tr>
+          <tr><th><code>type</code> · <code>category</code> · <code>country</code></th><td>Filter by entity type, category name or country</td></tr>
+          <tr><th><code>sort</code></th><td><code>featured</code> (default) · <code>newest</code> · <code>name</code> · <code>confidence</code></td></tr>
+          <tr><th>Fields returned</th><td>Public profile fields — name, slug, tagline, description, type, category, website, city, country, founded, size, tags, confidence, claimed, sponsored, url. <b>Contact details stay Pro.</b></td></tr>
+        </table>
+        <div class="code-block"><span class="code-label">curl</span>curl "<%= SITE %>/api/v1/directory?category=Logistics&amp;sort=newest&amp;per_page=50"</div>
+        <div class="code-block"><span class="code-label">200 OK</span>{\n  <span class="k">\"data\"</span>: [ { <span class=\"k\">\"slug\"</span>: <span class=\"s\">\"acme-ltd\"</span>, <span class=\"k\">\"name\"</span>: <span class=\"s\">\"Acme Ltd\"</span>, <span class=\"k\">\"category\"</span>: <span class=\"s\">\"Logistics\"</span>, <span class=\"k\">\"confidence\"</span>: <span class=\"s\">84</span>, <span class=\"k\">\"url\"</span>: <span class=\"s\">\"...\"</span> } ],\n  <span class=\"k\">\"meta\"</span>: { <span class=\"k\">\"page\"</span>: <span class=\"s\">1</span>, <span class=\"k\">\"per_page\"</span>: <span class=\"s\">20</span>, <span class=\"k\">\"total\"</span>: <span class=\"s\">3</span>, <span class=\"k\">\"total_pages\"</span>: <span class=\"s\">1</span> }\n}</div>
+        <p class="fine-print">Use it server-side and cache the results — it is intended for secondary display of FirmLedger data, not as a substitute for your own first-party sources.</p>
+        <h3 class="form-section" style="margin-top:18px"><span class="m-chip m-get">GET</span>&nbsp; <code>/api/v1/directory/:slug</code> — one public listing</h3>
+        <p class="muted">Fetch a single approved listing by its <code>slug</code>. Public, no key. Returns <code>404 not_found</code> if unknown or not yet approved.</p>
+        <div class="code-block"><span class="code-label">curl</span>curl <%= SITE %>/api/v1/directory/acme-ltd</div>
       </div>
 
       <div class="form-card docs-anchor" id="ep-me">

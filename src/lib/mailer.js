@@ -307,7 +307,8 @@ function logOutbox(to, msg, via, extra = '') {
 async function sendVia(hop, to, msg) {
   const t = transporterFor(hop);
   if (!t) throw new Error('Could not build transport for ' + hop.host);
-  const payload = { from: fromAddress(), to, ...msg };
+  // msg.from (if provided) overrides the global From for this one message.
+  const payload = { ...msg, from: msg.from || fromAddress(), to };
   if (msg.html && msg.html.includes('cid:firmledger-logo')) payload.attachments = getLogoAttachment();
   await t.sendMail(payload);
 }
@@ -355,7 +356,7 @@ async function sendMail(to, subject, text, html) {
 }
 
 async function sendBranded(to, subject, opts = {}) {
-  return deliver(to, { subject, text: opts.text || brandedText(opts), html: brandedHtml(opts) });
+  return deliver(to, { subject, text: opts.text || brandedText(opts), html: brandedHtml(opts), from: opts.from });
 }
 
 async function sendTest(to) {

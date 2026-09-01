@@ -11,6 +11,9 @@ const { getIndexNowKey } = require('../lib/indexing');
 const nl = require('../lib/newsletter');
 const { allPlans, perksActive, canViewFull, PRO_USER_SQL, PRO_LISTING_SQL } = require('../lib/plans');
 const paypal = require('../lib/paypal');
+const compare = require('../lib/compare');
+const ad = require('../lib/advertising');
+const careers = require('../lib/careers');
 
 const spam = require('../lib/spam');
 
@@ -62,6 +65,8 @@ router.get('/', (req, res) => {
   const tickerItems = db.prepare(
     "SELECT name, slug, confidence FROM listings WHERE status='approved' ORDER BY updated_at DESC LIMIT 12"
   ).all();
+  const sponsored = ad.sponsoredStrip(4);
+  const hasActiveSponsors = sponsored.length > 0;
 
   res.render('home', {
     meta: {
@@ -99,6 +104,7 @@ router.get('/', (req, res) => {
       },
     },
     stats, featured, latest, byType, medianConf, recentVerifications, tickerItems,
+    sponsored, hasActiveSponsors,
   });
 });
 
@@ -372,6 +378,7 @@ router.get('/listing/:slug', (req, res, next) => {
     },
     l, events, related, socials, sources, isOwner, ownerName, graph, catSlug, ICONS,
     watching: req.user ? nl.isWatched(req.user.id, l.id) : false,
+    comparing: compare.includes(req, l.id),
     watchJobs: nl.jobsForListing(l.id),
     canJobPost: isOwner && perksActive(l),
     perksPro: perksActive(l),
@@ -714,6 +721,80 @@ router.get('/jobs', (req, res) => {
   });
 });
 
+/* ---------------- Compare (save & compare companies side by side) ---------------- */
+router.get('/compare', (req, res) => {
+  const ids = compare.read(req);
+  let rows = [];
+  if (ids.length) {
+    const marks = ids.map(() => '?').join(',');
+    rows = db.prepare(
+      `SELECT l.*, u.plan AS owner_plan, u.plan_expires_at AS owner_plan_expires
+       FROM listings l LEFT JOIN users u ON u.id = l.owner_user_id
+       WHERE l.status='approved' AND l.id IN (${marks}) ORDER BY l.name ASC`
+    ).all(...ids);
+  }
+  res.render('compare', {
+    meta: {
+      title: 'Compare companies side by side | FirmLedger',
+      description: 'Compare verified FirmLedger listings side by side — category, location, founding year, team size, confidence, ownership and more.',
+      canonical: siteUrl('/compare'),
+    },
+    rows, ids, max: compare.MAX,
+    ok: req.query.ok || '', err: req.query.err || '',
+  });
+});
+
+/* Add / remove a listing to the comparison set (cookie-backed, works for guests). */
+router.post('/compare/toggle', (req, res) => {
+  const id = Number(req.body.listing_id) || 0;
+  const back = String(req.body.back || '').startsWith('/') ? String(req.body.back) : '/compare';
+  const r = compare.includes(req, id) ? compare.remove(id, res, req) : compare.add(id, res, req);
+  let msg;
+  if (r.reason === 'full') msg = `Comparison is full — remove one before adding another (max ${compare.MAX}).`;
+  else if (r.added) msg = 'Added to comparison — view it side by side.';
+  else if (r.ok) msg = 'Removed from comparison.';
+  else msg = 'That listing could not be added.';
+  res.redirect(back + (back.includes('?') ? '&' : '?') + 'ok=' + encodeURIComponent(msg) + '#compare');
+});
+
+router.post('/compare/clear', (req, res) => {
+  compare.clear(res, req);
+  res.redirect('/compare?ok=' + encodeURIComponent('Comparison cleared.'));
+});
+
+/* ---------------- Advertise — Sponsored Content ---------------- */
+router.get('/advertise', (req, res) => {
+  res.render('advertise', {
+    meta: {
+      title: 'Advertise your listing — Sponsored Content | FirmLedger',
+      description: 'Put your verified FirmLedger listing on the homepage as clearly-labelled Sponsored Content. Choose a package and duration, pay securely by PayPal, and go live instantly.',
+      canonical: siteUrl('/advertise'),
+    },
+    packages: ad.allPackages(true),
+    paypalReady: paypal.configured(),
+    paypalMode: paypal.mode(),
+  });
+});
+
+/* ---------------- Careers — FirmLedger is hiring ---------------- */
+router.get('/careers', (req, res) => {
+  const open = careers.listOpen();
+  const all = careers.listAll();
+  const activeAny = open.length > 0;
+  res.render('careers', {
+    meta: {
+      title: activeAny ? 'Careers — FirmLedger is hiring' : 'Careers — FirmLedger',
+      description: activeAny
+        ? 'Open roles at FirmLedger, the trusted business record layer. Apply by email in one click — every position has its requirements listed.'
+        : 'FirmLedger isn’t hiring right now. Get to know the team and the product while we grow.',
+      canonical: siteUrl('/careers'),
+    },
+    open, all, activeAny, ROLE_TYPES: careers.ROLE_TYPES,
+    applyMailto: careers.applyMailto,
+    ok: req.query.ok || '',
+  });
+});
+
 /* ---------------- SEO endpoints ---------------- */
 router.get('/robots.txt', (req, res) => {
   /* Dev/staging hosts (unset BASE_URL, localhost, .test, private IP) are never indexed.
@@ -852,12 +933,23 @@ router.get('/sitemaps/static.xml', (req, res) => {
     { loc: siteUrl('/pricing'), changefreq: 'weekly', priority: '0.6' },
     { loc: siteUrl('/about'), changefreq: 'monthly', priority: '0.5' },
     { loc: siteUrl('/docs'), changefreq: 'monthly', priority: '0.5' },
+    { loc: siteUrl('/careers'), changefreq: 'weekly', priority: '0.5' },
+    { loc: siteUrl('/advertise'), changefreq: 'weekly', priority: '0.6' },
+    { loc: siteUrl('/compare'), changefreq: 'weekly', priority: '0.5' },
+    { loc: siteUrl('/status'), changefreq: 'hourly', priority: '0.7' },
     { loc: siteUrl('/privacy'), changefreq: 'yearly', priority: '0.2' },
     { loc: siteUrl('/terms'), changefreq: 'yearly', priority: '0.2' },
     { loc: siteUrl('/blog'), changefreq: 'weekly', priority: '0.6' },
     { loc: siteUrl('/jobs'), changefreq: 'daily', priority: '0.7' },
     { loc: siteUrl('/api/docs'), changefreq: 'monthly', priority: '0.6' },
   ];
+  for (const c of db.prepare("SELECT id, updated_at FROM careers WHERE status='open'").all()) {
+    urls.push({
+      loc: siteUrl(`/careers#role-${c.id}`),
+      lastmod: new Date(c.updated_at).toISOString().slice(0, 10),
+      changefreq: 'weekly', priority: '0.4',
+    });
+  }
   for (const p of db.prepare("SELECT slug, updated_at, published_at, status FROM blog_posts WHERE status='published'").all()) {
     urls.push({
       loc: siteUrl(`/blog/${p.slug}`),
@@ -930,9 +1022,11 @@ router.get('/feed.xml', (req, res) => {
       }));
     } catch { return []; }
   })();
-  const items = [...listings, ...posts]
+  let careerItems = [];
+  try { careerItems = careers.feedItems(); } catch { careerItems = []; }
+  const items = [...listings, ...posts, ...careerItems]
     .sort((a, b) => b.date - a.date)
-    .slice(0, 35)
+    .slice(0, 40)
     .map((i) => `    <item>
       <title>${escXml(i.title)}</title>
       <link>${escXml(i.link)}</link>

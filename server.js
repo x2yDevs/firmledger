@@ -85,7 +85,7 @@ app.use((req, res, next) => {
   res.locals.proAccess = require('./src/lib/plans').hasProAccess;
   res.locals.nav = req.path.startsWith('/directory') || req.path.startsWith('/listing') ? 'directory'
     : req.path.startsWith('/claim') ? 'claim' : req.path.startsWith('/api') ? 'api'
-    : req.path.startsWith('/pricing') ? 'pricing' : '';
+    : req.path.startsWith('/pricing') ? 'pricing' : req.path.startsWith('/status') ? 'status' : '';
   res.locals.initials = (name) => {
     const words = String(name || 'F').trim().split(/[\s-]+/).filter(Boolean);
     return (words.length > 1 ? words[0][0] + words[1][0] : words[0].slice(0, 2)).toUpperCase();
@@ -132,6 +132,7 @@ app.use(require('./src/lib/spam').scrapeGate);
 
 /* Routes */
 app.use('/', require('./src/routes/public'));
+app.use('/status', require('./src/routes/status'));
 app.use('/', require('./src/routes/auth'));
 app.use('/', require('./src/routes/dashboard'));
 app.use('/', require('./src/routes/billing'));
@@ -177,12 +178,20 @@ function hourlyJobs() {
     if (purged) console.log(`[notifications] purged ${purged} expired archived notification(s)`);
   } catch (e) { console.error('[notif-purge]', e.message); }
   try { require('./src/lib/plans').expireTrials(); } catch (e) { console.error('[trials]', e.message); }
+  try { require('./src/lib/statusMonitor').sendWeeklyStatusDigest().catch(() => {}); } catch (e) { console.error('[status-digest]', e.message); }
 }
 setInterval(hourlyJobs, 3600e3);
 setTimeout(hourlyJobs, 90e3);
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`FirmLedger running on http://0.0.0.0:${PORT} — public base: ${util.siteUrl('/')}`);
+  /* Start the public status monitor once we're listening, so the first
+     self-probe against our own origin succeeds. */
+  try {
+    require('./src/lib/statusMonitor').startMonitoring();
+  } catch (e) {
+    console.error('[status-monitor] failed to start:', e && e.message);
+  }
   if (!INDEXABLE) {
     console.warn('⚠  BASE_URL is not a public origin — search engines are blocked with X-Robots-Tag: noindex and a "Disallow: /" robots.txt.');
     console.warn('   Before launch set BASE_URL=https://your-domain (no trailing slash) in .env and restart. Set FORCE_INDEXABLE=1 to override.');
