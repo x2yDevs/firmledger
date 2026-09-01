@@ -22,7 +22,7 @@
         <p>Archive a notification from your inbox and it waits here — for 1 week or 1 month — before it is deleted for good.</p>
       </div>
     <% } else { %>
-      <div class="notif-list">
+      <div class="notif-panel"><div class="notif-scroll"><div class="notif-list">
         <% items.forEach(function (n) { const left = daysLeft(n); %>
           <div class="notif-item">
             <div class="notif-row notif-row-static">
@@ -51,7 +51,7 @@
             </div>
           </div>
         <% }) %>
-      </div>
+      </div></div></div>
     <% } %>
   </div>
 </section>

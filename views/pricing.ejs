@@ -10,12 +10,54 @@
 
 <section class="section-tight">
   <div class="container">
+    <div id="free-trial"></div>
+    <% if (typeof trialOk !== 'undefined' && trialOk) { %><div class="alert alert-ok"><%= trialOk %></div><% } %>
+    <% if (typeof trialErr !== 'undefined' && trialErr) { %><div class="alert alert-err"><%= trialErr %></div><% } %>
+
+    <% if (typeof trial !== 'undefined' && !(trial.isPaidPro)) { %>
+    <div class="trial-band rv">
+      <div class="trial-copy">
+        <p class="kicker" style="margin:0 0 4px">Free trial</p>
+        <% if (trial.active) { %>
+          <h3>Your free Pro trial is running — <%= trial.daysLeft %> day<%= trial.daysLeft === 1 ? '' : 's' %> left</h3>
+          <p class="muted">Full Pro access until <b><%= trial.expiresAt %></b>: every listing's details, the blue tick, Featured placement, gold badge and the developer API. Upgrade below to keep it after the trial.</p>
+        <% } else if (trial.eligible) { %>
+          <h3>Try everything in Pro — free for <%= trial.days %> days</h3>
+          <p class="muted">No card, no commitment. One click activates <b>real, full Pro access</b> on your account: every listing's complete details, the blue verified tick, homepage Featured placement, the gold badge and developer API keys. When it ends, your account simply returns to Free.</p>
+        <% } else if (trial.used) { %>
+          <h3>Your free trial has been used</h3>
+          <p class="muted">Every account gets one free trial. Keep full Pro access with one of the offers below — new time always stacks on anything remaining.</p>
+        <% } else { %>
+          <h3>Start with a <%= trial.days %>-day free Pro trial</h3>
+          <p class="muted">Create an account (email, Google or LinkedIn) and activate your trial right here — <b>real, full Pro access</b>, no payment details required.</p>
+        <% } %>
+      </div>
+      <div class="trial-cta">
+        <% if (user && trial.active) { %>
+          <a class="btn btn-primary" href="/dashboard">Open your dashboard</a>
+        <% } else if (user && trial.eligible) { %>
+          <form method="post" action="/pricing/free-trial">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <button class="btn btn-primary btn-lg" type="submit">Start my free trial — <%= trial.days %> days</button>
+          </form>
+          <p class="fine-print" style="margin-top:8px;text-align:center">Activates instantly · no card needed</p>
+        <% } else if (user && trial.used) { %>
+          <a class="btn btn-primary" href="/dashboard/upgrade">Upgrade to Pro</a>
+        <% } else if (!user) { %>
+          <a class="btn btn-primary btn-lg" href="/register">Create your free account</a>
+          <p class="fine-print" style="margin-top:8px;text-align:center">Then activate the trial on this page</p>
+        <% } %>
+      </div>
+    </div>
+    <% } %>
+
     <div class="plan-grid">
       <div class="plan-card rv">
         <h3>Free</h3>
         <p class="plan-price">$0 <small>forever</small></p>
         <ul class="plan-feats">
           <li>Submit a listing with <b>every detail</b> — no paywalled fields</li>
+          <li><b><%= typeof trial !== 'undefined' ? trial.days : 14 %>-day full Pro trial included</b> — activate it above, no card needed</li>
           <li>Basic public company profile</li>
           <li>Moderated approval &amp; IndexNow push</li>
           <li>Category &amp; search ranking</li>
@@ -79,6 +121,10 @@
       <details class="faq">
         <summary>What happens when the subscription runs out?<span class="faq-tgl" aria-hidden="true">+</span></summary>
         <div class="faq-a"><p>The tick, Featured slot and gold badge pause and the profile gracefully returns to the free presentation; nothing is deleted. Your full-details viewing pauses too. Renew any time — new time stacks on what you still have.</p></div>
+      </details>
+      <details class="faq">
+        <summary>Is there a free trial?<span class="faq-tgl" aria-hidden="true">+</span></summary>
+        <div class="faq-a"><p>Yes — every account gets one <b><%= typeof trial !== 'undefined' ? trial.days : 14 %>-day free trial of full Pro</b>, no payment details required. Create an account (email, Google or LinkedIn), then activate the trial in the banner at the top of this page — you'll also receive the activation link by email. While it runs it is real Pro access: every listing's full details, the blue tick, Featured placement, gold badge and developer API. When it ends your account returns to Free automatically; nothing is deleted and nothing is charged.</p></div>
       </details>
       <details class="faq">
         <summary>How do payments work?<span class="faq-tgl" aria-hidden="true">+</span></summary>

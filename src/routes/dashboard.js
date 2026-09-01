@@ -19,7 +19,7 @@ const { detectTech } = require('../lib/enrich');
 const { firmledgerScore } = require('../lib/score');
 const passwords = require('../lib/passwords');
 const { submitForIndexing } = require('../lib/indexing');
-const { isProUser, perksActive, allPlans, isProListingActive } = require('../lib/plans');
+const { isProUser, hasProAccess, perksActive, allPlans, isProListingActive } = require('../lib/plans');
 const nl = require('../lib/newsletter');
 const paypal = require('../lib/paypal');
 const notify = require('../lib/notify');
@@ -150,7 +150,7 @@ router.get('/dashboard', (req, res) => {
   res.render('dashboard/index', {
     meta: { title: 'Dashboard — FirmLedger', description: '', robots: 'noindex' },
     listings, claims, claimable, former, scores, plans,
-    accountPro: isProUser(req.user),
+    accountPro: hasProAccess(req.user),
     accountExpires: req.user.plan_expires_at || '',
     paypalReady: paypal.configured(),
     fa2On: user2fa.enabled(req.user.id),
@@ -767,7 +767,7 @@ router.get('/dashboard/watchlist', requireUser, (req, res) => {
   res.render('dashboard/watchlist', {
     meta: { title: 'Your watchlist — FirmLedger', description: '', robots: 'noindex' },
     rows,
-    accountPro: isProUser(req.user),
+    accountPro: hasProAccess(req.user),
     ok: req.query.ok || '', err: req.query.err || '',
   });
 });
@@ -775,15 +775,18 @@ router.get('/dashboard/watchlist', requireUser, (req, res) => {
 router.post('/dashboard/watchlist/toggle', requireUser, (req, res) => {
   const listingId = Number(req.body.listing_id) || 0;
   const back = String(req.body.back || '').startsWith('/') ? String(req.body.back) : '/dashboard/watchlist';
-  const l = db.prepare("SELECT id FROM listings WHERE id=? AND status='approved'").get(listingId);
+  const l = db.prepare("SELECT id, name FROM listings WHERE id=? AND status='approved'").get(listingId);
   if (!l) return res.redirect('/dashboard/watchlist?err=' + encodeURIComponent('That listing could not be found.'));
   const r = nl.toggleFavorite(req.user.id, listingId);
-  res.redirect(back + (back.includes('?') ? '&' : '?') + (r.watching ? 'wl=added' : 'wl=removed'));
+  const msg = r.watching
+    ? `${l.name} added to your watchlist — you'll get an email digest when its record changes.`
+    : `${l.name} removed from your watchlist.`;
+  res.redirect(back + (back.includes('?') ? '&' : '?') + 'ok=' + encodeURIComponent(msg));
 });
 
 /* Pro users export their watchlist as CSV for their own CRM */
 router.get('/dashboard/watchlist.csv', requireUser, (req, res) => {
-  if (!isProUser(req.user)) {
+  if (!hasProAccess(req.user)) {
     return res.status(402).redirect('/dashboard/watchlist?err=' + encodeURIComponent('CSV export is a Pro feature — upgrade to download your watchlist.'));
   }
   const rows = db.prepare(
@@ -868,7 +871,7 @@ setInterval(() => {
 }, 60_000).unref();
 
 function renderApiConsole(req, res, extra = {}) {
-  const pro = isProUser(req.user);
+  const pro = hasProAccess(req.user);
   const keys = apikeys.listKeys(req.user.id);
   res.render('dashboard/api', {
     meta: { title: 'Developer API — FirmLedger', description: 'Manage FirmLedger API keys, limits and usage.', robots: 'noindex' },
@@ -885,7 +888,7 @@ router.get('/dashboard/api', (req, res) => {
 });
 
 router.post('/dashboard/api/keys', (req, res) => {
-  if (!isProUser(req.user)) return res.redirect('/dashboard/api?err=' + encodeURIComponent('API keys are a FirmLedger Pro feature — upgrade to create one.'));
+  if (!hasProAccess(req.user)) return res.redirect('/dashboard/api?err=' + encodeURIComponent('API keys are a FirmLedger Pro feature — upgrade to create one.'));
   try {
     const { raw } = apikeys.createKey(req.user.id, req.body.label);
     const nonce = stashReveal(req.user.id, raw);
@@ -937,7 +940,7 @@ router.get('/dashboard/api/playground', (req, res) => {
   const newest = db.prepare('SELECT id FROM listings WHERE owner_user_id=? ORDER BY id DESC LIMIT 1').get(req.user.id);
   res.render('dashboard/api-playground', {
     meta: { title: 'API Playground — FirmLedger', description: 'Try the FirmLedger API live against your own data.', robots: 'noindex' },
-    pro: isProUser(req.user),
+    pro: hasProAccess(req.user),
     endpoints: PLAYGROUND_ENDPOINTS,
     limits: apilim,
     sampleId: newest ? newest.id : null,
@@ -947,7 +950,7 @@ router.get('/dashboard/api/playground', (req, res) => {
 });
 
 router.post('/dashboard/api/playground', (req, res) => {
-  const pro = isProUser(req.user);
+  const pro = hasProAccess(req.user);
   const method = String(req.body.method || 'GET').toUpperCase();
   const path = String(req.body.path || '/api/v1/listings').trim().slice(0, 120);
   const body = String(req.body.body || '').slice(0, 40_000);

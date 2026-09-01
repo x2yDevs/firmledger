@@ -907,7 +907,7 @@ function pricingPage(req, res) {
     trialDaysRemaining: plans.trialDaysRemaining,
     TRIAL_DEFAULT_DAYS: plans.TRIAL_DEFAULT_DAYS,
     TRIAL_MAX_DAYS: plans.TRIAL_MAX_DAYS,
-    TRIAL_ON_UPGRADE_DAYS: plans.TRIAL_ON_UPGRADE_DAYS,
+    TRIAL_SIGNUP_DAYS: plans.TRIAL_SIGNUP_DAYS,
     prefillEmail: String(req.query.email || ''),
     ok: req.query.ok || '', err: req.query.err || '',
   });
@@ -931,6 +931,7 @@ function grantTrial(req, res) {
     body: `A free trial was activated on your account. It runs until ${String(r.expiresAt).slice(0, 10)}.`,
     url: '/dashboard/upgrade',
   });
+  require('../lib/trialmail').sendTrialActivated(u, { days, expiresAt: r.expiresAt }).catch(() => {});
   return back('ok=' + encodeURIComponent(`${days}-day trial granted to ${email} (ends ${String(r.expiresAt).slice(0, 10)}).`));
 }
 
@@ -958,7 +959,7 @@ router.get('/admin3119Musa/settings', (req, res) => {
      LEFT JOIN listings l ON l.id = p.listing_id
      LEFT JOIN plans pl ON pl.id = p.plan_id
      LEFT JOIN users u ON u.id = p.user_id
-     ORDER BY p.created_at DESC LIMIT 25`
+     ORDER BY p.created_at DESC LIMIT 100`
   ).all();
   res.render('admin/settings', {
     meta: { title: 'Settings — FirmLedger Admin', description: '', robots: 'noindex,nofollow' },
@@ -1140,7 +1141,7 @@ router.get('/admin3119Musa/users/:id', (req, res, next) => {
     'SELECT id, ref, subject, category, status, created_at, updated_at FROM tickets WHERE user_id=? ORDER BY updated_at DESC LIMIT 10'
   ).all(u.id);
   const payments = db.prepare(
-    "SELECT id, reference, amount, currency, status, created_at, paid_at FROM payments WHERE user_id=? AND status='paid' ORDER BY COALESCE(paid_at, created_at) DESC LIMIT 10"
+    "SELECT id, reference, amount, currency, status, created_at, paid_at FROM payments WHERE user_id=? AND status='success' ORDER BY COALESCE(paid_at, created_at) DESC LIMIT 10"
   ).all(u.id);
   const pendingDeletion = db.prepare(
     "SELECT id, reason, created_at FROM deletion_requests WHERE user_id=? AND status='pending' ORDER BY id DESC LIMIT 1"
