@@ -103,8 +103,12 @@ function csrfProtect(req, res, next) {
   if ((req.headers['content-type'] || '').includes('multipart/form-data')) return next();
   const sess = req.userSession || req.adminSession;
   if (!sess) return next(); // unauthenticated posts (login/register) hold no privilege
-  if (tokenEq(req.body && req.body._csrf, sess.csrf)) return next();
-  return csrfFail(res);
+  const sent = (req.body && req.body._csrf)
+    || req.get('x-csrf-token')
+    || req.get('x-xsrf-token')
+    || '';
+  if (tokenEq(sent, sess.csrf)) return next();
+  return csrfFail(res, req);
 }
 
 /** Re-check after multer has populated req.body on multipart/form-data routes. */
@@ -114,7 +118,15 @@ function validCsrf(req) {
   return tokenEq(req.body && req.body._csrf, sess.csrf);
 }
 
-function csrfFail(res) {
+function csrfFail(res, req) {
+  const wantsJson = req && (
+    String(req.headers.accept || '').includes('application/json')
+    || String(req.headers['content-type'] || '').includes('application/json')
+    || req.xhr
+  );
+  if (wantsJson) {
+    return res.status(403).json({ ok: false, error: 'Security check failed. Reload the page and try again.' });
+  }
   return res.status(403).render('error', {
     meta: { title: 'Session expired — FirmLedger', description: 'Security check failed.', robots: 'noindex' },
     code: 403,
@@ -130,6 +142,12 @@ function requireUser(req, res, next) {
 
 function requireAdmin(req, res, next) {
   if (req.admin) return next();
+  const wantsJson = String(req.headers.accept || '').includes('application/json')
+    || String(req.headers['content-type'] || '').includes('application/json')
+    || req.xhr;
+  if (wantsJson) {
+    return res.status(401).json({ ok: false, error: 'Admin session expired. Reload and sign in again.' });
+  }
   res.redirect('/admin3119Musa');
 }
 

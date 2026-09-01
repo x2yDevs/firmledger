@@ -19,7 +19,7 @@ const session = require('./src/lib/session');
 const util = require('./src/lib/util');
 
 /* Bumped on every deploy that changes public/ assets — defeats the 7-day static cache. */
-const ASSET_V = '37';
+const ASSET_V = '39';
 
 const app = express();
 app.set('trust proxy', true);
@@ -38,6 +38,7 @@ app.set('views', path.join(__dirname, 'views'));
 
 app.use(compression());
 app.use(express.urlencoded({ extended: true, limit: '200kb' }));
+app.use(express.json({ limit: '200kb' }));
 app.use(cookieParser());
 
 /* Search-index guard: a box that isn't reachable at its own BASE_URL (unset value,
@@ -139,6 +140,7 @@ app.use('/', require('./src/routes/billing'));
 app.use('/', require('./src/routes/claim'));
 app.use('/', require('./src/routes/admin'));
 app.use('/', require('./src/routes/adminops'));
+app.use('/', require('./src/routes/adminai'));
 
 /* 404 */
 app.use((req, res) => {

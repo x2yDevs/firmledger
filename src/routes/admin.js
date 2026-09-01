@@ -1469,6 +1469,9 @@ router.post('/admin3119Musa/listings/new', async (req, res) => {
     Math.max(0, Math.min(97, parseInt(b.confidence, 10) || 55))
   );
   if (status === 'approved') submitForIndexing([`/listing/${slug}`]);
+  if (status === 'pending') {
+    try { require('../lib/ai').scheduleModeration(info.lastInsertRowid); } catch { /* AI moderation is best-effort */ }
+  }
   res.redirect(`/admin3119Musa/listings/${info.lastInsertRowid}/edit?ok=` + encodeURIComponent('Listing created — review fields and add sources/graph below.'));
 });
 

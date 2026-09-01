@@ -272,7 +272,8 @@ router.post('/dashboard/listings/new', spam.gate('listing'), async (req, res) =>
   let n = 2;
   while (db.prepare('SELECT id FROM listings WHERE slug = ?').get(slug)) slug = `${slugify(f.name)}-${n++}`;
 
-  const autoApprove = getSetting('auto_approve', '0') === '1';
+  const aiModeration = getSetting('ai_moderation_on', '0') === '1';
+  const autoApprove = !aiModeration && getSetting('auto_approve', '0') === '1';
   const status = autoApprove ? 'approved' : 'pending';
   const confidence = confidenceScore({ ...f, claimed: 0 });
 
@@ -316,6 +317,7 @@ router.post('/dashboard/listings/new', spam.gate('listing'), async (req, res) =>
       url: '/dashboard',
     });
   }
+  try { require('../lib/ai').scheduleModeration(newId); } catch { /* AI moderation is best-effort */ }
   res.redirect('/dashboard?ok=' + encodeURIComponent(
     status === 'approved'
       ? 'Your listing is live and has been submitted to search engines.'
@@ -428,6 +430,7 @@ router.post('/dashboard/listings/:id/edit', ownListing, async (req, res) => {
       body: `${req.user.email} updated an existing listing.`,
       url: '/admin3119Musa/listings?status=pending',
     });
+    try { require('../lib/ai').scheduleModeration(l.id); } catch { /* AI moderation is best-effort */ }
   }
   res.redirect(`/dashboard/listings/${l.id}/edit?ok=` + encodeURIComponent(
     needsReview
