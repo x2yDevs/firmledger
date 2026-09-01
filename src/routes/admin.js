@@ -891,9 +891,8 @@ router.post('/admin3119Musa/plans/:id/delete', (req, res) => {
 });
 
 /* ---------------- Free trials (Admin → Pricing) ----------------
-   Canonical path is /admin3119Musa/pricing; /admin/pricing is kept as an
-   alias (same handlers, same admin session guard) so the documented URLs
-   work too. */
+   Lives inside the admin area only, behind the same secret-path + session
+   guard as every other console page (router.use('/admin3119Musa', requireAdmin)). */
 function pricingPage(req, res) {
   const users = db.prepare(
     `SELECT id, email, name, plan, plan_expires_at, subscription_status,
@@ -950,10 +949,6 @@ function revokeTrialRoute(req, res) {
 router.get('/admin3119Musa/pricing', pricingPage);
 router.post('/admin3119Musa/pricing/free-trial', grantTrial);
 router.post('/admin3119Musa/pricing/revoke-trial', revokeTrialRoute);
-
-router.get('/admin/pricing', requireAdmin, pricingPage);
-router.post('/admin/pricing/free-trial', requireAdmin, grantTrial);
-router.post('/admin/pricing/revoke-trial', requireAdmin, revokeTrialRoute);
 
 /* ---------------- Settings ---------------- */
 router.get('/admin3119Musa/settings', (req, res) => {
