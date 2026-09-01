@@ -119,4 +119,129 @@ router.post('/admin3119Musa/ai/cancel', async (req, res) => {
   }
 });
 
+/* Chat session management */
+router.post('/admin3119Musa/ai/chat/sessions', async (req, res) => {
+  try {
+    const userId = req.session && req.session.userId ? Number(req.session.userId) : 0;
+    const includeArchived = req.query.include_archived === '1' || req.body.include_archived === '1';
+    const sessions = ai.getChatSessions(userId, includeArchived);
+    return res.json({ ok: true, sessions });
+  } catch (e) {
+    return handleAiError(req, res, e);
+  }
+});
+
+router.post('/admin3119Musa/ai/chat/session/create', async (req, res) => {
+  try {
+    const userId = req.session && req.session.userId ? Number(req.session.userId) : 0;
+    const title = String((req.body && req.body.title) || '').slice(0, 200) || 'New Chat';
+    const model = String((req.body && req.body.model) || '').slice(0, 100) || groq.modelId();
+    const session = ai.createChatSession(userId, title, model);
+    return res.json({ ok: true, session });
+  } catch (e) {
+    return handleAiError(req, res, e);
+  }
+});
+
+router.post('/admin3119Musa/ai/chat/session/:id/messages', async (req, res) => {
+  try {
+    const sessionId = Number(req.params.id);
+    const limit = Number(req.query.limit) || 100;
+    const messages = ai.getChatMessages(sessionId, limit);
+    return res.json({ ok: true, messages });
+  } catch (e) {
+    return handleAiError(req, res, e);
+  }
+});
+
+router.post('/admin3119Musa/ai/chat/session/:id/delete', async (req, res) => {
+  try {
+    const sessionId = Number(req.params.id);
+    const userId = req.session && req.session.userId ? Number(req.session.userId) : 0;
+    const session = ai.getChatSession(sessionId);
+    if (session && session.user_id === userId) {
+      ai.deleteChatSession(sessionId);
+      return res.json({ ok: true, deleted: true });
+    }
+    throw new Error('Session not found or not authorized.');
+  } catch (e) {
+    return handleAiError(req, res, e);
+  }
+});
+
+router.post('/admin3119Musa/ai/chat/session/:id/archive', async (req, res) => {
+  try {
+    const sessionId = Number(req.params.id);
+    const userId = req.session && req.session.userId ? Number(req.session.userId) : 0;
+    const session = ai.getChatSession(sessionId);
+    if (session && session.user_id === userId) {
+      ai.archiveChatSession(sessionId);
+      return res.json({ ok: true, archived: true });
+    }
+    throw new Error('Session not found or not authorized.');
+  } catch (e) {
+    return handleAiError(req, res, e);
+  }
+});
+
+router.post('/admin3119Musa/ai/chat/session/:id/unarchive', async (req, res) => {
+  try {
+    const sessionId = Number(req.params.id);
+    const userId = req.session && req.session.userId ? Number(req.session.userId) : 0;
+    const session = ai.getChatSession(sessionId);
+    if (session && session.user_id === userId) {
+      ai.unarchiveChatSession(sessionId);
+      return res.json({ ok: true, unarchived: true });
+    }
+    throw new Error('Session not found or not authorized.');
+  } catch (e) {
+    return handleAiError(req, res, e);
+  }
+});
+
+router.post('/admin3119Musa/ai/chat/session/:id/activate', async (req, res) => {
+  try {
+    const sessionId = Number(req.params.id);
+    const userId = req.session && req.session.userId ? Number(req.session.userId) : 0;
+    const session = ai.setActiveSession(sessionId);
+    if (session && session.user_id === userId) {
+      return res.json({ ok: true, session });
+    }
+    throw new Error('Session not found or not authorized.');
+  } catch (e) {
+    return handleAiError(req, res, e);
+  }
+});
+
+router.post('/admin3119Musa/ai/chat/purge-old', async (req, res) => {
+  try {
+    const days = Number(req.query.days) || 30;
+    ai.purgeOldArchivedChats(days);
+    return res.json({ ok: true, purged: true });
+  } catch (e) {
+    return handleAiError(req, res, e);
+  }
+});
+
+/* Audit and moderation log deletion */
+router.post('/admin3119Musa/ai/audit/:id/delete', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    ai.deleteAuditLogEntry(id);
+    return res.json({ ok: true, deleted: true });
+  } catch (e) {
+    return handleAiError(req, res, e);
+  }
+});
+
+router.post('/admin3119Musa/ai/moderation/:id/delete', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    ai.deleteModerationLogEntry(id);
+    return res.json({ ok: true, deleted: true });
+  } catch (e) {
+    return handleAiError(req, res, e);
+  }
+});
+
 module.exports = router;

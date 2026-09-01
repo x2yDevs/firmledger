@@ -651,6 +651,30 @@ CREATE TABLE IF NOT EXISTS ai_pending_actions (
   expires_at TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS ai_chat_sessions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL DEFAULT 0,
+  title TEXT NOT NULL DEFAULT '',
+  model TEXT NOT NULL DEFAULT '',
+  is_active INTEGER NOT NULL DEFAULT 0,
+  archived INTEGER NOT NULL DEFAULT 0,
+  archived_at TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_ai_chat_user ON ai_chat_sessions(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ai_chat_active ON ai_chat_sessions(is_active);
+CREATE INDEX IF NOT EXISTS idx_ai_chat_archived ON ai_chat_sessions(archived, archived_at);
+
+CREATE TABLE IF NOT EXISTS ai_chat_messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id INTEGER NOT NULL REFERENCES ai_chat_sessions(id) ON DELETE CASCADE,
+  role TEXT NOT NULL DEFAULT '',
+  content TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_ai_chat_msgs_session ON ai_chat_messages(session_id, created_at DESC);
 `);
 
 /* Settings helpers */

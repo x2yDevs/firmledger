@@ -678,10 +678,81 @@ function recentAudit(limit = 40) {
   return db.prepare('SELECT * FROM ai_audit_log ORDER BY id DESC LIMIT ?').all(limit);
 }
 
+/* ---------------- Chat Session Management ---------------- */
+
+function createChatSession(userId, title, model) {
+  const existingActive = db.prepare('UPDATE ai_chat_sessions SET is_active = 0 WHERE user_id = ?').run(userId);
+  const info = db.prepare(
+    `INSERT INTO ai_chat_sessions (user_id, title, model, is_active, archived, archived_at)
+     VALUES (?,?,?,1,0,'')`
+  ).run(userId || 0, title || 'New Chat', model || groq.modelId());
+  return db.prepare('SELECT * FROM ai_chat_sessions WHERE id = ?').get(info.lastInsertRowid);
+}
+
+function getChatSessions(userId, includeArchived = false) {
+  const where = includeArchived ? 'WHERE user_id = ?' : 'WHERE user_id = ? AND archived = 0';
+  return db.prepare(`SELECT * FROM ai_chat_sessions ${where} ORDER BY updated_at DESC`).all(userId || 0);
+}
+
+function getChatSession(sessionId) {
+  return db.prepare('SELECT * FROM ai_chat_sessions WHERE id = ?').get(sessionId);
+}
+
+function getChatMessages(sessionId, limit = 100) {
+  return db.prepare('SELECT * FROM ai_chat_messages WHERE session_id = ? ORDER BY id ASC LIMIT ?').all(sessionId, limit);
+}
+
+function addChatMessage(sessionId, role, content) {
+  const info = db.prepare(
+    `INSERT INTO ai_chat_messages (session_id, role, content)
+     VALUES (?,?,?)`
+  ).run(sessionId, role, content);
+  db.prepare('UPDATE ai_chat_sessions SET updated_at = datetime("now") WHERE id = ?').run(sessionId);
+  return info;
+}
+
+function deleteChatSession(sessionId) {
+  return db.prepare('DELETE FROM ai_chat_sessions WHERE id = ?').run(sessionId);
+}
+
+function archiveChatSession(sessionId) {
+  const archivedAt = new Date().toISOString().replace('T', ' ').slice(0, 19);
+  return db.prepare('UPDATE ai_chat_sessions SET archived = 1, archived_at = ?, is_active = 0 WHERE id = ?').run(archivedAt, sessionId);
+}
+
+function unarchiveChatSession(sessionId) {
+  return db.prepare('UPDATE ai_chat_sessions SET archived = 0, archived_at = "", is_active = 1 WHERE id = ?').run(sessionId);
+}
+
+function purgeOldArchivedChats(days = 30) {
+  const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().replace('T', ' ').slice(0, 19);
+  return db.prepare('DELETE FROM ai_chat_sessions WHERE archived = 1 AND archived_at < ?').run(cutoff);
+}
+
+function setActiveSession(sessionId) {
+  const session = getChatSession(sessionId);
+  if (session) {
+    db.prepare('UPDATE ai_chat_sessions SET is_active = 0 WHERE user_id = ?').run(session.user_id);
+    db.prepare('UPDATE ai_chat_sessions SET is_active = 1 WHERE id = ?').run(sessionId);
+  }
+  return session;
+}
+
+function deleteAuditLogEntry(id) {
+  return db.prepare('DELETE FROM ai_audit_log WHERE id = ?').run(id);
+}
+
+function deleteModerationLogEntry(id) {
+  return db.prepare('DELETE FROM ai_moderation_log WHERE id = ?').run(id);
+}
+
 module.exports = {
   DEFAULT_MODERATION_RULES,
   audit, generateListing, publishListing, applyListingLimits,
   chatTurn, executePending, cancelPending,
   scheduleModeration, moderateListing, isModerationOn,
   settingsSnapshot, saveSettings, recentModeration, recentAudit,
+  createChatSession, getChatSessions, getChatSession, getChatMessages,
+  addChatMessage, deleteChatSession, archiveChatSession, unarchiveChatSession,
+  purgeOldArchivedChats, setActiveSession, deleteAuditLogEntry, deleteModerationLogEntry,
 };
