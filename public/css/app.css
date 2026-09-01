@@ -575,7 +575,7 @@ code { font-family: var(--fm); font-size: .9em; background: var(--paper); border
 /* ---------- footer ---------- */
 .site-footer { background: var(--surface); border-top: 1px solid var(--hair); }
 
-/* Footer top — brand + key links + search pinned above the rest */
+/* Footer top — quick destination links pinned above the rest */
 .foot-top { background: var(--paper); border-bottom: 1px solid var(--hair); }
 .foot-top-in { display: flex; align-items: center; gap: 18px 28px; flex-wrap: wrap; padding-block: clamp(22px, 3vw, 30px); }
 .foot-quick { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex: 1 1 auto; min-width: 0; }
@@ -585,7 +585,6 @@ code { font-family: var(--fm); font-size: .9em; background: var(--paper); border
   white-space: nowrap; transition: border-color .15s, color .15s, background .15s;
 }
 .foot-quick a:hover { color: var(--accent2); border-color: var(--accent); background: var(--soft); text-decoration: none; }
-.foot-top-in .foot-search { flex: 0 1 340px; min-width: 240px; max-width: 380px; margin: 0; }
 
 /* Footer body — horizontally scrollable section strip (admin-console pattern) */
 .foot-scroll { border-bottom: 1px solid var(--hair); }
@@ -1654,3 +1653,46 @@ h2.h-display { font-size: clamp(1.9rem, 3.4vw, 2.7rem); }
 .ad-search-form .btn { height: 45px; }
 @media(max-width:900px) { .ad-search-form { grid-template-columns: 1fr 1fr; } .ad-search-form .btn { width: 100%; } }
 @media(max-width:560px) { .ad-search-form { grid-template-columns: 1fr; } }
+
+/* ================= r32: newsletter band fit + footer link row + socials ================= */
+/* Newsletter band: one balanced row — logo mark, copy, and the form — instead of the
+   old flex/space-between guesswork where the form wrapped onto its own line early and
+   the panel padding drifted. A 3-column grid gives the form a predictable track and
+   keeps everything vertically centred at every width. */
+.news-band .container { display: block; padding-block: clamp(26px, 3.4vw, 40px); }
+.news-inner {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(300px, 420px);
+  align-items: center;
+  gap: clamp(18px, 2.6vw, 34px);
+  padding: clamp(24px, 3vw, 32px) clamp(22px, 3.4vw, 40px);
+}
+.news-copy { min-width: 0; }
+.news-copy p { max-width: 56ch; }
+.news-form { width: 100%; margin: 0; }
+.news-ok { width: 100%; max-width: none; margin: 0; }
+
+/* Below ~1060px the copy needs the full width to stay readable, so the form moves to
+   its own row and keeps a sane maximum measure rather than stretching edge to edge. */
+@media (max-width: 1060px) {
+  .news-inner { grid-template-columns: auto minmax(0, 1fr); }
+  .news-form, .news-ok { grid-column: 1 / -1; max-width: 540px; }
+}
+@media (max-width: 560px) {
+  .news-inner { grid-template-columns: 1fr; gap: 16px; }
+  .news-copy p { font-size: .88rem; }
+}
+
+/* Footer top strip: brand lockup and duplicate search removed — the header already
+   carries both — leaving a single centred row of quick destinations. */
+.foot-top-in { justify-content: center; gap: 10px; padding-block: clamp(16px, 2.2vw, 22px); }
+.foot-quick { justify-content: center; flex: 0 1 auto; gap: 10px; }
+.foot-quick a { padding: 9px 16px; }
+
+/* Footer socials: a tidy, evenly-spaced icon row that wraps cleanly inside the brand
+   column and inherits the footer ink colour for a restrained, professional look. */
+.foot-socials { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 22px; }
+.foot-soc { width: 36px; height: 36px; border-radius: 9px; flex: 0 0 auto; background: var(--paper); }
+.foot-soc .social-ico { color: inherit; display: inline-flex; align-items: center; justify-content: center; }
+.foot-soc .social-ico svg { width: 15px; height: 15px; display: block; }
+.foot-soc:hover { background: var(--soft); }
