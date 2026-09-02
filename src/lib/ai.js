@@ -3,6 +3,9 @@
  * All Groq calls stay on the server. Mutating assistant tools wait for UI
  * confirmation (ai_pending_actions) unless the admin ticked them under Settings
  * → Auto-run. Lookups always run immediately. delete_user always confirms.
+ *
+ * The assistant is stateless: no chat history is stored. Context comes only
+ * from the messages visible in the current browser tab.
  */
 const crypto = require('crypto');
 const { db, getSetting, setSetting } = require('../db');
@@ -166,7 +169,7 @@ async function generateListing(prompt, opts = {}) {
     err.status = 422;
     throw err;
   }
-  const model = chatModelFor(opts.model, null);
+  const model = chatModelFor(opts.model);
   const data = await groq.chat({
     model,
     temperature: 0.4,
@@ -260,14 +263,14 @@ function sweepPending() {
   try { db.prepare("DELETE FROM ai_pending_actions WHERE expires_at < datetime('now')").run(); } catch { /* ignore */ }
 }
 
-function storePending({ tool, args, messages, assistantMessage, sessionId = 0 }) {
+function storePending({ tool, args, messages, assistantMessage }) {
   sweepPending();
   const id = 'act_' + crypto.randomBytes(16).toString('hex');
   const expires = new Date(Date.now() + 10 * 60 * 1000).toISOString().replace('T', ' ').slice(0, 19);
   db.prepare(
     `INSERT INTO ai_pending_actions (id, tool, args, messages, expires_at) VALUES (?,?,?,?,?)`
   ).run(id, tool, JSON.stringify(args || {}),
-    JSON.stringify({ messages, assistantMessage, sessionId }), expires);
+    JSON.stringify({ messages, assistantMessage }), expires);
   return id;
 }
 
@@ -313,26 +316,14 @@ Rules:
 }
 
 /**
- * One assistant turn.
- *
- * opts.session_id → the stored transcript is the source of truth. The tail of the
- *   conversation is read back from SQLite (never from the browser), the new line is
- *   written first, and the reply is written after, so a reload always shows exactly
- *   what the model saw. opts.text is the message being sent.
- * No session → the caller's `history` array is used and nothing is stored.
+ * One assistant turn — fully stateless. The caller's `history` array (the
+ * messages visible in the current tab) is the only context; nothing is read
+ * from or written to a transcript store. Write actions still land in
+ * ai_pending_actions so the operator can confirm them.
  */
 async function chatTurn(history, opts = {}) {
-  const session = opts.session_id ? getChatSessionForUser(opts.session_id, opts.userId) : null;
-  const model = chatModelFor(opts.model, session);
-  let messages;
-
-  if (session) {
-    const text = String(opts.text || '').trim().slice(0, 4000);
-    if (text) addChatMessage(session.id, 'user', text, { model });
-    messages = sanitiseHistory([...transcriptForModel(session.id)]);
-  } else {
-    messages = sanitiseHistory(history);
-  }
+  const model = chatModelFor(opts.model);
+  const messages = sanitiseHistory(history);
   if (!messages.length) {
     const err = new Error('Send a message first.');
     err.status = 422;
@@ -346,23 +337,13 @@ async function chatTurn(history, opts = {}) {
   }
 
   const useTools = groq.supportsTools(model);
-  let data;
-  try {
-    data = await groq.chat({
-      model,
-      temperature: 0.2,
-      max_tokens: 900,
-      ...(useTools ? { tools: tools.groqTools(), tool_choice: 'auto' } : {}),
-      messages: [{ role: 'system', content: assistantSystemPrompt() }, ...messages],
-    });
-  } catch (e) {
-    if (session) {
-      addChatMessage(session.id, 'assistant', `Groq could not answer: ${e.message}`, {
-        model, ok: false,
-      });
-    }
-    throw e;
-  }
+  const data = await groq.chat({
+    model,
+    temperature: 0.2,
+    max_tokens: 900,
+    ...(useTools ? { tools: tools.groqTools(), tool_choice: 'auto' } : {}),
+    messages: [{ role: 'system', content: assistantSystemPrompt() }, ...messages],
+  });
 
   const usedModel = data._model || model;
   const calls = useTools ? groq.toolCalls(data) : [];
@@ -377,30 +358,23 @@ async function chatTurn(history, opts = {}) {
     const t = tools.getTool(name);
     if (!t) {
       const content = text || `I wanted to run “${name}” but that action is not registered.`;
-      if (session) addChatMessage(session.id, 'assistant', content, { model: usedModel, ok: false });
-      return { type: 'message', content, model: usedModel, usage: groq.usage(data), session_id: session ? session.id : 0 };
+      return { type: 'message', content, model: usedModel, usage: groq.usage(data) };
     }
     if (tools.isAuto(name)) {
       audit({ kind: 'chat', action: 'auto:' + name, payload: args, result: 'auto-run' });
       return finishToolTurn({
-        tool: name, args, messages, assistantMessage, auto: true, session, model: usedModel,
+        tool: name, args, messages, assistantMessage, auto: true, model: usedModel,
       });
     }
-    const pendingId = storePending({
-      tool: name, args, messages, assistantMessage, sessionId: session ? session.id : 0,
-    });
+    const pendingId = storePending({ tool: name, args, messages, assistantMessage });
     audit({ kind: 'chat', action: 'propose:' + name, payload: args, result: pendingId });
     const content = text || `I can ${tools.describeCall(name, args)}. Confirm to run it.`;
-    if (session) {
-      addChatMessage(session.id, 'assistant', content, { model: usedModel, tool: `propose:${name}` });
-    }
     return {
       type: 'tool_proposal',
       pending_id: pendingId,
       content,
       model: usedModel,
       usage: groq.usage(data),
-      session_id: session ? session.id : 0,
       expires_in_sec: 600,
       tool: {
         name,
@@ -414,11 +388,10 @@ async function chatTurn(history, opts = {}) {
 
   audit({ kind: 'chat', action: 'reply', payload: { preview: last.content.slice(0, 200) }, result: text.slice(0, 400) });
   const content = text || 'Done.';
-  if (session) addChatMessage(session.id, 'assistant', content, { model: usedModel });
-  return { type: 'message', content, model: usedModel, usage: groq.usage(data), session_id: session ? session.id : 0 };
+  return { type: 'message', content, model: usedModel, usage: groq.usage(data) };
 }
 
-async function finishToolTurn({ tool, args, messages, assistantMessage, auto = false, session = null, model = '' }) {
+async function finishToolTurn({ tool, args, messages, assistantMessage, auto = false, model = '' }) {
   let exec;
   try {
     exec = await tools.execute(tool, args);
@@ -426,7 +399,6 @@ async function finishToolTurn({ tool, args, messages, assistantMessage, auto = f
     audit({ kind: 'tool', action: tool, payload: args, result: e.message, ok: 0 });
     const err = new Error(e.message || 'The action failed.');
     err.status = 500;
-    if (session) addChatMessage(session.id, 'assistant', `“${tool}” failed: ${e.message}`, { model, tool, ok: false });
     throw err;
   }
   audit({
@@ -468,24 +440,19 @@ async function finishToolTurn({ tool, args, messages, assistantMessage, auto = f
       ? `Action completed: ${tool}. ${JSON.stringify(exec.result || exec).slice(0, 400)}`
       : `Action failed: ${exec.error || 'unknown error'}`;
   }
-  if (session) {
-    addChatMessage(session.id, 'assistant', content || (exec.ok ? 'Done.' : exec.error), {
-      model: usedModel, tool, ok: Boolean(exec.ok),
-    });
-  }
   if (!exec.ok) {
     return {
       type: 'message', content: content || exec.error, error: exec.error,
-      executed: false, auto, tool, model: usedModel, session_id: session ? session.id : 0,
+      executed: false, auto, tool, model: usedModel,
     };
   }
   return {
     type: 'message', content: content || 'Done.', executed: true, tool, result: exec.result, auto,
-    model: usedModel, session_id: session ? session.id : 0,
+    model: usedModel,
   };
 }
 
-async function executePending(pendingId, opts = {}) {
+async function executePending(pendingId) {
   const row = loadPending(pendingId);
   if (!row) {
     const err = new Error('That action expired or was already handled. Ask me again if you still want it.');
@@ -496,19 +463,16 @@ async function executePending(pendingId, opts = {}) {
   const args = tools.parseArgs(row.args);
   let packed;
   try { packed = JSON.parse(row.messages); } catch { packed = { messages: [], assistantMessage: { role: 'assistant', content: '' } }; }
-  const sessionId = Number(opts.session_id || packed.sessionId || 0) || 0;
-  const session = sessionId ? getChatSessionForUser(sessionId, opts.userId) : null;
   return finishToolTurn({
     tool: row.tool,
     args,
     messages: packed.messages,
     assistantMessage: packed.assistantMessage,
     auto: false,
-    session,
   });
 }
 
-async function cancelPending(pendingId, opts = {}) {
+async function cancelPending(pendingId) {
   const row = loadPending(pendingId);
   if (!row) return { type: 'message', content: 'That action was already cancelled or expired. Nothing ran.' };
   dropPending(row.id);
@@ -522,8 +486,6 @@ async function cancelPending(pendingId, opts = {}) {
     || 'call_1';
 
   let content = `Understood — cancelled “${tools.describeCall(row.tool, tools.parseArgs(row.args))}”. Nothing was changed.`;
-  const sessionId = Number(opts.session_id || packed.sessionId || 0) || 0;
-  const session = sessionId ? ownedChatSession(sessionId, opts.userId) : null;
   try {
     const data = await groq.chat({
       temperature: 0.2,
@@ -541,9 +503,8 @@ async function cancelPending(pendingId, opts = {}) {
       ],
     });
     content = groq.assistantText(data) || content;
-    if (session) addChatMessage(session.id, 'assistant', content, { model: data._model || '', tool: `cancel:${row.tool}` });
   } catch { /* keep the canned acknowledgement if the model is unreachable */ }
-  return { type: 'message', content, cancelled: true, session_id: session ? session.id : 0 };
+  return { type: 'message', content, cancelled: true };
 }
 
 /* ---------------- Auto-moderation ---------------- */
@@ -692,7 +653,7 @@ function notifyAdminUnsure(l, reason) {
   }
 }
 
-function settingsSnapshot(userId = 0) {
+function settingsSnapshot() {
   const keySet = groq.groqConfigured();
   const src = groq.groqKeySource();
   const live = groq.liveSnapshot();
@@ -710,7 +671,6 @@ function settingsSnapshot(userId = 0) {
     models: groq.usableModels(),
     live_models: live.ids,
     live_checked_at: live.checked_at,
-    chat_window: CHAT_WINDOW,
     moderation_on: isModerationOn(),
     moderation_model: moderationModelId(),
     moderation_rules: getSetting('ai_moderation_rules', '') || DEFAULT_MODERATION_RULES,
@@ -719,7 +679,6 @@ function settingsSnapshot(userId = 0) {
     tools: tools.catalog(),
     tool_groups: tools.GROUPS,
     auto_tools: [...tools.autoSet()],
-    counts: countChatSessions(userId),
     pending_actions: pending,
   };
 }
@@ -826,287 +785,12 @@ function recentAudit(limit = 40, offset = 0) {
   return logsPage('audit', { limit, offset }).rows;
 }
 
-/* ---------------- Legacy chat session helpers (history disabled in admin UI) ---------------- */
-
-const CHAT_WINDOW = 24;              // stored turns replayed to Groq per request
-const MAX_SESSIONS_PER_USER = 400;   // archived chats are pruned past this
-const PLACEHOLDER_TITLES = new Set(['', 'new chat', 'new conversation', 'untitled chat']);
-
-function titleFromText(text) {
-  const flat = String(text || '').replace(/\s+/g, ' ').trim();
-  if (!flat) return 'New chat';
-  return flat.length > 56 ? `${flat.slice(0, 55).trimEnd()}…` : flat;
-}
-
-function cleanTitle(title) {
-  const t = String(title || '').replace(/\s+/g, ' ').trim().slice(0, 120);
-  return t || 'New chat';
-}
-
-function chatModelFor(requested, session) {
-  const cand = String(requested || (session && session.model) || '').trim();
+/** Resolve a requested model against the known list; fall back to the default. */
+function chatModelFor(requested) {
+  const cand = String(requested || '').trim();
   if (groq.isKnownModel(cand)) return cand;
   return groq.modelId();
 }
-
-function getChatSession(sessionId) {
-  return db.prepare('SELECT * FROM ai_chat_sessions WHERE id = ?').get(Number(sessionId) || 0) || null;
-}
-
-/** Non-fatal variant used after an action resolves: a gone/foreign chat just means “do not persist”. */
-function ownedChatSession(sessionId, userId) {
-  const s = getChatSession(sessionId);
-  if (!s) return null;
-  if (userId != null && Number(s.user_id) !== Number(userId || 0)) return null;
-  return s;
-}
-
-/** Ownership gate — every /session/:id route resolves through this. */
-function getChatSessionForUser(sessionId, userId) {
-  const s = getChatSession(sessionId);
-  if (!s) {
-    const err = new Error('That chat no longer exists.');
-    err.status = 404;
-    throw err;
-  }
-  if (Number(s.user_id) !== Number(userId || 0)) {
-    const err = new Error('That chat belongs to a different operator.');
-    err.status = 403;
-    throw err;
-  }
-  return s;
-}
-
-function countChatSessions(userId) {
-  const row = db.prepare(
-    `SELECT COUNT(*) AS total,
-            SUM(CASE WHEN archived = 0 THEN 1 ELSE 0 END) AS live,
-            SUM(CASE WHEN archived = 1 THEN 1 ELSE 0 END) AS archived
-       FROM ai_chat_sessions WHERE user_id = ?`
-  ).get(Number(userId) || 0);
-  return {
-    total: Number(row && row.total) || 0,
-    live: Number(row && row.live) || 0,
-    archived: Number(row && row.archived) || 0,
-  };
-}
-
-function listChatSessions(userId, opts = {}) {
-  const uid = Number(userId) || 0;
-  const limit = Math.max(1, Math.min(200, Number(opts.limit) || 80));
-  const offset = Math.max(0, Number(opts.offset) || 0);
-  const term = String(opts.q || '').trim().replace(/[%_*"']/g, '').slice(0, 60);
-  const clauses = [`s.user_id = ?`];
-  const params = [uid];
-  if (opts.archivedOnly) clauses.push('s.archived = 1');
-  else if (!opts.includeArchived) clauses.push('s.archived = 0');
-  if (term.length >= 2) {
-    clauses.push(`(s.title LIKE ? OR EXISTS (SELECT 1 FROM ai_chat_messages mm
-      WHERE mm.session_id = s.id AND mm.content LIKE ?))`);
-    params.push(`%${term}%`, `%${term}%`);
-  }
-  const where = `WHERE ${clauses.join(' AND ')}`;
-  const rows = db.prepare(
-    `SELECT s.*,
-            (SELECT COUNT(*) FROM ai_chat_messages m WHERE m.session_id = s.id) AS message_count,
-            (SELECT substr(replace(m.content, char(10), ' '), 1, 110)
-               FROM ai_chat_messages m WHERE m.session_id = s.id ORDER BY m.id DESC LIMIT 1) AS preview
-     FROM ai_chat_sessions s ${where}
-     ORDER BY s.is_active DESC, datetime(s.updated_at) DESC
-     LIMIT ? OFFSET ?`
-  ).all(...params, limit, offset);
-  const total = db.prepare(`SELECT COUNT(*) AS c FROM ai_chat_sessions s ${where}`)
-    .get(...params).c;
-  return { sessions: rows, total, limit, offset, has_more: offset + rows.length < total };
-}
-
-function activeChatSession(userId) {
-  return db.prepare(
-    'SELECT * FROM ai_chat_sessions WHERE user_id = ? AND archived = 0 AND is_active = 1 ORDER BY id DESC LIMIT 1'
-  ).get(Number(userId) || 0) || null;
-}
-
-function createChatSession(userId, title, model) {
-  const uid = Number(userId) || 0;
-  const m = chatModelFor(model, null);
-  const held = db.prepare('SELECT COUNT(*) AS c FROM ai_chat_sessions WHERE user_id = ?').get(uid).c;
-  if (held >= MAX_SESSIONS_PER_USER) {
-    const overflow = held - MAX_SESSIONS_PER_USER + 1;
-    db.prepare(
-      `DELETE FROM ai_chat_sessions
-       WHERE id IN (SELECT id FROM ai_chat_sessions WHERE user_id = ? AND archived = 1
-                    ORDER BY datetime(updated_at) ASC LIMIT ?)`
-    ).run(uid, overflow);
-  }
-  db.prepare('UPDATE ai_chat_sessions SET is_active = 0 WHERE user_id = ?').run(uid);
-  const info = db.prepare(
-    `INSERT INTO ai_chat_sessions (user_id, title, model, is_active, archived, archived_at, last_message_at)
-     VALUES (?,?,?,1,0,'',datetime('now'))`
-  ).run(uid, cleanTitle(title), m);
-  const session = getChatSession(info.lastInsertRowid);
-  audit({ kind: 'chat', action: 'session:create', payload: { session_id: session.id, model: m } });
-  return session;
-}
-
-/**
- * Ensures the operator has somewhere to write. Reuses the active chat when it is
- * still empty, otherwise opens a new one — so pressing send on a fresh tab never
- * needs a second round trip, and repeated empty chats never pile up.
- */
-function ensureChatSession(userId, { title, model } = {}) {
-  const active = activeChatSession(userId);
-  if (active) {
-    const empty = !db.prepare('SELECT 1 FROM ai_chat_messages WHERE session_id = ? LIMIT 1').get(active.id);
-    if (empty) {
-      const m = chatModelFor(model, active);
-      if (m !== active.model) setChatSessionModel(active.id, m);
-      return getChatSession(active.id);
-    }
-  }
-  return createChatSession(userId, title, model);
-}
-
-function renameChatSession(sessionId, title) {
-  db.prepare('UPDATE ai_chat_sessions SET title = ? WHERE id = ?').run(cleanTitle(title), Number(sessionId) || 0);
-  return getChatSession(sessionId);
-}
-
-function setChatSessionModel(sessionId, model) {
-  const m = chatModelFor(model, null);
-  db.prepare('UPDATE ai_chat_sessions SET model = ? WHERE id = ?').run(m, Number(sessionId) || 0);
-  return getChatSession(sessionId);
-}
-
-function setActiveSession(sessionId, userId) {
-  const session = getChatSessionForUser(sessionId, userId);
-  db.prepare('UPDATE ai_chat_sessions SET is_active = 0 WHERE user_id = ?').run(session.user_id);
-  db.prepare('UPDATE ai_chat_sessions SET is_active = 1 WHERE id = ?').run(session.id);
-  return getChatSession(session.id);
-}
-
-function touchSession(sessionId, patch = {}) {
-  const stamp = new Date().toISOString().replace('T', ' ').slice(0, 19);
-  if (patch.title) {
-    db.prepare(
-      'UPDATE ai_chat_sessions SET updated_at = datetime(\'now\'), last_message_at = datetime(\'now\'), title = ? WHERE id = ?'
-    ).run(cleanTitle(patch.title), Number(sessionId) || 0);
-    return;
-  }
-  db.prepare(
-    'UPDATE ai_chat_sessions SET updated_at = datetime(\'now\'), last_message_at = datetime(\'now\') WHERE id = ?'
-  ).run(Number(sessionId) || 0);
-}
-
-/**
- * Persist one transcript line. `meta` carries what the UI needs to replay the
- * bubble faithfully: which model answered, and whether the line records a
- * console action (and whether that action succeeded).
- */
-function addChatMessage(sessionId, role, content, meta = {}) {
-  const sid = Number(sessionId) || 0;
-  if (!sid) return null;
-  const body = String(content == null ? '' : content).slice(0, 12000);
-  const info = db.prepare(
-    `INSERT INTO ai_chat_messages (session_id, role, content, model, tool, ok)
-     VALUES (?,?,?,?,?,?)`
-  ).run(sid, role === 'user' ? 'user' : 'assistant', body,
-    String(meta.model || '').slice(0, 100), String(meta.tool || '').slice(0, 80),
-    meta.ok === false ? 0 : 1);
-  const session = getChatSession(sid);
-  if (session && role === 'user' && PLACEHOLDER_TITLES.has(String(session.title || '').toLowerCase())) {
-    touchSession(sid, { title: titleFromText(body) });
-  } else {
-    touchSession(sid);
-  }
-  return { id: Number(info.lastInsertRowid), session_id: sid, role, content: body, model: meta.model || '', tool: meta.tool || '', ok: meta.ok === false ? 0 : 1 };
-}
-
-const appendChatMessage = addChatMessage;
-
-function clearChatMessages(sessionId) {
-  const info = db.prepare('DELETE FROM ai_chat_messages WHERE session_id = ?').run(Number(sessionId) || 0);
-  touchSession(sessionId);
-  return { removed: info.changes };
-}
-
-function sessionTranscript(sessionId, opts = {}) {
-  const sid = Number(sessionId) || 0;
-  const limit = Math.max(1, Math.min(300, Number(opts.limit) || 120));
-  const beforeId = Math.max(0, Number(opts.before) || 0);
-  const rows = db.prepare(
-    `SELECT * FROM ai_chat_messages
-     WHERE session_id = ? AND (? = 0 OR id < ?)
-     ORDER BY id DESC LIMIT ?`
-  ).all(sid, beforeId, beforeId, limit + 1);
-  const hasMore = rows.length > limit;
-  const page = hasMore ? rows.slice(0, limit) : rows;
-  return {
-    messages: page.reverse(),
-    has_more: hasMore,
-    oldest_id: page.length ? page[0].id : 0,
-  };
-}
-
-/** Model-facing history: role + content only, trimmed to the recent window. */
-function transcriptForModel(sessionId) {
-  const rows = db.prepare(
-    'SELECT role, content FROM ai_chat_messages WHERE session_id = ? ORDER BY id DESC LIMIT ?'
-  ).all(Number(sessionId) || 0, CHAT_WINDOW);
-  return rows.reverse().map((r) => ({ role: r.role, content: r.content }));
-}
-
-function deleteChatSession(sessionId) {
-  const sid = Number(sessionId) || 0;
-  const session = getChatSession(sid);
-  if (!session) return { deleted: false, reason: 'missing' };
-  db.prepare('DELETE FROM ai_chat_messages WHERE session_id = ?').run(sid);
-  db.prepare('DELETE FROM ai_chat_sessions WHERE id = ?').run(sid);
-  if (session.is_active) {
-    const next = db.prepare(
-      'SELECT id FROM ai_chat_sessions WHERE user_id = ? AND archived = 0 ORDER BY datetime(updated_at) DESC LIMIT 1'
-    ).get(session.user_id);
-    if (next) db.prepare('UPDATE ai_chat_sessions SET is_active = 1 WHERE id = ?').run(next.id);
-  }
-  audit({ kind: 'chat', action: 'session:delete', payload: { session_id: sid, title: session.title } });
-  return { deleted: true, id: sid };
-}
-
-function archiveChatSession(sessionId) {
-  const session = getChatSession(sessionId);
-  if (!session) return { archived: false, reason: 'missing' };
-  db.prepare(
-    "UPDATE ai_chat_sessions SET archived = 1, is_active = 0, archived_at = datetime('now') WHERE id = ?"
-  ).run(session.id);
-  if (session.is_active) {
-    const next = db.prepare(
-      'SELECT id FROM ai_chat_sessions WHERE user_id = ? AND archived = 0 ORDER BY datetime(updated_at) DESC LIMIT 1'
-    ).get(session.user_id);
-    if (next) db.prepare('UPDATE ai_chat_sessions SET is_active = 1 WHERE id = ?').run(next.id);
-  }
-  return { archived: true, id: session.id };
-}
-
-/** Restores a chat without stealing the active slot — activating is its own action. */
-function unarchiveChatSession(sessionId) {
-  const session = getChatSession(sessionId);
-  if (!session) return { unarchived: false, reason: 'missing' };
-  db.prepare("UPDATE ai_chat_sessions SET archived = 0, archived_at = '' WHERE id = ?").run(session.id);
-  return { unarchived: true, id: session.id };
-}
-
-function purgeArchivedChats(userId, days = 30) {
-  const d = Math.max(1, Math.min(365, Number(days) || 30));
-  const doomed = db.prepare(
-    `SELECT id FROM ai_chat_sessions
-     WHERE user_id = ? AND archived = 1 AND datetime(COALESCE(NULLIF(archived_at, ''), updated_at)) < datetime('now', ?)`
-  ).all(Number(userId) || 0, `-${d} days`).map((r) => r.id);
-  if (!doomed.length) return { purged: 0, days: d, removed_messages: 0 };
-  const del = db.prepare('DELETE FROM ai_chat_messages WHERE session_id IN (' + doomed.map(() => '?').join(',') + ')').run(...doomed);
-  db.prepare('DELETE FROM ai_chat_sessions WHERE id IN (' + doomed.map(() => '?').join(',') + ')').run(...doomed);
-  audit({ kind: 'chat', action: 'session:purge', payload: { days: d, count: doomed.length } });
-  return { purged: doomed.length, days: d, removed_messages: del.changes };
-}
-
 /** Oldest un-reviewed submissions — feeds the “Review one now” picker. */
 function oldestPending(limit = 30) {
   const n = Math.max(1, Math.min(100, Number(limit) || 30));
@@ -1131,11 +815,5 @@ module.exports = {
   chatTurn, executePending, cancelPending,
   scheduleModeration, moderateListing, isModerationOn, moderationModelId,
   settingsSnapshot, saveSettings, recentModeration, recentAudit, logsPage, logSnapshot, oldestPending,
-  /* legacy chat sessions — admin history is disabled */
-  createChatSession, ensureChatSession, getChatSession, getChatSessionForUser, listChatSessions,
-  countChatSessions, activeChatSession, sessionTranscript, transcriptForModel,
-  addChatMessage, clearChatMessages, renameChatSession, setChatSessionModel,
-  deleteChatSession, archiveChatSession, unarchiveChatSession, purgeArchivedChats,
-  setActiveSession,
   deleteAuditLogEntry, deleteModerationLogEntry,
 };

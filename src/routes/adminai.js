@@ -5,8 +5,9 @@
  * Contract for the console UI (all JSON endpoints answer the same envelope):
  *   ok:true  + payload            success
  *   ok:false + error (+code)      anything the operator should read
- * The admin assistant is stateless: it can use the messages visible in the
- * current tab, but it no longer stores or reopens chat transcripts.
+ * The admin assistant is stateless: it only uses the messages visible in the
+ * current tab. Chat history was removed entirely — nothing is stored, listed,
+ * reopened or restored.
  */
 const express = require('express');
 const { requireAdmin } = require('../lib/session');
@@ -33,16 +34,6 @@ function jsonError(res, status, message, extra = {}) {
 
 function str(v, max = 4000) {
   return String(v == null ? '' : v).trim().slice(0, max);
-}
-
-/*
- * Admin sessions are cookie-only (sessions.kind='admin', user_id NULL), so every
- * console operator shares one identity — owner 0. The id is still threaded through
- * every chat route so transcripts stay scoped per owner if the console ever grows
- * named admins.
- */
-function adminUserId() {
-  return 0;
 }
 
 function handleAiError(req, res, e) {
@@ -78,27 +69,14 @@ function json(handler) {
 /* ---------------- Render ---------------- */
 
 router.get(BASE, (req, res) => {
-  const userId = adminUserId();
-  const settings = ai.settingsSnapshot(userId);
-
-  // The admin assistant is intentionally stateless: no saved chat rail, no
-  // persisted transcript, and no previous messages rendered back into the UI.
-  const transcriptLimit = 120;
-  const transcript = { messages: [], has_more: false, oldest_id: 0 };
-
+  // The admin assistant is intentionally stateless: no chat history, no saved
+  // sessions, and no previous messages rendered back into the UI.
   res.render('admin/ai', {
     meta: { title: 'AI Playground — FirmLedger Admin', description: '', robots: 'noindex,nofollow' },
     section: 'ai',
-    settings,
+    settings: ai.settingsSnapshot(),
     TYPES, SIZES, COUNTRIES,
     allCats: catLib.all(),
-    openSession: null,
-    messages: transcript.messages,
-    hasMoreMessages: transcript.has_more,
-    oldestMessageId: transcript.oldest_id,
-    transcriptLimit: transcriptLimit,
-    chatSessions: [],
-    chatTotal: 0,
     pendingSamples: ai.oldestPending(30),
     moderation: ai.logsPage('moderation', { limit: 50 }),
     auditLog: ai.logsPage('audit', { limit: 40 }),
@@ -135,7 +113,7 @@ router.post(`${BASE}/test`, json(async (req, res) => {
   return res.json({
     ok: true,
     test: result,
-    settings: ai.settingsSnapshot(adminUserId()),
+    settings: ai.settingsSnapshot(),
   });
 }));
 
@@ -174,77 +152,29 @@ router.post(`${BASE}/publish-listing`, json(async (req, res) => {
 /* ---------------- Assistant ---------------- */
 
 router.post(`${BASE}/chat`, json(async (req, res) => {
-  const userId = adminUserId();
   const text = str(req.body && req.body.text);
   const model = str(req.body && req.body.model, 100);
   const prior = req.body && Array.isArray(req.body.messages) ? req.body.messages : [];
   const messages = text ? [...prior, { role: 'user', content: text }] : prior;
   if (!messages.length) return jsonError(res, 422, 'Type a message first.');
 
-  // No session_id on purpose: the assistant can use the current in-page context
-  // but does not create or append any saved chat history in SQLite.
-  const result = await ai.chatTurn(messages, { model, session_id: 0, userId });
-  return res.json({
-    ok: true,
-    ...result,
-    session: null,
-    session_id: 0,
-    history_open: false,
-  });
+  // Stateless by design: the assistant uses the current in-page context only.
+  // No chat history is created or stored anywhere.
+  const result = await ai.chatTurn(messages, { model });
+  return res.json({ ok: true, ...result });
 }));
 
 router.post(`${BASE}/execute`, json(async (req, res) => {
   const id = str(req.body && req.body.pending_id, 80);
-  const result = await ai.executePending(id, {
-    session_id: Number(req.body && req.body.session_id) || 0,
-    userId: adminUserId(),
-  });
+  const result = await ai.executePending(id);
   return res.json({ ok: true, ...result });
 }));
 
 router.post(`${BASE}/cancel`, json(async (req, res) => {
   const id = str(req.body && req.body.pending_id, 80);
-  const result = await ai.cancelPending(id, {
-    session_id: Number(req.body && req.body.session_id) || 0,
-    userId: adminUserId(),
-  });
+  const result = await ai.cancelPending(id);
   return res.json({ ok: true, ...result });
 }));
-
-/* ---------------- Chat history disabled ---------------- */
-
-function emptyHistory(req, res) {
-  return res.json({
-    ok: true,
-    sessions: [],
-    total: 0,
-    limit: Number(req.query && req.query.limit) || 80,
-    offset: Number(req.query && req.query.offset) || 0,
-    has_more: false,
-    counts: { total: 0, live: 0, archived: 0 },
-  });
-}
-
-function historyGone(req, res) {
-  return res.status(410).json({
-    ok: false,
-    error: 'Saved chat history has been removed from the admin assistant.',
-    counts: { total: 0, live: 0, archived: 0 },
-  });
-}
-
-router.get(`${BASE}/chat/sessions`, emptyHistory);
-router.post(`${BASE}/chat/sessions`, emptyHistory);
-router.post(`${BASE}/chat/session/create`, emptyHistory);
-router.get(`${BASE}/chat/sessions/:id`, historyGone);
-router.get(`${BASE}/chat/session/:id/messages`, historyGone);
-['activate', 'archive', 'unarchive', 'clear', 'rename', 'model'].forEach((action) => {
-  router.post(`${BASE}/chat/sessions/:id/${action}`, historyGone);
-  router.post(`${BASE}/chat/session/:id/${action}`, historyGone);
-});
-router.post(`${BASE}/chat/sessions/:id/delete`, historyGone);
-router.delete(`${BASE}/chat/sessions/:id`, historyGone);
-router.post(`${BASE}/chat/purge-archived`, emptyHistory);
 
 /* ---------------- Logs ---------------- */
 
