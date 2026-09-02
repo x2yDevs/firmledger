@@ -826,7 +826,7 @@ function recentAudit(limit = 40, offset = 0) {
   return logsPage('audit', { limit, offset }).rows;
 }
 
-/* ---------------- Chat sessions (assistant history rail) ---------------- */
+/* ---------------- Legacy chat session helpers (history disabled in admin UI) ---------------- */
 
 const CHAT_WINDOW = 24;              // stored turns replayed to Groq per request
 const MAX_SESSIONS_PER_USER = 400;   // archived chats are pruned past this
@@ -1131,7 +1131,7 @@ module.exports = {
   chatTurn, executePending, cancelPending,
   scheduleModeration, moderateListing, isModerationOn, moderationModelId,
   settingsSnapshot, saveSettings, recentModeration, recentAudit, logsPage, logSnapshot, oldestPending,
-  /* chat sessions — the assistant's history rail */
+  /* legacy chat sessions — admin history is disabled */
   createChatSession, ensureChatSession, getChatSession, getChatSessionForUser, listChatSessions,
   countChatSessions, activeChatSession, sessionTranscript, transcriptForModel,
   addChatMessage, clearChatMessages, renameChatSession, setChatSessionModel,

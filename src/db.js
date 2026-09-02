@@ -690,6 +690,18 @@ try { db.exec("ALTER TABLE ai_chat_messages ADD COLUMN ok INTEGER NOT NULL DEFAU
 try { db.exec("ALTER TABLE ai_chat_sessions ADD COLUMN last_message_at TEXT NOT NULL DEFAULT ''"); } catch { /* column exists */ }
 try { db.exec('CREATE INDEX IF NOT EXISTS idx_ai_chat_sessions_owner ON ai_chat_sessions(user_id, archived, updated_at DESC)'); } catch { /* ignore */ }
 
+/* AI Playground admin assistant no longer stores chat history. Purge legacy
+   transcripts once so old conversations cannot reappear after this deploy. */
+try {
+  const done = db.prepare('SELECT value FROM settings WHERE key = ?').get('ai_chat_history_removed_v20260902');
+  if (!done) {
+    db.exec('DELETE FROM ai_chat_messages; DELETE FROM ai_chat_sessions;');
+    db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run('ai_chat_history_removed_v20260902', new Date().toISOString());
+  }
+} catch (e) {
+  console.error('[db] failed to purge legacy AI chat history:', e.message);
+}
+
 /* Settings helpers */
 function getSetting(key, fallback = '') {
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
