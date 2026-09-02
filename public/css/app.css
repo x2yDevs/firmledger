@@ -1812,9 +1812,9 @@ h2.h-display { font-size: clamp(1.9rem, 3.4vw, 2.7rem); }
 /* ================= AI Playground (admin) =================
    One page, three tabs: generator · assistant · settings & logs.
    The assistant reuses the support-chat vocabulary (.chat-window / .chat-head /
-   .chat-pane / .wa-*), so both chat surfaces stay visually identical. The history
-   rail is a real grid column here (never an absolutely positioned overlay), and
-   every control in the navy header gets light-on-dark styling so nothing can go
+   .chat-pane / .wa-*), so both chat surfaces stay visually identical. Chat
+   history was removed: the assistant is a single-column, stateless window.
+   Every control in the navy header gets light-on-dark styling so nothing can go
    invisible the way a bare .btn-ghost on a light background did. */
 
 .ai-page .section-head { align-items: flex-start; }
@@ -1900,44 +1900,38 @@ h2.h-display { font-size: clamp(1.9rem, 3.4vw, 2.7rem); }
   -webkit-appearance: none; appearance: none;
 }
 .ai-model-select:focus, .ai-inline-select select:focus { border-color: var(--accent); }
-/* Inputs that live outside a .form wrapper (log filters, the rail search, the
-   "review one now" box) inherit nothing, so they are mapped onto the same field
-   aesthetic every other input on the site uses. */
+/* Inputs that live outside a .form wrapper (log filters, the "review one now"
+   box) inherit nothing, so they are mapped onto the same field aesthetic every
+   other input on the site uses. */
 .ai-inline-search input,
-.rail-tools input,
 .ai-quick-row input {
   width: 100%; border: 1px solid var(--hair2); border-radius: var(--rs);
   background: var(--surface); color: var(--ink); font: 400 14.5px/1.4 var(--fb);
   padding: 12px 14px; outline: none; -webkit-appearance: none; appearance: none;
 }
 .ai-inline-search input:focus,
-.rail-tools input:focus,
 .ai-quick-row input:focus { border-color: var(--accent); }
 .ai-inline-search input::placeholder,
-.rail-tools input::placeholder,
 .ai-quick-row input::placeholder { color: var(--muted); }
 .ai-inline-search { display: inline-flex; }
 .ai-inline-search input { width: clamp(140px, 20vw, 210px); height: 38px; padding: 0 12px; font-size: 13px; }
-.rail-tools input { height: 38px; padding: 0 12px; font-size: 13px; }
 .ai-quick-row input { height: 42px; padding: 0 14px; font-size: 14px; }
 .form-actions-tight { margin-top: 14px; gap: 9px; }
 .ai-clear-key { margin: 4px 0 0; padding: 9px 12px; border: 1px solid var(--hair); border-radius: 10px; background: var(--paper); }
 .ai-clear-key:hover { border-color: #F2D2CF; }
 
-/* Assistant window */
-.ai-chat { display: flex; flex-direction: column; min-height: clamp(560px, 78vh, 860px); }
-.ai-chat .chat-head { flex: 0 0 auto; }
+/* Assistant window — one column: header, transcript, composer. The window owns
+   a fixed height (viewport-aware) and the transcript scrolls inside it, so the
+   header and the composer are always visible no matter how long the chat gets.
+   No height math against the header: flex does the distribution. */
+.ai-chat { display: flex; flex-direction: column; height: clamp(540px, 76vh, 840px); }
+.ai-chat .chat-head { flex: 0 0 auto; flex-wrap: wrap; row-gap: 10px; }
 .chat-head-actions .btn { color: #fff; border-color: rgba(255, 255, 255, .38); background: rgba(255, 255, 255, .06); }
 .chat-head-actions .btn:hover { background: rgba(255, 255, 255, .16); border-color: #fff; color: #fff; }
 .chat-head-actions .btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .chat-head-actions .btn[disabled] { opacity: .45; cursor: not-allowed; }
-.chat-head-actions .btn-icon { width: 38px; padding: 0; gap: 0; position: relative; }
+.chat-head-actions .btn-icon { width: 38px; padding: 0; gap: 0; }
 .chat-head-actions .btn svg { flex: 0 0 auto; }
-.rail-count {
-  position: absolute; top: -5px; right: -5px; min-width: 17px; height: 17px; padding: 0 4px;
-  border-radius: 999px; background: var(--gold, #C58A2C); color: var(--navy);
-  font: 700 10px/17px var(--fm); text-align: center; border: 1px solid var(--navy);
-}
 .ai-live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: 0 0 auto; }
 .ai-live-dot.is-on { background: #6EE7A8; box-shadow: 0 0 0 3px rgba(110, 231, 168, .22); }
 .ai-live-dot.is-off { background: #F2B8B4; }
@@ -1952,97 +1946,21 @@ h2.h-display { font-size: clamp(1.9rem, 3.4vw, 2.7rem); }
 .chat-model-pick select:hover { background-color: rgba(255, 255, 255, .14); }
 .chat-model-pick option { color: var(--ink); background: var(--surface); }
 
-/* Rail + transcript share the window as two columns */
-.ai-chat-body { position: relative; flex: 1 1 auto; display: grid; grid-template-columns: 1fr; min-height: 0; }
-@media (min-width: 901px) {
-  .ai-chat-body { grid-template-columns: minmax(0, 0fr) minmax(0, 1fr); transition: grid-template-columns .22s ease; }
-  .ai-chat.has-rail .ai-chat-body { grid-template-columns: minmax(260px, 300px) minmax(0, 1fr); }
-  /* Both tracks are named explicitly: with the rail hidden (display:none) the
-     transcript must stay in the second, full-width track instead of being
-     auto-placed into the collapsed first one — that is what made the chat
-     disappear when the history rail was closed. */
-  .ai-chat-body > .chat-rail { grid-column: 1; grid-row: 1; }
-  .ai-chat-body > .ai-chat-main { grid-column: 2; grid-row: 1; }
-}
-.ai-chat-main { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
-.ai-chat .chat-pane { flex: 1 1 auto; max-height: none; min-height: 340px; overflow-y: auto; }
-/* The window sets the height; the transcript owns the scroll, so the composer
-   and the history rail never get pushed off-screen by a long chat. */
-.ai-chat-body { height: calc(clamp(560px, 78vh, 860px) - 69px); }
-@media (max-width: 700px) { .ai-chat-body { height: auto; } }
+/* Single-column layout: the transcript is the window's only content track. */
+.ai-chat-body { position: relative; flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
+.ai-chat-main { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+/* The transcript owns the scroll: long chats never push the composer or the
+   page itself off-screen. */
+.ai-chat .chat-pane { flex: 1 1 auto; max-height: none; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 
-.chat-rail {
-  display: flex; flex-direction: column; min-height: 0;
-  background: var(--paper); border-right: 1px solid var(--hair2);
-}
-.chat-rail[hidden] { display: none; }
-/* On desktop the rail stays a real grid column (always visible). On phones the same
-   rail becomes a sliding drawer: it sits off-canvas to the left and only slides in
-   when the ☰ button in the chat header is pressed, over a dimmed backdrop. Pressing
-   the button, the backdrop, or choosing a chat slides it back away. */
-.chat-rail-toggle { display: none; }
-.rail-backdrop { display: none; }
-@media (max-width: 900px) {
-  .ai-chat-body { height: auto; position: relative; }
-  .chat-rail-toggle { display: inline-flex; }
-  .chat-rail {
-    position: absolute; top: 0; bottom: 0; left: 0; z-index: 20;
-    width: min(86vw, 340px); max-width: 340px;
-    border-right: 1px solid var(--hair2); border-bottom: 0;
-    box-shadow: var(--shadow);
-    transform: translateX(-105%);
-    transition: transform .25s ease;
-    visibility: hidden;
-  }
-  .ai-chat.is-rail-open .chat-rail { transform: translateX(0); visibility: visible; }
-  .rail-backdrop {
-    display: block; position: absolute; inset: 0; z-index: 15;
-    background: rgba(10, 22, 40, .35);
-    opacity: 0; visibility: hidden; transition: opacity .2s ease;
-  }
-  .ai-chat.is-rail-open .rail-backdrop { opacity: 1; visibility: visible; }
-}
-
-.rail-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 12px 10px 16px; border-bottom: 1px solid var(--hair); }
-.rail-head h4 { font: 600 11px/1 var(--fm); letter-spacing: .14em; text-transform: uppercase; color: var(--accent); }
-.rail-tools { padding: 10px 12px; display: grid; gap: 8px; border-bottom: 1px solid var(--hair); }
-.rail-seg { display: flex; gap: 4px; padding: 3px; border-radius: 9px; background: var(--paper-2, #F3F1EC); border: 1px solid var(--hair); }
-.rail-seg button { flex: 1 1 0; border: 0; border-radius: 6px; padding: 5px 4px; background: transparent; color: var(--muted); font: 600 11px var(--fm); cursor: pointer; transition: all .15s; }
-.rail-seg button:hover { color: var(--ink); }
-.rail-seg button.on { background: var(--surface); color: var(--navy); box-shadow: 0 1px 2px rgba(10, 22, 40, .08); }
-.rail-list { flex: 1 1 auto; overflow-y: auto; padding: 6px; min-height: 160px; scrollbar-width: thin; }
-.rail-group { font: 600 10px/1 var(--fm); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); padding: 12px 10px 6px; }
-.rail-item { display: flex; align-items: stretch; gap: 2px; border-radius: 10px; transition: background .14s; }
-.rail-item:hover { background: var(--surface); }
-.rail-item.active { background: var(--soft); box-shadow: inset 2px 0 0 var(--accent); }
-.rail-item.archived { opacity: .72; }
-.rail-item.archived.active { opacity: 1; }
-.rail-item-main {
-  flex: 1 1 auto; min-width: 0; display: grid; gap: 3px; text-align: left; cursor: pointer;
-  background: transparent; border: 0; padding: 9px 4px 9px 10px; border-radius: 10px 0 0 10px; color: inherit;
-  font: inherit;
-}
-.rail-item-main:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.ri-title { font: 600 13px/1.35 var(--fb); color: var(--ink); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.ri-meta { font: 500 10.5px/1.4 var(--fm); color: var(--muted); }
-.ri-preview { font: 400 11.5px/1.45 var(--fb); color: var(--ink2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.rail-item.active .ri-preview { color: var(--accent2); }
-.rail-item-actions { display: flex; flex-direction: column; justify-content: center; gap: 3px; padding: 4px 4px 4px 0; }
+/* Small icon buttons (log delete controls) */
 .icon-btn.xs { width: 26px; height: 26px; border-radius: 7px; border: 1px solid transparent; background: transparent; color: var(--muted); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: all .14s; }
 .icon-btn.xs:hover { background: var(--surface); border-color: var(--hair2); color: var(--ink); }
 .icon-btn.xs.danger:hover { color: var(--bad); border-color: #F2D2CF; background: var(--bad-soft); }
 .icon-btn.xs:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.icon-btn.sm { width: 30px; height: 30px; border-radius: 8px; }
-.rail-empty { font: 400 12px/1.6 var(--fb); color: var(--muted); padding: 18px 12px; text-align: center; }
-.rail-foot { display: flex; gap: 8px; justify-content: space-between; align-items: center; padding: 9px 12px; border-top: 1px solid var(--hair); background: var(--surface); }
-.rail-foot .btn { color: var(--ink2); }
-.rail-foot .btn:hover { color: var(--ink); }
-.rail-foot .btn.danger { color: var(--bad); }
 
 /* Transcript */
 .chat-day { margin: 2px 0 4px; }
-.ai-day-actions { display: flex; justify-content: center; padding: 4px 0 10px; }
-.ai-empty-transcript { align-self: center; margin: auto 0; font-size: .86rem; color: var(--muted); text-align: center; padding: 14px 16px; border: 1px dashed var(--hair2); border-radius: var(--r); background: var(--surface); }
 .ai-chat .chat-day { position: sticky; top: 0; z-index: 1; }
 .ai-chat .wa-row { align-items: flex-start; }
 .ai-chat .wa-bubble { max-width: min(84%, 660px); }
@@ -2168,17 +2086,31 @@ h2.h-display { font-size: clamp(1.9rem, 3.4vw, 2.7rem); }
 .ai-help-list b { color: var(--ink); }
 body.ai-modal-open { overflow: hidden; }
 
+/* Responsive assistant: on tablets and phones the window stops claiming a fixed
+   viewport height — the transcript becomes a comfortable fixed-height scroll
+   area instead, and the header controls get their own row so nothing overflows
+   or hides behind the edge. */
+@media (max-width: 900px) {
+  .ai-chat { height: auto; }
+  .ai-chat .chat-pane { flex: 0 0 auto; height: max(300px, 56vh); }
+  .ai-chat .chat-head-actions { width: 100%; justify-content: flex-end; }
+}
 @media (max-width: 700px) {
-  .ai-chat { min-height: 0; }
-  .ai-chat .chat-pane { min-height: 260px; max-height: 60vh; }
-  .chat-head { flex-wrap: wrap; }
-  .chat-head-actions { width: 100%; justify-content: flex-end; }
-  .chat-model-pick, .chat-model-pick select { max-width: 100%; width: 100%; }
+  .ai-chat .chat-head { padding: 12px 14px; }
+  .ai-chat .chat-pane { padding: 14px 10px; }
+  .ai-chat .chat-composer { padding: 10px; }
+  .ai-chat .wa-bubble { max-width: min(92%, 660px); }
   .ai-keyline-live { margin-left: 0; }
+}
+@media (max-width: 520px) {
+  /* The model picker takes its own row; Clear + help stay on the next. */
+  .ai-chat .chat-head-actions { gap: 8px; }
+  .ai-chat .chat-model-pick { flex: 1 1 100%; }
+  .ai-chat .chat-model-pick select { width: 100%; max-width: 100%; }
 }
 @media (prefers-reduced-motion: reduce) {
   .ai-typing .dot, .is-spin { animation: none; }
-  .chat-rail, .rail-item, .ai-tab, .ai-chip { transition: none; }
+  .ai-tab, .ai-chip { transition: none; }
 }
 
 /* ================= r34: footer that fits every width + sponsored marquee ================= */

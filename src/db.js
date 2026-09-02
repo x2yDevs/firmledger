@@ -652,54 +652,15 @@ CREATE TABLE IF NOT EXISTS ai_pending_actions (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE TABLE IF NOT EXISTS ai_chat_sessions (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id INTEGER NOT NULL DEFAULT 0,
-  title TEXT NOT NULL DEFAULT '',
-  model TEXT NOT NULL DEFAULT '',
-  is_active INTEGER NOT NULL DEFAULT 0,
-  archived INTEGER NOT NULL DEFAULT 0,
-  archived_at TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-CREATE INDEX IF NOT EXISTS idx_ai_chat_user ON ai_chat_sessions(user_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_ai_chat_active ON ai_chat_sessions(is_active);
-CREATE INDEX IF NOT EXISTS idx_ai_chat_archived ON ai_chat_sessions(archived, archived_at);
-
-CREATE TABLE IF NOT EXISTS ai_chat_messages (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  session_id INTEGER NOT NULL REFERENCES ai_chat_sessions(id) ON DELETE CASCADE,
-  role TEXT NOT NULL DEFAULT '',
-  content TEXT NOT NULL DEFAULT '',
-  model TEXT NOT NULL DEFAULT '',
-  tool TEXT NOT NULL DEFAULT '',
-  ok INTEGER NOT NULL DEFAULT 1,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-CREATE INDEX IF NOT EXISTS idx_ai_chat_msgs_session ON ai_chat_messages(session_id, created_at DESC);
 `);
 
-/* AI Playground chat transcript columns — mirrors
-   migrations/2026-09-01-ai-playground-chat.sql so existing deployments
-   pick them up at boot. model/tool/ok let the assistant's action results
-   be replayed in the transcript exactly as they happened. */
-try { db.exec("ALTER TABLE ai_chat_messages ADD COLUMN model TEXT NOT NULL DEFAULT ''"); } catch { /* column exists */ }
-try { db.exec("ALTER TABLE ai_chat_messages ADD COLUMN tool TEXT NOT NULL DEFAULT ''"); } catch { /* column exists */ }
-try { db.exec("ALTER TABLE ai_chat_messages ADD COLUMN ok INTEGER NOT NULL DEFAULT 1"); } catch { /* column exists */ }
-try { db.exec("ALTER TABLE ai_chat_sessions ADD COLUMN last_message_at TEXT NOT NULL DEFAULT ''"); } catch { /* column exists */ }
-try { db.exec('CREATE INDEX IF NOT EXISTS idx_ai_chat_sessions_owner ON ai_chat_sessions(user_id, archived, updated_at DESC)'); } catch { /* ignore */ }
-
-/* AI Playground admin assistant no longer stores chat history. Purge legacy
-   transcripts once so old conversations cannot reappear after this deploy. */
+/* AI Playground admin assistant is stateless — chat history was removed.
+   Drop the legacy transcript tables (messages first: they reference the
+   session rows) so stored conversations cannot survive on any deployment. */
 try {
-  const done = db.prepare('SELECT value FROM settings WHERE key = ?').get('ai_chat_history_removed_v20260902');
-  if (!done) {
-    db.exec('DELETE FROM ai_chat_messages; DELETE FROM ai_chat_sessions;');
-    db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run('ai_chat_history_removed_v20260902', new Date().toISOString());
-  }
+  db.exec('DROP TABLE IF EXISTS ai_chat_messages; DROP TABLE IF EXISTS ai_chat_sessions;');
 } catch (e) {
-  console.error('[db] failed to purge legacy AI chat history:', e.message);
+  console.error('[db] failed to drop legacy AI chat tables:', e.message);
 }
 
 /* Settings helpers */

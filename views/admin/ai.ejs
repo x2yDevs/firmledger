@@ -6,18 +6,6 @@
   const offAttr = ready ? '' : ' disabled';
   const tierLabel = { production: 'Production', preview: 'Preview', legacy: 'Legacy' };
   const chatTitle = 'Admin assistant';
-  const labelFor = (id) => { const hit = (settings.models || []).filter(function (m) { return m.id === id; })[0]; return hit ? hit.label : (id || 'no model'); };
-  const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const UTC_DAY = (offset) => new Date(Date.now() - (offset || 0) * 86400000).toISOString().slice(0, 10);
-  const dayChip = (day) => {
-    if (!day) return 'Today';
-    const today = UTC_DAY(0);
-    if (day === today) return 'Today';
-    if (day === UTC_DAY(1)) return 'Yesterday';
-    const p = String(day).split('-');
-    return parseInt(p[2], 10) + ' ' + MON[parseInt(p[1], 10) - 1] + (p[0] === today.slice(0, 4) ? '' : ' ' + p[0]);
-  };
-  const counts = settings.counts || { total: 0, live: 0, archived: 0 };
 %>
 
 <section class="section-tight ai-page">
@@ -484,10 +472,6 @@
   var BASE = '/admin3119Musa/ai';
   var READY = <%- ready ? 'true' : 'false' %>;
   var MODELS = <%- JSON.stringify(settings.models.map(function (m) { return { id: m.id, label: m.label, tier: m.tier, available: m.available == null ? null : !!m.available, note: m.note || '', tools: !!m.tools }; })) %>;
-  var START_SESSION = null;
-  var START_MESSAGES = [];
-  var START_MORE = false;
-  var START_OLDEST = 0;
   var START_TAB = <%- JSON.stringify(tab) %>;
   var DEFAULT_RULES = <%- JSON.stringify(settings.default_rules) %>;
 
@@ -536,40 +520,6 @@
     } catch (e) { /* private mode — the page still works */ }
     return null;
   }
-  function fmtTime(value) {
-    var t = String(value || '').replace(' ', 'T');
-    if (t && !/Z|[+-]\d\d:?\d\d$/.test(t)) t += 'Z';
-    var d = t ? new Date(t) : null;
-    return d && !isNaN(d.getTime()) ? d : null;
-  }
-  function hhmm(d) {
-    if (!d) return '';
-    return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
-  }
-  function whenLabel(value) {
-    var d = fmtTime(value);
-    if (!d) return '—';
-    var now = new Date();
-    var days = Math.floor((new Date(now.getFullYear(), now.getMonth(), now.getDate())
-      - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 864e5);
-    if (days <= 0) return 'Today ' + hhmm(d);
-    if (days === 1) return 'Yesterday ' + hhmm(d);
-    if (days < 7) return days + ' days ago';
-    return d.toISOString().slice(0, 10);
-  }
-  function groupLabel(value) {
-    var d = fmtTime(value);
-    if (!d) return 'Earlier';
-    var now = new Date();
-    var days = Math.floor((new Date(now.getFullYear(), now.getMonth(), now.getDate())
-      - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 864e5);
-    if (days <= 0) return 'Today';
-    if (days === 1) return 'Yesterday';
-    if (days < 7) return 'This week';
-    if (days < 31) return 'Last 30 days';
-    return 'Older';
-  }
-
   /* ---------------- fetch wrapper ---------------- */
 
   function api(path, opts) {
@@ -665,8 +615,6 @@
   var pane = $('chat-pane');
   var statusLine = $('chat-status');
   var state = {
-    sessionId: 0,
-    sessionTitle: 'Admin assistant',
     model: <%- JSON.stringify(settings.groq_model) %>,
     busy: false,
     pending: null,
@@ -1136,8 +1084,6 @@
   });
 
   function startFresh(silent) {
-    state.sessionId = 0;
-    state.sessionTitle = 'Admin assistant';
     state.pending = null;
     state.transcript = [];
     pane.textContent = '';

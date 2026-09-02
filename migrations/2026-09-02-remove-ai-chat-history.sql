@@ -1,7 +1,10 @@
 -- FirmLedger AI Playground: remove saved Admin assistant chat history.
--- The assistant remains available, but future turns are stateless and only keep
+-- The assistant remains available, but every turn is stateless and only keeps
 -- in-page context for the current browser tab. Pending action confirmations stay
 -- in ai_pending_actions and continue to expire normally.
+--
+-- Applied automatically at boot by src/db.js (idempotent; re-running is a no-op).
+-- Messages are dropped first because they reference the session rows.
 
-DELETE FROM ai_chat_messages;
-DELETE FROM ai_chat_sessions;
+DROP TABLE IF EXISTS ai_chat_messages;
+DROP TABLE IF EXISTS ai_chat_sessions;
