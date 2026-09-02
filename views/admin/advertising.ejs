@@ -63,25 +63,27 @@
     <div class="side-card">
       <h3>Currently sponsored</h3>
       <% if (sponsored.length) { %>
-      <div class="table-wrap">
-        <table class="table">
-          <thead><tr><th>Listing</th><th>Until</th><th>Reference</th><th class="ta-right">Actions</th></tr></thead>
-          <tbody>
-            <% sponsored.forEach(function (l) { %>
-            <tr>
-              <td><a href="/listing/<%= l.slug %>" target="_blank" style="font-weight:600;color:var(--ink)"><%= l.name %></a></td>
-              <td><%= l.sponsored_expires_at || 'lifetime' %></td>
-              <td class="muted" style="font-size:12px"><%= l.ad_reference || '—' %></td>
-              <td class="ta-right actions-cell">
-                <form method="post" action="/admin3119Musa/listings/<%= l.id %>/unsponsor" class="inline" onsubmit="return confirm('Remove sponsorship from “<%= l.name.replace(/\"/g, '') %>”?');">
-                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                  <button class="btn btn-danger btn-xs" type="submit">Remove</button>
-                </form>
-              </td>
-            </tr>
-            <% }); %>
-          </tbody>
-        </table>
+      <div class="scroll-table">
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Listing</th><th>Until</th><th>Reference</th><th class="ta-right">Actions</th></tr></thead>
+            <tbody>
+              <% sponsored.forEach(function (l) { %>
+              <tr>
+                <td><a href="/listing/<%= l.slug %>" target="_blank" style="font-weight:600;color:var(--ink)"><%= l.name %></a></td>
+                <td><%= l.sponsored_expires_at || 'lifetime' %></td>
+                <td class="muted" style="font-size:12px"><%= l.ad_reference || '—' %></td>
+                <td class="ta-right actions-cell">
+                  <form method="post" action="/admin3119Musa/listings/<%= l.id %>/unsponsor" class="inline" onsubmit="return confirm('Remove sponsorship from “<%= l.name.replace(/\"/g, '') %>”?');">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                    <button class="btn btn-danger btn-xs" type="submit">Remove</button>
+                  </form>
+                </td>
+              </tr>
+              <% }); %>
+            </tbody>
+          </table>
+        </div>
       </div>
       <% } else { %>
       <p class="muted">No listings are currently sponsored.</p>
@@ -108,7 +110,8 @@
         <button class="btn btn-gold" type="submit">Search</button>
         <% if (q || status) { %><a class="btn btn-ghost" href="/admin3119Musa/advertising">Clear</a><% } %>
       </form>
-      <div class="table-wrap scroll-table">
+      <div class="scroll-table">
+        <div class="table-wrap">
         <table class="table" id="adListingsTable">
           <thead><tr><th>Listing</th><th>Owner</th><th>Status</th><th>Sponsored</th><th class="ta-right">Actions</th></tr></thead>
           <tbody>
@@ -150,6 +153,7 @@
             <% }); %>
           </tbody>
         </table>
+        </div>
       </div>
       <% if (!listings.length) { %>
       <p class="muted" style="margin:12px 0 0">No listings match <%= q ? '“' + q + '”' : '' %><%= q && status ? ' and ' : '' %><%= status ? 'the ' + status + ' filter' : '' %>. Try a different search, or <a href="/admin3119Musa/advertising">clear the filters</a>.</p>

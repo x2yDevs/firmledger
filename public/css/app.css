@@ -1511,10 +1511,61 @@ body:has(.admin-bar) #main .table-wrap thead th {
 .notif-scroll .notif-list { gap: 10px; }
 .notif-panel-foot { padding: 10px 16px; border-top: 1px solid var(--hair); background: var(--surface); font: 500 12px/1.5 var(--fm); color: var(--muted); }
 
-/* Admin — recent payments table scrolls inside its card instead of growing the page */
-.scroll-table { max-height: 380px; overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--hair); border-radius: var(--r); scrollbar-width: thin; }
-.scroll-table .table-wrap { border: 0; border-radius: 0; margin: 0; }
-.scroll-table table thead th { position: sticky; top: 0; z-index: 1; background: var(--surface); box-shadow: 0 1px 0 var(--hair); }
+/* ---------------------------------------------------------------------------
+   Admin data surfaces — one scroll pattern for every long queue in the console.
+
+   .scroll-table  wraps a .table-wrap: the rows scroll inside the card, the
+                  header row stays pinned, and the page keeps its normal height.
+   .scroll-panel  the same behaviour for card/list surfaces that are not tables
+                  (recent incidents, and anything built from articles).
+   Both mirror the notifications inbox: contained, quiet scrollbar, no page
+   growth as records pile up.
+   --------------------------------------------------------------------------- */
+.scroll-table {
+  max-height: min(58vh, 520px);
+  overflow: auto;            /* rows scroll down, wide tables still scroll across */
+  overscroll-behavior: contain;
+  border: 1px solid var(--hair);
+  border-radius: var(--r);
+  background: var(--surface);
+  scrollbar-width: thin;
+  scrollbar-color: var(--hair2) transparent;
+}
+/* The inner wrapper must not scroll as well — one scrollbar per surface.
+   Written with the same #main specificity as the generic admin rule above so it
+   wins wherever both apply. */
+.scroll-table .table-wrap,
+body:has(.admin-bar) #main .scroll-table .table-wrap {
+  border: 0; border-radius: 0; margin: 0; max-height: none; overflow: visible;
+}
+.scroll-table table thead th { position: sticky; top: 0; z-index: 2; background: var(--surface); box-shadow: 0 1px 0 var(--hair); }
+.scroll-table::-webkit-scrollbar { width: 9px; }
+.scroll-table::-webkit-scrollbar-thumb { background: var(--hair2); border-radius: 999px; }
+.scroll-table::-webkit-scrollbar-track { background: transparent; }
+
+.scroll-panel {
+  max-height: min(62vh, 560px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--hair);
+  border-radius: var(--r);
+  background: var(--paper);
+  padding: 12px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--hair2) transparent;
+}
+.scroll-panel::-webkit-scrollbar { width: 9px; }
+.scroll-panel::-webkit-scrollbar-thumb { background: var(--hair2); border-radius: 999px; }
+.scroll-panel::-webkit-scrollbar-track { background: transparent; }
+
+/* A short list should never leave a half-empty scroll box: the panel only takes
+   the height it needs, the cap just stops it running away. */
+.scroll-table > .table-wrap > .table { margin: 0; }
+
+@media (max-width: 720px) {
+  .scroll-table { max-height: min(64vh, 460px); }
+  .scroll-panel { max-height: min(64vh, 460px); padding: 10px; }
+}
 
 /* ===== Sponsored Content (advertising) ===== */
 .section-sponsored { border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); background: linear-gradient(180deg, rgba(29,78,216,.02), rgba(29,78,216,0)); }
@@ -2022,6 +2073,10 @@ body:has(.admin-bar) #main .table-wrap thead th {
   font: 400 11.5px/1.5 var(--fm); color: var(--ink2); max-height: 160px; white-space: pre-wrap;
 }
 .ai-proposal-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+/* Batched proposal — one confirm covering several ordered actions. */
+.ai-proposal-steps { margin: 2px 0 0; padding-left: 18px; display: grid; gap: 4px; }
+.ai-proposal-steps li { font: 500 13px/1.45 var(--fb); color: var(--ink); }
+.ai-proposal-steps li::marker { color: var(--muted); font: 600 11.5px var(--fm); }
 
 /* Composer */
 .ai-chat .chat-composer { flex: 0 0 auto; }

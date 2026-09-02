@@ -263,14 +263,25 @@ function sweepPending() {
   try { db.prepare("DELETE FROM ai_pending_actions WHERE expires_at < datetime('now')").run(); } catch { /* ignore */ }
 }
 
-function storePending({ tool, args, messages, assistantMessage }) {
+/**
+ * Park one or more proposed actions for operator confirmation.
+ * `steps` is always an array of { name, args, id } — a single proposal is a
+ * one-element batch, so confirm/execute has exactly one code path.
+ */
+function storePending({ steps, convo, ran = [] }) {
   sweepPending();
   const id = 'act_' + crypto.randomBytes(16).toString('hex');
   const expires = new Date(Date.now() + 10 * 60 * 1000).toISOString().replace('T', ' ').slice(0, 19);
+  const label = steps.length === 1 ? steps[0].name : `${steps.length} actions`;
   db.prepare(
     `INSERT INTO ai_pending_actions (id, tool, args, messages, expires_at) VALUES (?,?,?,?,?)`
-  ).run(id, tool, JSON.stringify(args || {}),
-    JSON.stringify({ messages, assistantMessage }), expires);
+  ).run(
+    id,
+    label.slice(0, 80),
+    JSON.stringify({ steps }).slice(0, 200000),
+    JSON.stringify({ convo, ran }).slice(0, 400000),
+    expires,
+  );
   return id;
 }
 
@@ -308,18 +319,204 @@ ${tools.capabilityPrompt()}
 
 Rules:
 - Prefer a tool for any admin action or factual lookup. Do not invent ids, emails, slugs or counts.
+- Finish the whole job. If a request needs several actions, call them — one after another is fine, and you may call more than one tool in a single response. You will be given each tool's real result before you answer.
+- Look things up first when you are missing an id or slug (search_listings, search_users, search_admin, the list_* tools), then act on what you found.
 - If a request is ambiguous (which listing / which user?), ask a clarifying question instead of calling a tool.
-- Never claim you already did a write. The UI either auto-runs allowed tools or asks the operator to confirm.
+- Never claim you already did a write. Report only what the tool results show: if a tool returned an error, say so plainly and do not describe it as done.
 - ${autoLine}
 - Destructive actions (delete user, delete listing, email everyone, maintenance on, fulfill removal) only when the operator is explicit.
 - Be concise.`;
 }
 
+/* How far one turn may go on its own before it must come back to the operator. */
+const MAX_MODEL_STEPS = 6;   // model round-trips per turn
+const MAX_TOOL_RUNS = 12;    // tool executions per turn
+
+function toolMessage(callId, name, payload) {
+  return {
+    role: 'tool',
+    tool_call_id: callId,
+    name,
+    content: JSON.stringify(payload).slice(0, 6000),
+  };
+}
+
+/** Normalise the model's tool_calls into { id, name, args }. */
+function readCalls(calls) {
+  return calls.map((c, i) => ({
+    id: c.id || `call_${i + 1}`,
+    name: (c.function && c.function.name) || c.name || '',
+    args: tools.parseArgs(c.function && c.function.arguments),
+  }));
+}
+
+/** One-line receipt per executed step, used when the model cannot summarise. */
+function receipt(ran) {
+  return ran.map((r) => (r.ok
+    ? `✓ ${tools.describeCall(r.tool, r.args)}`
+    : `✗ ${tools.describeCall(r.tool, r.args)} — ${r.error}`)).join('\n');
+}
+
+/** Execute a list of steps in order, appending the results to the conversation. */
+async function runSteps(steps, convo, ran, { auto = false } = {}) {
+  for (const step of steps) {
+    let exec;
+    try {
+      exec = await tools.execute(step.name, step.args);
+    } catch (e) {
+      exec = { ok: false, error: e.message || 'The action failed.' };
+    }
+    audit({
+      kind: 'tool',
+      action: (auto ? 'auto:' : '') + step.name,
+      payload: step.args,
+      result: exec,
+      ok: exec.ok ? 1 : 0,
+    });
+    ran.push({ tool: step.name, args: step.args, ok: Boolean(exec.ok), result: exec.result, error: exec.error || '' });
+    convo.push(toolMessage(step.id, step.name, exec));
+  }
+  return ran;
+}
+
+/**
+ * The agent loop.
+ *
+ * Runs the model, executes whatever it is allowed to execute, feeds the real
+ * tool results back, and lets it continue until the task is genuinely finished
+ * (or the step budget runs out). Nothing is ever reported as done unless a tool
+ * actually ran and returned ok — the summary is generated from the tool output.
+ *
+ * Any step that needs operator confirmation stops the loop: every call in that
+ * model response is parked as ONE pending batch, so “suspend X and email them”
+ * is confirmed and then executed as a unit rather than being refused.
+ */
+async function runAgent({ convo, model, ran = [], budgetSteps = MAX_MODEL_STEPS }) {
+  let usedModel = model;
+  let usage = null;
+  const useTools = groq.supportsTools(model);
+
+  for (let step = 0; step < budgetSteps; step++) {
+    const data = await groq.chat({
+      model,
+      temperature: 0.2,
+      max_tokens: 900,
+      ...(useTools ? { tools: tools.groqTools(), tool_choice: 'auto' } : {}),
+      messages: convo,
+    });
+    usedModel = data._model || usedModel;
+    usage = groq.usage(data) || usage;
+
+    const text = groq.assistantText(data) || '';
+    const choice = data.choices && data.choices[0];
+    const assistantMessage = (choice && choice.message) || { role: 'assistant', content: text };
+    const calls = useTools ? readCalls(groq.toolCalls(data)) : [];
+
+    if (!calls.length) {
+      audit({ kind: 'chat', action: 'reply', payload: { steps: ran.length }, result: text.slice(0, 400) });
+      const content = text
+        || (ran.length ? receipt(ran) : 'I could not verify an action or lookup from that request, so nothing was changed. Please rephrase it or include the listing, user, or record identifier.');
+      return {
+        type: 'message',
+        content,
+        model: usedModel,
+        usage,
+        executed: ran.some((r) => r.ok),
+        steps: ran.map((r) => ({ tool: r.tool, ok: r.ok, error: r.error })),
+        tool: ran.length ? ran[ran.length - 1].tool : '',
+      };
+    }
+
+    /* Unknown tool names never fail the turn — tell the model and let it retry. */
+    const unknown = calls.filter((c) => !tools.getTool(c.name));
+    if (unknown.length) {
+      convo.push(assistantMessage);
+      for (const c of unknown) {
+        convo.push(toolMessage(c.id, c.name || 'unknown', { ok: false, error: `“${c.name}” is not a registered admin action.` }));
+      }
+      for (const c of calls.filter((x) => tools.getTool(x.name))) {
+        convo.push(toolMessage(c.id, c.name, { ok: false, error: 'Skipped — another call in the same batch was invalid.' }));
+      }
+      continue;
+    }
+
+    const needsConfirm = calls.filter((c) => !tools.isAuto(c.name));
+    if (needsConfirm.length) {
+      convo.push(assistantMessage);
+      const pendingId = storePending({ steps: calls, convo, ran });
+      audit({
+        kind: 'chat',
+        action: 'propose:' + calls.map((c) => c.name).join('+'),
+        payload: { steps: calls.map((c) => ({ tool: c.name, args: c.args })) },
+        result: pendingId,
+      });
+      const labels = calls.map((c) => tools.describeCall(c.name, c.args));
+      const label = labels.length === 1 ? labels[0] : `${labels.length} actions — ${labels.join(' · ')}`;
+      const content = text || (labels.length === 1
+        ? `I can ${labels[0]} Confirm to run it.`
+        : `I can run these ${labels.length} actions in order:\n${labels.map((l, i) => `${i + 1}. ${l}`).join('\n')}\nConfirm to run them.`);
+      return {
+        type: 'tool_proposal',
+        pending_id: pendingId,
+        content,
+        model: usedModel,
+        usage,
+        expires_in_sec: 600,
+        tool: {
+          name: calls.length === 1 ? calls[0].name : calls.map((c) => c.name).join(' + '),
+          label,
+          mutating: calls.some((c) => Boolean((tools.getTool(c.name) || {}).mutating)),
+          auto: false,
+          args: calls.length === 1 ? calls[0].args : calls.map((c) => ({ action: c.name, arguments: c.args })),
+          steps: calls.map((c) => ({ name: c.name, label: tools.describeCall(c.name, c.args), args: c.args })),
+        },
+        done: ran.map((r) => ({ tool: r.tool, ok: r.ok })),
+      };
+    }
+
+    if (ran.length + calls.length > MAX_TOOL_RUNS) {
+      return {
+        type: 'message',
+        content: `${receipt(ran)}\n\nI stopped there — that request needs more than ${MAX_TOOL_RUNS} actions in one turn. Ask me to continue and I will pick up from here.`,
+        model: usedModel,
+        usage,
+        executed: ran.some((r) => r.ok),
+        steps: ran.map((r) => ({ tool: r.tool, ok: r.ok, error: r.error })),
+      };
+    }
+
+    audit({ kind: 'chat', action: 'auto:' + calls.map((c) => c.name).join('+'), payload: { count: calls.length }, result: 'auto-run' });
+    convo.push(assistantMessage);
+    await runSteps(calls, convo, ran, { auto: true });
+  }
+
+  /* Budget spent — ask for a plain summary of what actually happened. */
+  let content = receipt(ran);
+  try {
+    const data = await groq.chat({
+      ...(model && groq.isKnownModel(model) ? { model } : {}),
+      temperature: 0.2,
+      max_tokens: 500,
+      messages: [...convo, { role: 'user', content: 'Summarise, in two sentences, exactly what was done and what is still outstanding. Do not claim anything the tool results do not show.' }],
+    });
+    content = groq.assistantText(data) || content;
+    usedModel = data._model || usedModel;
+  } catch { /* the receipt is a perfectly good fallback */ }
+  return {
+    type: 'message',
+    content,
+    model: usedModel,
+    usage,
+    executed: ran.some((r) => r.ok),
+    steps: ran.map((r) => ({ tool: r.tool, ok: r.ok, error: r.error })),
+  };
+}
+
 /**
  * One assistant turn — fully stateless. The caller's `history` array (the
  * messages visible in the current tab) is the only context; nothing is read
- * from or written to a transcript store. Write actions still land in
- * ai_pending_actions so the operator can confirm them.
+ * from or written to a transcript store. Actions that need confirmation land
+ * in ai_pending_actions; everything else is executed for real inside the loop.
  */
 async function chatTurn(history, opts = {}) {
   const model = chatModelFor(opts.model);
@@ -336,134 +533,12 @@ async function chatTurn(history, opts = {}) {
     throw err;
   }
 
-  const useTools = groq.supportsTools(model);
-  const data = await groq.chat({
-    model,
-    temperature: 0.2,
-    max_tokens: 900,
-    ...(useTools ? { tools: tools.groqTools(), tool_choice: 'auto' } : {}),
-    messages: [{ role: 'system', content: assistantSystemPrompt() }, ...messages],
-  });
-
-  const usedModel = data._model || model;
-  const calls = useTools ? groq.toolCalls(data) : [];
-  const text = groq.assistantText(data) || '';
-  const choice = data.choices && data.choices[0];
-  const assistantMessage = choice && choice.message ? choice.message : { role: 'assistant', content: text };
-
-  if (calls.length > 1) {
-    audit({ kind: 'chat', action: 'multiple_tool_calls', payload: { count: calls.length }, result: 'rejected', ok: 0 });
-    return {
-      type: 'message',
-      content: 'I received several admin actions at once. To keep this safe, I did not run any of them. Please ask for one action at a time.',
-      model: usedModel,
-      usage: groq.usage(data),
-      executed: false,
-    };
-  }
-
-  if (calls.length) {
-    const call = calls[0];
-    const name = (call.function && call.function.name) || call.name;
-    const args = tools.parseArgs(call.function && call.function.arguments);
-    const t = tools.getTool(name);
-    if (!t) {
-      const content = text || `I wanted to run “${name}” but that action is not registered.`;
-      return { type: 'message', content, model: usedModel, usage: groq.usage(data) };
-    }
-    if (tools.isAuto(name)) {
-      audit({ kind: 'chat', action: 'auto:' + name, payload: args, result: 'auto-run' });
-      return finishToolTurn({
-        tool: name, args, messages, assistantMessage, auto: true, model: usedModel,
-      });
-    }
-    const pendingId = storePending({ tool: name, args, messages, assistantMessage });
-    audit({ kind: 'chat', action: 'propose:' + name, payload: args, result: pendingId });
-    const content = text || `I can ${tools.describeCall(name, args)}. Confirm to run it.`;
-    return {
-      type: 'tool_proposal',
-      pending_id: pendingId,
-      content,
-      model: usedModel,
-      usage: groq.usage(data),
-      expires_in_sec: 600,
-      tool: {
-        name,
-        label: tools.describeCall(name, args),
-        mutating: Boolean(t.mutating),
-        auto: false,
-        args,
-      },
-    };
-  }
-
-  audit({ kind: 'chat', action: 'reply', payload: { preview: last.content.slice(0, 200) }, result: text.slice(0, 400) });
-  const content = text || 'I could not verify an action or lookup from that request, so nothing was changed. Please rephrase it or include the listing, user, or record identifier.';
-  return { type: 'message', content, model: usedModel, usage: groq.usage(data), executed: false };
+  const convo = [{ role: 'system', content: assistantSystemPrompt() }, ...messages];
+  return runAgent({ convo, model });
 }
 
-async function finishToolTurn({ tool, args, messages, assistantMessage, auto = false, model = '' }) {
-  let exec;
-  try {
-    exec = await tools.execute(tool, args);
-  } catch (e) {
-    audit({ kind: 'tool', action: tool, payload: args, result: e.message, ok: 0 });
-    const err = new Error(e.message || 'The action failed.');
-    err.status = 500;
-    throw err;
-  }
-  audit({
-    kind: 'tool',
-    action: (auto ? 'auto:' : '') + tool,
-    payload: args,
-    result: exec,
-    ok: exec.ok ? 1 : 0,
-  });
-
-  const history = sanitiseHistory(messages);
-  const assistant = assistantMessage || { role: 'assistant', content: '' };
-  const toolCallId = (assistant.tool_calls && assistant.tool_calls[0] && assistant.tool_calls[0].id) || 'call_1';
-  const follow = [
-    { role: 'system', content: assistantSystemPrompt() },
-    ...history,
-    assistant,
-    {
-      role: 'tool',
-      tool_call_id: toolCallId,
-      name: tool,
-      content: JSON.stringify(exec).slice(0, 6000),
-    },
-  ];
-
-  let content;
-  let usedModel = model;
-  try {
-    const data = await groq.chat({
-      ...(model && groq.isKnownModel(model) ? { model } : {}),
-      temperature: 0.2,
-      max_tokens: 700,
-      messages: follow,
-    });
-    content = groq.assistantText(data);
-    usedModel = data._model || usedModel;
-  } catch (e) {
-    content = exec.ok
-      ? `Action completed: ${tool}. ${JSON.stringify(exec.result || exec).slice(0, 400)}`
-      : `Action failed: ${exec.error || 'unknown error'}`;
-  }
-  if (!exec.ok) {
-    return {
-      type: 'message', content: content || exec.error, error: exec.error,
-      executed: false, auto, tool, model: usedModel,
-    };
-  }
-  return {
-    type: 'message', content: content || 'Done.', executed: true, tool, result: exec.result, auto,
-    model: usedModel,
-  };
-}
-
-async function executePending(pendingId) {
+/** Operator pressed Run: execute the parked batch, then let the loop continue. */
+async function executePending(pendingId, opts = {}) {
   const row = loadPending(pendingId);
   if (!row) {
     const err = new Error('That action expired or was already handled. Ask me again if you still want it.');
@@ -471,47 +546,80 @@ async function executePending(pendingId) {
     throw err;
   }
   dropPending(row.id);
-  const args = tools.parseArgs(row.args);
-  let packed;
-  try { packed = JSON.parse(row.messages); } catch { packed = { messages: [], assistantMessage: { role: 'assistant', content: '' } }; }
-  return finishToolTurn({
-    tool: row.tool,
-    args,
-    messages: packed.messages,
-    assistantMessage: packed.assistantMessage,
-    auto: false,
-  });
+
+  let steps = [];
+  let packed = { convo: [], ran: [] };
+  try {
+    const parsedArgs = JSON.parse(row.args);
+    steps = Array.isArray(parsedArgs && parsedArgs.steps) ? parsedArgs.steps : null;
+    if (!steps) steps = [{ id: 'call_1', name: row.tool, args: parsedArgs || {} }]; // legacy row
+  } catch {
+    steps = [{ id: 'call_1', name: row.tool, args: {} }];
+  }
+  try { packed = JSON.parse(row.messages) || packed; } catch { /* legacy / truncated */ }
+
+  const model = chatModelFor(opts.model);
+  const convo = Array.isArray(packed.convo) && packed.convo.length
+    ? packed.convo
+    : [{ role: 'system', content: assistantSystemPrompt() }];
+  const ran = Array.isArray(packed.ran) ? packed.ran : [];
+
+  await runSteps(steps, convo, ran);
+
+  /* Continue the loop so multi-part jobs finish themselves; it stops at the
+     next confirmation or when the model has nothing left to do. */
+  const out = await runAgent({ convo, model, ran, budgetSteps: 3 });
+  if (out.type === 'message') {
+    const executedNow = steps.every((s) => (ran.find((r) => r.tool === s.name) || {}).ok !== false);
+    return {
+      ...out,
+      executed: out.executed || executedNow,
+      tool: steps.map((s) => s.name).join(' + '),
+      result: ran.length ? ran[ran.length - 1].result : undefined,
+      error: ran.filter((r) => !r.ok).map((r) => r.error).join(' ') || undefined,
+    };
+  }
+  return out;
 }
 
 async function cancelPending(pendingId) {
   const row = loadPending(pendingId);
   if (!row) return { type: 'message', content: 'That action was already cancelled or expired. Nothing ran.' };
   dropPending(row.id);
-  audit({ kind: 'tool', action: 'cancel:' + row.tool, payload: tools.parseArgs(row.args), result: 'cancelled', ok: 1 });
 
-  let packed;
-  try { packed = JSON.parse(row.messages); } catch { packed = { messages: [] }; }
-  const history = sanitiseHistory(packed.messages);
-  const assistantMessage = packed.assistantMessage || { role: 'assistant', content: '' };
-  const toolCallId = (assistantMessage.tool_calls && assistantMessage.tool_calls[0] && assistantMessage.tool_calls[0].id)
-    || 'call_1';
+  let steps = [];
+  try {
+    const parsedArgs = JSON.parse(row.args);
+    steps = Array.isArray(parsedArgs && parsedArgs.steps) ? parsedArgs.steps : [{ id: 'call_1', name: row.tool, args: parsedArgs || {} }];
+  } catch { steps = [{ id: 'call_1', name: row.tool, args: {} }]; }
 
-  let content = `Understood — cancelled “${tools.describeCall(row.tool, tools.parseArgs(row.args))}”. Nothing was changed.`;
+  audit({
+    kind: 'tool',
+    action: 'cancel:' + steps.map((s) => s.name).join('+'),
+    payload: { steps: steps.map((s) => ({ tool: s.name, args: s.args })) },
+    result: 'cancelled',
+    ok: 1,
+  });
+
+  let packed = { convo: [] };
+  try { packed = JSON.parse(row.messages) || packed; } catch { /* ignore */ }
+  const convo = Array.isArray(packed.convo) && packed.convo.length
+    ? packed.convo
+    : [{ role: 'system', content: assistantSystemPrompt() }];
+  for (const s of steps) {
+    convo.push(toolMessage(s.id || 'call_1', s.name, {
+      cancelled: true,
+      note: 'The operator cancelled this action. It did NOT run. Do not retry it unless they ask again.',
+    }));
+  }
+
+  const labels = steps.map((s) => tools.describeCall(s.name, s.args));
+  let content = `Understood — cancelled ${labels.length === 1 ? `“${labels[0]}”` : `${labels.length} actions`}. Nothing was changed.`;
   try {
     const data = await groq.chat({
       temperature: 0.2,
       max_tokens: 400,
-      messages: [
-        { role: 'system', content: assistantSystemPrompt() },
-        ...history,
-        assistantMessage,
-        {
-          role: 'tool',
-          tool_call_id: toolCallId,
-          name: row.tool,
-          content: JSON.stringify({ cancelled: true, note: 'The operator cancelled this action. Do not retry it unless they ask again.' }),
-        },
-      ],
+      messages: [...convo, { role: 'user', content: 'Acknowledge the cancellation in one short sentence. Do not retry.' }],
     });
     content = groq.assistantText(data) || content;
   } catch { /* keep the canned acknowledgement if the model is unreachable */ }

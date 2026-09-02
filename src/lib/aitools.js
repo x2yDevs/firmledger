@@ -975,12 +975,14 @@ const TOOLS = [
       const r = db.prepare('SELECT * FROM removal_requests WHERE id=?').get(Number(args.id));
       if (!r) return { error: 'Removal request not found.' };
       const l = db.prepare('SELECT * FROM listings WHERE id=?').get(r.listing_id);
+      /* Resolve the request first, then drop the listing: the FK sets listing_id
+         to NULL, so the request survives as a "removed" audit record. */
+      db.prepare("UPDATE removal_requests SET status='removed', resolved_at=datetime('now') WHERE id=?").run(r.id);
       if (l) {
         deleteLogo(l.logo_url);
         db.prepare('DELETE FROM listings WHERE id=?').run(l.id);
       }
-      db.prepare("UPDATE removal_requests SET status='removed', resolved_at=datetime('now') WHERE id=?").run(r.id);
-      return { ok: true, id: r.id, listing: l ? l.name : null };
+      return { ok: true, id: r.id, listing: l ? l.name : null, status: 'removed' };
     },
   },
 

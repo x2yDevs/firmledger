@@ -4,36 +4,38 @@
 <section class="section-tight">
   <div class="container">
     <div class="section-head"><h2>Ownership claims</h2></div>
-    <div class="table-wrap">
-      <table class="table">
-        <thead><tr><th>Listing</th><th>Requested by</th><th>Method</th><th>Domain</th><th>Token</th><th>Status</th><th>Date</th><th class="ta-right">Actions</th></tr></thead>
-        <tbody>
-          <% claims.forEach(function (c) { %>
-            <tr>
-              <td><a href="/listing/<%= c.listing_slug %>"><strong><%= c.listing_name %></strong></a></td>
-              <td><small class="muted"><%= c.user_email %></small></td>
-              <td><%= c.method %></td>
-              <td><code><%= c.domain %></code></td>
-              <td><code class="token-cell"><%= c.token %></code></td>
-              <td><span class="pill pill-<%= c.status === 'verified' ? 'approved' : c.status === 'pending' ? 'pending' : 'rejected' %>"><%= c.status %></span></td>
-              <td class="muted"><%= fmtDate(c.created_at) %></td>
-              <td class="ta-right actions-cell">
-                <% if (c.status === 'pending') { %>
-                  <form method="post" action="/admin3119Musa/claims/<%= c.id %>/recheck" class="inline">
-                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                    <button class="btn btn-primary btn-xs" type="submit">Re-check now</button>
-                  </form>
-                  <form method="post" action="/admin3119Musa/claims/<%= c.id %>/reject" class="inline">
-                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                    <button class="btn btn-danger btn-xs" type="submit">Reject</button>
-                  </form>
-                <% } %>
-              </td>
-            </tr>
-          <% }) %>
-          <% if (!claims.length) { %><tr><td colspan="8" class="muted" style="text-align:center;padding:2rem">No claims yet.</td></tr><% } %>
-        </tbody>
-      </table>
+    <div class="scroll-table">
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Listing</th><th>Requested by</th><th>Method</th><th>Domain</th><th>Token</th><th>Status</th><th>Date</th><th class="ta-right">Actions</th></tr></thead>
+          <tbody>
+            <% claims.forEach(function (c) { %>
+              <tr>
+                <td><a href="/listing/<%= c.listing_slug %>"><strong><%= c.listing_name %></strong></a></td>
+                <td><small class="muted"><%= c.user_email %></small></td>
+                <td><%= c.method %></td>
+                <td><code><%= c.domain %></code></td>
+                <td><code class="token-cell"><%= c.token %></code></td>
+                <td><span class="pill pill-<%= c.status === 'verified' ? 'approved' : c.status === 'pending' ? 'pending' : 'rejected' %>"><%= c.status %></span></td>
+                <td class="muted"><%= fmtDate(c.created_at) %></td>
+                <td class="ta-right actions-cell">
+                  <% if (c.status === 'pending') { %>
+                    <form method="post" action="/admin3119Musa/claims/<%= c.id %>/recheck" class="inline">
+                      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                      <button class="btn btn-primary btn-xs" type="submit">Re-check now</button>
+                    </form>
+                    <form method="post" action="/admin3119Musa/claims/<%= c.id %>/reject" class="inline">
+                      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                      <button class="btn btn-danger btn-xs" type="submit">Reject</button>
+                    </form>
+                  <% } %>
+                </td>
+              </tr>
+            <% }) %>
+            <% if (!claims.length) { %><tr><td colspan="8" class="muted" style="text-align:center;padding:2rem">No claims yet.</td></tr><% } %>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 </section>

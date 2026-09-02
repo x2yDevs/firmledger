@@ -4,7 +4,11 @@
   "main": "index.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "test": "node tests/run-all.js",
+    "test:ai": "node tests/ai-tools.test.js && node tests/ai-agent.test.js",
+    "test:backup": "node tests/backup.test.js",
+    "test:pages": "node tests/admin-pages.test.js"
   },
   "keywords": [],
   "author": "",

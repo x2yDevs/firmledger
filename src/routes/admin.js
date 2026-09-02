@@ -781,9 +781,12 @@ router.post('/admin3119Musa/users/import', backup.backupField('backup_file'), (r
   }
   const r = backup.importUsers(req.file.buffer.toString('utf8'));
   if (!r.ok) return usersFail(req, res, r.error);
-  backToUsers(req, res,
-    `Import complete — ${r.created} created, ${r.updated} updated${r.skipped ? `, ${r.skipped} skipped (invalid rows)` : ''}.`
-  );
+  const parts = [`Import complete — ${r.created} accounts created, ${r.updated} updated${r.skipped ? `, ${r.skipped} skipped (invalid rows)` : ''}.`];
+  if (r.restore) {
+    parts.push(`Ledger & configuration restored: ${r.restore.created} records created, ${r.restore.updated} updated across ${r.restore.tables.length} tables.`);
+  }
+  if (r.restoreError) parts.push(r.restoreError);
+  backToUsers(req, res, parts.join(' '));
 });
 
 /** POST — permanently delete a user + everything attributable to their account. */
@@ -1130,11 +1133,13 @@ router.post('/admin3119Musa/removals/:id/remove-listing', (req, res) => {
   const r = db.prepare('SELECT * FROM removal_requests WHERE id=?').get(req.params.id);
   if (!r) return res.redirect('/admin3119Musa/removals');
   const l = db.prepare('SELECT * FROM listings WHERE id=?').get(r.listing_id);
+  /* Resolve first, delete second — listing_id is ON DELETE SET NULL, so the
+     request stays visible in this table as a completed removal. */
+  db.prepare("UPDATE removal_requests SET status='removed', resolved_at=datetime('now') WHERE id=?").run(r.id);
   if (l) {
     deleteLogo(l.logo_url);
     db.prepare('DELETE FROM listings WHERE id=?').run(l.id);
   }
-  db.prepare("UPDATE removal_requests SET status='removed', resolved_at=datetime('now') WHERE id=?").run(r.id);
   res.redirect('/admin3119Musa/removals?ok=' + encodeURIComponent(`Listing “${l ? l.name : '—'}” removed from the ledger and the request resolved.`));
 });
 

@@ -11,34 +11,36 @@
     <% if (!posts.length) { %>
     <div class="empty-state"><h3>No posts yet</h3><p>Write your first post — it will appear on /blog, in the footer News column and in the RSS feed.</p></div>
     <% } else { %>
-    <div class="table-wrap">
-      <table class="table">
-        <thead><tr><th>Post</th><th>Status</th><th>Published</th><th class="ta-right">Actions</th></tr></thead>
-        <tbody>
-          <% posts.forEach(function (p) { %>
-          <tr>
-            <td>
-              <strong><%= p.title %></strong><br>
-              <small class="muted">/blog/<%= p.slug %></small>
-            </td>
-            <td><span class="pill pill-<%= p.status === 'published' ? 'approved' : 'pending' %>"><%= p.status %></span></td>
-            <td class="muted"><%= p.published_at ? fmtDate(p.published_at) : '—' %></td>
-            <td class="ta-right actions-cell">
-              <% if (p.status === 'published') { %><a class="btn btn-ghost btn-xs" href="/blog/<%= p.slug %>" target="_blank">View</a><% } %>
-              <a class="btn btn-ghost btn-xs" href="/admin3119Musa/blog/<%= p.id %>/edit">Edit</a>
-              <form method="post" action="/admin3119Musa/blog/<%= p.id %>/toggle" class="inline">
-                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                <button class="btn btn-ghost btn-xs" type="submit"><%= p.status === 'published' ? 'Unpublish' : 'Publish' %></button>
-              </form>
-              <form method="post" action="/admin3119Musa/blog/<%= p.id %>/delete" class="inline" onsubmit="return confirm('Delete this post permanently?');">
-                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                <button class="btn btn-danger btn-xs" type="submit">Delete</button>
-              </form>
-            </td>
-          </tr>
-          <% }) %>
-        </tbody>
-      </table>
+    <div class="scroll-table">
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Post</th><th>Status</th><th>Published</th><th class="ta-right">Actions</th></tr></thead>
+          <tbody>
+            <% posts.forEach(function (p) { %>
+            <tr>
+              <td>
+                <strong><%= p.title %></strong><br>
+                <small class="muted">/blog/<%= p.slug %></small>
+              </td>
+              <td><span class="pill pill-<%= p.status === 'published' ? 'approved' : 'pending' %>"><%= p.status %></span></td>
+              <td class="muted"><%= p.published_at ? fmtDate(p.published_at) : '—' %></td>
+              <td class="ta-right actions-cell">
+                <% if (p.status === 'published') { %><a class="btn btn-ghost btn-xs" href="/blog/<%= p.slug %>" target="_blank">View</a><% } %>
+                <a class="btn btn-ghost btn-xs" href="/admin3119Musa/blog/<%= p.id %>/edit">Edit</a>
+                <form method="post" action="/admin3119Musa/blog/<%= p.id %>/toggle" class="inline">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <button class="btn btn-ghost btn-xs" type="submit"><%= p.status === 'published' ? 'Unpublish' : 'Publish' %></button>
+                </form>
+                <form method="post" action="/admin3119Musa/blog/<%= p.id %>/delete" class="inline" onsubmit="return confirm('Delete this post permanently?');">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <button class="btn btn-danger btn-xs" type="submit">Delete</button>
+                </form>
+              </td>
+            </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
     </div>
     <% } %>
   </div>

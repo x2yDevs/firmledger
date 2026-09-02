@@ -20,30 +20,32 @@
     <% if (!tickets.length) { %>
       <div class="empty-state"><h3>No <%= filter === 'all' ? '' : filter %> tickets</h3><p>When members open support tickets they appear here in real time.</p></div>
     <% } else { %>
-      <div class="table-wrap">
-        <table class="table">
-          <thead><tr><th>Ticket</th><th>Member</th><th>Status</th><th>Msgs</th><th>Last activity</th><th class="ta-right">Open</th></tr></thead>
-          <tbody>
-            <% tickets.forEach(function (t) { const unread = t.last_user_msg_at > t.admin_seen_at; %>
-              <tr class="<%= unread ? 'row-unread' : '' %>">
-                <td>
-                  <div class="ticket-cell-main">
-                    <% if (unread) { %><span class="unread-dot" title="New member message">●</span><% } %>
-                    <div>
-                      <strong><%= t.subject %></strong><br>
-                      <small class="muted"><%= t.ref %> · <span class="badge badge-cat"><%= t.category %></span></small>
+      <div class="scroll-table">
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Ticket</th><th>Member</th><th>Status</th><th>Msgs</th><th>Last activity</th><th class="ta-right">Open</th></tr></thead>
+            <tbody>
+              <% tickets.forEach(function (t) { const unread = t.last_user_msg_at > t.admin_seen_at; %>
+                <tr class="<%= unread ? 'row-unread' : '' %>">
+                  <td>
+                    <div class="ticket-cell-main">
+                      <% if (unread) { %><span class="unread-dot" title="New member message">●</span><% } %>
+                      <div>
+                        <strong><%= t.subject %></strong><br>
+                        <small class="muted"><%= t.ref %> · <span class="badge badge-cat"><%= t.category %></span></small>
+                      </div>
                     </div>
-                  </div>
-                </td>
-                <td><strong><%= t.user_name %></strong><br><small class="muted"><%= t.user_email %></small></td>
-                <td><span class="badge status-<%= t.status %>"><%= t.status === 'open' ? 'Open' : t.status === 'solved' ? 'Solved' : 'Closed' %></span></td>
-                <td><%= t.msg_count %></td>
-                <td class="muted"><%= fmtDate(new Date(t.updated_at.replace(' ','T') + 'Z')) %></td>
-                <td class="ta-right"><a class="btn btn-ghost btn-sm" href="/admin3119Musa/tickets/<%= t.id %>">Open →</a></td>
-              </tr>
-            <% }); %>
-          </tbody>
-        </table>
+                  </td>
+                  <td><strong><%= t.user_name %></strong><br><small class="muted"><%= t.user_email %></small></td>
+                  <td><span class="badge status-<%= t.status %>"><%= t.status === 'open' ? 'Open' : t.status === 'solved' ? 'Solved' : 'Closed' %></span></td>
+                  <td><%= t.msg_count %></td>
+                  <td class="muted"><%= fmtDate(new Date(t.updated_at.replace(' ','T') + 'Z')) %></td>
+                  <td class="ta-right"><a class="btn btn-ghost btn-sm" href="/admin3119Musa/tickets/<%= t.id %>">Open →</a></td>
+                </tr>
+              <% }); %>
+            </tbody>
+          </table>
+        </div>
       </div>
     <% } %>
   </div>

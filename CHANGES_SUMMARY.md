@@ -1,166 +1,101 @@
-# AI Playground Admin Area - Changes Summary
+# FirmLedger — change summary
 
-## Date: 2026-09-01
+## 2026-09-02 — Backup completeness, production-ready AI assistant, contained admin queues
 
-## Overview
-Updated the AI Playground in the admin area to support new models, chat history management, and log deletion capabilities.
+### 1. `.firmledger` backup now carries the whole console (`src/lib/backup.js`)
 
-## Changes Made
+**Download (Admin → Users → Full backup, Admin → Health → Backup)**
 
-### 1. Updated Models (src/lib/groq.js)
-**Changed the available models to:**
-- `openai/gpt-oss-20b` - OpenAI GPT-OSS 20B
-- `openai/gpt-oss-120b` - OpenAI GPT-OSS 120B
-- `qwen/qwen3.8-27b` - Qwen 3.8 27B
-- `qwen/qwen3.6-27b` - Qwen 3.6 27B
-- `llama-3.3-70b-versatile` - Llama 3.3 70B (legacy)
-- `llama-3.1-8b-instant` - Llama 3.1 8B Instant (legacy)
-- `llama3-70b-8192` - Llama 3 70B 8k (legacy)
-- `mixtral-8x7b-32768` - Mixtral 8×7B (legacy)
+The file is still one pretty-printed JSON document, now with three readable
+sections on top of the raw table dump:
 
-**Updated fallbacks to include new models.**
+| Section | Contents |
+| --- | --- |
+| `users` | every account: name, email, password hash, plan, expiry, suspension, 2FA state, their listings/claims/tickets/payments |
+| `listings` | **every listing in the ledger** (owned or not) with a spelled-out `configuration` block — status, category, type, featured, claimed, sponsorship + expiry, listing Pro plan + expiry, verified badge, socials, sources, tags — plus its jobs, relationships and the owner's e-mail |
+| `configuration` | settings (all key/values), categories, plan offers, promo codes, advertising packages, careers, blog posts, protection IP/domain rules, status components + incidents, newsletter subscribers |
+| `database` | authoritative table-by-table snapshot used by the restore |
 
-### 2. Added Chat Session Management (src/db.js)
-**New database tables:**
-- `ai_chat_sessions` - Stores chat session metadata (title, model, user_id, active status, archived status)
-- `ai_chat_messages` - Stores individual messages within each chat session
+Sessions, password-reset tokens, registration OTPs and TOTP secrets are still
+excluded on purpose.
 
-**Indexes created for performance:**
-- `idx_ai_chat_user` - For querying sessions by user
-- `idx_ai_chat_active` - For finding active sessions
-- `idx_ai_chat_archived` - For finding archived sessions
-- `idx_ai_chat_msgs_session` - For querying messages by session
+**Import (Admin → Users → Import from file)**
 
-### 3. Extended AI Library (src/lib/ai.js)
-**New functions added:**
-- `createChatSession(userId, title, model)` - Create a new chat session
-- `getChatSessions(userId, includeArchived)` - Get all chat sessions for a user
-- `getChatSession(sessionId)` - Get a specific session
-- `getChatMessages(sessionId, limit)` - Get messages for a session
-- `addChatMessage(sessionId, role, content)` - Add a message to a session
-- `deleteChatSession(sessionId)` - Delete a chat session
-- `archiveChatSession(sessionId)` - Archive a chat session
-- `unarchiveChatSession(sessionId)` - Unarchive a chat session
-- `purgeOldArchivedChats(days)` - Purge archived chats older than specified days (default 30)
-- `setActiveSession(sessionId)` - Set a session as active
-- `deleteAuditLogEntry(id)` - Delete an audit log entry
-- `deleteModerationLogEntry(id)` - Delete a moderation log entry
+Import used to restore identities only. It now rebuilds the ledger and the
+configuration as well:
 
-### 4. Added New API Routes (src/routes/adminai.js)
-**Chat Session Management:**
-- `POST /admin3119Musa/ai/chat/sessions` - List chat sessions
-- `POST /admin3119Musa/ai/chat/session/create` - Create a new chat session
-- `POST /admin3119Musa/ai/chat/session/:id/messages` - Get messages for a session
-- `POST /admin3119Musa/ai/chat/session/:id/delete` - Delete a chat session
-- `POST /admin3119Musa/ai/chat/session/:id/archive` - Archive a chat session
-- `POST /admin3119Musa/ai/chat/session/:id/unarchive` - Unarchive a chat session
-- `POST /admin3119Musa/ai/chat/session/:id/activate` - Activate a chat session
-- `POST /admin3119Musa/ai/chat/purge-old` - Purge old archived chats
+* users merge by e-mail (unchanged behaviour, original password hashes kept);
+* listings merge by slug, with ownership re-attached through the owner e-mail so
+  a restore into a fresh database keeps the right owner even when ids shift;
+* every other table is restored on its natural key (slug / code / value / key),
+  and keyless tables are matched on the whole row — importing the same file
+  twice creates no duplicates;
+* nothing is deleted; the flash message reports accounts *and* records restored.
 
-**Log Management:**
-- `POST /admin3119Musa/ai/audit/:id/delete` - Delete an audit log entry
-- `POST /admin3119Musa/ai/moderation/:id/delete` - Delete a moderation log entry
+### 2. AI Playground — a real agent, tested action by action
 
-### 5. Enhanced UI (views/admin/ai.ejs)
+Design and layout unchanged. The engine underneath is new (`src/lib/ai.js`):
 
-#### Chat Interface Enhancements:
-- **New Chat Button** - Start a new chat session at any time
-- **Chat History Sidebar** - Toggleable sidebar showing all chat sessions
-- **Session Management** - For each chat session:
-  - View title, model, and last updated time
-  - Activate to continue a previous chat
-  - Archive to hide from main list (retains for 30 days)
-  - Unarchive to restore from archived list
-  - Delete to permanently remove
-  - Visual indicators for active and archived sessions
-- **Show/Hide Archived Chats** - Toggle to view archived sessions
-- **Purge Old Chats** - One-click purge of chats archived >30 days
-- **Refresh Chat History** - Reload the chat session list
+* **Agent loop.** The assistant can look a record up and then act on it inside
+  one turn: tool results are fed back to the model and it continues until the job
+  is finished (6 model steps / 12 tool runs per turn, then it says what is left).
+* **Multi-action turns are executed, not refused.** Previously two tool calls in
+  one response were rejected outright. They are now parked as a single numbered
+  confirmation and executed in order when the operator presses Run.
+* **Honest reporting.** The summary is generated from actual tool return values;
+  a failed tool is reported as failed and `executed` stays false.
+* **Unknown tool names** no longer end the turn — the model is told and retries.
+* Cancellation still executes nothing, and `delete_user` still always confirms.
 
-#### Log Management Enhancements:
-- **Audit Log** - Added deletion capability:
-  - Delete button on each audit log entry
-  - Confirmation dialog before deletion
-  - Maintains all existing functionality
+**All 60 admin tools are tested for real effect**, not for a happy-looking
+response: `tests/ai-tools.test.js` runs every tool against a throwaway database
+and asserts the resulting database state (76 checks). One real bug was found and
+fixed on the way: fulfilling a removal request deleted the request along with the
+listing (FK cascade), so the "removed" outcome vanished from Admin → Removals.
 
-- **Moderation Log** - Added deletion capability:
-  - Delete button on each moderation log entry
-  - Confirmation dialog before deletion
-  - Maintains all existing functionality
+* `migrations/2026-09-02-removal-requests-history.sql` (and the equivalent
+  automatic migration in `src/db.js`) makes `removal_requests.listing_id`
+  nullable `ON DELETE SET NULL`;
+* both the AI tool and the admin route now resolve the request before deleting
+  the listing, so the record survives.
 
-- **Refresh Buttons** - Added refresh buttons for both logs
-- **Load More Buttons** - Added "Load More" buttons for pagination (framework in place)
+### 3. Admin queues scroll inside their cards
 
-#### Styling:
-- Added CSS styles for chat history sidebar
-- Added styles for chat history items (active, archived, hover states)
-- Added styles for action buttons
-- Added styles for log tables with scrolling
-- Maintained existing design language
+Long lists no longer stretch the console into an extra-tall page. Two classes in
+`public/css/app.css`, both modelled on the notifications inbox (contained, quiet
+scrollbar, sticky table header, `overscroll-behavior: contain`):
 
-## Features Implemented
+* `.scroll-table` — wraps a `.table-wrap`;
+* `.scroll-panel` — for card lists that are not tables.
 
-### ✅ Model Changes
-- All four requested models added: openai/gpt-oss-20b, openai/gpt-oss-120b, qwen/qwen3.8-27b, qwen/qwen3.6-27b
-- Legacy models retained for backward compatibility
-- Models appear in the dropdown selector in Settings
+Applied to: Listings, Ownership claims, Users, Categories, Pricing (free trials),
+Advertising (currently sponsored + all listings), Careers (roles), Status (recent
+incidents), Promos (codes), Protection (IP rules + domain rules), Health (mail
+hops), Removal requests, Support tickets, Email (recent sends), Blog posts, and
+Settings (recent Pro payments).
 
-### ✅ New Chat Functionality
-- "New Chat" button creates a fresh chat session
-- Current conversation is preserved when starting new chat
-- Chat sessions are stored with metadata (title, model, timestamps)
+### 4. Tests
 
-### ✅ Delete Past Chats
-- Delete individual chat sessions with confirmation
-- Permanent deletion with no recovery
+```
+npm test            # everything
+npm run test:ai     # AI tools + agent loop
+npm run test:backup # .firmledger round trip
+npm run test:pages  # every admin page renders and its list scrolls
+```
 
-### ✅ Archive Past Chats for 30 Days
-- Archive chats to hide from main list
-- Archived chats retained for 30 days
-- Unarchive capability to restore chats
-- Automatic purge of chats archived >30 days
-- Manual purge button for old archived chats
+| Suite | What it proves |
+| --- | --- |
+| `tests/ai-tools.test.js` | all 60 assistant tools really change the database |
+| `tests/ai-agent.test.js` | chaining, batched confirmation, cancellation, honest failures (Groq stubbed — no key needed) |
+| `tests/backup.test.js` | backup carries users + all listings + configuration, restores into an empty database, and is idempotent |
+| `tests/admin-pages.test.js` | boots the real server and checks every admin page renders with its list in a scroll region |
 
-### ✅ Scrolling for Audit and Moderation Logs
-- Log tables have max-height and overflow-y: auto
-- Scrollable containers for both audit and moderation logs
-- Maintains all existing log display functionality
+`FIRMLEDGER_DATA_DIR` was added to `src/db.js` so suites run against a temporary
+database and never touch `data/`.
 
-### ✅ Deletion of Audit and Moderation Logs
-- Delete button on each log entry
-- Confirmation dialog before deletion
-- Immediate removal from UI
-- Server-side deletion from database
+---
 
-### ✅ All Existing Functionality Maintained
-- Listing generator works as before
-- Admin assistant works as before
-- Settings configuration works as before
-- Auto-moderation works as before
-- All existing features preserved
+# AI Playground Admin Area - Changes Summary (2026-09-01)
 
-## Files Modified
-
-1. `src/lib/groq.js` - Updated MODELS array and FALLBACKS
-2. `src/db.js` - Added ai_chat_sessions and ai_chat_messages tables
-3. `src/lib/ai.js` - Added chat session management functions
-4. `src/routes/adminai.js` - Added new API routes for chat and log management
-5. `views/admin/ai.ejs` - Enhanced UI with chat history, new buttons, and log management
-
-## Total Changes
-- 5 files changed
-- 703 insertions(+)
-- 9 deletions(-)
-
-## Backward Compatibility
-All changes are backward compatible:
-- Legacy models remain in the list
-- Existing database schema unchanged (new tables added)
-- Existing API endpoints unchanged (new endpoints added)
-- Existing UI elements preserved (new elements added)
-
-## Security Considerations
-- Chat sessions are user-scoped (user_id stored with each session)
-- Deletion actions require confirmation
-- All actions validate user ownership before execution
-- API endpoints protected by existing admin middleware
+See git history for the previous round: model registry refresh, stateless
+assistant (chat history removed), audit/moderation log deletion.

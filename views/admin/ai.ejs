@@ -455,6 +455,8 @@
     <ul class="ai-help-list">
       <li><b>Reads run straight away.</b> Counts, lookups and status checks never change anything.</li>
       <li><b>Writes are confirmed.</b> A proposal card appears with the exact arguments; nothing executes until you press Run — unless you allow that action under Settings → Assistant auto-run.</li>
+      <li><b>Multi-step jobs finish.</b> Ask for a look-up plus an action and the assistant chains them in one turn. Several write actions arrive as a single numbered confirmation and run in order once you approve.</li>
+      <li><b>Only real results are reported.</b> Every claim in a reply comes from the tool's actual return value — a failed action is reported as failed, never as done.</li>
       <li><b>No saved history.</b> The assistant can use messages visible in this tab for context, but conversations are not stored or restored after reload.</li>
       <li><b>Nothing auto-publishes.</b> Generated listings are saved as <span class="mono">pending</span> and still pass the normal review queue.</li>
     </ul>
@@ -899,16 +901,23 @@
   }
 
   function proposalCard(tool, pendingId) {
+    var steps = (tool.steps && tool.steps.length > 1) ? tool.steps : null;
     var wrap = el('div', 'ai-proposal');
-    wrap.appendChild(el('h5', null, 'Confirm before this runs'));
-    wrap.appendChild(el('p', null, tool.label || tool.name));
+    wrap.appendChild(el('h5', null, steps ? ('Confirm ' + steps.length + ' actions before they run') : 'Confirm before this runs'));
+    if (steps) {
+      var ol = el('ol', 'ai-proposal-steps');
+      steps.forEach(function (s) { ol.appendChild(el('li', null, s.label || s.name)); });
+      wrap.appendChild(ol);
+    } else {
+      wrap.appendChild(el('p', null, tool.label || tool.name));
+    }
     var args = el('pre', 'ai-proposal-args');
     args.textContent = JSON.stringify(tool.args || {}, null, 2);
     wrap.appendChild(args);
     var actions = el('div', 'ai-proposal-actions');
     var run = el('button', 'btn btn-sm btn-primary', 'Review in dialog');
     run.type = 'button';
-    run.addEventListener('click', function () { openModal({ pending_id: pendingId, name: tool.name, label: tool.label, args: tool.args }); });
+    run.addEventListener('click', function () { openModal({ pending_id: pendingId, name: tool.name, label: tool.label, args: tool.args, steps: tool.steps }); });
     actions.appendChild(run);
     var drop = el('button', 'btn btn-sm btn-ghost', 'Discard');
     drop.type = 'button';
@@ -924,7 +933,7 @@
       var bubble = addBubble('assistant', content, { kind: 'await', model: data.model });
       bubble.appendChild(proposalCard(data.tool || {}, data.pending_id));
       remember('assistant', content);
-      state.pending = { pending_id: data.pending_id, name: data.tool && data.tool.name, label: data.tool && data.tool.label, args: data.tool && data.tool.args };
+      state.pending = { pending_id: data.pending_id, name: data.tool && data.tool.name, label: data.tool && data.tool.label, args: data.tool && data.tool.args, steps: data.tool && data.tool.steps };
       openModal(state.pending, true);
       return;
     }
@@ -1017,7 +1026,13 @@
   function openModal(tool, silent) {
     if (!tool) return;
     state.pending = tool;
-    modalLabel.textContent = tool.label || tool.name;
+    var many = tool.steps && tool.steps.length > 1;
+    $('ai-modal-title').textContent = many
+      ? ('Run these ' + tool.steps.length + ' console actions?')
+      : 'Run this console action?';
+    modalLabel.textContent = many
+      ? tool.steps.map(function (s, i) { return (i + 1) + '. ' + (s.label || s.name); }).join('  ')
+      : (tool.label || tool.name);
     modalArgs.textContent = JSON.stringify(tool.args || {}, null, 2);
     modalStatus.textContent = silent ? 'Awaiting your confirm · expires in 10 minutes' : '';
     lastFocus = document.activeElement;

@@ -46,33 +46,35 @@
       </form>
     </div>
 
-    <div class="table-wrap">
-      <table class="table">
-        <thead><tr><th>Code</th><th>Off</th><th>Plan</th><th>Uses</th><th>Expires</th><th>Status</th><th></th></tr></thead>
-        <tbody>
-          <% codes.forEach(function (c) { %>
-          <tr <%= c.active ? '' : 'style="opacity:.55"' %>>
-            <td><b class="mono"><%= c.code %></b><% if (c.note) { %><div class="score-hint"><%= c.note %></div><% } %></td>
-            <td><b><%= c.percent %>%</b></td>
-            <td class="muted"><%= c.plan_id ? ('#' + c.plan_id) : 'any' %></td>
-            <td><%= c.used_count %><% if (c.max_uses) { %> / <%= c.max_uses %><% } else { %> <span class="muted">∞</span><% } %></td>
-            <td class="muted"><%= c.expires_at || '—' %></td>
-            <td><span class="pill pill-<%= c.active ? 'approved' : 'pending' %>"><%= c.active ? 'live' : 'off' %></span></td>
-            <td class="ta-right" style="white-space:nowrap">
-              <form method="post" action="/admin3119Musa/promos/<%= c.id %>/toggle" class="inline">
-                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                <button class="btn btn-ghost btn-xs" type="submit"><%= c.active ? 'Disable' : 'Enable' %></button>
-              </form>
-              <form method="post" action="/admin3119Musa/promos/<%= c.id %>/delete" class="inline" onsubmit="return confirm('Delete this code? Codes with payments are deactivated instead.');">
-                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                <button class="btn btn-danger btn-xs" type="submit">Delete</button>
-              </form>
-            </td>
-          </tr>
-          <% }) %>
-          <% if (!codes.length) { %><tr><td colspan="7" class="muted">No codes yet — create LAUNCH20 above.</td></tr><% } %>
-        </tbody>
-      </table>
+    <div class="scroll-table">
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Code</th><th>Off</th><th>Plan</th><th>Uses</th><th>Expires</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+            <% codes.forEach(function (c) { %>
+            <tr <%= c.active ? '' : 'style="opacity:.55"' %>>
+              <td><b class="mono"><%= c.code %></b><% if (c.note) { %><div class="score-hint"><%= c.note %></div><% } %></td>
+              <td><b><%= c.percent %>%</b></td>
+              <td class="muted"><%= c.plan_id ? ('#' + c.plan_id) : 'any' %></td>
+              <td><%= c.used_count %><% if (c.max_uses) { %> / <%= c.max_uses %><% } else { %> <span class="muted">∞</span><% } %></td>
+              <td class="muted"><%= c.expires_at || '—' %></td>
+              <td><span class="pill pill-<%= c.active ? 'approved' : 'pending' %>"><%= c.active ? 'live' : 'off' %></span></td>
+              <td class="ta-right" style="white-space:nowrap">
+                <form method="post" action="/admin3119Musa/promos/<%= c.id %>/toggle" class="inline">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <button class="btn btn-ghost btn-xs" type="submit"><%= c.active ? 'Disable' : 'Enable' %></button>
+                </form>
+                <form method="post" action="/admin3119Musa/promos/<%= c.id %>/delete" class="inline" onsubmit="return confirm('Delete this code? Codes with payments are deactivated instead.');">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <button class="btn btn-danger btn-xs" type="submit">Delete</button>
+                </form>
+              </td>
+            </tr>
+            <% }) %>
+            <% if (!codes.length) { %><tr><td colspan="7" class="muted">No codes yet — create LAUNCH20 above.</td></tr><% } %>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 </section>
