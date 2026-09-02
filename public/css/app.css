@@ -1864,12 +1864,27 @@ h2.h-display { font-size: clamp(1.9rem, 3.4vw, 2.7rem); }
 .ai-empty-row { text-align: center; color: var(--muted); font-style: italic; padding: 18px 12px !important; }
 
 /* Generator: brief + draft sit side by side once there is room */
-.ai-gen-grid { display: grid; gap: 18px; align-items: start; }
+.ai-gen-grid { display: grid; gap: 18px; align-items: stretch; }
 @media (min-width: 1060px) {
-  .ai-gen-grid { grid-template-columns: minmax(320px, .8fr) 1.2fr; }
-  .ai-gen-grid:not(.is-wide) > :first-child { grid-column: 1 / -1; }
+  .ai-gen-grid.is-wide { grid-template-columns: minmax(340px, .85fr) 1.15fr; }
   .ai-gen-grid.is-wide > :first-child { align-self: start; position: sticky; top: 18px; }
 }
+/* Brief card: the prompt box owns the leftover height so the writing area is a
+   real composing surface, not a three-line slot. */
+.ai-gen-brief { display: flex; flex-direction: column; }
+.ai-gen-brief .ai-prompt-label { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; margin-bottom: 16px; }
+.ai-gen-brief .ai-prompt-label > span { display: block; font: 600 13px/1.4 var(--fb); margin-bottom: 8px; color: var(--ink); }
+/* Same field treatment as every other textarea on the site (.form textarea). */
+.ai-gen-brief .ai-prompt-input {
+  flex: 1 1 auto; width: 100%; border: 1px solid var(--hair2); border-radius: var(--rs);
+  background: var(--surface); color: var(--ink); padding: 12px 14px; outline: none;
+  min-height: clamp(200px, 34vh, 360px); resize: vertical;
+  font: 400 14px/1.65 var(--fb);
+}
+.ai-gen-brief .ai-prompt-input:focus { border-color: var(--accent); }
+.ai-gen-brief .ai-prompt-input::placeholder { color: var(--muted); }
+.ai-gen-grid:not(.is-wide) .ai-gen-brief .ai-prompt-input { min-height: clamp(220px, 30vh, 320px); }
+.ai-gen-grid.is-wide .ai-gen-brief .ai-prompt-input { min-height: clamp(180px, 26vh, 300px); }
 .ai-chips { display: flex; flex-wrap: wrap; gap: 7px; margin: 12px 0 0; }
 .ai-chip {
   border: 1px dashed var(--hair2); border-radius: 999px; padding: 6px 12px;
@@ -1886,13 +1901,32 @@ h2.h-display { font-size: clamp(1.9rem, 3.4vw, 2.7rem); }
   background-position: calc(100% - 15px) 15px, calc(100% - 10px) 15px;
   background-size: 5px 5px, 5px 5px; background-repeat: no-repeat;
 }
-.ai-inline-search input { height: 31px; padding: 0 10px; font-size: 12px; border-radius: 8px; }
+/* Inputs that live outside a .form wrapper (log filters, the rail search, the
+   "review one now" box) inherit nothing, so they are mapped onto the same field
+   aesthetic every other input on the site uses. */
+.ai-inline-search input,
+.rail-tools input,
+.ai-quick-row input {
+  width: 100%; border: 1px solid var(--hair2); border-radius: var(--rs);
+  background: var(--surface); color: var(--ink); font: 400 14.5px/1.4 var(--fb);
+  padding: 12px 14px; outline: none; -webkit-appearance: none; appearance: none;
+}
+.ai-inline-search input:focus,
+.rail-tools input:focus,
+.ai-quick-row input:focus { border-color: var(--accent); }
+.ai-inline-search input::placeholder,
+.rail-tools input::placeholder,
+.ai-quick-row input::placeholder { color: var(--muted); }
+.ai-inline-search { display: inline-flex; }
+.ai-inline-search input { width: clamp(140px, 20vw, 210px); height: 38px; padding: 0 12px; font-size: 13px; }
+.rail-tools input { height: 38px; padding: 0 12px; font-size: 13px; }
+.ai-quick-row input { height: 42px; padding: 0 14px; font-size: 14px; }
 .form-actions-tight { margin-top: 14px; gap: 9px; }
 .ai-clear-key { margin: 4px 0 0; padding: 9px 12px; border: 1px solid var(--hair); border-radius: 10px; background: var(--paper); }
 .ai-clear-key:hover { border-color: #F2D2CF; }
 
 /* Assistant window */
-.ai-chat { display: flex; flex-direction: column; min-height: clamp(520px, 72vh, 720px); }
+.ai-chat { display: flex; flex-direction: column; min-height: clamp(560px, 78vh, 860px); }
 .ai-chat .chat-head { flex: 0 0 auto; }
 .chat-head-actions .btn { color: #fff; border-color: rgba(255, 255, 255, .38); background: rgba(255, 255, 255, .06); }
 .chat-head-actions .btn:hover { background: rgba(255, 255, 255, .16); border-color: #fff; color: #fff; }
@@ -1924,14 +1958,20 @@ h2.h-display { font-size: clamp(1.9rem, 3.4vw, 2.7rem); }
 /* Rail + transcript share the window as two columns */
 .ai-chat-body { position: relative; flex: 1 1 auto; display: grid; grid-template-columns: 1fr; min-height: 0; }
 @media (min-width: 901px) {
-  .ai-chat-body { grid-template-columns: 0 1fr; transition: grid-template-columns .22s ease; }
-  .ai-chat.has-rail .ai-chat-body { grid-template-columns: minmax(260px, 300px) 1fr; }
+  .ai-chat-body { grid-template-columns: minmax(0, 0fr) minmax(0, 1fr); transition: grid-template-columns .22s ease; }
+  .ai-chat.has-rail .ai-chat-body { grid-template-columns: minmax(260px, 300px) minmax(0, 1fr); }
+  /* Both tracks are named explicitly: with the rail hidden (display:none) the
+     transcript must stay in the second, full-width track instead of being
+     auto-placed into the collapsed first one — that is what made the chat
+     disappear when the history rail was closed. */
+  .ai-chat-body > .chat-rail { grid-column: 1; grid-row: 1; }
+  .ai-chat-body > .ai-chat-main { grid-column: 2; grid-row: 1; }
 }
 .ai-chat-main { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
-.ai-chat .chat-pane { flex: 1 1 auto; max-height: none; min-height: 300px; overflow-y: auto; }
+.ai-chat .chat-pane { flex: 1 1 auto; max-height: none; min-height: 340px; overflow-y: auto; }
 /* The window sets the height; the transcript owns the scroll, so the composer
    and the history rail never get pushed off-screen by a long chat. */
-.ai-chat-body { height: calc(clamp(520px, 72vh, 720px) - 69px); }
+.ai-chat-body { height: calc(clamp(560px, 78vh, 860px) - 69px); }
 @media (max-width: 700px) { .ai-chat-body { height: auto; } }
 
 .chat-rail {
@@ -1954,7 +1994,6 @@ h2.h-display { font-size: clamp(1.9rem, 3.4vw, 2.7rem); }
 .rail-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 12px 10px 16px; border-bottom: 1px solid var(--hair); }
 .rail-head h4 { font: 600 11px/1 var(--fm); letter-spacing: .14em; text-transform: uppercase; color: var(--accent); }
 .rail-tools { padding: 10px 12px; display: grid; gap: 8px; border-bottom: 1px solid var(--hair); }
-.rail-tools input { height: 34px; font-size: 13px; }
 .rail-seg { display: flex; gap: 4px; padding: 3px; border-radius: 9px; background: var(--paper-2, #F3F1EC); border: 1px solid var(--hair); }
 .rail-seg button { flex: 1 1 0; border: 0; border-radius: 6px; padding: 5px 4px; background: transparent; color: var(--muted); font: 600 11px var(--fm); cursor: pointer; transition: all .15s; }
 .rail-seg button:hover { color: var(--ink); }
@@ -2073,7 +2112,7 @@ h2.h-display { font-size: clamp(1.9rem, 3.4vw, 2.7rem); }
 .ai-quick-card { padding: 12px 14px; border: 1px solid var(--hair); border-radius: 10px; background: var(--paper); align-self: end; }
 .ai-quick-h { font: 600 11px/1 var(--fm); letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin-bottom: 8px; }
 .ai-quick-row { display: flex; gap: 8px; }
-.ai-quick-row input { flex: 1 1 auto; height: 38px; }
+.ai-quick-row input { flex: 1 1 auto; }
 .ai-run-summary {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   padding: 10px 13px; margin: 0 0 16px; border-radius: 10px;
