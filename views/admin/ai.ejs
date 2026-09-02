@@ -195,7 +195,7 @@
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
               New chat
             </button>
-            <button class="btn btn-sm btn-ghost btn-icon" type="button" id="toggle-history" aria-expanded="false" aria-controls="chat-rail" title="Show chat history" aria-label="Show chat history">
+            <button class="btn btn-sm btn-ghost btn-icon" type="button" id="toggle-history" title="Refresh chat history" aria-label="Refresh chat history">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7.5V12l3 2"/></svg>
               <span class="rail-count" id="rail-count"><%= counts.live || 0 %></span>
             </button>
@@ -204,13 +204,9 @@
         </header>
 
         <div class="ai-chat-body">
-          <div class="ai-rail-scrim" id="rail-scrim" hidden></div>
-          <aside class="chat-rail" id="chat-rail" aria-label="Chat history" hidden>
+          <aside class="chat-rail" id="chat-rail" aria-label="Chat history">
             <div class="rail-head">
               <h4>Chat history</h4>
-              <button class="icon-btn sm" type="button" id="rail-close" aria-label="Hide chat history">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
-              </button>
             </div>
 
             <div class="rail-tools">
@@ -743,14 +739,13 @@
   var pane = $('chat-pane');
   var rail = $('chat-rail');
   var railList = $('rail-list');
-  var scrim = $('rail-scrim');
   var statusLine = $('chat-status');
   var state = {
     sessionId: START_SESSION ? START_SESSION.id : 0,
     sessionTitle: START_SESSION ? START_SESSION.title : 'Admin assistant',
     model: START_SESSION ? START_SESSION.model : <%- JSON.stringify(settings.groq_model) %>,
     busy: false,
-    railOpen: false,
+    railOpen: true,
     archived: '0',
     q: '',
     pending: null,
@@ -1088,7 +1083,7 @@
       handleReply(data);
       refreshHeadTitle();
       syncUrl();
-      if (state.railOpen) loadRail(); else state.railDirty = true;
+      loadRail();
     }).catch(function (e) {
       killTyping(typing);
       var bubble = addBubble('assistant', 'Groq could not answer: ' + e.message, { kind: 'bad', ok: false });
@@ -1214,30 +1209,18 @@
     if (ev.key !== 'Escape') return;
     if (!help.hidden) { help.hidden = true; return; }
     if (!modal.hidden) cancelProposal();
-    else if (state.railOpen && window.matchMedia('(max-width: 900px)').matches) setRail(false);
   });
 
-  /* ---------- history rail ---------- */
+  /* ---------- history rail (always visible, never closable) ---------- */
 
-  function setRail(open) {
-    state.railOpen = !!open;
-    rail.hidden = !open;
-    if (scrim) scrim.hidden = !open;
+  function showRail() {
+    state.railOpen = true;
+    rail.hidden = false;
     var win = $('ai-chat');
-    if (win) win.classList.toggle('has-rail', !!open);
-    if (open) state.railDirty = false;
-    var btn = $('toggle-history');
-    if (btn) {
-      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-      btn.title = open ? 'Hide chat history' : 'Show chat history';
-      btn.setAttribute('aria-label', btn.title);
-    }
-    store('fl-ai-rail', open ? '1' : '0');
-    if (open && (!state.railLoaded || state.railDirty)) loadRail();
+    if (win) win.classList.add('has-rail');
+    if (!state.railLoaded || state.railDirty) loadRail();
   }
-  $('toggle-history').addEventListener('click', function () { setRail(!state.railOpen); });
-  $('rail-close').addEventListener('click', function () { setRail(false); });
-  if (scrim) scrim.addEventListener('click', function () { setRail(false); });
+  $('toggle-history').addEventListener('click', function () { loadRail(); });
 
   var searchTimer = null;
   $('chat-search').addEventListener('input', function () {
@@ -1389,7 +1372,6 @@
       }
       refreshHeadTitle();
       loadRail();
-      if (window.matchMedia('(max-width: 900px)').matches) setRail(false);
       syncUrl();
     }).catch(function (e) { fail(statusLine, e); });
   }
@@ -1685,8 +1667,7 @@
   var wantTab = START_TAB || store('fl-ai-tab') || 'gen';
   if (window.location.hash === '#ai-settings') wantTab = 'set';
   showTab(wantTab, false);
-  var wantRail = store('fl-ai-rail') === '1' || (state.sessionId && store('fl-ai-rail') === null);
-  if (wantRail && window.matchMedia('(min-width: 901px)').matches) setRail(true);
+  showRail();
   setBusy(false);
   refreshHeadTitle();
   ['moderation', 'audit'].forEach(function (kind) {

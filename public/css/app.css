@@ -1894,13 +1894,12 @@ h2.h-display { font-size: clamp(1.9rem, 3.4vw, 2.7rem); }
 .ai-chip:hover { border-style: solid; border-color: var(--accent); color: var(--accent2); background: var(--soft); }
 .ai-inline-select { display: inline-flex; align-items: center; gap: 6px; }
 .ai-model-select, .ai-inline-select select {
-  height: 34px; padding: 0 30px 0 11px; border-radius: 8px; border: 1px solid var(--hair2);
-  background: var(--surface); color: var(--ink); font: 500 12.5px var(--fb);
-  appearance: none;
-  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
-  background-position: calc(100% - 15px) 15px, calc(100% - 10px) 15px;
-  background-size: 5px 5px, 5px 5px; background-repeat: no-repeat;
+  height: 34px; padding: 0 32px 0 11px; border-radius: var(--rs); border: 1px solid var(--hair2);
+  background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2364748B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat right 12px center / 14px;
+  color: var(--ink); font: 500 12.5px var(--fb); cursor: pointer;
+  -webkit-appearance: none; appearance: none;
 }
+.ai-model-select:focus, .ai-inline-select select:focus { border-color: var(--accent); }
 /* Inputs that live outside a .form wrapper (log filters, the rail search, the
    "review one now" box) inherit nothing, so they are mapped onto the same field
    aesthetic every other input on the site uses. */
@@ -1945,12 +1944,10 @@ h2.h-display { font-size: clamp(1.9rem, 3.4vw, 2.7rem); }
 .chat-head-sub .ai-live-dot { display: inline-block; }
 .chat-model-pick { position: relative; }
 .chat-model-pick select {
-  height: 38px; max-width: 210px; padding: 0 30px 0 12px; border-radius: var(--rs); cursor: pointer;
-  border: 1px solid rgba(255, 255, 255, .38); background: rgba(255, 255, 255, .06); color: #fff;
-  font: 500 12.5px var(--fb); appearance: none;
-  background-image: linear-gradient(45deg, transparent 50%, rgba(255,255,255,.85) 50%), linear-gradient(135deg, rgba(255,255,255,.85) 50%, transparent 50%);
-  background-position: calc(100% - 16px) 17px, calc(100% - 11px) 17px;
-  background-size: 5px 5px, 5px 5px; background-repeat: no-repeat;
+  height: 38px; max-width: 210px; padding: 0 32px 0 12px; border-radius: var(--rs); cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, .38); color: #fff;
+  background: rgba(255, 255, 255, .06) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat right 12px center / 14px;
+  font: 500 12.5px var(--fb); -webkit-appearance: none; appearance: none;
 }
 .chat-model-pick select:hover { background-color: rgba(255, 255, 255, .14); }
 .chat-model-pick option { color: var(--ink); background: var(--surface); }
@@ -1979,17 +1976,15 @@ h2.h-display { font-size: clamp(1.9rem, 3.4vw, 2.7rem); }
   background: var(--paper); border-right: 1px solid var(--hair2);
 }
 .chat-rail[hidden] { display: none; }
+/* The rail is always visible and never closable, so on small screens it stacks
+   above the transcript (in normal flow) instead of sliding in as an overlay. */
 @media (max-width: 900px) {
   .chat-rail {
-    position: absolute; z-index: 12; inset: 0 auto 0 0; width: min(86%, 320px);
-    box-shadow: 14px 0 34px -20px rgba(10, 22, 40, .35);
-    animation: railIn .2s ease;
+    width: 100%; border-right: 0; border-bottom: 1px solid var(--hair2);
+    max-height: 42vh;
   }
-  .ai-rail-scrim { position: absolute; inset: 0; z-index: 11; background: rgba(10, 22, 40, .32); border: 0; }
-  .ai-rail-scrim[hidden] { display: none; }
+  .ai-chat-body { height: auto; }
 }
-@media (min-width: 901px) { .ai-rail-scrim { display: none !important; } }
-@keyframes railIn { from { transform: translateX(-14px); opacity: .4; } to { transform: none; opacity: 1; } }
 
 .rail-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 12px 10px 16px; border-bottom: 1px solid var(--hair); }
 .rail-head h4 { font: 600 11px/1 var(--fm); letter-spacing: .14em; text-transform: uppercase; color: var(--accent); }
