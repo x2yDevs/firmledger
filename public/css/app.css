@@ -2016,7 +2016,14 @@ h2.h-display { font-size: clamp(1.9rem, 3.4vw, 2.7rem); }
 .ai-chat .composer-box:has(textarea:disabled) { background: var(--paper-2, #F3F1EC); }
 .composer-box { position: relative; }
 .composer-count { flex: 0 0 auto; align-self: center; padding-right: 4px; font: 500 10px/1 var(--fm); color: var(--muted); }
-.composer-hint { flex: 1 1 100%; padding: 0 2px 2px; font: 400 11px/1.5 var(--fm); color: var(--muted); }
+/* The hint is a sibling of the composer, i.e. a direct child of the vertical
+   .ai-chat-main column — not an item inside the composer row. `flex: 1 1 100%`
+   therefore made this one-line note grow into all the leftover height, which
+   starved the transcript and parked the input mid-window on desktop. It must
+   only ever be as tall as its own text so the composer stays pinned at the
+   bottom. Phones are unaffected either way: there .ai-chat is height:auto, so
+   there is no free space to distribute. */
+.composer-hint { flex: 0 0 auto; padding: 0 2px 2px; font: 400 11px/1.5 var(--fm); color: var(--muted); }
 .ai-chat .chat-status-line { min-height: 20px; }
 .chat-status-line.is-live { color: var(--accent2); }
 .ai-chat kbd {
