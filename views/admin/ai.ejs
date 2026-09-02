@@ -183,6 +183,9 @@
             </div>
           </div>
           <div class="chat-head-actions">
+            <button class="btn btn-sm btn-ghost btn-icon chat-rail-toggle" type="button" id="toggle-rail" title="Show chat history" aria-label="Show chat history" aria-controls="chat-rail" aria-expanded="false">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+            </button>
             <label class="chat-model-pick">
               <span class="sr-only">Model for this chat</span>
               <select id="chat-model" title="Model for this chat">
@@ -248,6 +251,8 @@
               <button class="btn btn-xs btn-ghost danger" type="button" id="purge-archived" title="Hard-delete archived chats untouched for 30 days">Purge archived</button>
             </div>
           </aside>
+
+          <div class="rail-backdrop" id="rail-backdrop" aria-hidden="true"></div>
 
           <div class="ai-chat-main">
             <div class="chat-pane" id="chat-pane" role="log" aria-live="polite">
@@ -1208,10 +1213,42 @@
   document.addEventListener('keydown', function (ev) {
     if (ev.key !== 'Escape') return;
     if (!help.hidden) { help.hidden = true; return; }
-    if (!modal.hidden) cancelProposal();
+    if (!modal.hidden) { cancelProposal(); return; }
+    if (railIsOpen()) setRail(false);
   });
 
-  /* ---------- history rail (always visible, never closable) ---------- */
+  /* ---------- history rail (always visible on desktop; sliding drawer on phones) ---------- */
+
+  var railToggle = $('toggle-rail');
+  var railBackdrop = $('rail-backdrop');
+
+  function railIsOpen() {
+    var win = $('ai-chat');
+    return !!(win && win.classList.contains('is-rail-open'));
+  }
+  function setRail(open) {
+    var win = $('ai-chat');
+    if (win) win.classList.toggle('is-rail-open', !!open);
+    if (railToggle) {
+      railToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      var label = open ? 'Hide chat history' : 'Show chat history';
+      railToggle.setAttribute('aria-label', label);
+      railToggle.setAttribute('title', label);
+    }
+  }
+  if (railToggle) {
+    railToggle.addEventListener('click', function () { setRail(!railIsOpen()); });
+  }
+  if (railBackdrop) {
+    railBackdrop.addEventListener('click', function () { setRail(false); });
+  }
+  /* Crossing back to desktop always clears the drawer so it can never linger. */
+  var railMq = window.matchMedia ? window.matchMedia('(max-width: 900px)') : null;
+  function onRailBreakpoint(e) { if (e && !e.matches) setRail(false); }
+  if (railMq) {
+    if (railMq.addEventListener) railMq.addEventListener('change', onRailBreakpoint);
+    else if (railMq.addListener) railMq.addListener(onRailBreakpoint);
+  }
 
   function showRail() {
     state.railOpen = true;
@@ -1373,10 +1410,12 @@
       refreshHeadTitle();
       loadRail();
       syncUrl();
+      setRail(false); /* tucked-away drawer closes once a chat is opened */
     }).catch(function (e) { fail(statusLine, e); });
   }
 
   function startFresh(silent) {
+    setRail(false);
     state.sessionId = 0;
     state.sessionTitle = 'Admin assistant';
     pane.textContent = '';
