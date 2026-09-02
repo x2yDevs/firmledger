@@ -113,20 +113,22 @@
 
     <div class="section-head" style="margin-top:2.5rem"><h2>Recent sends</h2><span class="muted"><%= log.length %></span></div>
     <% if (log.length) { %>
-    <div class="table-wrap">
-      <table class="table">
-        <thead><tr><th>To</th><th>Subject</th><th>Status</th><th>Sent</th></tr></thead>
-        <tbody>
-          <% log.forEach(function (m) { %>
-          <tr>
-            <td><small class="mono"><%= m.to_email %></small></td>
-            <td><strong><%= m.subject %></strong></td>
-            <td><span class="pill pill-<%= m.delivered ? 'approved' : 'pending' %>"><%= m.delivered ? 'delivered' : 'outbox' %></span></td>
-            <td class="muted"><%= fmtDate(m.created_at) %></td>
-          </tr>
-          <% }) %>
-        </tbody>
-      </table>
+    <div class="scroll-table">
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>To</th><th>Subject</th><th>Status</th><th>Sent</th></tr></thead>
+          <tbody>
+            <% log.forEach(function (m) { %>
+            <tr>
+              <td><small class="mono"><%= m.to_email %></small></td>
+              <td><strong><%= m.subject %></strong></td>
+              <td><span class="pill pill-<%= m.delivered ? 'approved' : 'pending' %>"><%= m.delivered ? 'delivered' : 'outbox' %></span></td>
+              <td class="muted"><%= fmtDate(m.created_at) %></td>
+            </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
     </div>
     <% } else { %><p class="muted">No messages sent yet.</p><% } %>
   </div>

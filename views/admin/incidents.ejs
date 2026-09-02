@@ -69,6 +69,7 @@
     <div class="side-card">
       <h3>Recent incidents</h3>
       <% if (incidents.length) { %>
+      <div class="scroll-panel">
       <div class="incident-list">
         <% incidents.forEach(function (inc) { %>
         <article class="incident-card">
@@ -123,6 +124,7 @@
           </form>
         </article>
         <% }); %>
+      </div>
       </div>
       <% } else { %>
       <p class="muted">No incidents yet — open one above. The public page will say “All Systems Normal”.</p>

@@ -6,7 +6,11 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 
-const dataDir = path.join(__dirname, '..', 'data');
+/* Data directory. Production uses ./data next to the app; FIRMLEDGER_DATA_DIR lets
+   test harnesses (and alternate deployments) point the whole store somewhere else. */
+const dataDir = process.env.FIRMLEDGER_DATA_DIR
+  ? path.resolve(process.env.FIRMLEDGER_DATA_DIR)
+  : path.join(__dirname, '..', 'data');
 fs.mkdirSync(dataDir, { recursive: true });
 
 const db = new Database(path.join(dataDir, 'firmledger.db'));
@@ -157,9 +161,11 @@ CREATE TABLE IF NOT EXISTS blog_posts (
   published_at TEXT
 );
 
+/* listing_id is nullable ON DELETE SET NULL: fulfilling a request deletes the
+   listing but the request itself must survive as an auditable "removed" record. */
 CREATE TABLE IF NOT EXISTS removal_requests (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  listing_id INTEGER NOT NULL REFERENCES listings(id) ON DELETE CASCADE,
+  listing_id INTEGER REFERENCES listings(id) ON DELETE SET NULL,
   name TEXT NOT NULL DEFAULT '',
   email TEXT NOT NULL DEFAULT '',
   reason TEXT NOT NULL DEFAULT '',
@@ -334,6 +340,43 @@ try { db.exec("ALTER TABLE payments ADD COLUMN order_id TEXT NOT NULL DEFAULT ''
     try { db.exec('ROLLBACK'); } catch {}
     db.pragma('foreign_keys = ON');
     console.error('[db] payments listing_id migration skipped:', e.message);
+  }
+})();
+
+/* Legacy removal_requests declared listing_id NOT NULL ... ON DELETE CASCADE, so
+   fulfilling a request (which deletes the listing) also deleted the request —
+   the "removed" outcome vanished from Admin → Removals. Rebuild with a nullable
+   listing_id ON DELETE SET NULL so resolved requests stay on the record.
+   Mirrors migrations/2026-09-02-removal-requests-history.sql. */
+(function migrateRemovalRequestsFk() {
+  try {
+    const col = db.prepare('PRAGMA table_info(removal_requests)').all().find((c) => c.name === 'listing_id');
+    if (!col || col.notnull !== 1) return;
+    db.pragma('foreign_keys = OFF');
+    db.exec(`
+      BEGIN;
+      CREATE TABLE removal_requests__new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        listing_id INTEGER REFERENCES listings(id) ON DELETE SET NULL,
+        name TEXT NOT NULL DEFAULT '',
+        email TEXT NOT NULL DEFAULT '',
+        reason TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'pending',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        resolved_at TEXT
+      );
+      INSERT INTO removal_requests__new (id, listing_id, name, email, reason, status, created_at, resolved_at)
+        SELECT id, listing_id, name, email, reason, status, created_at, resolved_at FROM removal_requests;
+      DROP TABLE removal_requests;
+      ALTER TABLE removal_requests__new RENAME TO removal_requests;
+      CREATE INDEX IF NOT EXISTS idx_removal_listing ON removal_requests(listing_id);
+      COMMIT;
+    `);
+    db.pragma('foreign_keys = ON');
+  } catch (e) {
+    try { db.exec('ROLLBACK'); } catch { /* ignore */ }
+    db.pragma('foreign_keys = ON');
+    console.error('[db] removal_requests listing_id migration skipped:', e.message);
   }
 })();
 

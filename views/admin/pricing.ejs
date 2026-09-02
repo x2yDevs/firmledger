@@ -38,48 +38,50 @@
       </form>
     </div>
 
-    <div class="table-wrap" style="margin-top:22px">
-      <table class="table">
-        <thead>
-          <tr><th>Email</th><th>Name</th><th>Status</th><th>Trial expires</th><th class="ta-right">Actions</th></tr>
-        </thead>
-        <tbody>
-          <% users.forEach(function (u) {
-               const status = statusOf(u);
-               const left = trialDaysRemaining(u);
-          %>
-          <tr>
-            <td><b><%= u.email %></b></td>
-            <td class="muted"><%= u.name || '—' %></td>
-            <td>
-              <span class="pill <%= status === 'active' ? 'pill-approved' : (status === 'trialing' ? 'pill-pending' : '') %>"><%= status %></span>
-            </td>
-            <td class="muted">
-              <% if (u.trial_expires_at) { %>
-                <%= String(u.trial_expires_at).slice(0, 10) %>
-                <% if (left > 0) { %><div class="score-hint"><%= left %> day<%= left === 1 ? '' : 's' %> left</div><% } else { %><div class="score-hint">expired</div><% } %>
-              <% } else { %>—<% } %>
-            </td>
-            <td class="ta-right" style="white-space:nowrap">
-              <form method="post" action="/admin3119Musa/pricing/free-trial" class="inline">
-                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                <input type="hidden" name="email" value="<%= u.email %>">
-                <input type="hidden" name="days" value="<%= TRIAL_DEFAULT_DAYS %>">
-                <button class="btn btn-ghost btn-xs" type="submit">Grant <%= TRIAL_DEFAULT_DAYS %>d</button>
-              </form>
-              <form method="post" action="/admin3119Musa/pricing/revoke-trial" class="inline">
-                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                <input type="hidden" name="email" value="<%= u.email %>">
-                <button class="btn btn-danger btn-xs" type="submit"<%= u.trial_expires_at ? '' : ' disabled' %>>Revoke</button>
-              </form>
-            </td>
-          </tr>
-          <% }) %>
-          <% if (!users.length) { %>
-          <tr><td colspan="5" class="muted">No registered users yet.</td></tr>
-          <% } %>
-        </tbody>
-      </table>
+    <div class="scroll-table">
+      <div class="table-wrap" style="margin-top:22px">
+        <table class="table">
+          <thead>
+            <tr><th>Email</th><th>Name</th><th>Status</th><th>Trial expires</th><th class="ta-right">Actions</th></tr>
+          </thead>
+          <tbody>
+            <% users.forEach(function (u) {
+                 const status = statusOf(u);
+                 const left = trialDaysRemaining(u);
+            %>
+            <tr>
+              <td><b><%= u.email %></b></td>
+              <td class="muted"><%= u.name || '—' %></td>
+              <td>
+                <span class="pill <%= status === 'active' ? 'pill-approved' : (status === 'trialing' ? 'pill-pending' : '') %>"><%= status %></span>
+              </td>
+              <td class="muted">
+                <% if (u.trial_expires_at) { %>
+                  <%= String(u.trial_expires_at).slice(0, 10) %>
+                  <% if (left > 0) { %><div class="score-hint"><%= left %> day<%= left === 1 ? '' : 's' %> left</div><% } else { %><div class="score-hint">expired</div><% } %>
+                <% } else { %>—<% } %>
+              </td>
+              <td class="ta-right" style="white-space:nowrap">
+                <form method="post" action="/admin3119Musa/pricing/free-trial" class="inline">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <input type="hidden" name="email" value="<%= u.email %>">
+                  <input type="hidden" name="days" value="<%= TRIAL_DEFAULT_DAYS %>">
+                  <button class="btn btn-ghost btn-xs" type="submit">Grant <%= TRIAL_DEFAULT_DAYS %>d</button>
+                </form>
+                <form method="post" action="/admin3119Musa/pricing/revoke-trial" class="inline">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <input type="hidden" name="email" value="<%= u.email %>">
+                  <button class="btn btn-danger btn-xs" type="submit"<%= u.trial_expires_at ? '' : ' disabled' %>>Revoke</button>
+                </form>
+              </td>
+            </tr>
+            <% }) %>
+            <% if (!users.length) { %>
+            <tr><td colspan="5" class="muted">No registered users yet.</td></tr>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
     </div>
 
     <p class="fine-print" style="margin-top:18px">

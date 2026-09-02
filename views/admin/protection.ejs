@@ -73,26 +73,28 @@
           </div>
           <div class="form-actions"><button class="btn btn-accent" type="submit">Add IP</button></div>
         </form>
-        <div class="table-wrap" style="margin-top:14px">
-          <table class="table">
-            <thead><tr><th>IP</th><th>List</th><th>Note</th><th></th></tr></thead>
-            <tbody>
-              <% ips.forEach(function (r) { %>
-              <tr>
-                <td class="mono"><%= r.value %></td>
-                <td><span class="pill pill-<%= r.kind === 'allow' ? 'approved' : 'rejected' %>"><%= r.kind %></span></td>
-                <td class="muted"><%= r.note || '—' %></td>
-                <td class="ta-right">
-                  <form method="post" action="/admin3119Musa/protection/ip/<%= r.id %>/delete" class="inline">
-                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                    <button class="btn btn-danger btn-xs" type="submit">Remove</button>
-                  </form>
-                </td>
-              </tr>
-              <% }) %>
-              <% if (!ips.length) { %><tr><td colspan="4" class="muted">No IP rules yet.</td></tr><% } %>
-            </tbody>
-          </table>
+        <div class="scroll-table">
+          <div class="table-wrap" style="margin-top:14px">
+            <table class="table">
+              <thead><tr><th>IP</th><th>List</th><th>Note</th><th></th></tr></thead>
+              <tbody>
+                <% ips.forEach(function (r) { %>
+                <tr>
+                  <td class="mono"><%= r.value %></td>
+                  <td><span class="pill pill-<%= r.kind === 'allow' ? 'approved' : 'rejected' %>"><%= r.kind %></span></td>
+                  <td class="muted"><%= r.note || '—' %></td>
+                  <td class="ta-right">
+                    <form method="post" action="/admin3119Musa/protection/ip/<%= r.id %>/delete" class="inline">
+                      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                      <button class="btn btn-danger btn-xs" type="submit">Remove</button>
+                    </form>
+                  </td>
+                </tr>
+                <% }) %>
+                <% if (!ips.length) { %><tr><td colspan="4" class="muted">No IP rules yet.</td></tr><% } %>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
@@ -113,26 +115,28 @@
           </div>
           <div class="form-actions"><button class="btn btn-accent" type="submit">Add domain</button></div>
         </form>
-        <div class="table-wrap" style="margin-top:14px">
-          <table class="table">
-            <thead><tr><th>Domain</th><th>List</th><th>Note</th><th></th></tr></thead>
-            <tbody>
-              <% domains.forEach(function (r) { %>
-              <tr>
-                <td class="mono"><%= r.value %></td>
-                <td><span class="pill pill-<%= r.kind === 'allow' ? 'approved' : 'rejected' %>"><%= r.kind %></span></td>
-                <td class="muted"><%= r.note || '—' %></td>
-                <td class="ta-right">
-                  <form method="post" action="/admin3119Musa/protection/domain/<%= r.id %>/delete" class="inline">
-                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                    <button class="btn btn-danger btn-xs" type="submit">Remove</button>
-                  </form>
-                </td>
-              </tr>
-              <% }) %>
-              <% if (!domains.length) { %><tr><td colspan="4" class="muted">No domain rules yet.</td></tr><% } %>
-            </tbody>
-          </table>
+        <div class="scroll-table">
+          <div class="table-wrap" style="margin-top:14px">
+            <table class="table">
+              <thead><tr><th>Domain</th><th>List</th><th>Note</th><th></th></tr></thead>
+              <tbody>
+                <% domains.forEach(function (r) { %>
+                <tr>
+                  <td class="mono"><%= r.value %></td>
+                  <td><span class="pill pill-<%= r.kind === 'allow' ? 'approved' : 'rejected' %>"><%= r.kind %></span></td>
+                  <td class="muted"><%= r.note || '—' %></td>
+                  <td class="ta-right">
+                    <form method="post" action="/admin3119Musa/protection/domain/<%= r.id %>/delete" class="inline">
+                      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                      <button class="btn btn-danger btn-xs" type="submit">Remove</button>
+                    </form>
+                  </td>
+                </tr>
+                <% }) %>
+                <% if (!domains.length) { %><tr><td colspan="4" class="muted">No domain rules yet.</td></tr><% } %>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>

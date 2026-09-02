@@ -54,21 +54,23 @@
         <p class="muted">No SMTP configured — mail is written to <code>data/outbox.log</code>. Add providers in <a href="/admin3119Musa/settings">Settings</a>.</p>
       <% } else { %>
         <p class="muted" style="margin-bottom:12px">From: <code><%= snap.mail.from %></code> — same sender on every hop. First hop that is under its limit wins.</p>
-        <div class="table-wrap">
-          <table class="table">
-            <thead><tr><th>#</th><th>Hop</th><th>Host</th><th>Today</th><th>Last error</th></tr></thead>
-            <tbody>
-              <% (snap.mail.hops || []).forEach(function (h, i) { %>
-              <tr>
-                <td class="muted"><%= i + 1 %></td>
-                <td><b><%= h.label %></b><div class="score-hint"><%= h.source %></div></td>
-                <td class="mono" style="font-size:12px"><%= h.host %>:<%= h.port %></td>
-                <td><%= h.sent_today %><% if (h.daily_limit) { %> / <%= h.daily_limit %><% } %></td>
-                <td class="muted" style="font-size:12px"><%= h.last_error || '—' %></td>
-              </tr>
-              <% }) %>
-            </tbody>
-          </table>
+        <div class="scroll-table">
+          <div class="table-wrap">
+            <table class="table">
+              <thead><tr><th>#</th><th>Hop</th><th>Host</th><th>Today</th><th>Last error</th></tr></thead>
+              <tbody>
+                <% (snap.mail.hops || []).forEach(function (h, i) { %>
+                <tr>
+                  <td class="muted"><%= i + 1 %></td>
+                  <td><b><%= h.label %></b><div class="score-hint"><%= h.source %></div></td>
+                  <td class="mono" style="font-size:12px"><%= h.host %>:<%= h.port %></td>
+                  <td><%= h.sent_today %><% if (h.daily_limit) { %> / <%= h.daily_limit %><% } %></td>
+                  <td class="muted" style="font-size:12px"><%= h.last_error || '—' %></td>
+                </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
         </div>
       <% } %>
     </div>

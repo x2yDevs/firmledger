@@ -44,31 +44,33 @@
     <div class="side-card">
       <h3>Roles</h3>
       <% if (roles.length) { %>
-      <div class="table-wrap">
-        <table class="table">
-          <thead><tr><th>Title</th><th>Type</th><th>Location</th><th>Status</th><th class="ta-right">Actions</th></tr></thead>
-          <tbody>
-            <% roles.forEach(function (r) { %>
-            <tr>
-              <td><strong><%= r.title %></strong><br><small class="muted">posted <%= fmtDate(r.created_at) %></small></td>
-              <td><%= r.role_type %></td>
-              <td><%= r.location %></td>
-              <td><span class="pill pill-<%= r.status === 'open' ? 'approved' : 'closed' %>"><%= r.status %></span></td>
-              <td class="ta-right actions-cell">
-                <a class="btn btn-ghost btn-xs" href="/careers#role-<%= r.id %>" target="_blank">View</a>
-                <form method="post" action="/admin3119Musa/careers/<%= r.id %>/toggle" class="inline">
-                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                  <button class="btn btn-ghost btn-xs" type="submit"><%= r.status === 'open' ? 'Close' : 'Reopen' %></button>
-                </form>
-                <form method="post" action="/admin3119Musa/careers/<%= r.id %>/delete" class="inline" onsubmit="return confirm('Remove role “<%= r.title.replace(/\"/g, '') %>”?');">
-                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                  <button class="btn btn-danger btn-xs" type="submit">Delete</button>
-                </form>
-              </td>
-            </tr>
-            <% }); %>
-          </tbody>
-        </table>
+      <div class="scroll-table">
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Title</th><th>Type</th><th>Location</th><th>Status</th><th class="ta-right">Actions</th></tr></thead>
+            <tbody>
+              <% roles.forEach(function (r) { %>
+              <tr>
+                <td><strong><%= r.title %></strong><br><small class="muted">posted <%= fmtDate(r.created_at) %></small></td>
+                <td><%= r.role_type %></td>
+                <td><%= r.location %></td>
+                <td><span class="pill pill-<%= r.status === 'open' ? 'approved' : 'closed' %>"><%= r.status %></span></td>
+                <td class="ta-right actions-cell">
+                  <a class="btn btn-ghost btn-xs" href="/careers#role-<%= r.id %>" target="_blank">View</a>
+                  <form method="post" action="/admin3119Musa/careers/<%= r.id %>/toggle" class="inline">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                    <button class="btn btn-ghost btn-xs" type="submit"><%= r.status === 'open' ? 'Close' : 'Reopen' %></button>
+                  </form>
+                  <form method="post" action="/admin3119Musa/careers/<%= r.id %>/delete" class="inline" onsubmit="return confirm('Remove role “<%= r.title.replace(/\"/g, '') %>”?');">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                    <button class="btn btn-danger btn-xs" type="submit">Delete</button>
+                  </form>
+                </td>
+              </tr>
+              <% }); %>
+            </tbody>
+          </table>
+        </div>
       </div>
       <% } else { %>
       <p class="muted">No roles yet — post one above. The public page will say “We're not hiring”.</p>
