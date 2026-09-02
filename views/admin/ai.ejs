@@ -5,7 +5,7 @@
   const ready = Boolean(settings.groq_configured);
   const offAttr = ready ? '' : ' disabled';
   const tierLabel = { production: 'Production', preview: 'Preview', legacy: 'Legacy' };
-  const chatTitle = openSession ? openSession.title : 'Admin assistant';
+  const chatTitle = 'Admin assistant';
   const labelFor = (id) => { const hit = (settings.models || []).filter(function (m) { return m.id === id; })[0]; return hit ? hit.label : (id || 'no model'); };
   const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const UTC_DAY = (offset) => new Date(Date.now() - (offset || 0) * 86400000).toISOString().slice(0, 10);
@@ -50,7 +50,7 @@
     <div class="ai-keyline">
       <span class="ai-keyline-item"><span class="ai-keyline-k">Model</span> <b class="mono"><%= settings.groq_model %></b></span>
       <span class="ai-keyline-item"><span class="ai-keyline-k">Key</span> <b class="mono"><%= settings.groq_key_hint || 'none' %></b></span>
-      <span class="ai-keyline-item"><span class="ai-keyline-k">Chats</span> <b><%= counts.live || 0 %> open · <%= counts.archived || 0 %> archived</b></span>
+      <span class="ai-keyline-item"><span class="ai-keyline-k">Assistant</span> <b>stateless · no saved history</b></span>
       <span class="ai-keyline-item"><span class="ai-keyline-k">Pending writes</span> <b><%= settings.pending_actions %></b></span>
       <span class="ai-keyline-item ai-keyline-live"><span class="ai-keyline-k">Models seen</span>
         <b><%= settings.live_models.length ? settings.live_models.length + ' on this key' : 'not checked yet' %></b>
@@ -172,7 +172,7 @@
 
     <!-- ================= Assistant ================= -->
     <div class="ai-pane" data-pane="chat" id="pane-chat" role="tabpanel" aria-label="Admin assistant">
-      <div class="chat-window ai-chat<%= openSession ? ' has-session' : '' %>" id="ai-chat">
+      <div class="chat-window ai-chat" id="ai-chat">
         <header class="chat-head">
           <div class="chat-head-avatar" aria-hidden="true">AI</div>
           <div class="chat-head-meta">
@@ -183,115 +183,38 @@
             </div>
           </div>
           <div class="chat-head-actions">
-            <button class="btn btn-sm btn-ghost btn-icon chat-rail-toggle" type="button" id="toggle-rail" title="Show chat history" aria-label="Show chat history" aria-controls="chat-rail" aria-expanded="false">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-            </button>
             <label class="chat-model-pick">
-              <span class="sr-only">Model for this chat</span>
-              <select id="chat-model" title="Model for this chat">
+              <span class="sr-only">Model for this assistant</span>
+              <select id="chat-model" title="Model for this assistant">
                 <% settings.models.forEach(function (m) { %>
-                  <option value="<%= m.id %>" <%= ((openSession && openSession.model) || settings.groq_model) === m.id ? 'selected' : '' %>><%= m.label %><%= m.available === false ? ' · not on this key' : '' %></option>
+                  <option value="<%= m.id %>" <%= settings.groq_model === m.id ? 'selected' : '' %>><%= m.label %><%= m.available === false ? ' · not on this key' : '' %></option>
                 <% }) %>
               </select>
             </label>
-            <button class="btn btn-sm btn-ghost" type="button" id="new-chat-btn"<%= offAttr %> title="Start a new chat">
+            <button class="btn btn-sm btn-ghost" type="button" id="new-chat-btn"<%= offAttr %> title="Clear the current assistant conversation">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-              New chat
-            </button>
-            <button class="btn btn-sm btn-ghost btn-icon" type="button" id="toggle-history" title="Refresh chat history" aria-label="Refresh chat history">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7.5V12l3 2"/></svg>
-              <span class="rail-count" id="rail-count"><%= counts.live || 0 %></span>
+              Clear chat
             </button>
             <button class="btn btn-sm btn-ghost btn-icon" type="button" id="chat-help" aria-label="How this assistant works" title="How this assistant works">?</button>
           </div>
         </header>
 
         <div class="ai-chat-body">
-          <aside class="chat-rail" id="chat-rail" aria-label="Chat history">
-            <div class="rail-head">
-              <h4>Chat history</h4>
-            </div>
-
-            <div class="rail-tools">
-              <label class="sr-only" for="chat-search">Search chats</label>
-              <input id="chat-search" type="search" placeholder="Search chats" autocomplete="off" maxlength="60">
-              <div class="rail-seg" role="group" aria-label="Which chats to list">
-                <button type="button" class="on" data-archived="0">Active</button>
-                <button type="button" data-archived="1">Archived</button>
-                <button type="button" data-archived="all">All</button>
-              </div>
-            </div>
-
-            <div class="rail-list" id="rail-list" role="list">
-              <% if (chatSessions && chatSessions.length) { %>
-                <% chatSessions.forEach(function (s) { %>
-                  <div class="rail-item <%= openSession && openSession.id === s.id ? 'active' : '' %><%= s.archived ? ' archived' : '' %>" data-id="<%= s.id %>" role="listitem">
-                    <button class="rail-item-main" type="button" data-open="<%= s.id %>">
-                      <span class="ri-title"><%= s.title || 'Untitled chat' %></span>
-                      <span class="ri-meta"><%= (s.message_count || 0) %> messages · <%= labelFor(s.model) %><%= s.archived ? ' · archived' : '' %></span>
-                      <% if (s.preview) { %><span class="ri-preview"><%= s.preview %></span><% } %>
-                    </button>
-                    <span class="rail-item-actions">
-                      <button class="icon-btn xs" type="button" data-act="rename" title="Rename" aria-label="Rename chat"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button>
-                      <button class="icon-btn xs" type="button" data-act="<%= s.archived ? 'unarchive' : 'archive' %>" title="<%= s.archived ? 'Restore' : 'Archive' %>" aria-label="<%= s.archived ? 'Restore chat' : 'Archive chat' %>"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8"/><path d="M10 12h4"/></svg></button>
-                      <button class="icon-btn xs danger" type="button" data-act="delete" title="Delete" aria-label="Delete chat"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg></button>
-                    </span>
-                  </div>
-                <% }) %>
-              <% } else { %>
-                <p class="rail-empty">No saved chats yet. Your conversations are stored here as soon as you send one.</p>
-              <% } %>
-            </div>
-
-            <div class="rail-foot">
-              <button class="btn btn-xs btn-ghost" type="button" id="rail-refresh" title="Reload the list">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>
-                Refresh
-              </button>
-              <button class="btn btn-xs btn-ghost danger" type="button" id="purge-archived" title="Hard-delete archived chats untouched for 30 days">Purge archived</button>
-            </div>
-          </aside>
-
-          <div class="rail-backdrop" id="rail-backdrop" aria-hidden="true"></div>
-
           <div class="ai-chat-main">
             <div class="chat-pane" id="chat-pane" role="log" aria-live="polite">
-              <% if (messages && messages.length) { %>
-                <% if (hasMoreMessages) { %>
-                  <div class="ai-day-actions">
-                    <a class="btn btn-xs btn-ghost" href="?tab=chat&session=<%= openSession.id %>&limit=300">Load earlier messages</a>
-                  </div>
-                <% } %>
-                <% let prevChatDay = ''; %>
-                <% messages.forEach(function (m) { %>
-                  <% const chatDay = (m.created_at || '').slice(0, 10); %>
-                  <% if (chatDay !== prevChatDay) { prevChatDay = chatDay; %>
-                    <div class="chat-day"><%= dayChip(chatDay) %></div>
-                  <% } %>
-                  <div class="wa-row <%= m.role === 'user' ? 'wa-mine' : 'wa-theirs' %><%= Number(m.ok) === 0 ? ' ai-bad' : '' %>">
-                    <div class="wa-bubble">
-                      <div class="wa-who"><%= m.role === 'user' ? 'You' : 'Assistant' %></div>
-                      <div class="wa-text"><%= m.content %></div>
-                      <% if (m.tool) { %><div class="wa-tag"><%= m.tool %></div><% } %>
-                      <div class="wa-meta"><span><%= (m.created_at || '').slice(11, 16) %></span><% if (m.model) { %><span class="wa-meta-model"><%= labelFor(m.model) %></span><% } %></div>
-                    </div>
-                  </div>
-                <% }) %>
-              <% } else { %>
-                <div class="chat-day">Today</div>
-                <div class="wa-row wa-theirs">
-                  <div class="wa-bubble">
-                    <div class="wa-who">Assistant</div>
-                    <div class="wa-text">Ask in plain language. I can run the same actions as the rest of this console — listings, users, billing, tickets, claims, blog, email, protection, status, and more. Lookups run immediately; writes show a confirmation first unless you auto-allow them in Settings.</div>
-                  </div>
+              <div class="chat-day">Today</div>
+              <div class="wa-row wa-theirs">
+                <div class="wa-bubble">
+                  <div class="wa-who">Assistant</div>
+                  <div class="wa-text">Ask in plain language. I can run the same actions as the rest of this console — listings, users, billing, tickets, claims, blog, email, protection, status, and more. Lookups run immediately; writes show a confirmation first unless you auto-allow them in Settings. Chat history is not saved.</div>
                 </div>
-                <div class="ai-starters" role="group" aria-label="Starter prompts">
-                  <button type="button" class="ai-starter" data-prompt="How many listings are pending right now?">Pending count</button>
-                  <button type="button" class="ai-starter" data-prompt="Summarise this week's signups and any suspended accounts.">Weekly signup summary</button>
-                  <button type="button" class="ai-starter" data-prompt="List the newest pending listings with their domains.">Newest pending</button>
-                  <button type="button" class="ai-starter" data-prompt="Are there open incidents on the status page?">Incident check</button>
-                </div>
-              <% } %>
+              </div>
+              <div class="ai-starters" role="group" aria-label="Starter prompts">
+                <button type="button" class="ai-starter" data-prompt="How many listings are pending right now?">Pending count</button>
+                <button type="button" class="ai-starter" data-prompt="Summarise this week's signups and any suspended accounts.">Weekly signup summary</button>
+                <button type="button" class="ai-starter" data-prompt="List the newest pending listings with their domains.">Newest pending</button>
+                <button type="button" class="ai-starter" data-prompt="Are there open incidents on the status page?">Incident check</button>
+              </div>
             </div>
 
             <div class="chat-status-line" id="chat-status" role="status"></div>
@@ -306,7 +229,7 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2 11 13"/><path d="M22 2 15 22 11 13 2 9 22 2z"/></svg>
               </button>
             </form>
-            <p class="composer-hint">Enter sends · Shift+Enter for a new line · every chat is saved to your history rail</p>
+            <p class="composer-hint">Enter sends · Shift+Enter for a new line · this assistant does not save chat history</p>
           </div>
         </div>
       </div>
@@ -544,8 +467,7 @@
     <ul class="ai-help-list">
       <li><b>Reads run straight away.</b> Counts, lookups and status checks never change anything.</li>
       <li><b>Writes are confirmed.</b> A proposal card appears with the exact arguments; nothing executes until you press Run — unless you allow that action under Settings → Assistant auto-run.</li>
-      <li><b>History is real.</b> Each chat is stored with its messages, so reopening the console brings the conversation (and the model you picked for it) back.</li>
-      <li><b>The rail is the archive.</b> Rename, search, archive, restore or delete chats from the history rail.</li>
+      <li><b>No saved history.</b> The assistant can use messages visible in this tab for context, but conversations are not stored or restored after reload.</li>
       <li><b>Nothing auto-publishes.</b> Generated listings are saved as <span class="mono">pending</span> and still pass the normal review queue.</li>
     </ul>
     <div class="form-actions">
@@ -562,10 +484,10 @@
   var BASE = '/admin3119Musa/ai';
   var READY = <%- ready ? 'true' : 'false' %>;
   var MODELS = <%- JSON.stringify(settings.models.map(function (m) { return { id: m.id, label: m.label, tier: m.tier, available: m.available == null ? null : !!m.available, note: m.note || '', tools: !!m.tools }; })) %>;
-  var START_SESSION = <%- JSON.stringify(openSession ? { id: openSession.id, title: openSession.title, model: openSession.model } : null) %>;
-  var START_MESSAGES = <%- JSON.stringify(messages || []) %>;
-  var START_MORE = <%- JSON.stringify(!!hasMoreMessages) %>;
-  var START_OLDEST = <%- JSON.stringify(oldestMessageId || 0) %>;
+  var START_SESSION = null;
+  var START_MESSAGES = [];
+  var START_MORE = false;
+  var START_OLDEST = 0;
   var START_TAB = <%- JSON.stringify(tab) %>;
   var DEFAULT_RULES = <%- JSON.stringify(settings.default_rules) %>;
 
@@ -718,8 +640,7 @@
     if (push !== false) {
       var url = new URL(window.location.href);
       url.searchParams.set('tab', name);
-      if (state.sessionId) url.searchParams.set('session', String(state.sessionId));
-      else url.searchParams.delete('session');
+      url.searchParams.delete('session');
       window.history.replaceState({}, '', url.toString());
     }
     if (name === 'chat') {
@@ -742,17 +663,12 @@
   /* ---------------- shared state ---------------- */
 
   var pane = $('chat-pane');
-  var rail = $('chat-rail');
-  var railList = $('rail-list');
   var statusLine = $('chat-status');
   var state = {
-    sessionId: START_SESSION ? START_SESSION.id : 0,
-    sessionTitle: START_SESSION ? START_SESSION.title : 'Admin assistant',
-    model: START_SESSION ? START_SESSION.model : <%- JSON.stringify(settings.groq_model) %>,
+    sessionId: 0,
+    sessionTitle: 'Admin assistant',
+    model: <%- JSON.stringify(settings.groq_model) %>,
     busy: false,
-    railOpen: true,
-    archived: '0',
-    q: '',
     pending: null,
     lastUser: '',
     transcript: [],
@@ -1003,6 +919,11 @@
     return bubble;
   }
 
+  function remember(role, content) {
+    state.transcript.push({ role: role === 'user' ? 'user' : 'assistant', content: String(content || '').slice(0, 4000) });
+    if (state.transcript.length > 20) state.transcript = state.transcript.slice(-20);
+  }
+
   function addTyping() {
     var row = el('div', 'wa-row wa-theirs ai-typing-row');
     var bubble = el('div', 'wa-bubble');
@@ -1054,15 +975,13 @@
     if (data.type === 'tool_proposal') {
       var bubble = addBubble('assistant', content, { kind: 'await', model: data.model });
       bubble.appendChild(proposalCard(data.tool || {}, data.pending_id));
+      remember('assistant', content);
       state.pending = { pending_id: data.pending_id, name: data.tool && data.tool.name, label: data.tool && data.tool.label, args: data.tool && data.tool.args };
       openModal(state.pending, true);
       return;
     }
     addBubble('assistant', content, { model: data.model, kind: data.executed ? 'ran' : (data.error ? 'bad' : null), tool: data.tool || '', ok: data.executed !== false });
-    if (data.session_id && !state.sessionId) {
-      state.sessionId = data.session_id;
-      loadRail();
-    }
+    remember('assistant', content);
     refreshHeadTitle();
   }
 
@@ -1074,24 +993,22 @@
     input.value = '';
     input.dispatchEvent(new Event('input'));
     state.lastUser = text;
+    var prior = state.transcript.slice(-20);
     addBubble('user', text);
+    remember('user', text);
     var typing = addTyping();
     setBusy(true, 'Thinking…');
     api('/chat', {
-      body: { text: text, session_id: state.sessionId || 0, model: chatModel ? chatModel.value : '' },
+      body: { text: text, messages: prior, model: chatModel ? chatModel.value : '' },
     }).then(function (data) {
       killTyping(typing);
-      if (data.session && data.session.id) {
-        state.sessionId = data.session.id;
-        state.sessionTitle = data.session.title;
-      }
       handleReply(data);
       refreshHeadTitle();
       syncUrl();
-      loadRail();
     }).catch(function (e) {
       killTyping(typing);
       var bubble = addBubble('assistant', 'Groq could not answer: ' + e.message, { kind: 'bad', ok: false });
+      remember('assistant', 'Groq could not answer: ' + e.message);
       var retry = el('button', 'btn btn-xs btn-ghost', 'Try again');
       retry.type = 'button';
       retry.addEventListener('click', function () {
@@ -1117,27 +1034,24 @@
   if (chatModel) {
     chatModel.addEventListener('change', function () {
       state.model = chatModel.value;
-      if (!state.sessionId) return;
-      api('/chat/sessions/' + state.sessionId + '/model', { body: { model: chatModel.value } })
-        .then(function () { toast('ok', 'This chat now uses ' + modelLabel(chatModel.value) + '.', 'Model switched'); })
-        .catch(function (e) { fail(statusLine, e); });
+      toast('ok', 'Assistant now uses ' + modelLabel(chatModel.value) + ' for this tab.', 'Model switched');
+      refreshHeadTitle();
     });
   }
   function syncUrl() {
     var url = new URL(window.location.href);
-    if (state.sessionId) url.searchParams.set('session', String(state.sessionId));
-    else url.searchParams.delete('session');
+    url.searchParams.delete('session');
     url.searchParams.set('tab', 'chat');
     window.history.replaceState({}, '', url.toString());
   }
   function refreshHeadTitle() {
     var head = $('chat-head-title');
-    if (head) head.textContent = state.sessionId ? state.sessionTitle : 'Admin assistant';
+    if (head) head.textContent = 'Admin assistant';
     var sub = $('chat-head-sub');
     if (sub) {
       var bits = [];
       bits.push(READY ? 'Live · ' + modelLabel(chatModel ? chatModel.value : state.model) : 'Groq key required');
-      if (state.sessionId) bits.push('Chat #' + state.sessionId);
+      bits.push('no saved history');
       bits.push('writes confirm first');
       sub.textContent = bits.join(' · ');
     }
@@ -1173,11 +1087,14 @@
     var id = state.pending.pending_id;
     var cancelledName = state.pending.name || '';
     closeModal();
-    api('/cancel', { body: { pending_id: id, session_id: state.sessionId || 0 } }).then(function (data) {
-      addBubble('assistant', data.content || 'Cancelled. Nothing ran.', { kind: 'muted', tool: cancelledName ? 'cancelled: ' + cancelledName : 'cancelled', model: data.model });
+    api('/cancel', { body: { pending_id: id } }).then(function (data) {
+      var content = data.content || 'Cancelled. Nothing ran.';
+      addBubble('assistant', content, { kind: 'muted', tool: cancelledName ? 'cancelled: ' + cancelledName : 'cancelled', model: data.model });
+      remember('assistant', content);
       state.pending = null;
     }).catch(function (e) {
       addBubble('assistant', e.message, { kind: 'bad', ok: false });
+      remember('assistant', e.message);
       state.pending = null;
     });
   }
@@ -1187,14 +1104,16 @@
     var toolName = state.pending.name;
     $('ai-modal-ok').disabled = true;
     modalStatus.textContent = 'Running…';
-    api('/execute', { body: { pending_id: id, session_id: state.sessionId || 0 } }).then(function (data) {
+    api('/execute', { body: { pending_id: id } }).then(function (data) {
       closeModal();
-      addBubble('assistant', data.content || 'Done.', {
+      var content = data.content || 'Done.';
+      addBubble('assistant', content, {
         kind: data.executed === false ? 'bad' : 'ran',
         ok: data.executed !== false,
         tool: toolName,
         model: data.model,
       });
+      remember('assistant', content);
       state.pending = null;
       toast(data.executed === false ? 'err' : 'ok', (data.content || 'Action finished').slice(0, 140), 'Assistant');
     }).catch(function (e) {
@@ -1214,213 +1133,15 @@
     if (ev.key !== 'Escape') return;
     if (!help.hidden) { help.hidden = true; return; }
     if (!modal.hidden) { cancelProposal(); return; }
-    if (railIsOpen()) setRail(false);
   });
-
-  /* ---------- history rail (always visible on desktop; sliding drawer on phones) ---------- */
-
-  var railToggle = $('toggle-rail');
-  var railBackdrop = $('rail-backdrop');
-
-  function railIsOpen() {
-    var win = $('ai-chat');
-    return !!(win && win.classList.contains('is-rail-open'));
-  }
-  function setRail(open) {
-    var win = $('ai-chat');
-    if (win) win.classList.toggle('is-rail-open', !!open);
-    if (railToggle) {
-      railToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-      var label = open ? 'Hide chat history' : 'Show chat history';
-      railToggle.setAttribute('aria-label', label);
-      railToggle.setAttribute('title', label);
-    }
-  }
-  if (railToggle) {
-    railToggle.addEventListener('click', function () { setRail(!railIsOpen()); });
-  }
-  if (railBackdrop) {
-    railBackdrop.addEventListener('click', function () { setRail(false); });
-  }
-  /* Crossing back to desktop always clears the drawer so it can never linger. */
-  var railMq = window.matchMedia ? window.matchMedia('(max-width: 900px)') : null;
-  function onRailBreakpoint(e) { if (e && !e.matches) setRail(false); }
-  if (railMq) {
-    if (railMq.addEventListener) railMq.addEventListener('change', onRailBreakpoint);
-    else if (railMq.addListener) railMq.addListener(onRailBreakpoint);
-  }
-
-  function showRail() {
-    state.railOpen = true;
-    rail.hidden = false;
-    var win = $('ai-chat');
-    if (win) win.classList.add('has-rail');
-    if (!state.railLoaded || state.railDirty) loadRail();
-  }
-  $('toggle-history').addEventListener('click', function () { loadRail(); });
-
-  var searchTimer = null;
-  $('chat-search').addEventListener('input', function () {
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(function () {
-      state.q = $('chat-search').value.trim();
-      loadRail();
-    }, 260);
-  });
-  document.querySelectorAll('.rail-seg button').forEach(function (b) {
-    b.addEventListener('click', function () {
-      state.archived = b.getAttribute('data-archived');
-      document.querySelectorAll('.rail-seg button').forEach(function (x) { x.classList.toggle('on', x === b); });
-      loadRail();
-    });
-  });
-  $('rail-refresh').addEventListener('click', function () { loadRail(); });
-
-  function railItemNode(s) {
-    var item = el('div', 'rail-item' + (Number(s.id) === Number(state.sessionId) ? ' active' : '') + (s.archived ? ' archived' : ''));
-    item.setAttribute('data-id', String(s.id));
-    item.setAttribute('role', 'listitem');
-    var main = el('button', 'rail-item-main');
-    main.type = 'button';
-    main.appendChild(el('span', 'ri-title', s.title || 'Untitled chat'));
-    main.appendChild(el('span', 'ri-meta', (s.message_count || 0) + ' messages · ' + modelLabel(s.model) + ' · ' + whenLabel(s.updated_at || s.created_at)));
-    if (s.preview) main.appendChild(el('span', 'ri-preview', s.preview));
-    main.addEventListener('click', function () { openSession(s.id); });
-    item.appendChild(main);
-
-    var actions = el('span', 'rail-item-actions');
-    var rename = icoBtn('Rename chat', ['M12 20h9', 'M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z']);
-    rename.addEventListener('click', function () {
-      var next = window.prompt('Rename chat', s.title || 'Untitled chat');
-      if (next == null) return;
-      api('/chat/sessions/' + s.id + '/rename', { body: { title: next } })
-        .then(function () { loadRail(); refreshHeadTitle(); toast('ok', 'Chat renamed.', 'History'); })
-        .catch(function (e) { fail(statusLine, e); });
-    });
-    actions.appendChild(rename);
-    var arch = icoBtn(s.archived ? 'Restore chat' : 'Archive chat', ['M3 4h18v4H3z', 'M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8', 'M10 12h4']);
-    arch.addEventListener('click', function () {
-      api('/chat/sessions/' + s.id + '/' + (s.archived ? 'unarchive' : 'archive'), { method: 'POST', body: {} })
-        .then(function (data) {
-          if (data.counts) $('rail-count').textContent = String(data.counts.live || 0);
-          if (Number(state.sessionId) === Number(s.id) && !s.archived) state.sessionId = 0;
-          loadRail();
-          toast('ok', s.archived ? 'Chat restored.' : 'Chat archived.', 'History');
-        })
-        .catch(function (e) { fail(statusLine, e); });
-    });
-    actions.appendChild(arch);
-    var del = icoBtn('Delete chat', ['M4 7h16', 'M9 7V5h6v2', 'M6 7l1 13h10l1-13'], 'danger');
-    del.addEventListener('click', function () {
-      if (!window.confirm('Delete this chat and all its messages? This cannot be undone.')) return;
-      api('/chat/sessions/' + s.id, { method: 'DELETE' }).then(function (data) {
-        if (data.counts) $('rail-count').textContent = String(data.counts.live || 0);
-        if (Number(state.sessionId) === Number(s.id)) {
-          state.sessionId = 0;
-          startFresh();
-        }
-        loadRail();
-        toast('ok', 'Chat deleted.', 'History');
-      }).catch(function (e) { fail(statusLine, e); });
-    });
-    actions.appendChild(del);
-    item.appendChild(actions);
-    return item;
-  }
-
-  function loadRail() {
-    state.railLoaded = true;
-    state.railDirty = false;
-    var url = '/chat/sessions?archived=' + encodeURIComponent(state.archived)
-      + (state.q ? '&q=' + encodeURIComponent(state.q) : '');
-    return api(url).then(function (data) {
-      $('rail-count').textContent = String((data.counts && data.counts.live) || 0);
-      var list = data.sessions || [];
-      railList.textContent = '';
-      if (!list.length) {
-        railList.appendChild(el('p', 'rail-empty', state.q
-          ? 'No chats match “' + state.q + '”.'
-          : (state.archived === '1' ? 'Nothing archived yet.' : 'No saved chats yet. Your conversations are stored here as soon as you send one.')));
-        return;
-      }
-      var group = '';
-      list.forEach(function (s) {
-        var label = s.archived ? 'Archived' : groupLabel(s.updated_at || s.created_at);
-        if (label !== group) {
-          group = label;
-          railList.appendChild(el('div', 'rail-group', group));
-        }
-        railList.appendChild(railItemNode(s));
-      });
-    }).catch(function (e) {
-      railList.textContent = '';
-      railList.appendChild(el('p', 'rail-empty', 'Could not load history — ' + e.message));
-    });
-  }
-
-  function paintTranscript(messages, keepAnchor) {
-    var anchor = pane.scrollHeight - pane.scrollTop;
-    state.transcript = messages || [];
-    pane.textContent = '';
-    if (!state.transcript.length) pane.appendChild(el('div', 'ai-empty-transcript', 'This chat has no messages yet.'));
-    state.transcript.forEach(function (m) {
-      addBubble(m.role === 'user' ? 'user' : 'assistant', m.content, {
-        model: m.model, tool: m.tool, ok: Number(m.ok) !== 0, kind: Number(m.ok) === 0 ? 'bad' : null,
-        when: m.created_at,
-      });
-    });
-    if (keepAnchor) pane.scrollTop = Math.max(0, pane.scrollHeight - anchor);
-    else pane.scrollTop = pane.scrollHeight;
-  }
-
-  /* Long chats page one screen at a time; each click widens the same render so day
-     separators and per-message styling stay consistent. */
-  function renderPager(id, data) {
-    var wrap = pane.querySelector('.ai-day-actions');
-    if (wrap && wrap.parentNode) wrap.parentNode.removeChild(wrap);
-    if (!data || !data.has_more || !state.transcript.length) return;
-    wrap = el('div', 'ai-day-actions');
-    var btn = el('button', 'btn btn-xs btn-ghost', 'Load earlier messages');
-    btn.type = 'button';
-    btn.addEventListener('click', function () {
-      btn.disabled = true;
-      btn.textContent = 'Loading\u2026';
-      api('/chat/sessions/' + id + '?limit=120&before=' + (data.oldest_id || 0)).then(function (page) {
-        data.oldest_id = page.oldest_id || 0;
-        data.has_more = !!page.has_more;
-        paintTranscript((page.messages || []).concat(state.transcript), true);
-        renderPager(id, data);
-      }).catch(function (e) { btn.disabled = false; btn.textContent = e.message; });
-    });
-    wrap.appendChild(btn);
-    pane.insertBefore(wrap, pane.firstChild);
-  }
-
-  function openSession(id) {
-    api('/chat/sessions/' + id).then(function (data) {
-      state.sessionId = data.session.id;
-      state.sessionTitle = data.session.title;
-      if (chatModel) chatModel.value = data.session.model;
-      state.model = data.session.model;
-      paintTranscript(data.messages);
-      renderPager(id, data);
-      if (data.session.archived) {
-        api('/chat/sessions/' + id + '/unarchive', { method: 'POST', body: {} }).catch(function () { /* non-fatal */ });
-      }
-      refreshHeadTitle();
-      loadRail();
-      syncUrl();
-      setRail(false); /* tucked-away drawer closes once a chat is opened */
-    }).catch(function (e) { fail(statusLine, e); });
-  }
 
   function startFresh(silent) {
-    setRail(false);
     state.sessionId = 0;
     state.sessionTitle = 'Admin assistant';
-    pane.textContent = '';
+    state.pending = null;
     state.transcript = [];
-    var bubble = addBubble('assistant', 'New chat. Ask anything about the ledger — counts, pending queues, suspensions, incidents. Writes still confirm first.', {});
+    pane.textContent = '';
+    addBubble('assistant', 'New chat. Ask anything about the ledger — counts, pending queues, suspensions, incidents. Writes still confirm first. This conversation is not saved.', {});
     var grid = el('div', 'ai-starters');
     ['How many listings are pending right now?', 'List the newest pending listings with their domains.', 'Summarise this week of signups.'].forEach(function (p) {
       var b = el('button', 'ai-starter', p.split(' ')[0] + ' …');
@@ -1436,33 +1157,13 @@
     pane.appendChild(grid);
     if (input) { input.disabled = !READY; input.focus(); }
     refreshHeadTitle();
-    var url = new URL(window.location.href);
-    url.searchParams.delete('session');
-    window.history.replaceState({}, '', url.toString());
     syncUrl();
-    if (!silent) toast('ok', 'Started a new chat.', 'Admin assistant');
+    if (!silent) toast('ok', 'Conversation cleared.', 'Admin assistant');
   }
 
   $('new-chat-btn').addEventListener('click', function () {
     if (!READY) { fail(statusLine, new Error('Add a Groq key first (Settings tab).')); return; }
-    if (state.sessionId) {
-      api('/chat/sessions', { body: { title: 'New chat', model: chatModel ? chatModel.value : '' } }).then(function (data) {
-        state.sessionId = data.session.id;
-        state.sessionTitle = data.session.title;
-        startFresh(true);
-        loadRail();
-        toast('ok', 'New chat ready. Earlier ones stay in the history rail.', 'Admin assistant');
-      }).catch(function (e) { fail(statusLine, e); });
-      return;
-    }
     startFresh();
-  });
-  $('purge-archived').addEventListener('click', function () {
-    if (!window.confirm('Hard-delete every archived chat older than 30 days? This cannot be undone.')) return;
-    api('/chat/purge-archived', { body: { days: 30 } }).then(function (data) {
-      loadRail();
-      toast('ok', (data.purged || 0) + ' archived chat(s) purged.', 'History');
-    }).catch(function (e) { fail(statusLine, e); });
   });
 
   /* ================= settings tab ================= */
@@ -1486,9 +1187,6 @@
       state.model = id;
       markModelChips();
       refreshHeadTitle();
-      if (state.sessionId) {
-        api('/chat/sessions/' + state.sessionId + '/model', { body: { model: id } }).catch(function () { /* the select retries on next change */ });
-      }
     });
   });
   markModelChips();
@@ -1697,16 +1395,9 @@
 
   /* ---------------- boot ---------------- */
 
-  if (START_SESSION) {
-    state.sessionId = START_SESSION.id;
-    paintTranscript(START_MESSAGES);
-    renderPager(START_SESSION.id, { has_more: START_MORE, oldest_id: START_OLDEST });
-  }
-  state.railDirty = true;
   var wantTab = START_TAB || store('fl-ai-tab') || 'gen';
   if (window.location.hash === '#ai-settings') wantTab = 'set';
   showTab(wantTab, false);
-  showRail();
   setBusy(false);
   refreshHeadTitle();
   ['moderation', 'audit'].forEach(function (kind) {
