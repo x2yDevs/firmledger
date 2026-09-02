@@ -351,6 +351,17 @@ async function chatTurn(history, opts = {}) {
   const choice = data.choices && data.choices[0];
   const assistantMessage = choice && choice.message ? choice.message : { role: 'assistant', content: text };
 
+  if (calls.length > 1) {
+    audit({ kind: 'chat', action: 'multiple_tool_calls', payload: { count: calls.length }, result: 'rejected', ok: 0 });
+    return {
+      type: 'message',
+      content: 'I received several admin actions at once. To keep this safe, I did not run any of them. Please ask for one action at a time.',
+      model: usedModel,
+      usage: groq.usage(data),
+      executed: false,
+    };
+  }
+
   if (calls.length) {
     const call = calls[0];
     const name = (call.function && call.function.name) || call.name;
@@ -387,8 +398,8 @@ async function chatTurn(history, opts = {}) {
   }
 
   audit({ kind: 'chat', action: 'reply', payload: { preview: last.content.slice(0, 200) }, result: text.slice(0, 400) });
-  const content = text || 'Done.';
-  return { type: 'message', content, model: usedModel, usage: groq.usage(data) };
+  const content = text || 'I could not verify an action or lookup from that request, so nothing was changed. Please rephrase it or include the listing, user, or record identifier.';
+  return { type: 'message', content, model: usedModel, usage: groq.usage(data), executed: false };
 }
 
 async function finishToolTurn({ tool, args, messages, assistantMessage, auto = false, model = '' }) {
