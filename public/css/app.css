@@ -1976,14 +1976,31 @@ h2.h-display { font-size: clamp(1.9rem, 3.4vw, 2.7rem); }
   background: var(--paper); border-right: 1px solid var(--hair2);
 }
 .chat-rail[hidden] { display: none; }
-/* The rail is always visible and never closable, so on small screens it stacks
-   above the transcript (in normal flow) instead of sliding in as an overlay. */
+/* On desktop the rail stays a real grid column (always visible). On phones the same
+   rail becomes a sliding drawer: it sits off-canvas to the left and only slides in
+   when the ☰ button in the chat header is pressed, over a dimmed backdrop. Pressing
+   the button, the backdrop, or choosing a chat slides it back away. */
+.chat-rail-toggle { display: none; }
+.rail-backdrop { display: none; }
 @media (max-width: 900px) {
+  .ai-chat-body { height: auto; position: relative; }
+  .chat-rail-toggle { display: inline-flex; }
   .chat-rail {
-    width: 100%; border-right: 0; border-bottom: 1px solid var(--hair2);
-    max-height: 42vh;
+    position: absolute; top: 0; bottom: 0; left: 0; z-index: 20;
+    width: min(86vw, 340px); max-width: 340px;
+    border-right: 1px solid var(--hair2); border-bottom: 0;
+    box-shadow: var(--shadow);
+    transform: translateX(-105%);
+    transition: transform .25s ease;
+    visibility: hidden;
   }
-  .ai-chat-body { height: auto; }
+  .ai-chat.is-rail-open .chat-rail { transform: translateX(0); visibility: visible; }
+  .rail-backdrop {
+    display: block; position: absolute; inset: 0; z-index: 15;
+    background: rgba(10, 22, 40, .35);
+    opacity: 0; visibility: hidden; transition: opacity .2s ease;
+  }
+  .ai-chat.is-rail-open .rail-backdrop { opacity: 1; visibility: visible; }
 }
 
 .rail-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 12px 10px 16px; border-bottom: 1px solid var(--hair); }
