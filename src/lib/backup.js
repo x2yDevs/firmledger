@@ -4,16 +4,34 @@
  * .firmledger files are plain JSON (UTF-8), pretty-printed so the records line up
  * column wise and remain human-auditable. Two files share the one format:
  *   - "Export users"   → the core user rows (details + plan + status).
- *   - "Backup"         → the same rows PLUS each user's listings, claims, tickets
- *                        and payment history, so a full restore is possible after loss.
- * Password hashes are included — an account keeps working after a restore.
+ *   - "Backup"         → every user plus a complete snapshot of all durable ledger
+ *                        records and admin configuration (including every listing).
+ * Password hashes are included — an account keeps working after an identity restore.
+ * One-time credentials and sessions are excluded for safety.
  * Imports validate the format header and merge by email (update in place, never
  * silently downgrade an existing account unless the file says to).
  */
 const multer = require('multer');
 const { db } = require('../db');
 
-const FORMAT = 'firmledger-backup@1';
+const FORMAT = 'firmledger-backup@2';
+
+/* Tables that make up the admin configuration and ledger. Transient credentials and
+   one-time tokens are intentionally excluded; they are never needed to restore the
+   application and should not travel in a downloadable file. */
+const BACKUP_EXCLUDED_TABLES = new Set(['sessions', 'resets', 'reg_otps', 'user_totp']);
+function databaseSnapshot() {
+  const tables = db.prepare("SELECT name, sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all();
+  const snapshot = {};
+  for (const table of tables) {
+    if (BACKUP_EXCLUDED_TABLES.has(table.name)) continue;
+    snapshot[table.name] = {
+      schema: table.sql,
+      rows: db.prepare(`SELECT * FROM "${table.name.replace(/"/g, '""')}"`).all(),
+    };
+  }
+  return snapshot;
+}
 
 const memUpload = multer({
   storage: multer.memoryStorage(),
@@ -74,7 +92,7 @@ function buildExport() {
 function buildBackup() {
   const users = userRows().map((u) => {
     const listings = db.prepare(
-      'SELECT id, slug, name, status, claimed, plan, plan_expires_at, created_at, updated_at FROM listings WHERE owner_user_id = ? ORDER BY id ASC'
+      'SELECT * FROM listings WHERE owner_user_id = ? ORDER BY id ASC'
     ).all(u.id);
     const claims = db.prepare(
       'SELECT id, listing_id, method, domain, status, created_at FROM claims WHERE user_id = ? ORDER BY id ASC'
@@ -95,6 +113,11 @@ function buildBackup() {
     app: 'FirmLedger',
     count: users.length,
     users,
+    /* Complete ledger/config snapshot: listings (including every custom field),
+       categories, plans, settings, advertising, protection, status, blog and all
+       other durable admin records. This keeps Backup materially different from
+       Export users and makes the file useful for disaster recovery. */
+    database: databaseSnapshot(),
   }, null, 2);
 }
 

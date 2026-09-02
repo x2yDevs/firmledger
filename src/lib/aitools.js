@@ -1454,6 +1454,12 @@ async function execute(name, args) {
   const t = getTool(name);
   if (!t) return { ok: false, error: `Unknown tool “${name}”.` };
   const parsed = parseArgs(args);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || parsed._raw) {
+    return { ok: false, error: 'The model returned invalid arguments for this action. Please try the request again.' };
+  }
+  const required = (t.parameters && Array.isArray(t.parameters.required)) ? t.parameters.required : [];
+  const missing = required.filter((key) => parsed[key] === undefined || parsed[key] === null || String(parsed[key]).trim() === '');
+  if (missing.length) return { ok: false, error: `Missing required argument${missing.length > 1 ? 's' : ''}: ${missing.join(', ')}.` };
   const result = await t.run(parsed);
   if (result && result.error) return { ok: false, error: result.error, result };
   return { ok: true, result };

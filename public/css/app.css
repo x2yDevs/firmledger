@@ -1489,6 +1489,19 @@ h2.h-display { font-size: clamp(1.9rem, 3.4vw, 2.7rem); }
   .trial-band .trial-cta .btn { width: 100%; justify-content: center; }
 }
 
+/* Admin data surfaces stay compact and independently scrollable. This keeps long
+   queues usable without turning the whole console into an extra-tall page. */
+body:has(.admin-bar) #main .table-wrap {
+  max-height: min(58vh, 560px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+body:has(.admin-bar) #main .table-wrap .table { min-width: max-content; width: 100%; }
+body:has(.admin-bar) #main .table-wrap thead th {
+  position: sticky; top: 0; z-index: 2;
+  background: var(--surface); box-shadow: 0 1px 0 var(--hair);
+}
 /* Notifications — contained, card-like inbox that scrolls internally instead
    of stretching the page as items accumulate. */
 .notif-panel { border: 1px solid var(--hair); border-radius: var(--r); background: var(--paper); box-shadow: 0 1px 2px rgba(10,22,40,.04); overflow: hidden; }
