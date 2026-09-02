@@ -83,7 +83,7 @@
     <!-- ================= Listing generator ================= -->
     <div class="ai-pane is-on" data-pane="gen" id="pane-gen" role="tabpanel" aria-label="Listing generator">
       <div class="ai-gen-grid">
-        <div class="form-card ai-card ai-card-tight">
+        <div class="form-card ai-card ai-card-tight ai-gen-brief">
           <div class="ai-card-head">
             <h3 class="form-section">Brief</h3>
             <div class="ai-card-head-actions">
@@ -97,8 +97,8 @@
             </div>
           </div>
           <p class="muted ai-card-note">Describe a business (name, website, a snippet). The draft respects the public API field limits — nothing is published until you review and save.</p>
-          <label><span>Prompt</span>
-            <textarea id="gen-prompt" rows="6" maxlength="4000" placeholder="e.g. Acme Cold Chain Ltd, acmecold.co.ke — refrigerated freight between Mombasa and Kampala for horticulture exporters, founded 2019, ~40 staff, Nairobi."<%= offAttr %>></textarea>
+          <label class="ai-prompt-label"><span>Prompt <span class="count" id="c-prompt">0 / 4000</span></span>
+            <textarea id="gen-prompt" class="ai-prompt-input" rows="12" maxlength="4000" placeholder="e.g. Acme Cold Chain Ltd, acmecold.co.ke — refrigerated freight between Mombasa and Kampala for horticulture exporters, founded 2019, ~40 staff, Nairobi."<%= offAttr %>></textarea>
           </label>
           <div class="ai-chips" role="group" aria-label="Example briefs">
             <button type="button" class="ai-chip" data-seed="Northwind Analytics, northwind.co.ke — self-service BI dashboards for SACCOs and MFIs in Kenya, founded 2021, 12 staff, Nairobi.">Analytics SaaS</button>
@@ -783,6 +783,7 @@
   bindCount($('f-name'), $('c-name'), 2, 60);
   bindCount($('mod-rules'), $('c-rules'), 0, 8000);
   bindCount($('chat-input'), $('chat-count'), 0, 4000);
+  bindCount($('gen-prompt'), $('c-prompt'), 0, 4000);
 
   function autoGrow(node) {
     if (!node) return;
