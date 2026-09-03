@@ -18,11 +18,16 @@ const router = express.Router();
 const page = (view, meta, data = {}) => (req, res) => res.render(view, { meta, ...data, errors: [], old: {} });
 
 /* ---------------- Register ---------------- */
-router.get('/register', page('auth/register', {
-  title: 'Create your FirmLedger account',
-  description: 'Join FirmLedger to submit listings, claim and manage business profiles, and build your verified presence.',
-  canonical: siteUrl('/register'), robots: 'noindex,follow',
-}));
+router.get('/register', (req, res) => {
+  res.render('auth/register', {
+    meta: {
+      title: 'Create your FirmLedger account',
+      description: 'Join FirmLedger to submit listings, claim and manage business profiles, and build your verified presence.',
+      canonical: siteUrl('/register'), robots: 'noindex,follow',
+    },
+    errors: [], old: {}, next: req.query.next || '', ...oauthLocals(),
+  });
+});
 
 /* ---------------- Registration — step 1: request an OTP ----------------
    A user does not exist until the emailed code is confirmed, so nobody can
@@ -67,7 +72,7 @@ router.post('/register', spam.gate('register', { checkEmail: true }), (req, res)
   if (errors.length) {
     return res.status(422).render('auth/register', {
       meta: { title: 'Create your FirmLedger account', description: '', robots: 'noindex' },
-      errors, old: { name, email },
+      errors, old: { name, email }, next: req.body.next || '', ...oauthLocals(),
     });
   }
 

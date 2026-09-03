@@ -941,11 +941,8 @@ router.get('/robots.txt', (req, res) => {
 const ROBOTS_PRIVATE_PATHS = [
   '/dashboard',
   '/admin3119Musa',
-  '/claim',
-  '/search',
   '/removal/',
   '/forgot',
-  '/login',
 ];
 
 /* Crawlers that train / ground generative models. Blocked outright — each one
