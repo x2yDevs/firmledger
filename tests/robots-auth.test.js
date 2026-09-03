@@ -110,6 +110,61 @@ function check(name, cond, detail) {
   check('/login renders Google OAuth button', /href="\/auth\/google\?next=%2Fdashboard%2Flistings%2Fnew"/.test(loginHtml) && /Continue with Google/.test(loginHtml));
   check('/login renders LinkedIn OAuth button', /href="\/auth\/linkedin\?next=%2Fdashboard%2Flistings%2Fnew"/.test(loginHtml) && /Continue with LinkedIn/.test(loginHtml));
 
+  /* ---- 4. Indexing: /search (and its ?q= URLs) must be indexable and
+     self-canonical; the private half must stay noindex. Google Search Console
+     reported "noindex detected" plus a /register canonical on /search — these
+     checks lock the fix in. */
+  console.log('\nD. /search indexing + canonical');
+  const robotsMeta = (html) => (html.match(/<meta name="robots" content="([^"]*)"/) || [])[1] || '';
+  const canonicalOf = (html) => (html.match(/<link rel="canonical" href="([^"]*)"/) || [])[1] || '';
+
+  const searchRes = await fetch(`${BASE}/search`);
+  check('/search returns HTTP 200', searchRes.status === 200);
+  check('/search sends no noindex X-Robots-Tag header', !/noindex/i.test(searchRes.headers.get('x-robots-tag') || ''));
+  const searchHtml = await searchRes.text();
+  check('/search robots meta permits indexing', /^index,\s*follow$/i.test(robotsMeta(searchHtml)), `got "${robotsMeta(searchHtml)}"`);
+  check('/search has no noindex in its robots meta', !/noindex/i.test(robotsMeta(searchHtml)));
+  check('/search canonical is /search', canonicalOf(searchHtml) === 'https://firmledger.co.ke/search', `got "${canonicalOf(searchHtml)}"`);
+  check('/search canonical is NOT /register', canonicalOf(searchHtml) !== 'https://firmledger.co.ke/register');
+
+  for (const q of ['fintech', 'accounting', 'technology']) {
+    const r = await fetch(`${BASE}/search?q=${q}`);
+    const html = await r.text();
+    const canon = canonicalOf(html);
+    check(`/search?q=${q} returns HTTP 200`, r.status === 200);
+    check(`/search?q=${q} is indexable`, !/noindex/i.test(robotsMeta(html)), `got "${robotsMeta(html)}"`);
+    check(`/search?q=${q} is not canonicalised to /register`, canon !== 'https://firmledger.co.ke/register', `got "${canon}"`);
+    /* A query with hits self-references; a query with none folds back to /search
+       (no thin duplicates) — never to some unrelated page. */
+    check(`/search?q=${q} canonical is self or /search`,
+      canon === `https://firmledger.co.ke/search?q=${q}` || canon === 'https://firmledger.co.ke/search', `got "${canon}"`);
+    check(`/search?q=${q} og:url matches canonical`, html.includes(`<meta property="og:url" content="${canon}">`));
+  }
+
+  /* A query that matches seeded content must self-canonicalise. */
+  const hitHtml = await (await fetch(`${BASE}/search?q=verification`)).text();
+  check('/search?q=verification self-canonicalises when it has results',
+    canonicalOf(hitHtml) === 'https://firmledger.co.ke/search?q=verification', `got "${canonicalOf(hitHtml)}"`);
+
+  const staticMap = await (await fetch(`${BASE}/sitemaps/static.xml`)).text();
+  check('/search is listed in the static sitemap', /<loc>https:\/\/firmledger\.co\.ke\/search<\/loc>/.test(staticMap));
+
+  console.log('\nE. /claim, /login and /register stay indexable');
+  const claimHtml = await (await fetch(`${BASE}/claim`)).text();
+  check('/claim is indexable', !/noindex/i.test(robotsMeta(claimHtml)), `got "${robotsMeta(claimHtml)}"`);
+  check('/login is indexable', !/noindex/i.test(robotsMeta(loginHtml)), `got "${robotsMeta(loginHtml)}"`);
+  check('/login canonical is /login', canonicalOf(loginHtml) === 'https://firmledger.co.ke/login');
+  check('/register is indexable', !/noindex/i.test(robotsMeta(regHtml)), `got "${robotsMeta(regHtml)}"`);
+  check('/register canonical is /register', canonicalOf(regHtml) === 'https://firmledger.co.ke/register');
+
+  console.log('\nF. Private areas and AI rules unchanged');
+  const adminHtml = await (await fetch(`${BASE}/admin3119Musa`)).text();
+  const forgotHtml = await (await fetch(`${BASE}/forgot`)).text();
+  check('/admin3119Musa stays noindex', /noindex/i.test(robotsMeta(adminHtml)));
+  check('/forgot stays noindex', /noindex/i.test(robotsMeta(forgotHtml)));
+  check('Google-Extended still blocked', /User-agent:\s*Google-Extended\s*\nDisallow:\s*\//.test(robotsTxt));
+  check('Content-Signal line unchanged', /Content-Signal: search=yes, ai-train=no, use=reference/.test(robotsTxt));
+
   console.log(`\n${'='.repeat(64)}`);
   console.log(`checks passed: ${passed}   failed: ${failures.length}`);
   failures.forEach((f) => console.log('  • ' + f));

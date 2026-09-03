@@ -629,18 +629,29 @@ router.get('/search', spam.gate('search'), (req, res) => {
        || s.body.some((b) => b.toLowerCase().includes(ql))
     ).slice(0, 5);
   }
+  const total = out.listings.length + out.posts.length + out.docs.length;
+  /* Search is crawlable *and* indexable. A query that actually returned
+     something gets a self-referencing canonical (/search?q=fintech points at
+     itself, so it can be indexed on its own merits); the bare page and any
+     query with no results consolidate to /search, which keeps empty shells out
+     of the index without ever emitting noindex. */
+  const canonical = q && total
+    ? siteUrl(`/search?q=${encodeURIComponent(q)}`)
+    : siteUrl('/search');
   res.render('search', {
     meta: {
       title: q ? `“${q}” — Search | FirmLedger` : 'Search — FirmLedger',
-      description: 'Search the entire FirmLedger site: verified listings, news, documentation and guides.',
-      canonical: siteUrl('/search'),
-      noindex: true,
+      description: q && total
+        ? truncate(`${total} result${total === 1 ? '' : 's'} for “${q}” on FirmLedger — verified business profiles, news and documentation.`, 158)
+        : 'Search the entire FirmLedger site: verified listings, news, documentation and guides.',
+      canonical,
+      robots: 'index, follow',
     },
     q,
     providers: out.listings,
     posts: out.posts,
     docs: out.docs,
-    total: out.listings.length + out.posts.length + out.docs.length,
+    total,
   });
 });
 
@@ -1047,6 +1058,7 @@ router.get('/sitemaps/static.xml', (req, res) => {
   const urls = [
     { loc: siteUrl('/'), changefreq: 'daily', priority: '1.0' },
     { loc: siteUrl('/directory'), changefreq: 'hourly', priority: '0.9' },
+    { loc: siteUrl('/search'), changefreq: 'weekly', priority: '0.5' },
     { loc: siteUrl('/api'), changefreq: 'monthly', priority: '0.5' },
     { loc: siteUrl('/pricing'), changefreq: 'weekly', priority: '0.6' },
     { loc: siteUrl('/about'), changefreq: 'monthly', priority: '0.5' },

@@ -23,7 +23,7 @@ router.get('/register', (req, res) => {
     meta: {
       title: 'Create your FirmLedger account',
       description: 'Join FirmLedger to submit listings, claim and manage business profiles, and build your verified presence.',
-      canonical: siteUrl('/register'), robots: 'noindex,follow',
+      canonical: siteUrl('/register'), robots: 'index, follow',
     },
     errors: [], old: {}, next: req.query.next || '', ...oauthLocals(),
   });
@@ -163,7 +163,7 @@ const oauthLocals = () => ({
 
 router.get('/login', (req, res) => {
   res.render('auth/login', {
-    meta: { title: 'Sign in — FirmLedger', description: 'Sign in to manage your FirmLedger listings.', canonical: siteUrl('/login'), robots: 'noindex,follow' },
+    meta: { title: 'Sign in — FirmLedger', description: 'Sign in to manage your FirmLedger listings.', canonical: siteUrl('/login'), robots: 'index, follow' },
     errors: [], old: {}, next: req.query.next || '', ...oauthLocals(),
   });
 });
