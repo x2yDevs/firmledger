@@ -526,6 +526,7 @@ so nothing is dropped from the index).
 | **Google Indexing API** push (`URL_UPDATED`) the moment a listing is approved or updated, plus a manual "Submit first 200 listings" back-fill that respects Google's 200/day quota — a URL that has been pinged is never pinged again | `src/lib/googleIndexing.js`, Admin → Settings → Google Indexing API |
 | RSS/`feed.xml` (blog + new listings) for discovery and fast re-crawl | `src/routes/public.js` |
 | Empty category/location landing pages are `noindex,follow`, so they are never thin-indexed; `/directory?page=2` and `/directory/c/x?page=2` canonicalise back to page 1 on purpose (pagination and filters must not multiply in the index), and follow-links are still crawled | `src/routes/public.js` |
+| `/search` is `index, follow` and self-canonical; `/search?q=…` self-canonicalises when the query has results and folds back to `/search` when it has none — query-space duplication is managed with canonicals, never `noindex` | `src/routes/public.js` |
 | **Staging guard** — if `BASE_URL` is unset or points at `localhost`, a `.test/.local/.internal` name or a private IP, every response carries `X-Robots-Tag: noindex, follow` **and** `/robots.txt` becomes `Disallow: /`, so a dev or preview box can never leak into an index. The boot log tells you when this is active. Override: `FORCE_INDEXABLE=1`. | `server.js`, `src/lib/util.js` |
 
 ### Google Indexing API — one-time setup
@@ -596,12 +597,19 @@ npm run test:indexing                          # full Google Indexing suite, cli
 
 **Deliberately not indexed** (and why): `/dashboard/*` and `/admin3119Musa/*` (both
 `noindex,nofollow` in-page **and** disallowed in `robots.txt` — belt and braces, because a
-logged-out crawler must never see them), `/login` and `/forgot` (no content, and they'd be
-duplicate shells), `/search` (query-space duplication: thousands of near-identical result
-pages), `/removal/*` (private forms), `/claim` and everything under it (so the token-carrying
-`/claim/verify/<id>` URLs can never be crawled). `/register` **is** indexed and listed in the
-static sitemap on purpose — it's the entry point people search for.
+logged-out crawler must never see them), `/forgot` (no content, and it'd be a duplicate
+shell), `/removal/*` (private forms), and everything *under* `/claim` (so the token-carrying
+`/claim/verify/<id>` URLs can never be crawled).
 `/newsletter/unsubscribe?token=…` carries a secret in the URL, so it is `noindex` by design.
+
+**Deliberately indexed:** `/search`, `/register`, `/login` and the `/claim` hub are
+`index, follow` with self-referencing canonicals, and `/search` is listed in the static
+sitemap — these are the entry points people search for. `/search?q=…` result pages are
+indexable too: a query that returns results self-canonicalises
+(`https://firmledger.co.ke/search?q=fintech`), while the bare page and any zero-result query
+canonicalise to `https://firmledger.co.ke/search`, so query-space duplication is handled with
+canonicals rather than `noindex`. Nothing under `/search` is ever `Disallow`ed in
+`robots.txt` — Google must be able to crawl it to see those canonicals.
 
 **Do not** add `Disallow: /` "temporarily" while testing in production, and do not
 `noindex` the homepage: the app already keeps the private half out of the index.
