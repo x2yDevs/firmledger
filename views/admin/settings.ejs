@@ -5,6 +5,9 @@
   <div class="container container-narrow">
     <div class="section-head"><h2>Settings</h2></div>
 
+    <% if (typeof ok !== 'undefined' && ok) { %><div class="alert alert-ok"><%= ok %></div><% } %>
+    <% if (typeof err !== 'undefined' && err) { %><div class="alert alert-err"><%= err %></div><% } %>
+
     <form method="post" action="/admin3119Musa/settings" class="form form-card">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>">
       <h3 class="form-section">Moderation &amp; indexing</h3>
@@ -14,7 +17,11 @@
       </label>
       <label class="check check-lg">
         <input type="checkbox" name="indexing_enabled" value="1" <%= settings.indexing_enabled === '1' ? 'checked' : '' %>>
-        <span><strong>Push new listings to search engines</strong><br><small class="muted">Submits approve-and-claim events to IndexNow (Bing, Yandex, DuckDuckGo…) the moment they happen.</small></span>
+        <span><strong>Push new listings to search engines</strong><br><small class="muted">Master switch — submits approved listings to IndexNow (Bing, Yandex, DuckDuckGo…) the moment they go live. Turn this off and nothing is pinged at all.</small></span>
+      </label>
+      <label class="check check-lg">
+        <input type="checkbox" name="google_indexing_enabled" value="1" <%= settings.google_indexing_enabled === '1' ? 'checked' : '' %>>
+        <span><strong>Ping the Google Indexing API</strong><br><small class="muted">When a listing is approved or updated, its URL is sent to Google as <code>URL_UPDATED</code> in the background. Needs a service-account key below (and the master switch above).</small></span>
       </label>
       <h3 class="form-section" style="margin-top:1.6rem">Payments — FirmLedger Pro via PayPal</h3>
       <p class="muted">Checkout runs on PayPal's hosted payment page (REST Orders API). Create an app at <code>developer.paypal.com</code> to get a <b>Client ID</b> and <b>Secret</b>. <b>Sandbox</b> credentials never charge real money; switch <b>Mode</b> to <code>live</code> with production credentials to go live. Environment variables (<code>PAYPAL_CLIENT_ID</code>, <code>PAYPAL_CLIENT_SECRET</code>, <code>PAYPAL_MODE</code>) always win over these saved values.</p>
@@ -88,6 +95,113 @@
         <input type="hidden" name="_csrf" value="<%= csrfToken %>">
         <button class="btn btn-ghost" type="submit">Regenerate key</button>
       </form>
+    </div>
+
+    <div class="form-card">
+      <h3 class="form-section">Google Indexing API</h3>
+      <p class="muted">Upload the Google Cloud <b>service-account JSON key</b> once and every approved or updated listing pings Google in the background. The key is stored permanently on the server (<code>data/service-account.json</code>) — never committed to Git, never written to the database. In production you can instead set the whole JSON payload in <code>GOOGLE_INDEXING_SERVICE_ACCOUNT_JSON</code>; the environment variable always wins.</p>
+      <table class="facts">
+        <tr>
+          <th>Status</th>
+          <td><% if (google.configured) { %><span class="pill pill-approved">Connected ✓</span><% } else { %><span class="pill pill-pending">Not configured</span> — upload a key below<% } %><% if (google.enabled && google.configured) { %> <span class="muted" style="font-size:12px">· new and updated listings are pinged automatically</span><% } %></td>
+        </tr>
+        <tr>
+          <th>Service account</th>
+          <td><% if (google.client_email) { %><code><%= google.client_email %></code><% if (google.project_id) { %> <span class="muted" style="font-size:12px">· project <code><%= google.project_id %></code></span><% } %><% } else { %><span class="muted">—</span><% } %></td>
+        </tr>
+        <tr>
+          <th>Key source</th>
+          <td><% if (google.source) { %><%= google.source_label %><% if (google.uploaded_at) { %> <span class="muted" style="font-size:12px">· saved <%= google.uploaded_at.slice(0, 16).replace('T', ' ') %></span><% } %><% } else { %><span class="muted">none — set <code>GOOGLE_INDEXING_SERVICE_ACCOUNT_JSON</code> or upload a key</span><% } %></td>
+        </tr>
+        <tr>
+          <th>Quota (24h)</th>
+          <td><strong><%= google.quota.used %></strong> / <%= google.quota.limit %> used · <strong><%= google.quota.remaining %></strong> left in the rolling 24-hour window</td>
+        </tr>
+        <tr>
+          <th>Backlog</th>
+          <td><strong><%= google.pending %></strong> approved listing<%= google.pending === 1 ? '' : 's' %> Google has never been sent · <span class="muted"><%= google.submitted %> submitted all-time (a pinged URL is never pinged again)</span></td>
+        </tr>
+        <% if (google.last_run) { %>
+        <tr>
+          <th>Last run</th>
+          <td>
+            <% if (google.last_run.note === 'quota-exhausted') { %>Stopped — Google's 200/day quota was already used.<% } else if (google.last_run.note === 'nothing-pending') { %>Nothing to do — every approved listing had already been submitted.<% } else { %><strong><%= google.last_run.ok || 0 %></strong> submitted, <strong><%= google.last_run.failed || 0 %></strong> failed of <%= google.last_run.attempted || 0 %> attempted<% } %>
+            <% if (google.last_run.finished_at) { %> <span class="muted" style="font-size:12px">· <%= google.last_run.finished_at.slice(0, 16).replace('T', ' ') %></span><% } %>
+          </td>
+        </tr>
+        <% } %>
+      </table>
+
+      <form method="post" action="/admin3119Musa/settings/google/service-account" enctype="multipart/form-data" class="form" id="googleSaForm">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <label><span>Upload service-account.json</span>
+          <input type="file" name="service_account" accept=".json,application/json">
+          <small class="muted" style="display:block;margin-top:4px">Google Cloud → IAM &amp; Admin → Service accounts → Keys → Add key → JSON. Max 1 MB.</small>
+        </label>
+        <label><span>…or paste the key contents</span>
+          <textarea name="service_account_json" rows="4" spellcheck="false" placeholder='{ "type": "service_account", "project_id": "…", "client_email": "…", "private_key": "-----BEGIN PRIVATE KEY-----…" }'></textarea>
+          <small class="muted" style="display:block;margin-top:4px">Only the client email and project id are shown back to you — the private key is never displayed or logged.</small>
+        </label>
+        <div class="form-actions">
+          <button class="btn btn-accent" type="submit">Save service account</button>
+        </div>
+      </form>
+
+      <% if (google.file_saved) { %>
+      <form method="post" action="/admin3119Musa/settings/google/service-account/remove" style="margin-top:14px" onsubmit="return confirm('Remove the saved service-account key? Google indexing stops until a new key is uploaded (the environment variable, if set, keeps working).');">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <button class="btn btn-danger btn-sm" type="submit">Remove saved key</button>
+      </form>
+      <% } %>
+
+      <form method="post" action="/admin3119Musa/settings/google/submit-200" style="margin-top:18px" onsubmit="return confirm('Submit up to 200 listings to Google now? Only approved listings Google has never been sent are included — 200 is the daily limit.');">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <button class="btn btn-primary" type="submit" <%= google.quota.remaining === 0 ? 'disabled' : '' %>>Submit first 200 listings</button>
+        <span class="form-note" style="margin-left:10px"><%= google.quota.remaining %> of 200 left today · <%= google.pending %> never-submitted listing<%= google.pending === 1 ? '' : 's' %> waiting</span>
+      </form>
+      <div id="giJob" class="side-card" style="margin-top:12px<%= google.job.running ? '' : ';display:none' %>" data-running="<%= google.job.running ? '1' : '0' %>">
+        <strong>Submission run</strong>
+        <div class="muted" id="giJobText" style="font-size:13.5px;margin-top:4px">
+          <% if (google.job.running) { %>Sending <%= google.job.total %> listing<%= google.job.total === 1 ? '' : 's' %> to Google — <%= google.job.done %> done, <%= google.job.ok %> accepted, <%= google.job.failed %> failed.<% } %>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-card">
+      <h3 class="form-section">Indexing log</h3>
+      <p class="muted">Every search-engine ping this installation has attempted — IndexNow (Bing, Yandex, DuckDuckGo) and the Google Indexing API — newest first. The list scrolls inside this card and can be cleared at any time.</p>
+      <% if (indexLogs.length) { %>
+      <div class="scroll-table">
+        <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>When</th><th>Engine</th><th>URL</th><th>Result</th><th>Detail</th><th></th></tr></thead>
+          <tbody>
+            <% indexLogs.forEach(function (e) { %>
+            <tr>
+              <td class="muted" style="font-size:12.5px;white-space:nowrap"><%= (e.created_at || '').slice(5, 16) %></td>
+              <td><span class="pill <%= e.channel === 'google' ? 'pill-pending' : 'pill-approved' %>" style="font-size:11px"><%= e.channel === 'google' ? 'Google' : 'IndexNow' %></span></td>
+              <td class="mono" style="font-size:12px;word-break:break-all;max-width:320px"><%= e.url %></td>
+              <td><span class="pill pill-<%= e.ok ? 'approved' : 'rejected' %>"><%= e.ok ? (e.http_status || 'ok') : (e.http_status || 'failed') %></span></td>
+              <td class="muted" style="font-size:12.5px"><%= e.message %></td>
+              <td class="ta-right">
+                <form method="post" action="/admin3119Musa/indexing/logs/<%= e.id %>/delete" class="inline">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <button class="btn btn-ghost btn-xs" type="submit" aria-label="Delete this log entry">Delete</button>
+                </form>
+              </td>
+            </tr>
+            <% }); %>
+          </tbody>
+        </table>
+        </div>
+      </div>
+      <form method="post" action="/admin3119Musa/indexing/logs/clear" style="margin-top:12px" onsubmit="return confirm('Delete every indexing log entry? This only clears the log — submissions already sent to Google are unaffected.');">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <button class="btn btn-ghost btn-sm" type="submit">Clear log</button>
+      </form>
+      <% } else { %>
+      <p class="muted">No pings recorded yet — approve a listing and the IndexNow / Google submissions will appear here.</p>
+      <% } %>
     </div>
 
     <div class="form-card">
@@ -265,6 +379,31 @@
       </form>
     </div>
     <script>
+      /* Live progress for the "submit first 200 listings" batch run. The job runs
+         on the server in the background; this only mirrors its counter and
+         refreshes the page once it lands so the log above is up to date. */
+      (function () {
+        var box = document.getElementById('giJob');
+        var txt = document.getElementById('giJobText');
+        if (!box || !txt || box.getAttribute('data-running') !== '1') return;
+        var timer = setInterval(function () {
+          fetch('/admin3119Musa/settings/google/job.json', { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+              if (!d || !d.job) return;
+              if (!d.job.running) {
+                clearInterval(timer);
+                txt.textContent = 'Run finished — ' + (d.job.ok || 0) + ' submitted, ' + (d.job.failed || 0) + ' failed of ' + (d.job.total || 0) + '. Refreshing…';
+                setTimeout(function () { window.location.reload(); }, 1200);
+                return;
+              }
+              txt.textContent = 'Sending ' + (d.job.total || 0) + ' listing(s) to Google — '
+                + (d.job.done || 0) + ' done, ' + (d.job.ok || 0) + ' accepted, ' + (d.job.failed || 0) + ' failed.';
+            })
+            .catch(function () { /* transient — try again on the next tick */ });
+        }, 3000);
+      })();
+
       (function () {
         var sel = document.getElementById('smtp-provider');
         if (!sel) return;

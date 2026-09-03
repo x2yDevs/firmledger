@@ -38,15 +38,25 @@ router.get('/', (req, res) => {
     verified: db.prepare("SELECT COUNT(*) c FROM listings WHERE status='approved' AND claimed=1").get().c,
     countries: db.prepare("SELECT COUNT(DISTINCT country) c FROM listings WHERE status='approved' AND country<>''").get().c,
   };
-  // Homepage featured strip: admin-pinned records first, then listings carrying Pro
-  // perks — either admin-boosted or owned by an account with an active subscription.
-  const featured = db.prepare(
-    `SELECT l.*, u.plan AS owner_plan, u.plan_expires_at AS owner_plan_expires FROM listings l
+  /* Homepage featured records: admin-pinned records first, then listings carrying
+     Pro perks — either admin-boosted or owned by an account with an active
+     subscription. Up to 8 render as the normal grid; when there are more than 8
+     the whole set rides the same horizontal marquee as the promoted (sponsored)
+     strip, so nothing is ever dropped from the homepage. */
+  const FEATURED_GRID_MAX = 8;
+  const FEATURED_RAIL_MAX = 24;
+  const featuredWhere = `FROM listings l
      LEFT JOIN users u ON u.id = l.owner_user_id
      WHERE l.status='approved'
-       AND (l.featured=1 OR ${PRO_LISTING_SQL} OR ${PRO_USER_SQL})
-     ORDER BY l.featured DESC, l.updated_at DESC LIMIT 6`
-  ).all();
+       AND (l.featured=1 OR ${PRO_LISTING_SQL} OR ${PRO_USER_SQL})`;
+  const featuredCount = db.prepare(`SELECT COUNT(*) c ${featuredWhere}`).get().c;
+  const featuredOverflow = featuredCount > FEATURED_GRID_MAX;
+  const featured = db.prepare(
+    `SELECT l.*, u.plan AS owner_plan, u.plan_expires_at AS owner_plan_expires ${featuredWhere}
+     ORDER BY l.featured DESC, l.updated_at DESC LIMIT ?`
+  ).all(featuredOverflow ? FEATURED_RAIL_MAX : FEATURED_GRID_MAX);
+  /* Longer strip ⇒ longer loop, so the scroll speed stays constant. */
+  const featuredDur = Math.min(300, Math.max(28, Math.round(featured.length * 5.5)));
   const latest = db.prepare(
     "SELECT * FROM listings WHERE status='approved' ORDER BY created_at DESC LIMIT 8"
   ).all();
@@ -107,6 +117,7 @@ router.get('/', (req, res) => {
     },
     stats, featured, latest, byType, medianConf, recentVerifications, tickerItems,
     sponsored, hasActiveSponsors,
+    featuredCount, featuredOverflow, featuredDur,
   });
 });
 

@@ -1,5 +1,68 @@
 # FirmLedger — change summary
 
+## 2026-09-03 — Google Indexing API, featured-records marquee, permanent incident delete
+
+### 1. Google Indexing API (`src/lib/googleIndexing.js`, new)
+
+Approved and updated listings now ping Google directly, alongside the existing
+IndexNow push to Bing/Yandex/DuckDuckGo.
+
+| Piece | Where it lives |
+| --- | --- |
+| `pingGoogleNewListing(url)` — reusable background utility | `src/lib/googleIndexing.js` |
+| Service-account key (upload or paste), saved permanently | Admin → Settings → Google Indexing API → `data/service-account.json` (0600) |
+| Credentials in production | `GOOGLE_INDEXING_SERVICE_ACCOUNT_JSON` (stringified JSON in the environment) |
+| Back-fill button | Admin → Settings → **Submit first 200 listings** |
+| Audit trail | Admin → Settings → **Indexing log** (scrollable, deletable) |
+
+* **Credentials resolve in order:** `GOOGLE_INDEXING_SERVICE_ACCOUNT_JSON` → the
+  uploaded `data/service-account.json` → a local `./service-account.json` for
+  development. All three are git-ignored; `.gitignore` now names
+  `service-account.json`, `*service-account*.json` and `*.pem` explicitly.
+* **Auth + publish** use `google.auth.GoogleAuth` (scope
+  `https://www.googleapis.com/auth/indexing`) and
+  `indexing.urlNotifications.publish` with `{ url, type: 'URL_UPDATED' }`.
+* **Logs** — success: `console.log` with the target URL and the API status code;
+  failure: `console.error` with the target URL, status and message. Both are also
+  written to the `indexing_log` table shown in the console, where entries can be
+  deleted one by one or cleared.
+* **Controller integration** — the helper fires in the background (never awaited)
+  from admin approve / bulk-approve / create / edit, dashboard create / edit, the
+  claim flow and the AI tools, each time a record ends up public.
+* **200/day quota + never twice** — every accepted URL is recorded in
+  `google_indexing_submissions`; the manual run only ever picks URLs missing from
+  that table, stops on HTTP 429 and reports how much quota is left. Progress is
+  polled live on the settings page.
+
+### 2. Homepage featured records (`views/home.ejs`, `src/routes/public.js`)
+
+Up to **8** featured records render exactly as before in the grid. Beyond 8 the
+strip becomes the same seamless horizontal marquee as the promoted (sponsored)
+listings — two identical passes of the cards, one pass of travel, hover/focus or
+the Pause button freezes it, and `prefers-reduced-motion` turns it into a
+swipeable row. Same `l-card` markup, same spacing, same typography.
+
+### 3. Admin → Status: permanent incident delete
+
+Each incident card now carries a **Delete** button next to Resolve. It removes
+the row and its whole timeline (`incident_updates` cascades), so the incident
+disappears from the public `/status` page, from the 30-day history and from the
+console. If that incident was the only thing holding its component down, the
+component is healed back to operational; everything else on the page is untouched.
+
+### 4. Tests
+
+```
+npm test                # everything
+npm run test:indexing   # Google Indexing API + featured rail
+```
+
+`tests/google-indexing.test.js` (62 checks) runs the real server and the real
+library against a stubbed `googleapis` client (`tests/helpers/googleapis-stub.js`,
+preloaded with `node -r`), so it needs no Google credentials and no network.
+
+---
+
 ## 2026-09-02 — Backup completeness, production-ready AI assistant, contained admin queues
 
 ### 1. `.firmledger` backup now carries the whole console (`src/lib/backup.js`)

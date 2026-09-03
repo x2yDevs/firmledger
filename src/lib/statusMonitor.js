@@ -343,6 +343,28 @@ function resolveIncident(id) {
   return addIncidentUpdate(id, { status: 'resolved', message: 'This incident has been resolved.' });
 }
 
+/**
+ * Permanently delete an incident (Admin → Status → Delete).
+ *
+ * The row and its whole timeline go — `incident_updates` cascades on the foreign
+ * key — so the incident disappears from the public /status page, from the 30-day
+ * history and from the admin console for good. When the deleted incident was the
+ * only thing holding its component down (an incident forces a component out of
+ * "operational" until it is resolved), that component is healed straight back to
+ * operational; anything else on the page keeps its own state untouched.
+ */
+function deleteIncident(id) {
+  const inc = incidentById(id);
+  if (!inc) return { ok: false, error: 'Incident not found.' };
+  db.prepare('DELETE FROM incidents WHERE id=?').run(inc.id);      // timeline cascades
+  db.prepare('DELETE FROM incident_updates WHERE incident_id=?').run(inc.id); // belt & braces
+  if (inc.component_id && !hasOpenIncident(inc.component_id)) {
+    const comp = componentById(inc.component_id);
+    if (comp && comp.status !== STATUS.operational) setComponentStatus(comp.id, STATUS.operational);
+  }
+  return { ok: true, id: inc.id, title: inc.title };
+}
+
 const SEVERITY_LABELS = { minor: 'Minor', major: 'Major', critical: 'Critical' };
 const INCIDENT_STATUS_LABELS = {
   investigating: 'Investigating', identified: 'Identified', monitoring: 'Monitoring', resolved: 'Resolved',
@@ -500,7 +522,7 @@ module.exports = {
   checkComponent, checkAll, pruneHistory, hasOpenIncident,
   overallStatus, uptimePercent, overallUptime, uptimeSummary,
   incidentUpdates, incidentsSince, allIncidents, activeIncidents, incidentById,
-  createIncident, addIncidentUpdate, resolveIncident,
+  createIncident, addIncidentUpdate, resolveIncident, deleteIncident,
   subscriberByToken, addSubscriber, verifySubscriber, unsubscribeSubscriber,
   verifiedSubscribers, subscriberCount, notifySubscribers,
   sendWeeklyStatusDigest,

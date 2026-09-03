@@ -706,6 +706,41 @@ try {
   console.error('[db] failed to drop legacy AI chat tables:', e.message);
 }
 
+/* ---- Search-engine indexing: submission log + Google Indexing API ledger ----
+   Mirrors migrations/2026-09-03-google-indexing.sql so existing deployments can
+   apply the same DDL against a live database without a full re-seed.
+
+   indexing_log                every IndexNow / Google Indexing API attempt, so
+                               Admin → Settings can show what was actually sent.
+   google_indexing_submissions URLs already published to Google. Google's Indexing
+                               API quota is 200 URL_UPDATED notifications per day,
+                               and a URL that has been pinged must never be pinged
+                               again — this ledger is the record of that. */
+db.exec(`
+CREATE TABLE IF NOT EXISTS indexing_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  channel TEXT NOT NULL DEFAULT 'indexnow',
+  url TEXT NOT NULL DEFAULT '',
+  ok INTEGER NOT NULL DEFAULT 0,
+  http_status INTEGER NOT NULL DEFAULT 0,
+  message TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_indexing_log_created ON indexing_log(created_at DESC, id DESC);
+
+CREATE TABLE IF NOT EXISTS google_indexing_submissions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  url TEXT NOT NULL UNIQUE,
+  listing_id INTEGER,
+  http_status INTEGER NOT NULL DEFAULT 0,
+  response TEXT NOT NULL DEFAULT '',
+  attempts INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_google_sub_created ON google_indexing_submissions(created_at DESC);
+`);
+
 /* Settings helpers */
 function getSetting(key, fallback = '') {
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);

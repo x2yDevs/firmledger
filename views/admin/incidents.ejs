@@ -83,12 +83,18 @@
                 <span class="muted" style="font-size:12px">opened <%= (inc.created_at || '').slice(0, 16).replace('T', ' ') %></span>
               </div>
             </div>
+            <div class="incident-actions">
             <% if (inc.status !== 'resolved') { %>
             <form method="post" action="/admin3119Musa/incidents/<%= inc.id %>/resolve" class="inline" onsubmit="return confirm('Resolve “<%= inc.title.replace(/\"/g, '') %>”?');">
               <input type="hidden" name="_csrf" value="<%= csrfToken %>">
               <button class="btn btn-primary btn-xs" type="submit">Resolve</button>
             </form>
             <% } %>
+            <form method="post" action="/admin3119Musa/incidents/<%= inc.id %>/delete" class="inline" onsubmit="return confirm('Delete “<%= inc.title.replace(/\"/g, '') %>” permanently? The incident and its whole timeline are removed from the public status page and from history. This cannot be undone.');">
+              <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+              <button class="btn btn-danger btn-xs" type="submit">Delete</button>
+            </form>
+            </div>
           </div>
           <% if (inc.description) { %><p class="muted" style="font-size:14px;margin-bottom:12px"><%= inc.description %></p><% } %>
 
