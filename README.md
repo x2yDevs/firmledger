@@ -521,7 +521,7 @@ so nothing is dropped from the index).
 | Structured data — `WebSite` + `SearchAction`, `Organization` + `FAQPage` on listing profiles, `CollectionPage` + `ItemList` on category/location pages, `Article` on blog posts, `TechArticle` on the API docs, `BreadcrumbList` on listings, blog, docs, API docs, `/about`, `/privacy`, `/terms` | per-route `meta.jsonld` / `meta.breadcrumbs`, emitted by `views/partials/top.ejs` |
 | `robots` meta — `index,follow,max-image-preview:large,max-snippet:-1` by default, `noindex,follow` where it should be | `views/partials/top.ejs` |
 | `sitemap.xml` **index** → `/sitemaps/static.xml`, `listings.xml`, `categories.xml`, `locations.xml` (only `status='approved'` listings; `lastmod` from `updated_at`) | `src/routes/public.js` |
-| `robots.txt` — allows the public site, disallows `/dashboard`, `/admin3119Musa`, `/login`, `/forgot`, `/search`, `/removal/`, `/claim`, and points at the sitemap | `src/routes/public.js` |
+| `robots.txt` — allows the public site (including `/login`, `/search`, `/claim`, `/register`), disallows `/dashboard`, `/admin3119Musa`, `/removal/`, `/forgot`, and points at the sitemap | `src/routes/public.js` |
 | **IndexNow** push the moment a listing is approved or claimed, plus a re-ping 30 min later; key auto-generated and served at `/<key>.txt` | `src/lib/indexing.js` |
 | **Google Indexing API** push (`URL_UPDATED`) the moment a listing is approved or updated, plus a manual "Submit first 200 listings" back-fill that respects Google's 200/day quota — a URL that has been pinged is never pinged again | `src/lib/googleIndexing.js`, Admin → Settings → Google Indexing API |
 | RSS/`feed.xml` (blog + new listings) for discovery and fast re-crawl | `src/routes/public.js` |

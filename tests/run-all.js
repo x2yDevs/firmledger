@@ -23,6 +23,7 @@ const suites = [
   ['Backup round trip', 'backup.test.js'],
   ['Admin pages', 'admin-pages.test.js'],
   ['Google Indexing + featured rail', 'google-indexing.test.js'],
+  ['Robots & Auth OAuth', 'robots-auth.test.js'],
 ];
 
 const results = [];
