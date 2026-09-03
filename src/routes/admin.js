@@ -13,6 +13,8 @@ const { sendMail, sendBranded, sendTest, mailConfigured } = require('../lib/mail
 const { TYPES, CATEGORIES, SIZES, COUNTRIES } = require('../lib/taxonomy');
 const { runCheck } = require('../lib/verify');
 const { submitForIndexing, getIndexNowKey } = require('../lib/indexing');
+const googleIndexing = require('../lib/googleIndexing');
+const indexlog = require('../lib/indexlog');
 const { parseLines, normalizeUrl, slugify, domainOf, siteUrl, escHtml, randomToken } = require('../lib/util');
 const catLib = require('../lib/categories');
 const graphLib = require('../lib/graph');
@@ -389,6 +391,8 @@ router.post('/admin3119Musa/listings/:id/approve', (req, res) => {
     const catSlug = (db.prepare('SELECT slug FROM categories WHERE name = ?').get(l.category) || {}).slug;
     submitForIndexing([`/listing/${l.slug}`, catSlug ? `/directory/c/${catSlug}` : null].filter(Boolean));
   }
+  // Google Indexing API — asynchronous, never blocks the moderation response.
+  googleIndexing.pingGoogleNewListingBackground(siteUrl(`/listing/${l.slug}`));
   if (firstApproval && l.owner_user_id) {
     notify.notifyUser(l.owner_user_id, {
       kind: 'listing',
@@ -436,6 +440,7 @@ router.post('/admin3119Musa/listings/bulk', (req, res) => {
         .run(new Date().toISOString(), l.id);
       const catSlug = (db.prepare('SELECT slug FROM categories WHERE name = ?').get(l.category) || {}).slug;
       submitForIndexing([`/listing/${l.slug}`, catSlug ? `/directory/c/${catSlug}` : null].filter(Boolean));
+      googleIndexing.pingGoogleNewListingBackground(siteUrl(`/listing/${l.slug}`));
       if (l.owner_user_id) {
         notify.notifyUser(l.owner_user_id, {
           kind: 'listing', title: `${l.name} is live`,
@@ -605,6 +610,10 @@ router.post('/admin3119Musa/listings/:id/edit', async (req, res) => {
     l.id
   );
   submitForIndexing([`/listing/${l.slug}`]);
+  // Only ping Google when the record is still public after the edit.
+  if ((['pending', 'approved', 'rejected'].includes(b.status) ? b.status : l.status) === 'approved') {
+    googleIndexing.pingGoogleNewListingBackground(siteUrl(`/listing/${l.slug}`));
+  }
   res.redirect(`/admin3119Musa/listings/${l.id}/edit?ok=` + encodeURIComponent('Saved.'));
 });
 
@@ -1002,9 +1011,14 @@ router.get('/admin3119Musa/settings', (req, res) => {
       ad_packages: db.prepare('SELECT COUNT(*) c FROM ad_packages WHERE active=1').get().c,
       sponsored_active: ad.allSponsored().length,
       careers_open: db.prepare("SELECT COUNT(*) c FROM careers WHERE status='open'").get().c,
+      google_indexing_enabled: getSetting('google_indexing_enabled', '1'),
     },
     payments,
+    google: googleIndexing.status(),
+    indexLogs: indexlog.recent(100),
     section: 'settings',
+    ok: req.query.ok || '',
+    err: req.query.err || '',
     ...require('./adminops').mailLocals(),
   });
 });
@@ -1012,6 +1026,11 @@ router.get('/admin3119Musa/settings', (req, res) => {
 router.post('/admin3119Musa/settings', (req, res) => {
   setSetting('auto_approve', req.body.auto_approve === '1' ? '1' : '0');
   setSetting('indexing_enabled', req.body.indexing_enabled === '1' ? '1' : '0');
+  // Google Indexing API master switch (credentials live in the service-account
+  // key, not here — this only decides whether approved listings ping Google).
+  if (req.body.google_indexing_enabled !== undefined) {
+    setSetting('google_indexing_enabled', req.body.google_indexing_enabled === '1' ? '1' : '0');
+  }
   // Payments (PayPal) — credentials only updated when non-empty values are pasted;
   // environment variables always win at runtime.
   if (!process.env.PAYPAL_CLIENT_ID) {
@@ -1082,6 +1101,77 @@ router.post('/admin3119Musa/settings/test-mail', async (req, res) => {
 router.post('/admin3119Musa/settings/regen-key', (req, res) => {
   setSetting('indexnow_key', crypto.randomBytes(16).toString('hex'));
   res.redirect('/admin3119Musa/settings?ok=' + encodeURIComponent('IndexNow key regenerated. The old key file is now invalid.'));
+});
+
+/* ================= Google Indexing API =================
+   Admin uploads (or pastes) a Google Cloud service-account key; it is stored
+   permanently next to the database (data/service-account.json, git-ignored) and
+   used to ping Google whenever a listing is approved or updated. The manual
+   "submit first 200" run back-fills the backlog inside Google's daily quota. */
+function settingsBack(msg, kind = 'err') {
+  return '/admin3119Musa/settings' + (kind === 'ok' ? '?ok=' : '?err=') + encodeURIComponent(msg);
+}
+
+router.post(
+  '/admin3119Musa/settings/google/service-account',
+  googleIndexing.serviceAccountField('service_account'),
+  (req, res) => {
+    if (req.uploadError) return res.redirect(settingsBack(req.uploadError));
+    const raw = req.file && req.file.buffer
+      ? req.file.buffer.toString('utf8')
+      : String(req.body.service_account_json || '');
+    const r = googleIndexing.saveServiceAccount(raw);
+    if (!r.ok) return res.redirect(settingsBack(r.error));
+    notify.notifyAdmin({
+      kind: 'system', title: 'Google Indexing API connected',
+      body: `${r.client_email} — new and updated listings will ping Google automatically.`,
+      url: '/admin3119Musa/settings',
+    });
+    res.redirect(settingsBack(
+      `Google Indexing API connected (${r.client_email}). Approved and updated listings now ping Google automatically.`, 'ok'));
+  }
+);
+
+router.post('/admin3119Musa/settings/google/service-account/remove', (req, res) => {
+  googleIndexing.removeServiceAccount();
+  res.redirect(settingsBack(
+    googleIndexing.status().env_set
+      ? 'Saved key removed. The GOOGLE_INDEXING_SERVICE_ACCOUNT_JSON environment variable is still set and will keep being used.'
+      : 'Saved key removed — Google indexing is inactive until a new key is uploaded.', 'ok'));
+});
+
+/* Back-fill: submit the first 200 listings Google has never been sent. */
+router.post('/admin3119Musa/settings/google/submit-200', (req, res) => {
+  const q = googleIndexing.quota();
+  if (q.remaining <= 0) {
+    return res.redirect(settingsBack(
+      `Google's 200/day quota is already used — ${q.used} of 200 submitted in the last 24 hours. Try again tomorrow.`));
+  }
+  const r = googleIndexing.startBatch(200);
+  if (!r.ok) return res.redirect(settingsBack(r.error));
+  notify.notifyAdmin({
+    kind: 'system', title: 'Google submission run started',
+    body: 'Submitting un-pinged listings to the Google Indexing API (max 200).',
+    url: '/admin3119Musa/settings',
+  });
+  res.redirect(settingsBack(
+    'Submission run started — up to 200 listings are being sent to Google. Results appear in the indexing log below as they land.', 'ok'));
+});
+
+/* Live progress for the batch run (polled by the settings page). */
+router.get('/admin3119Musa/settings/google/job.json', (req, res) => {
+  res.json({ job: googleIndexing.jobState(), quota: googleIndexing.quota(), pending: googleIndexing.pendingCount(), submitted: googleIndexing.submittedCount() });
+});
+
+/* ================= Indexing log ================= */
+router.post('/admin3119Musa/indexing/logs/clear', (req, res) => {
+  const n = indexlog.clearAll();
+  res.redirect(settingsBack(n ? `Indexing log cleared — ${n} entr${n === 1 ? 'y' : 'ies'} deleted.` : 'Indexing log is already empty.', 'ok'));
+});
+
+router.post('/admin3119Musa/indexing/logs/:id/delete', (req, res) => {
+  indexlog.remove(req.params.id);
+  res.redirect(settingsBack('Log entry deleted.', 'ok'));
 });
 
 router.post('/admin3119Musa/settings/2fa-reset', (req, res) => {
@@ -1473,7 +1563,10 @@ router.post('/admin3119Musa/listings/new', async (req, res) => {
     status, b.featured === '1' ? 1 : 0, 0,
     Math.max(0, Math.min(97, parseInt(b.confidence, 10) || 55))
   );
-  if (status === 'approved') submitForIndexing([`/listing/${slug}`]);
+  if (status === 'approved') {
+    submitForIndexing([`/listing/${slug}`]);
+    googleIndexing.pingGoogleNewListingBackground(siteUrl(`/listing/${slug}`));
+  }
   if (status === 'pending') {
     try { require('../lib/ai').scheduleModeration(info.lastInsertRowid); } catch { /* AI moderation is best-effort */ }
   }
@@ -2012,6 +2105,19 @@ router.post('/admin3119Musa/incidents/:id/update', (req, res) => {
   });
   mon.notifySubscribers(`FirmLedger status: ${inc.title}`, incidentEmail(inc, newUpdate)).catch(() => {});
   res.redirect('/admin3119Musa/incidents?ok=' + encodeURIComponent(`Update posted — status is now “${mon.INCIDENT_STATUS_LABELS[inc.status]}”.`));
+});
+
+/* Permanently delete an incident — row + timeline, gone from /status for good. */
+router.post('/admin3119Musa/incidents/:id/delete', (req, res) => {
+  const inc = mon.incidentById(req.params.id);
+  const r = mon.deleteIncident(req.params.id);
+  if (!r.ok) return res.redirect('/admin3119Musa/incidents?err=' + encodeURIComponent(r.error));
+  notify.notifyAdmin({
+    kind: 'status', title: `Incident deleted: ${r.title}`,
+    body: `Removed permanently${inc && inc.component_id ? ' (component state healed)' : ''}. Status history no longer lists it.`,
+    url: '/admin3119Musa/incidents',
+  });
+  res.redirect('/admin3119Musa/incidents?ok=' + encodeURIComponent(`“${r.title}” deleted permanently — it no longer appears on /status.`));
 });
 
 router.post('/admin3119Musa/incidents/:id/resolve', (req, res) => {

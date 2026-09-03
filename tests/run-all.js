@@ -10,6 +10,9 @@
  *                cancellation and honest failure reporting (Groq stubbed).
  *   backup       .firmledger round trip — users, all listings + configuration.
  *   admin-pages  every admin page renders and its long list scrolls in place.
+   indexing     Google Indexing API (stubbed) + the homepage featured rail:
+                URL_UPDATED pings, the never-ping-twice ledger, the 200/day
+                quota and the admin console wired to all of it.
  */
 const path = require('path');
 const { spawnSync } = require('child_process');
@@ -19,6 +22,7 @@ const suites = [
   ['AI agent loop', 'ai-agent.test.js'],
   ['Backup round trip', 'backup.test.js'],
   ['Admin pages', 'admin-pages.test.js'],
+  ['Google Indexing + featured rail', 'google-indexing.test.js'],
 ];
 
 const results = [];

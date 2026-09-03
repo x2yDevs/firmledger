@@ -2,3 +2,10 @@ node_modules/
 data/
 .env
 *.log
+
+# Google Cloud service-account keys — secrets, never commit them.
+# Production injects the same payload as GOOGLE_INDEXING_SERVICE_ACCOUNT_JSON;
+# the admin upload lands in data/service-account.json (already ignored above).
+service-account.json
+*service-account*.json
+*.pem

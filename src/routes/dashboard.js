@@ -20,6 +20,7 @@ const { detectTech } = require('../lib/enrich');
 const { firmledgerScore } = require('../lib/score');
 const passwords = require('../lib/passwords');
 const { submitForIndexing } = require('../lib/indexing');
+const googleIndexing = require('../lib/googleIndexing');
 const { isProUser, hasProAccess, perksActive, allPlans, isProListingActive } = require('../lib/plans');
 const nl = require('../lib/newsletter');
 const paypal = require('../lib/paypal');
@@ -303,6 +304,8 @@ router.post('/dashboard/listings/new', spam.gate('listing'), async (req, res) =>
   if (status === 'approved') {
     const catSlug = catLib.all().find((c) => c.name === f.category)?.slug;
     submitForIndexing([`/listing/${slug}`, catSlug ? `/directory/c/${catSlug}` : null].filter(Boolean));
+    // Google Indexing API — fires in the background, never delays the redirect.
+    googleIndexing.pingGoogleNewListingBackground(siteUrl(`/listing/${slug}`));
   } else {
     notify.notifyAdmin({
       kind: 'listing',
@@ -406,6 +409,12 @@ router.post('/dashboard/listings/:id/edit', ownListing, async (req, res) => {
     } catch { /* best-effort */ }
   }
   submitForIndexing([`/listing/${l.slug}`]);
+  // Google only gets a ping while the record is still live — an edit that sends
+  // it back to moderation (needsReview) makes the public URL 404 until approval,
+  // so the ping happens on the approval itself instead.
+  if (!needsReview && l.status === 'approved') {
+    googleIndexing.pingGoogleNewListingBackground(siteUrl(`/listing/${l.slug}`));
+  }
 
   // watchlist digest — tell everyone starring this listing what changed
   const watchChanges = [];

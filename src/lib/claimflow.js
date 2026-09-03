@@ -8,6 +8,7 @@ const { sendBranded } = require('./mailer');
 const { siteUrl, escHtml } = require('./util');
 const notify = require('./notify');
 const { submitForIndexing } = require('./indexing');
+const googleIndexing = require('./googleIndexing');
 const { isProListingActive } = require('./plans');
 
 function finalizeVerifiedClaim(c, l, newUser) {
@@ -19,7 +20,11 @@ function finalizeVerifiedClaim(c, l, newUser) {
     "UPDATE listings SET claimed=1, owner_user_id=?, last_verified_at=?, confidence=MIN(97, confidence + 13), updated_at=datetime('now') WHERE id=?"
   ).run(newUser.id, now, l.id);
   db.prepare("UPDATE claims SET status='rejected' WHERE listing_id=? AND id<>? AND status='pending'").run(l.id, c.id);
-  if (l.slug) submitForIndexing([`/listing/${l.slug}`]);
+  if (l.slug) {
+    submitForIndexing([`/listing/${l.slug}`]);
+    // Ownership just became verified — nudge Google to re-crawl the live record.
+    googleIndexing.pingGoogleNewListingBackground(siteUrl(`/listing/${l.slug}`));
+  }
 
   const listingPro = isProListingActive(l);
   const prev = prevOwnerId && prevOwnerId !== newUser.id

@@ -1689,6 +1689,8 @@ body:has(.admin-bar) #main .scroll-table .table-wrap {
 .incident-title { font: 600 17px/1.3 var(--fb); color: var(--ink); }
 .incident-meta { display: flex; align-items: center; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
 .incident-meta .pill { text-transform: capitalize; }
+/* Resolve + Delete sit together on the incident header row. */
+.incident-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .incident-updates { border-left: 2px solid var(--hair); padding-left: 14px; display: flex; flex-direction: column; gap: 14px; margin: 4px 0 14px; }
 .incident-update { display: flex; align-items: flex-start; gap: 10px; }
 .incident-update-dot { flex: 0 0 auto; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); margin-top: 5px; }
@@ -2293,6 +2295,50 @@ body.ai-modal-open { overflow: hidden; }
 }
 .sponsor-toggle:hover { border-color: var(--accent); color: var(--accent2); background: var(--soft); }
 .sponsor-toggle .sponsor-toggle-ico { display: inline-flex; }
+
+/* --- Featured records rail --------------------------------------------------
+   The homepage shows up to 8 featured records as the ordinary grid. With more
+   than 8, every record still gets shown — the strip becomes the same seamless
+   marquee as the promoted (sponsored) placements: two identical passes of the
+   cards, sliding exactly one pass to the left. Hovering, focusing a card or
+   pressing Pause freezes it; reduced motion turns it into a swipeable row. */
+.featured-rail {
+  --featured-gap: 16px;
+  --featured-card-w: clamp(268px, 26vw, 320px);
+  --featured-fade: clamp(16px, 4vw, 46px);
+  position: relative;
+  overflow: hidden;
+  padding: 4px 0 10px;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 var(--featured-fade), #000 calc(100% - var(--featured-fade)), transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0, #000 var(--featured-fade), #000 calc(100% - var(--featured-fade)), transparent 100%);
+}
+.featured-track { display: flex; align-items: stretch; width: max-content; }
+.featured-card { flex: 0 0 var(--featured-card-w); margin-inline-end: var(--featured-gap); }
+.featured-card .l-desc { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.featured-rail.is-marquee .featured-track {
+  animation: featured-marquee var(--featured-dur, 60s) linear infinite;
+  will-change: transform;
+}
+@keyframes featured-marquee {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-50%, 0, 0); }
+}
+.featured-rail:hover .featured-track,
+.featured-rail:focus-within .featured-track,
+.featured-rail.is-paused .featured-track { animation-play-state: paused; }
+
+/* Reduced motion: no auto-scroll — swipe the single pass instead. */
+@media (prefers-reduced-motion: reduce) {
+  .featured-rail {
+    overflow-x: auto; overflow-y: hidden;
+    -webkit-mask-image: none; mask-image: none;
+    scroll-snap-type: x proximity;
+    scrollbar-width: thin;
+  }
+  .featured-rail .featured-track { animation: none; }
+  .featured-card { scroll-snap-align: start; }
+  .featured-card--dup { display: none; }
+}
 
 /* Not enough sponsors to overflow: plain wrapped row, no mask, no loop. */
 .sponsor-rail:not(.is-marquee) { overflow: visible; -webkit-mask-image: none; mask-image: none; }

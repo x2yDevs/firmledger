@@ -9,6 +9,7 @@
 const { db, getSetting, setSetting } = require('../db');
 const { sendBranded, mailConfigured } = require('./mailer');
 const { submitForIndexing } = require('./indexing');
+const googleIndexing = require('./googleIndexing');
 const { deleteLogo } = require('./upload');
 const notify = require('./notify');
 const { siteUrl, escHtml, normalizeUrl, slugify, randomToken } = require('./util');
@@ -50,6 +51,7 @@ function approveListingRow(l) {
   if (firstApproval) {
     const catSlug = (db.prepare('SELECT slug FROM categories WHERE name = ?').get(l.category) || {}).slug;
     submitForIndexing([`/listing/${l.slug}`, catSlug ? `/directory/c/${catSlug}` : null].filter(Boolean));
+    googleIndexing.pingGoogleNewListingBackground(`/listing/${l.slug}`);
     if (l.owner_user_id) {
       notify.notifyUser(l.owner_user_id, {
         kind: 'listing',

@@ -1,0 +1,19 @@
+<% /* One featured record. Used twice when the strip overflows 8 cards: the
+      second pass is a duplicate for the seamless marquee, hidden from assistive
+      tech and skipped by the keyboard. */ %>
+<% const isDup = typeof dup !== 'undefined' && dup; %>
+<a class="l-card featured-card<%= isDup ? ' featured-card--dup' : '' %>" href="/listing/<%= l.slug %>"<% if (isDup) { %> tabindex="-1" aria-hidden="true"<% } %>>
+  <div class="l-top">
+    <% if (l.logo_url) { %><img class="avatar" src="<%= l.logo_url %>" alt="<%= l.name %> logo" loading="lazy"><% } else { %><span class="avatar"><%= initials(l.name) %></span><% } %>
+    <div>
+      <div class="l-name"><%= l.name %><% if (perksActive(l)) { %><span class="ptick ptick-sm" title="FirmLedger Pro — enhanced verified profile"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 2.4 3.3-.5 1 3.3L22 9l-1.7 3 1.7 3-3.3 1.8-1 3.3-3.3-.5L12 22l-2.4-2.4-3.3.5-1-3.3L2 15l1.7-3L2 9l3.3-1.8 1-3.3 3.3.5L12 2z" fill="#1D4ED8"/><path d="M10.6 15.4l-3-3 1.5-1.5 1.5 1.5 4.3-4.3 1.5 1.5-5.8 5.8z" fill="#fff"/></svg></span><% } %></div>
+      <div class="l-meta"><%= typeLabel(l.type) %> · <%= listingLoc(l) %></div>
+    </div>
+  </div>
+  <p class="l-desc"><%= l.tagline %></p>
+  <div class="l-foot">
+    <% if (l.claimed) { %><span class="vbadge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Verified</span><% } %>
+    <span class="tag"><%= typeLabel(l.type) %></span>
+    <%- dial(l.confidence) %>
+  </div>
+</a>

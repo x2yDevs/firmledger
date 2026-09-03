@@ -523,9 +523,47 @@ so nothing is dropped from the index).
 | `sitemap.xml` **index** → `/sitemaps/static.xml`, `listings.xml`, `categories.xml`, `locations.xml` (only `status='approved'` listings; `lastmod` from `updated_at`) | `src/routes/public.js` |
 | `robots.txt` — allows the public site, disallows `/dashboard`, `/admin3119Musa`, `/login`, `/forgot`, `/search`, `/removal/`, `/claim`, and points at the sitemap | `src/routes/public.js` |
 | **IndexNow** push the moment a listing is approved or claimed, plus a re-ping 30 min later; key auto-generated and served at `/<key>.txt` | `src/lib/indexing.js` |
+| **Google Indexing API** push (`URL_UPDATED`) the moment a listing is approved or updated, plus a manual "Submit first 200 listings" back-fill that respects Google's 200/day quota — a URL that has been pinged is never pinged again | `src/lib/googleIndexing.js`, Admin → Settings → Google Indexing API |
 | RSS/`feed.xml` (blog + new listings) for discovery and fast re-crawl | `src/routes/public.js` |
 | Empty category/location landing pages are `noindex,follow`, so they are never thin-indexed; `/directory?page=2` and `/directory/c/x?page=2` canonicalise back to page 1 on purpose (pagination and filters must not multiply in the index), and follow-links are still crawled | `src/routes/public.js` |
 | **Staging guard** — if `BASE_URL` is unset or points at `localhost`, a `.test/.local/.internal` name or a private IP, every response carries `X-Robots-Tag: noindex, follow` **and** `/robots.txt` becomes `Disallow: /`, so a dev or preview box can never leak into an index. The boot log tells you when this is active. Override: `FORCE_INDEXABLE=1`. | `server.js`, `src/lib/util.js` |
+
+### Google Indexing API — one-time setup
+
+IndexNow (Bing/Yandex/DuckDuckGo) needs nothing. Google's Indexing API needs a
+service-account key, and the app gives you two ways to supply it:
+
+1. **Production (recommended)** — put the whole JSON payload on one line in
+   `GOOGLE_INDEXING_SERVICE_ACCOUNT_JSON` (`.env`, or your host's environment
+   panel). Nothing sensitive ever touches the repository.
+2. **Admin console** — Admin → **Settings → Google Indexing API** → upload
+   `service-account.json` (or paste its contents). It is written to
+   `data/service-account.json` with `0600` permissions and survives restarts.
+
+Resolution order is: environment variable → uploaded file → `./service-account.json`
+(local development). All three locations are git-ignored — never commit a key.
+
+To create the key: Google Cloud → **IAM & Admin → Service accounts → Create service
+account → Keys → Add key → JSON**, then in **Google Search Console** add that
+service account as an *Owner* (or at least URL owner) of the property, and enable
+the **Indexing API** for the project.
+
+What happens then:
+
+- `pingGoogleNewListing(url)` fires `{ url, type: 'URL_UPDATED' }` at
+  `indexing.urlNotifications.publish` in the background whenever a listing is
+  approved or updated — the moderation response never waits on Google.
+- **Submit first 200 listings** back-fills the backlog inside the 200/day quota.
+  Every accepted URL is recorded in `google_indexing_submissions`, so it can never
+  be submitted twice.
+- Successes and failures are both `console.log`/`console.error`ed (with the target
+  URL and the API status) **and** written to **Admin → Settings → Indexing log**,
+  which scrolls inside its card and can be cleared entry-by-entry or all at once.
+
+```bash
+node -e "require('./src/lib/googleIndexing')"   # no output = the module loads cleanly
+npm run test:indexing                          # full Google Indexing suite, client stubbed
+```
 
 **You do these five things once the domain is live:**
 
