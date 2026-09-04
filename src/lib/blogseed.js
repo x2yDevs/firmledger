@@ -177,18 +177,24 @@ curl "https://firmledger.co.ke/api/v1/listings?category=Fintech&amp;country=Keny
 ];
 
 function seedBlog(db) {
-  const count = db.prepare('SELECT COUNT(*) c FROM blog_posts').get().c;
-  if (count) return;
+  // Idempotent per-slug: insert every seed post that doesn't already exist, so a
+  // fresh database gets the full set and an existing database picks up newly
+  // added posts on the next boot without disturbing existing or admin-authored
+  // content (rows are only inserted when their slug is absent).
   const ins = db.prepare(
-    "INSERT INTO blog_posts (slug, title, excerpt, body, status, published_at) VALUES (?,?,?,?,'published', ?)"
+    `INSERT INTO blog_posts (slug, title, excerpt, body, status, published_at)
+     SELECT ?,?,?,?,'published', ?
+      WHERE NOT EXISTS (SELECT 1 FROM blog_posts WHERE slug = ?)`
   );
   // Space the seed dates out so the array order == blog order (newest last), and
-  // the lead post (the API announcement) sits at the top of /blog on a fresh DB.
+  // the lead post (the newest guide) sits at the top of /blog.
   const now = Date.now();
   for (let i = 0; i < POSTS.length; i++) {
     const p = POSTS[i];
     const daysAgo = (POSTS.length - 1 - i) * 2;
-    ins.run(p.slug, p.title, p.excerpt, p.body, new Date(now - daysAgo * 86400000).toISOString().slice(0, 19).replace('T', ' '));
+    ins.run(p.slug, p.title, p.excerpt, p.body,
+      new Date(now - daysAgo * 86400000).toISOString().slice(0, 19).replace('T', ' '),
+      p.slug);
   }
 }
 

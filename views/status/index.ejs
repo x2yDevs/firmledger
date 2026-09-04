@@ -13,12 +13,21 @@
     <% if (ok) { %><div class="alert alert-ok"><%= ok %></div><% } %>
     <% if (err) { %><div class="alert alert-err"><%= err %></div><% } %>
 
+    <!-- Auto-refresh controls -->
+    <div class="st-refresh rv" role="region" aria-label="Status auto-refresh">
+      <div>
+        <span class="st-refresh-status" id="st-refresh-status">Auto-refresh is on — this page updates itself.</span>
+        <button type="button" class="btn btn-ghost btn-sm" id="st-refresh-now">Refresh now</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="st-refresh-toggle" data-on="1">Auto-refresh: on</button>
+      </div>
+    </div>
+
     <!-- Overall status hero -->
-    <div class="st-hero rv st-<%= snap.status %>" role="status" aria-live="polite">
+    <div class="st-hero rv st-<%= snap.status %>" id="st-hero" data-status="<%= snap.status %>" role="status" aria-live="polite">
       <div class="st-hero-dot" aria-hidden="true"></div>
       <div>
-        <h2 class="st-hero-title"><%= labels[snap.status] %></h2>
-        <p class="st-hero-sub">
+        <h2 class="st-hero-title" id="st-hero-title"><%= labels[snap.status] %></h2>
+        <p class="st-hero-sub" id="st-hero-sub">
           <% if (snap.active_incidents.length) { %>
             <b><%= snap.active_incidents.length %> active incident<%= snap.active_incidents.length === 1 ? '' : 's' %></b> — we're on it.
           <% } else if (snap.status === 'operational') { %>
@@ -30,38 +39,37 @@
       </div>
       <div class="st-hero-meta">
         <span class="st-meta-label">Last checked</span>
-        <span class="st-meta-val"><%= (snap.last_checked || snap.timestamp || '').slice(0, 16).replace('T', ' ') %> UTC</span>
+        <span class="st-meta-val" id="st-last-checked"><%= (snap.last_checked || snap.timestamp || '').slice(0, 16).replace('T', ' ') %> UTC</span>
       </div>
     </div>
 
     <!-- Uptime summary -->
     <div class="st-uptime rv" style="--d:60ms">
       <span class="st-up-label">Uptime</span>
-      <div class="st-up-cell"><span class="st-up-n"><%= snap.uptime['24h'] %>%</span><span class="st-up-l">24h</span></div>
-      <div class="st-up-cell"><span class="st-up-n"><%= snap.uptime['7d'] %>%</span><span class="st-up-l">7d</span></div>
-      <div class="st-up-cell"><span class="st-up-n"><%= snap.uptime['30d'] %>%</span><span class="st-up-l">30d</span></div>
-      <div class="st-up-cell"><span class="st-up-n"><%= snap.uptime['90d'] %>%</span><span class="st-up-l">90d</span></div>
+      <div class="st-up-cell" data-uptime-cell="24h"><span class="st-up-n"><%= snap.uptime['24h'] %>%</span><span class="st-up-l">24h</span></div>
+      <div class="st-up-cell" data-uptime-cell="7d"><span class="st-up-n"><%= snap.uptime['7d'] %>%</span><span class="st-up-l">7d</span></div>
+      <div class="st-up-cell" data-uptime-cell="30d"><span class="st-up-n"><%= snap.uptime['30d'] %>%</span><span class="st-up-l">30d</span></div>
+      <div class="st-up-cell" data-uptime-cell="90d"><span class="st-up-n"><%= snap.uptime['90d'] %>%</span><span class="st-up-l">90d</span></div>
     </div>
 
     <!-- Components -->
     <div class="st-components rv" style="--d:120ms">
       <h3 class="h-section" style="margin-bottom:14px">Components</h3>
       <% snap.components.forEach(function (c) { %>
-      <div class="st-component">
+      <div class="st-component" data-comp="<%= c.slug %>">
         <div class="st-cmp-name">
-          <span class="st-dot st-dot-<%= c.status %>" aria-hidden="true"></span>
+          <span class="st-dot st-dot-<%= c.status %>" data-comp-dot="<%= c.status %>" aria-hidden="true"></span>
           <div>
             <div class="st-cmp-title"><%= c.name %></div>
             <div class="st-cmp-desc"><%= c.description %></div>
           </div>
         </div>
         <div class="st-cmp-status">
-          <span class="st-pill st-pill-<%= c.status %>"><%= c.status_label %></span>
+          <span class="st-pill st-pill-<%= c.status %>" data-comp-pill="<%= c.status %>"><%= c.status_label %></span>
           <div class="st-cmp-uptime">
-            <span class="st-cmp-up"><i class="st-bar st-bar-<%= c.uptime['24h'] >= 99 ? 'ok' : 'warn' %>" style="width:<%= c.uptime['24h'] %>%"></i><%= c.uptime['24h'] %>%</span>
-            <span class="st-cmp-up"><i class="st-bar st-bar-<%= c.uptime['7d'] >= 99 ? 'ok' : 'warn' %>" style="width:<%= c.uptime['7d'] %>%"></i><%= c.uptime['7d'] %>%</span>
-            <span class="st-cmp-up"><i class="st-bar st-bar-<%= c.uptime['30d'] >= 99 ? 'ok' : 'warn' %>" style="width:<%= c.uptime['30d'] %>%"></i><%= c.uptime['30d'] %>%</span>
-            <span class="st-cmp-up"><i class="st-bar st-bar-<%= c.uptime['90d'] >= 99 ? 'ok' : 'warn' %>" style="width:<%= c.uptime['90d'] %>%"></i><%= c.uptime['90d'] %>%</span>
+            <% ['24h', '7d', '30d', '90d'].forEach(function (k) { %>
+            <span class="st-cmp-up" data-uptime="<%= k %>"><i class="st-bar st-bar-<%= c.uptime[k] >= 99 ? 'ok' : 'warn' %>" style="width:<%= c.uptime[k] %>%"></i><span class="st-cmp-num"><%= c.uptime[k] %>%</span></span>
+            <% }); %>
           </div>
         </div>
       </div>
@@ -150,4 +158,137 @@
   </div>
 </section>
 
+<script>
+(function () {
+  var API = '/status/api';
+  var REFRESH_MS = Math.max(15, (parseInt('<%= snap.monitor.interval_sec %>', 10) || 60)) * 1000;
+  var timer = null;
+  var auto = true;
+  var busy = false;
+
+  var LABELS = <%- JSON.stringify(labels) %>;
+  var COMP_LABELS = <%- JSON.stringify(componentLabels) %>;
+  var WINDOWS = ['24h', '7d', '30d', '90d'];
+
+  function setText(id, val) {
+    var el = document.getElementById(id);
+    if (el) el.textContent = val;
+  }
+  function setStatus(id, status) {
+    var el = document.getElementById(id);
+    if (el) {
+      var base = el.className;
+      ['operational', 'degraded', 'partial_outage', 'major_outage'].forEach(function (s) {
+        base = base.replace(new RegExp('(^|\\s)st-' + s + '(\\s|$)', 'g'), ' ');
+      });
+      el.className = (base.replace(/\s+/g, ' ').trim() + ' st-' + status).trim();
+    }
+  }
+
+  function applySnapshot(snap) {
+    if (!snap) return;
+    var overall = snap.status || 'operational';
+    setStatus('st-hero', 'st-' + overall);
+    setText('st-hero-title', LABELS[overall] || overall);
+
+    var sub = document.getElementById('st-hero-sub');
+    if (sub) {
+      var active = (snap.active_incidents || []).length;
+      var html;
+      if (active) {
+        html = '<b>' + active + ' active incident' + (active === 1 ? '' : 's') + '</b> — we\'re on it.';
+      } else if (overall === 'operational') {
+        html = 'All monitored systems are up and responding normally.';
+      } else {
+        html = 'Some systems are experiencing issues. We\'re working to restore normal service.';
+      }
+      sub.innerHTML = html;
+    }
+
+    setText('st-last-checked', (snap.last_checked || snap.timestamp || '').slice(0, 16).replace('T', ' ') + ' UTC');
+
+    var up = snap.uptime || {};
+    WINDOWS.forEach(function (k) {
+      var cell = document.querySelector('[data-uptime-cell="' + k + '"]');
+      if (!cell) return;
+      var num = cell.querySelector('.st-up-n');
+      if (num) num.textContent = up[k] != null ? up[k] + '%' : '—';
+    });
+
+    (snap.components || []).forEach(function (c) {
+      var row = document.querySelector('[data-comp="' + c.slug + '"]');
+      if (!row) return;
+      var dot = row.querySelector('[data-comp-dot]');
+      if (dot) {
+        dot.className = 'st-dot st-dot-' + c.status;
+        dot.setAttribute('data-comp-dot', c.status);
+      }
+      var pill = row.querySelector('[data-comp-pill]');
+      if (pill) {
+        pill.className = 'st-pill st-pill-' + c.status;
+        pill.setAttribute('data-comp-pill', c.status);
+        pill.textContent = COMP_LABELS[c.status] || c.status_label || c.status;
+      }
+      var uptime = c.uptime || {};
+      WINDOWS.forEach(function (k) {
+        var upEl = row.querySelector('[data-uptime="' + k + '"]');
+        if (!upEl) return;
+        var bar = upEl.querySelector('.st-bar');
+        var num = upEl.querySelector('.st-cmp-num');
+        var v = uptime[k];
+        var pct = (v == null || isNaN(Number(v))) ? null : Math.min(100, Math.round(Number(v)));
+        if (bar) {
+          if (pct == null) { bar.style.width = '0%'; bar.className = 'st-bar st-bar-warn'; }
+          else {
+            bar.style.width = pct + '%';
+            bar.className = 'st-bar st-bar-' + (pct >= 99 ? 'ok' : 'warn');
+          }
+        }
+        if (num) num.textContent = pct == null ? '—' : pct + '%';
+      });
+    });
+
+    var refreshEl = document.getElementById('st-refresh-status');
+    if (refreshEl) {
+      var last = (snap.last_checked || snap.timestamp || '');
+      refreshEl.textContent = 'Latest status as of ' + last.slice(0, 16).replace('T', ' ') + ' UTC.';
+    }
+    var toggle = document.getElementById('st-refresh-toggle');
+    if (toggle) toggle.textContent = 'Auto-refresh: ' + (auto ? 'on' : 'off');
+  }
+
+  function refreshNow() {
+    if (busy) return Promise.resolve();
+    busy = true;
+    return fetch(API, { headers: { Accept: 'application/json' } })
+      .then(function (r) { return r.json(); })
+      .then(applySnapshot)
+      .catch(function () { /* server briefly unreachable — keep last good state */ })
+      .finally(function () { busy = false; });
+  }
+
+  var nowBtn = document.getElementById('st-refresh-now');
+  if (nowBtn) nowBtn.addEventListener('click', refreshNow);
+
+  var toggleBtn = document.getElementById('st-refresh-toggle');
+  if (toggleBtn) {
+    toggleBtn.addEventListener('click', function () {
+      auto = !auto;
+      setText('st-refresh-status', auto ? 'Auto-refresh is on — this page updates itself.' : 'Auto-refresh is paused. Click “Refresh now” to update.');
+      if (auto) { refreshNow(); startTimer(); } else { stopTimer(); }
+      toggleBtn.textContent = 'Auto-refresh: ' + (auto ? 'on' : 'off');
+    });
+  }
+
+  function startTimer() {
+    if (timer) clearInterval(timer);
+    timer = setInterval(refreshNow, REFRESH_MS);
+  }
+  function stopTimer() {
+    if (timer) { clearInterval(timer); timer = null; }
+  }
+
+  if (auto) { startTimer(); refreshNow(); }
+})();
+</script>
 <%- include('../partials/bottom') %>

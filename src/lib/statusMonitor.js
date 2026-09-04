@@ -105,6 +105,43 @@ function hasOpenIncident(componentId) {
   ).get(componentId));
 }
 
+/* Admin action: clear an auto-detected state and force the component back to
+   operational. This is a *manual* override — if the component is genuinely still
+   failing, the next probe re-flags it (and the in-process failure counter is
+   reset first so one stale failure can't immediately fling it back to outage). */
+function resetComponentStatus(id) {
+  const comp = componentById(id);
+  if (!comp) return { ok: false, error: 'Component not found.' };
+  // A component held down by an open incident must be resolved/closed as an
+  // incident first — clearing the auto-detected state would otherwise fight the
+  // incident and leave the page inconsistent.
+  if (hasOpenIncident(comp.id)) {
+    return { ok: false, error: `“${comp.name}” has an open incident — resolve or delete it from the incidents list below first.` };
+  }
+  const changed = comp.status !== STATUS.operational;
+  consecutiveFails.delete(comp.id);
+  setComponentStatus(comp.id, STATUS.operational);
+  return {
+    ok: true, id: comp.id, name: comp.name,
+    changed, message: changed ? `${comp.name} was cleared back to operational.` : `${comp.name} is already operational.`,
+  };
+}
+
+/* Recent auto-detected status changes (non-operational) for the admin console,
+   so a monitor-caught degradation is visible even before a human opens an
+   incident. Limit to the last `hours` and `limit` rows. */
+function detectedChanges(hours = 48, limit = 40) {
+  return db.prepare(
+    `SELECT h.*, c.name AS component_name, c.slug AS component_slug
+       FROM component_status_history h
+       LEFT JOIN status_components c ON c.id = h.component_id
+      WHERE h.status != 'operational'
+        AND h.checked_at >= datetime('now', ?)
+      ORDER BY h.checked_at DESC
+      LIMIT ?`
+  ).all(`-${Math.max(1, Number(hours) || 48)} hours`, Math.max(1, Number(limit) || 40));
+}
+
 function decideProbeStatus(id, ok) {
   if (ok) {
     consecutiveFails.delete(id);
@@ -527,6 +564,7 @@ module.exports = {
   STATUS, STATUS_LABELS, OVERALL_LABELS, INCIDENT_STATUS, SEVERITIES,
   SEVERITY_LABELS, INCIDENT_STATUS_LABELS,
   ensureComponents, components, componentBySlug, componentById, setComponentStatus,
+  resetComponentStatus, detectedChanges,
   checkComponent, checkAll, pruneHistory, hasOpenIncident,
   overallStatus, uptimePercent, overallUptime, uptimeSummary,
   incidentUpdates, incidentsSince, allIncidents, activeIncidents, incidentById,

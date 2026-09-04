@@ -2033,10 +2033,19 @@ router.post('/admin3119Musa/careers/:id/delete', (req, res) => {
 /* ================= Incidents — public status page ================= */
 function incidentsPage(req, res, extra = {}) {
   const incidents = mon.allIncidents();
+  const snapshot = mon.snapshot();
+  const live = mon.components().map((c) => Object.assign({}, c, {
+    status_label: mon.STATUS_LABELS[c.status] || c.status,
+    uptime: mon.uptimeSummary(c.id),
+  }));
+  const detected = mon.detectedChanges(48, 40);
   res.render('admin/incidents', {
     meta: { title: 'Incidents — FirmLedger Admin', description: '', robots: 'noindex,nofollow' },
     section: 'incidents',
     incidents,
+    snapshot,
+    live,
+    detected,
     components: mon.components(),
     severityLabels: mon.SEVERITY_LABELS,
     incidentStatusLabels: mon.INCIDENT_STATUS_LABELS,
@@ -2151,6 +2160,36 @@ router.post('/admin3119Musa/incidents/:id/resolve', (req, res) => {
   });
   mon.notifySubscribers(`FirmLedger status: ${inc.title} resolved`, incidentEmail(inc, null)).catch(() => {});
   res.redirect('/admin3119Musa/incidents?ok=' + encodeURIComponent(`Incident resolved — marked live on /status.`));
+});
+
+/* ---------------- Live / auto-detected status management ---------------- */
+
+/* Re-run every component check right now. This is the admin-side "refresh" that
+   works even if the public page's auto-refresh is off or hasn't fired yet; it
+   pushes the latest detected state into the console. */
+router.post('/admin3119Musa/status/refresh', async (req, res) => {
+  let note = 'Status re-checked — you\'re seeing the latest detected state.';
+  try {
+    const results = await mon.checkAll();
+    const down = results.filter((r) => !r.ok).length;
+    if (down) note = `Status re-checked — ${down} component${down === 1 ? '' : 's'} currently failing detection.`;
+  } catch (e) {
+    console.error('[status-monitor] manual refresh failed:', e && e.message);
+  }
+  res.redirect('/admin3119Musa/incidents?ok=' + encodeURIComponent(note));
+});
+
+/* Clear an auto-detected degraded/outage state back to operational. The next
+   probe re-flags it if the component is genuinely still failing. */
+router.post('/admin3119Musa/status/components/:id/reset', (req, res) => {
+  const r = mon.resetComponentStatus(req.params.id);
+  if (!r.ok) return res.redirect('/admin3119Musa/incidents?err=' + encodeURIComponent(r.error));
+  notify.notifyAdmin({
+    kind: 'status', title: `Detected status cleared: ${r.name}`,
+    body: r.changed ? 'Component was cleared back to operational from the admin console.' : 'Component is already operational.',
+    url: '/admin3119Musa/incidents',
+  });
+  res.redirect('/admin3119Musa/incidents?ok=' + encodeURIComponent(r.message));
 });
 
 module.exports = router;
