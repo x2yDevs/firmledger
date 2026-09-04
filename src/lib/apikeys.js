@@ -12,9 +12,8 @@ const KEY_BODY_LEN = 32;
 const MAX_ACTIVE_KEYS = 3;
 
 const SCOPE_DEFINITIONS = Object.freeze([
-  { id: 'read:listings', label: 'Read listings', description: 'Directory, profiles, search, categories, countries, suggestions and your own listing reads.' },
+  { id: 'read:listings', label: 'Read listings', description: 'Directory, profiles, filters, categories, countries, suggestions and your own listing reads.' },
   { id: 'write:listings', label: 'Write listings', description: 'Create, update and delete listings owned by this account.' },
-  { id: 'read:relationships', label: 'Read relationships', description: 'Company relationship and ecosystem graph endpoints.' },
   { id: 'export', label: 'Export', description: 'Download approved ledger data as CSV.' },
   { id: 'manage:webhooks', label: 'Manage webhooks', description: 'Create, test, rotate and remove event subscriptions.' },
   { id: 'read:usage', label: 'Read usage', description: 'Account usage, endpoint analytics and rate-limit snapshots.' },
@@ -134,7 +133,6 @@ function usageEndpoint(method, path) {
   if (/^\/(listings|directory)\/[^/]+$/.test(p)) p = p.replace(/^(\/[^/]+)\/[^/]+$/, '$1/:slug');
   else if (/^\/my\/listings\/\d+$/.test(p)) p = '/my/listings/:id';
   else if (/^\/listings\/\d+$/.test(p)) p = '/listings/:id';
-  else if (/^\/relationships\/[^/]+$/.test(p)) p = '/relationships/:slug';
   else if (/^\/verify\/domain\/[^/]+$/.test(p)) p = '/verify/domain/:domain';
   else if (/^\/webhooks\/\d+\/deliveries\/\d+$/.test(p)) p = '/webhooks/:id/deliveries/:deliveryId';
   else if (/^\/webhooks\/\d+\/[^/]+$/.test(p)) p = p.replace(/^\/webhooks\/\d+\/[^/]+$/, '/webhooks/:id/action');

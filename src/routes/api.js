@@ -20,18 +20,16 @@
  *   GET    /api/v1/my/listings         → your listings (paginated)
  *   POST   /api/v1/my/listings         → create (owner only)
  *   GET    /api/v1/my/listings/:id     → one listing (owner only)
- *   GET    /api/v1/search              → global search
  *   GET    /api/v1/categories          → category list
  *   GET    /api/v1/countries           → country list
  *   GET    /api/v1/suggest             → autocomplete
- *   GET    /api/v1/relationships/:slug → company relationship graph
  *   GET    /api/v1/verify/domain/:domain → check if a domain is listed
  *   GET    /api/v1/export/listings.csv → bulk export (Pro)
  *   GET/POST/PATCH/DELETE /api/v1/webhooks → signed event subscriptions
  *
  * Access is a FirmLedger Pro feature: every key resolves to a user with an
  * active Pro plan, otherwise 403 { error.code = "pro_required" }. Keys can be
- * narrowed with read:listings, write:listings, read:relationships, export,
+ * narrowed with read:listings, write:listings, export,
  * manage:webhooks and read:usage scopes.
  */
 const express = require('express');
@@ -125,12 +123,11 @@ function requiredScope(req) {
   const method = req.method.toUpperCase();
   if (path === '/me' || path === '/usage') return 'read:usage';
   if (path === '/webhooks' || path.startsWith('/webhooks/')) return 'manage:webhooks';
-  if (path.startsWith('/relationships/')) return 'read:relationships';
   if (path === '/export/listings.csv') return 'export';
   if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)
       && (/^\/listings(?:\/|$)/.test(path) || /^\/my\/listings(?:\/|$)/.test(path))) return 'write:listings';
   if (method === 'GET' && (/^\/(?:listings|directory|my\/listings)(?:\/|$)/.test(path)
-      || ['/search', '/categories', '/countries', '/suggest'].includes(path)
+      || ['/categories', '/countries', '/suggest'].includes(path)
       || path.startsWith('/verify/domain/'))) return 'read:listings';
   return null;
 }
@@ -210,11 +207,9 @@ router.get('/', (req, res) => {
       update: 'PUT /api/v1/listings/:id',
       remove: 'DELETE /api/v1/listings/:id',
       mine: ['GET /api/v1/my/listings', 'POST /api/v1/my/listings', 'GET /api/v1/my/listings/:id'],
-      search: 'GET /api/v1/search',
       categories: 'GET /api/v1/categories',
       countries: 'GET /api/v1/countries',
       suggest: 'GET /api/v1/suggest',
-      relationships: 'GET /api/v1/relationships/:slug',
       verify: 'GET /api/v1/verify/domain/:domain',
       export: 'GET /api/v1/export/listings.csv',
       webhooks: {
@@ -350,12 +345,6 @@ router.delete('/my/listings/:id', (req, res) => {
   catch (e) { serviceError(res, e); }
 });
 
-/* ---------- global search ---------- */
-router.get('/search', (req, res) => {
-  try { res.json(svc.search(req.query)); }
-  catch (e) { serviceError(res, e); }
-});
-
 /* ---------- category list ---------- */
 router.get('/categories', (req, res) => {
   try { res.json(svc.categories()); }
@@ -372,15 +361,6 @@ router.get('/countries', (req, res) => {
 router.get('/suggest', (req, res) => {
   try { res.json(svc.suggest(req.query)); }
   catch (e) { serviceError(res, e); }
-});
-
-/* ---------- company relationship graph ---------- */
-router.get('/relationships/:slug', (req, res) => {
-  try {
-    const g = svc.relationships(req.params.slug);
-    if (!g) return lim.apiError(res, 404, 'not_found', 'No approved public listing with that slug.');
-    res.json({ data: g });
-  } catch (e) { serviceError(res, e); }
 });
 
 /* ---------- verify a domain is listed ---------- */

@@ -65,11 +65,9 @@ curl "<%= SITE %>/api/v1/listings?category=Fintech" \
           <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1/health</code></td><td>Liveness probe — authenticated, returns 200 when the API is up</td><td><span class="pill pill-approved">Live</span></td></tr>
           <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1/listings</code></td><td>Directory — approved listings with filters &amp; pagination</td><td><span class="pill pill-approved">Live</span></td></tr>
           <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1/listings/:slug</code></td><td>Full company profile by slug</td><td><span class="pill pill-approved">Live</span></td></tr>
-          <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1/search</code></td><td>Global search across the approved ledger</td><td><span class="pill pill-approved">Live</span></td></tr>
           <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1/categories</code></td><td>Category list with live listing counts</td><td><span class="pill pill-approved">Live</span></td></tr>
           <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1/countries</code></td><td>Countries present in the approved ledger</td><td><span class="pill pill-approved">Live</span></td></tr>
           <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1/suggest</code></td><td>Autocomplete — listings, categories, countries, cities</td><td><span class="pill pill-approved">Live</span></td></tr>
-          <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1/relationships/:slug</code></td><td>Company relationship &amp; ecosystem graph</td><td><span class="pill pill-approved">Live</span></td></tr>
           <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1/verify/domain/:domain</code></td><td>Check whether a domain is listed</td><td><span class="pill pill-approved">Live</span></td></tr>
           <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1/export/listings.csv</code></td><td>Bulk CSV export of the approved ledger</td><td><span class="pill pill-approved">Live</span></td></tr>
           <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1/me</code></td><td>Your account, scopes, key usage and live limits</td><td><span class="pill pill-approved">Live</span></td></tr>
@@ -104,7 +102,6 @@ curl "<%= SITE %>/api/v1/listings?category=Fintech" \
     <div class="rv" style="--d:100ms">
       <div class="code-block" style="margin:0"><span class="code-label">today</span><span class="c"># one Pro key unlocks the whole API</span>
 GET /api/v1/listings          <span class="c"># directory — filters &amp; pagination</span>
-GET /api/v1/search?q=fintech  <span class="c"># global search</span>
 GET /api/v1/export/listings.csv <span class="c"># bulk CSV export</span>
 GET /sitemap.xml              <span class="c"># public, auto-indexed</span></div>
     </div>

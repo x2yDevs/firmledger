@@ -1013,11 +1013,9 @@ const PLAYGROUND_ENDPOINTS = [
   { m: 'GET', path: '/api/v1/my/listings/{id}', body: '' },
   { m: 'PUT', path: '/api/v1/my/listings/{id}', body: '{\n  \"tagline\": \"Cold-chain freight and bonded warehousing, Mombasa to Kampala\",\n  \"city\": \"Mombasa\"\n}' },
   { m: 'DELETE', path: '/api/v1/my/listings/{id}', body: '' },
-  { m: 'GET', path: '/api/v1/search', body: '' },
   { m: 'GET', path: '/api/v1/categories', body: '' },
   { m: 'GET', path: '/api/v1/countries', body: '' },
   { m: 'GET', path: '/api/v1/suggest', body: '' },
-  { m: 'GET', path: '/api/v1/relationships/{slug}', body: '' },
   { m: 'GET', path: '/api/v1/verify/domain/example.com', body: '' },
   { m: 'GET', path: '/api/v1/export/listings.csv', body: '' },
 ];
@@ -1080,18 +1078,12 @@ function runPlaygroundCall(user, method, path, rawBody) {
   if (segs[0] === 'my' && segs[1] === 'listings' && segs.length === 3 && m === 'PUT') { const r = apisvc.updateListing(user, segs[2], body); return { status: r.status, json: r.body }; }
   if (segs[0] === 'my' && segs[1] === 'listings' && segs.length === 3 && m === 'DELETE') return apisvc.deleteListing(user, segs[2]);
   // Read helpers
-  if (segs[0] === 'search' && segs.length === 1 && m === 'GET') return { status: 200, json: apisvc.search(query) };
   if (segs[0] === 'categories' && segs.length === 1 && m === 'GET') return { status: 200, json: apisvc.categories() };
   if (segs[0] === 'countries' && segs.length === 1 && m === 'GET') return { status: 200, json: apisvc.countries() };
   if (segs[0] === 'suggest' && segs.length === 1 && m === 'GET') return { status: 200, json: apisvc.suggest(query) };
-  if (segs[0] === 'relationships' && segs.length === 2 && m === 'GET') {
-    const g = apisvc.relationships(segs[1]);
-    if (!g) return { status: 404, json: { error: { code: 'not_found', message: 'No approved public listing with that slug.' } } };
-    return { status: 200, json: { data: g } };
-  }
   if (segs[0] === 'verify' && segs[1] === 'domain' && segs.length === 3 && m === 'GET') return { status: 200, json: apisvc.verifyDomain(segs[2]) };
   if (segs[0] === 'export' && segs[1] === 'listings.csv' && m === 'GET') return { status: 200, json: { data: apisvc.exportCsv(query), meta: { note: 'CSV body shown — to download it, call the endpoint and stream to a file.' } } };
-  return { status: 404, json: { error: { code: 'unknown_endpoint', message: 'The playground covers the documented v1 endpoints: /me, /listings, /listings/:slug, /my/listings, /my/listings/:id, plus /search, /categories, /countries, /suggest, /relationships/:slug, /verify/domain/:domain and /export/listings.csv.' } } };
+  return { status: 404, json: { error: { code: 'unknown_endpoint', message: 'The playground covers the documented v1 endpoints: /me, /listings, /listings/:slug, /my/listings, /my/listings/:id, plus /categories, /countries, /suggest, /verify/domain/:domain and /export/listings.csv.' } } };
 }
 
 router.get('/dashboard/api/playground', (req, res) => {
