@@ -2494,7 +2494,10 @@ body.ai-modal-open { overflow: hidden; }
   scrollbar-width: thin;
   scrollbar-color: var(--hair2) transparent;
 }
-.playground-response:focus { outline: 2px solid var(--accent2); outline-offset: 2px; }
+/* Do not leave a selection-like ring around the response after a mouse click;
+   keyboard users still get a clear focus indicator. */
+.playground-response:focus { outline: none; }
+.playground-response:focus-visible { outline: 2px solid var(--accent2); outline-offset: 2px; }
 .playground-response::-webkit-scrollbar { width: 9px; }
 .playground-response::-webkit-scrollbar-thumb { background: var(--hair2); border-radius: 999px; }
 .playground-response::-webkit-scrollbar-track { background: transparent; }
