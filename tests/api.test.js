@@ -54,6 +54,7 @@ check('Playground keeps the copy-body action', /data-copy="#pgResponseBodyText"/
 /* 4. The CSS actually caps the response region. */
 const css = fs.readFileSync(path.join(ROOT, 'public/css/app.css'), 'utf8');
 check('CSS constrains the playground response height', /\.playground-response\s*\{[\s\S]*max-height/.test(css) && /\.playground-response[\s\S]*overflow-y\s*:\s*auto/.test(css));
+check('CSS keeps the response body highlighted (no inline-code chrome on .code-block code)', /\.code-block code\s*\{[\s\S]*background\s*:\s*none/.test(css) && /\.code-block code[\s\S]*font\s*:\s*inherit/.test(css));
 
 /* 5. Fresh DB seeds the production API blog post as the newest. */
 const { db } = require(path.join(ROOT, 'src/db.js'));
