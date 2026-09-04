@@ -9,7 +9,7 @@
  * rest, so key-less probes receive 401 (the status monitor sends a key).
  *
  *   GET    /api/v1                     → index (discovery)
- *   GET    /api/v1/health              → liveness (authenticated)
+ *   GET    /api/v1/health              → real system status (same data as /status)
  *   GET    /api/v1/me                  → account, scopes, limits, usage
  *   GET    /api/v1/usage               → durable monthly + endpoint usage analytics
  *   GET    /api/v1/listings            → directory (approved, filters & pagination)
@@ -186,9 +186,48 @@ function serviceError(res, e) {
   throw e;
 }
 
-/* ---------- liveness (authenticated) ---------- */
+/* ---------- health (authenticated) ----------
+   This is the machine-readable face of the public /status page. It is a normal
+   keyed v1 endpoint like every other one — same auth, same scopes, same rate
+   limits — but the payload is the *real* monitor state, not a hardcoded ok:true.
+   Both surfaces read the identical snapshot, so /api/v1/health and /status can
+   never disagree: same components, same live probe evidence, same uptime
+   percentages and the same open incidents. */
 router.get('/health', (req, res) => {
-  res.json({ ok: true, service: 'FirmLedger API', version: 'v1', time: new Date().toISOString() });
+  const mon = require('../lib/statusMonitor');
+  const snap = mon.snapshot();
+  const degraded = snap.status !== 'operational';
+  res.json({
+    ok: !degraded,
+    service: 'FirmLedger API',
+    version: 'v1',
+    time: new Date().toISOString(),
+    status: snap.status,
+    status_label: snap.status_label,
+    last_checked: snap.last_checked || null,
+    last_run_at: snap.last_run_at || null,
+    components: snap.components.map((c) => ({
+      name: c.name,
+      slug: c.slug,
+      status: c.status,
+      status_label: c.status_label,
+      last_note: c.last_note || '',
+      last_latency_ms: c.last_latency_ms || 0,
+      last_checked_at: c.last_checked_at || '',
+      uptime: c.uptime,
+    })),
+    uptime: snap.uptime,
+    active_incidents: snap.active_incidents.map((i) => ({
+      id: i.id,
+      title: i.title,
+      status: i.status,
+      severity: i.severity,
+      component: i.component_name || null,
+      source: i.source || 'manual',
+      created_at: i.created_at,
+    })),
+    status_page: siteUrl('/status'),
+  });
 });
 
 /* ---------- discovery ---------- */

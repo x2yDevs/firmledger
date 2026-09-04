@@ -75,7 +75,7 @@ const POSTS = [
 <thead><tr><th>Endpoint</th><th>What it does</th></tr></thead>
 <tbody>
 <tr><td><code>GET /api/v1</code></td><td>Discovery — name, version, the endpoint list and live limits.</td></tr>
-<tr><td><code>GET /api/v1/health</code></td><td>Liveness probe. Still key-authenticated, returns no business data.</td></tr>
+<tr><td><code>GET /api/v1/health</code></td><td>Real system health — the same live snapshot as our public status page.</td></tr>
 <tr><td><code>GET /api/v1/listings</code></td><td>The approved directory, with <code>q</code>, <code>type</code>, <code>category</code>, <code>country</code>, <code>city</code>, <code>region</code>, <code>sponsored</code>, <code>sort</code> and pagination.</td></tr>
 <tr><td><code>GET /api/v1/listings/:slug</code></td><td>The full company profile, with sources, technology radar and hiring link.</td></tr>
 <tr><td><code>GET /api/v1/categories</code></td><td>Every category, with its slug and a live listing count.</td></tr>
@@ -135,7 +135,7 @@ curl "https://firmledger.co.ke/api/v1/listings/acme-logistics-ltd" \
 <thead><tr><th>Method</th><th>Endpoint</th><th>What it does</th></tr></thead>
 <tbody>
 <tr><td><code>GET</code></td><td><code>/api/v1</code></td><td>Discovery — version, the endpoint list and live limits.</td></tr>
-<tr><td><code>GET</code></td><td><code>/api/v1/health</code></td><td>Liveness probe — still key-authenticated, returns no business data.</td></tr>
+<tr><td><code>GET</code></td><td><code>/api/v1/health</code></td><td>Real system health — the live status snapshot behind <a href="/status">/status</a>.</td></tr>
 <tr><td><code>GET</code></td><td><code>/api/v1/me</code> · <code>/usage</code></td><td>Your account, key scopes and durable usage analytics.</td></tr>
 <tr><td><code>GET</code></td><td><code>/api/v1/listings</code></td><td>The approved directory, filterable by <code>q</code>, <code>type</code>, <code>category</code>, <code>country</code>, <code>city</code>, <code>region</code> and sortable.</td></tr>
 <tr><td><code>GET</code></td><td><code>/api/v1/listings/:slug</code></td><td>The full company profile, with sources, technology radar and hiring link.</td></tr>
@@ -199,8 +199,17 @@ curl "https://firmledger.co.ke/api/v1/listings?category=Fintech&amp;country=Keny
   "ok": true,
   "service": "FirmLedger API",
   "version": "v1",
-  "time": "2026-09-04T09:14:02.881Z"
+  "status": "operational",
+  "status_label": "All Systems Normal",
+  "components": [
+    { "name": "API", "status": "operational", "last_note": "HTTP 200",
+      "last_latency_ms": 10, "uptime": { "24h": 100, "30d": 100 } }
+  ],
+  "uptime": { "24h": 100, "7d": 100, "30d": 100, "90d": 100 },
+  "active_incidents": [],
+  "status_page": "https://firmledger.co.ke/status"
 }</code></pre>
+<p>This is not a stub that always says yes. It is the <b>same live snapshot that renders our public <a href="/status">status page</a></b> — every monitored component with its last probe result, latency and uptime, plus any open incidents. <code>ok</code> flips to <code>false</code> the moment the platform is not fully operational, so one call is enough to drive your own dashboard or alerting.</p>
 <p>Drop the header and you get the shape every failure uses:</p>
 <pre><code>{
   "error": {

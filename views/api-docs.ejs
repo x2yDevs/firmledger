@@ -120,7 +120,7 @@
 
       <div class="form-card docs-anchor" id="ep-health">
         <h3 class="form-section"><span class="m-chip m-get">GET</span>&nbsp; <code>/api/v1/health</code> — liveness</h3>
-        <p class="muted">Liveness probe — returns a 200 and no business data. Still <b>authenticated</b>: it needs a key like everything else. Our public <a href="/status" style="color:var(--accent)">status page</a> monitors it without one — a correct <code>401 missing_key</code> is itself proof the API is up and enforcing auth.</p>
+        <p class="muted">Real system health — the same live snapshot that powers our public <a href="/status" style="color:var(--accent)">status page</a>: overall state, every monitored component with its last probe result and latency, 24h/7d/30d/90d uptime and any open incidents. <b>Authenticated</b> like every other endpoint. <code>ok</code> is <code>false</code> whenever the platform is not fully operational, so a single call is enough to drive your own dashboard or alerting.</p>
         <div class="code-block"><span class="code-label">curl</span>curl <%= SITE %>/api/v1/health -H "Authorization: Bearer fl_live_your_key"</div>
       </div>
 

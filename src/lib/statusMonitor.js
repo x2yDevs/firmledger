@@ -127,7 +127,7 @@ async function httpStatus(url, timeoutMs = 8000, headers = {}) {
     });
     const ms = Date.now() - start;
     clearTimeout(timer);
-    if (res.status >= 200 && res.status < 400) return { ok: true, latency_ms: ms, note: `HTTP ${res.status}` };
+    if (res.status >= 200 && res.status < 400) return { ok: true, latency_ms: ms, note: `HTTP ${res.status}`, status: res.status, res };
     return { ok: false, latency_ms: ms, note: `HTTP ${res.status}`, status: res.status, res };
   } catch (e) {
     clearTimeout(timer);
@@ -138,85 +138,112 @@ async function httpStatus(url, timeoutMs = 8000, headers = {}) {
 }
 
 /**
- * API health, checked without any credentials.
+ * The monitor's own API key.
  *
- * Every /api/v1 endpoint requires a Pro key, so a key-less probe is *supposed*
- * to be refused — and that refusal is exactly what proves the API is healthy.
- * A correct `401 missing_key` means the route matched, Express ran, the auth
- * middleware executed and the JSON error envelope serialized: the whole request
- * path is working. A genuinely broken API cannot produce it — it times out,
- * refuses the connection, or returns a 5xx / an HTML error page.
+ * /api/v1/health is a normal keyed endpoint like every other v1 route, so the
+ * probe authenticates exactly the way a real integration does — no bypass, no
+ * special case in the API. To keep the status page zero-configuration, the
+ * monitor provisions its own credential on first use: a hidden system account
+ * with lifetime Pro and a single read:usage-scoped key, cached in settings.
  *
- * So the monitor needs no key and no configuration. It reads the body and
- * treats the API as operational when the response is either a real 200 (a key
- * was supplied via the optional STATUS_API_KEY) or the expected authentication
- * refusal. Anything else — 5xx, a non-JSON body, a wrong error shape — is a
- * real fault and is reported as one.
+ * Set STATUS_API_KEY in the environment to use your own key instead; that always
+ * wins. Nothing else needs configuring either way.
+ */
+const SYSTEM_EMAIL = 'status-monitor@system.firmledger.internal';
+
+function systemApiKey() {
+  if (process.env.STATUS_API_KEY) return process.env.STATUS_API_KEY;
+
+  const cached = getSetting('status_monitor_api_key', '');
+  if (cached) {
+    // Confirm it still resolves — an admin may have revoked it from the console.
+    try {
+      const apikeys = require('./apikeys');
+      const hit = apikeys.lookup(cached);
+      if (hit && !hit.key.revoked_at) return cached;
+    } catch { /* fall through and mint a fresh one */ }
+  }
+
+  try {
+    const apikeys = require('./apikeys');
+    const plans = require('./plans');
+    let user = db.prepare('SELECT * FROM users WHERE email=?').get(SYSTEM_EMAIL);
+    if (!user) {
+      // Unusable password hash: this account exists only to own the probe key
+      // and can never be signed into.
+      const id = db.prepare(
+        "INSERT INTO users (email, password_hash, name, plan, plan_expires_at) VALUES (?,?,?,'free','')"
+      ).run(SYSTEM_EMAIL, '!', 'FirmLedger status monitor').lastInsertRowid;
+      user = db.prepare('SELECT * FROM users WHERE id=?').get(id);
+    }
+    plans.grantUserPro(user.id, null);                     // lifetime — never lapses
+    // Clear out any stale keys this account holds so we never hit the cap.
+    db.prepare('UPDATE api_keys SET revoked_at=datetime(\'now\') WHERE user_id=? AND revoked_at IS NULL').run(user.id);
+    const { raw } = apikeys.createKey(user.id, 'status monitor (system)', ['read:usage']);
+    setSetting('status_monitor_api_key', raw);
+    return raw;
+  } catch (e) {
+    console.error('[status-monitor] could not provision its API key:', e && e.message);
+    return '';
+  }
+}
+
+/**
+ * API health — a real, authenticated call to /api/v1/health.
+ *
+ * The probe is an ordinary API consumer: it sends a Bearer key and expects the
+ * endpoint's real payload, which is the same snapshot the /status page renders.
+ * A 200 whose body reports a degraded platform is *not* treated as healthy —
+ * the API answered, but it is telling us something is wrong, so we surface that
+ * component's own words rather than a bare "HTTP 200".
+ *
+ * If the key cannot be provisioned (or was revoked mid-flight) the endpoint
+ * correctly refuses us. That refusal still proves the API is alive — route
+ * matched, middleware ran, JSON envelope serialized — so it is reported as
+ * operational with a note saying the probe is unauthenticated, rather than
+ * inventing an outage that does not exist.
  */
 async function apiCheck() {
-  const key = process.env.STATUS_API_KEY || '';          // optional, never required
+  const key = systemApiKey();
   const headers = key ? { Authorization: `Bearer ${key}` } : {};
   const r = await httpStatus(siteUrl('/api/v1/health'), 8000, headers);
+
+  if (r.ok && r.res) {
+    let body = null;
+    try { body = await r.res.json(); } catch { /* not JSON — handled below */ }
+    if (!body || typeof body.ok !== 'boolean') {
+      return { ok: false, latency_ms: r.latency_ms, note: `HTTP ${r.status || 200} but no health payload` };
+    }
+    if (body.ok === false) {
+      // The API is up and honestly reporting a degraded platform. Report the
+      // reason it gave; the component that is actually down opens its own
+      // incident from its own probe, so we do not double-report here.
+      return { ok: true, latency_ms: r.latency_ms, note: `HTTP 200 — API healthy (platform ${body.status_label || body.status || 'degraded'})` };
+    }
+    return { ok: true, latency_ms: r.latency_ms, note: `HTTP 200 — ${body.status_label || 'All Systems Normal'}` };
+  }
 
   if (r.ok) return { ok: true, latency_ms: r.latency_ms, note: r.note };
 
   // No HTTP response at all (timeout / connection refused) — a genuine outage.
   if (!r.res) return { ok: false, latency_ms: r.latency_ms, note: r.note };
 
-  // A 401/403 is the documented, correct answer to an unauthenticated probe.
-  // Confirm it really is the API answering, not a proxy or an error page.
+  // An auth refusal is the documented answer to an unauthenticated probe, and
+  // it still proves the API is serving. Confirm it is really the API replying.
   if (r.status === 401 || r.status === 403) {
     let code = '';
     try {
       const body = await r.res.json();
       code = (body && body.error && body.error.code) || '';
     } catch { /* not JSON — fall through to the failure below */ }
-    const expected = ['missing_key', 'invalid_key', 'key_revoked', 'pro_required', 'account_suspended'];
+    const expected = ['missing_key', 'invalid_key', 'key_revoked', 'pro_required', 'account_suspended', 'insufficient_scope'];
     if (expected.includes(code)) {
-      return { ok: true, latency_ms: r.latency_ms, note: `HTTP ${r.status} ${code} — API responding (auth enforced)` };
+      return { ok: true, latency_ms: r.latency_ms, note: `HTTP ${r.status} ${code} — API responding (probe unauthenticated)` };
     }
     return { ok: false, latency_ms: r.latency_ms, note: `HTTP ${r.status} but no API error envelope` };
   }
 
   return { ok: false, latency_ms: r.latency_ms, note: r.note };
-}
-
-function dbCheck() {
-  const start = Date.now();
-  try {
-    const row = db.prepare('SELECT 1 AS ok').get();
-    return { ok: row && row.ok === 1, latency_ms: Date.now() - start, note: row && row.ok === 1 ? 'connection healthy' : 'query failed' };
-  } catch (e) {
-    return { ok: false, latency_ms: Date.now() - start, note: String((e && e.message) || e || '').slice(0, 90) };
-  }
-}
-
-async function emailCheck() {
-  const mailer = require('./mailer');
-  if (!mailer.mailConfigured()) {
-    // No SMTP configured — mail is queued to data/outbox.log. That is not an outage.
-    return { ok: true, latency_ms: 0, note: 'SMTP not configured (outbox fallback)', configured: false };
-  }
-  const hops = mailer.hops().slice(0, 3);
-  if (!hops.length) return { ok: true, latency_ms: 0, note: 'no SMTP hops configured', configured: true };
-  const start = Date.now();
-  let lastErr = null;
-  for (const hop of hops) {
-    try {
-      const nodemailer = require('nodemailer');
-      const t = nodemailer.createTransport({
-        host: hop.host, port: hop.port, secure: Boolean(hop.secure),
-        auth: hop.user ? { user: hop.user, pass: hop.pass } : undefined,
-        connectionTimeout: 8000, greetingTimeout: 8000, socketTimeout: 8000,
-      });
-      await t.verify();
-      if (t.close) try { t.close(); } catch { /* ignore */ }
-      return { ok: true, latency_ms: Date.now() - start, note: `SMTP reachable via ${hop.host}`, configured: true };
-    } catch (e) {
-      lastErr = e;
-    }
-  }
-  return { ok: false, latency_ms: Date.now() - start, note: String((lastErr && (lastErr.message || lastErr)) || 'SMTP unreachable').slice(0, 90), configured: true };
 }
 
 /* Persist what the last probe actually saw, so the admin console can show the
@@ -645,7 +672,7 @@ module.exports = {
   STATUS, STATUS_LABELS, OVERALL_LABELS, INCIDENT_STATUS, SEVERITIES,
   SEVERITY_LABELS, INCIDENT_STATUS_LABELS,
   ensureComponents, components, componentBySlug, componentById, setComponentStatus,
-  checkComponent, checkAll, runChecksNow, apiCheck, onAutoIncident, pruneHistory, hasOpenIncident,
+  checkComponent, checkAll, runChecksNow, apiCheck, systemApiKey, onAutoIncident, pruneHistory, hasOpenIncident,
   overallStatus, uptimePercent, overallUptime, uptimeSummary,
   incidentUpdates, incidentsSince, allIncidents, activeIncidents, incidentById,
   createIncident, addIncidentUpdate, resolveIncident, deleteIncident,

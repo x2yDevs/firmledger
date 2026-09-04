@@ -12,10 +12,12 @@
  *      • ?force=1 re-probes before answering
  *      • GET /status/api still serves the JSON snapshot, now with last_run_at
  *
- *   B0. The API is monitored with NO credentials
- *      • a key-less probe reads the 401 refusal as proof the API is alive
- *      • real faults (5xx, HTML error page, wrong envelope, dead port) still fail
- *      • so /status is green out of the box with nothing configured
+ *   B0. /api/v1/health is a normal keyed endpoint serving REAL status
+ *      • it stays key-protected like every other v1 route (401 without a key)
+ *      • its payload is the live monitor snapshot, identical to /status
+ *      • the monitor authenticates with a self-provisioned system key, so the
+ *        status page still needs zero configuration
+ *      • real faults (5xx, HTML, missing payload, dead port) are still caught
  *
  *   B. The monitor detects status on its own
  *      • a failing probe records the evidence on the component
@@ -138,21 +140,57 @@ const get = async (url, opts = {}) => {
   check('/status/api exposes the last probe evidence per component', 'last_note' in api.components[0]);
 
   /* ----------------------------- B0. API monitored without any key */
-  console.log('\nB0. API health needs no API key');
-  const noKeyEnv = { ...env };
-  delete noKeyEnv.STATUS_API_KEY;
-  check('no STATUS_API_KEY is set for this run', !noKeyEnv.STATUS_API_KEY);
+  console.log('\nB0. /api/v1/health is keyed and serves real status');
 
-  const apiComp = api.components.find((c) => c.slug === 'api');
-  check('the API component is operational with no key configured',
+  // It is a normal v1 endpoint: no key, no entry.
+  const anon = await get('/api/v1/health');
+  check('/api/v1/health refuses an unauthenticated caller', anon.status === 401);
+  check('/api/v1/health refuses with the standard API envelope',
+    /"code"\s*:\s*"missing_key"/.test(anon.text));
+
+  // The monitor provisions its own key, so nothing needs configuring.
+  const sysKey = inDb(`
+    const key = mon.systemApiKey();
+    const apikeys = require(${JSON.stringify(path.join(ROOT, 'src/lib/apikeys.js'))});
+    const hit = key ? apikeys.lookup(key) : null;
+    return {
+      key,
+      wellFormed: key ? apikeys.isWellFormed(key) : false,
+      scopes: hit ? apikeys.parseScopes(hit.key) : [],
+      pro: hit ? require(${JSON.stringify(path.join(ROOT, 'src/lib/plans.js'))}).hasProAccess(hit.user) : false,
+    };
+  `);
+  check('the monitor provisions its own API key with no configuration', sysKey.wellFormed);
+  check('that key is least-privilege (read:usage only)',
+    JSON.stringify(sysKey.scopes) === JSON.stringify(['read:usage']), JSON.stringify(sysKey.scopes));
+  check('the system account holds Pro so the key stays valid', sysKey.pro);
+  check('the key is stable across calls (cached, not re-minted)',
+    inDb('return { k: mon.systemApiKey() };').k === sysKey.key);
+
+  // Authenticated: the payload must be the real monitor snapshot.
+  const authed = await get('/api/v1/health', { headers: { Authorization: `Bearer ${sysKey.key}` } });
+  check('/api/v1/health answers an authenticated caller', authed.status === 200);
+  const health = JSON.parse(authed.text);
+  const live = JSON.parse((await get('/status/api')).text);
+  check('health reports real overall status, not a hardcoded ok', typeof health.status === 'string' && health.status_label);
+  check('health and /status agree on overall status', health.status === live.status);
+  check('health and /status list the same components',
+    JSON.stringify(health.components.map((c) => c.slug)) === JSON.stringify(live.components.map((c) => c.slug)));
+  check('health and /status agree on every component state',
+    JSON.stringify(health.components.map((c) => c.status)) === JSON.stringify(live.components.map((c) => c.status)));
+  check('health carries the real probe evidence',
+    health.components.every((c) => 'last_note' in c && 'last_latency_ms' in c));
+  check('health carries real uptime percentages', JSON.stringify(health.uptime) === JSON.stringify(live.uptime));
+  check('health exposes open incidents', Array.isArray(health.active_incidents));
+  check('health links back to the status page', /\/status$/.test(health.status_page || ''));
+
+  const apiComp = live.components.find((c) => c.slug === 'api');
+  check('the API component is operational with nothing configured',
     apiComp.status === 'operational', `${apiComp.status} — ${apiComp.last_note}`);
-  check('the probe explains it read the auth refusal as healthy',
-    /auth enforced/.test(apiComp.last_note), apiComp.last_note);
-  check('no auto incident was opened just because there is no key',
-    !api.active_incidents.some((i) => /API/.test(i.title)));
+  check('the API probe read the real payload', /All Systems Normal|platform /.test(apiComp.last_note), apiComp.last_note);
+  check('no auto incident was invented for a working API',
+    !live.active_incidents.some((i) => /API/.test(i.title)));
 
-  // The probe must still catch genuine faults. Exercise the real verdict
-  // function against servers that fail in each realistic way.
   // The probe must still catch genuine faults. Exercise the real verdict
   // function against servers that fail in each realistic way, in a separate
   // process so nothing here touches the running server.
@@ -160,13 +198,16 @@ const get = async (url, opts = {}) => {
 const http = require('http');
 process.env.FIRMLEDGER_DATA_DIR = ${JSON.stringify(dataDir)};
 const cases = [
-  ['ok_401',        401, 'application/json', JSON.stringify({ error: { code: 'missing_key' } }), true],
-  ['ok_200',        200, 'application/json', JSON.stringify({ ok: true }),                       true],
-  ['ok_403_pro',    403, 'application/json', JSON.stringify({ error: { code: 'pro_required' } }), true],
-  ['fault_500',     500, 'application/json', JSON.stringify({ error: 'boom' }),                  false],
-  ['fault_502',     502, 'text/plain',       'bad gateway',                                      false],
-  ['fault_html',    401, 'text/html',        '<html>401</html>',                                 false],
-  ['fault_envelope',401, 'application/json', JSON.stringify({ msg: 'nope' }),                    false],
+  ['ok_200_real',    200, 'application/json', JSON.stringify({ ok: true, status: 'operational', status_label: 'All Systems Normal' }), true],
+  ['ok_200_degraded',200, 'application/json', JSON.stringify({ ok: false, status: 'degraded', status_label: 'Degraded Performance' }), true],
+  ['ok_401_unauth',  401, 'application/json', JSON.stringify({ error: { code: 'missing_key' } }), true],
+  ['ok_403_scope',   403, 'application/json', JSON.stringify({ error: { code: 'insufficient_scope' } }), true],
+  ['fault_200_nopayload', 200, 'application/json', JSON.stringify({ hello: 'world' }), false],
+  ['fault_200_html', 200, 'text/html',        '<html>hi</html>',                       false],
+  ['fault_500',      500, 'application/json', JSON.stringify({ error: 'boom' }),       false],
+  ['fault_502',      502, 'text/plain',       'bad gateway',                           false],
+  ['fault_401_html', 401, 'text/html',        '<html>401</html>',                      false],
+  ['fault_401_envelope', 401, 'application/json', JSON.stringify({ msg: 'nope' }),     false],
 ];
 (async () => {
   const out = [];

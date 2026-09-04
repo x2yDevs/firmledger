@@ -60,24 +60,43 @@ webhooks with HMAC and idempotency, and the exact error codes and limits.
 * `seedBlog()` is now **idempotent per slug**, so new posts reach existing
   deployments without a re-seed and without overwriting editorial edits.
 
-### 4. The status page needs no API key
+### 4. `/api/v1/health` is a normal keyed endpoint serving the REAL status
 
-`/status` is public and self-sufficient — it authenticates nothing and requires
-no configuration. Every /api/v1 endpoint needs a Pro key, so the monitor probes
-`/api/v1/health` **without one** and reads the correct `401 missing_key` JSON
-refusal as proof the API is healthy: the route matched, Express ran, the auth
-middleware executed and the error envelope serialized. A broken API cannot
-produce that.
+`/health` is no longer a stub returning a hardcoded `{ ok: true }`. It is still
+an ordinary v1 endpoint — same key auth, same scopes, same rate limits, `401`
+without a key — but the payload is now the **live monitor snapshot**, the exact
+data `/status` renders:
+
+```
+GET /api/v1/health   (Authorization: Bearer fl_live_…)
+{
+  "ok": true, "status": "operational", "status_label": "All Systems Normal",
+  "components": [ { "name": "API", "status": "operational",
+                    "last_note": "HTTP 200", "last_latency_ms": 10,
+                    "uptime": { "24h": 100, ... } } ],
+  "uptime": { "24h": 100, "7d": 100, "30d": 100, "90d": 100 },
+  "active_incidents": [], "status_page": "https://firmledger.co.ke/status"
+}
+```
+
+`ok` is `false` whenever the platform is not fully operational, so one call
+drives an external dashboard. Both surfaces read the same snapshot, so the API
+and the status page can never disagree.
+
+**The monitor authenticates like any other consumer.** No bypass and no special
+case in the API: it sends a Bearer key and reads the real payload. To keep the
+status page zero-configuration it provisions its own credential on first run —
+a hidden system account with lifetime Pro and a single `read:usage` key, cached
+in settings and re-minted automatically if an admin revokes it. `STATUS_API_KEY`
+still overrides it and remains optional.
 
 | Probe result | Verdict |
 | --- | --- |
-| `401 missing_key` / `403 pro_required` (correct JSON envelope) | **Operational** — auth enforced |
-| `200` (only when the optional `STATUS_API_KEY` is set) | **Operational** |
+| `200` with a real health payload | **Operational** (reports the platform state it read) |
+| `401` / `403` with a correct API error envelope | **Operational** — API is serving, probe just unauthenticated |
+| `200` with no health payload or an HTML body | **Fault** → auto incident |
 | `5xx`, `502`, timeout, connection refused | **Fault** → auto incident |
-| `401` with an HTML body or a foreign JSON shape (proxy/error page) | **Fault** → auto incident |
-
-`STATUS_API_KEY` is now genuinely optional and blank by default. Nothing about
-uptime reporting depends on holding a key.
+| `401` with an HTML body or foreign JSON (proxy/error page) | **Fault** → auto incident |
 
 ### 5. Tests
 
