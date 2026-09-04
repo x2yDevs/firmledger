@@ -2038,6 +2038,8 @@ function incidentsPage(req, res, extra = {}) {
     section: 'incidents',
     incidents,
     components: mon.components(),
+    snap: mon.snapshot(),
+    overallLabel: mon.OVERALL_LABELS[mon.overallStatus()],
     severityLabels: mon.SEVERITY_LABELS,
     incidentStatusLabels: mon.INCIDENT_STATUS_LABELS,
     errors: extra.errors || [],
@@ -2077,6 +2079,26 @@ function incidentEmail(incident, update, params = {}) {
 }
 
 router.get('/admin3119Musa/incidents', incidentsPage);
+
+/* Live fragment for the auto-refreshing status region. The page polls this
+   every 20 seconds and swaps the HTML in place; `?force=1` (the "Refresh now"
+   button) runs the probes first so the admin sees a genuinely fresh reading. */
+router.get('/admin3119Musa/incidents/live', async (req, res) => {
+  if (req.query.force === '1') {
+    try { await mon.runChecksNow(); } catch { /* fall back to the last sweep */ }
+  }
+  res.set('Cache-Control', 'no-store');
+  res.render('admin/status-live', {
+    snap: mon.snapshot(),
+    overallLabel: mon.OVERALL_LABELS[mon.overallStatus()],
+    incidents: mon.allIncidents(),
+    incidentStatusLabels: mon.INCIDENT_STATUS_LABELS,
+    severityLabels: mon.SEVERITY_LABELS,
+  }, (err, html) => {
+    if (err) return res.status(500).type('html').send('<div class="alert alert-err">Could not refresh the status region.</div>');
+    res.type('html').send(html);
+  });
+});
 
 /* Toggle the optional weekly status report email to subscribers. */
 router.post('/admin3119Musa/incidents/config/weekly', (req, res) => {

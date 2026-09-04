@@ -66,76 +66,23 @@
       </form>
     </div>
 
-    <div class="side-card">
-      <h3>Recent incidents</h3>
-      <% if (incidents.length) { %>
-      <div class="scroll-panel">
-      <div class="incident-list">
-        <% incidents.forEach(function (inc) { %>
-        <article class="incident-card">
-          <div class="section-head" style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
-            <div>
-              <div class="incident-title"><%= inc.title %></div>
-              <div class="incident-meta">
-                <span class="pill pill-<%= inc.status === 'resolved' ? 'approved' : (inc.status === 'monitoring' ? 'pending' : 'rejected') %>"><%= inc.status %></span>
-                <span class="pill pill-<%= inc.severity === 'critical' ? 'rejected' : inc.severity === 'major' ? 'pending' : 'approved' %>"><%= inc.severity %></span>
-                <% if (inc.component_name) { %><span class="muted" style="font-size:12px"><%= inc.component_name %></span><% } %>
-                <span class="muted" style="font-size:12px">opened <%= (inc.created_at || '').slice(0, 16).replace('T', ' ') %></span>
-              </div>
-            </div>
-            <div class="incident-actions">
-            <% if (inc.status !== 'resolved') { %>
-            <form method="post" action="/admin3119Musa/incidents/<%= inc.id %>/resolve" class="inline" onsubmit="return confirm('Resolve “<%= inc.title.replace(/\"/g, '') %>”?');">
-              <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-              <button class="btn btn-primary btn-xs" type="submit">Resolve</button>
-            </form>
-            <% } %>
-            <form method="post" action="/admin3119Musa/incidents/<%= inc.id %>/delete" class="inline" onsubmit="return confirm('Delete “<%= inc.title.replace(/\"/g, '') %>” permanently? The incident and its whole timeline are removed from the public status page and from history. This cannot be undone.');">
-              <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-              <button class="btn btn-danger btn-xs" type="submit">Delete</button>
-            </form>
-            </div>
-          </div>
-          <% if (inc.description) { %><p class="muted" style="font-size:14px;margin-bottom:12px"><%= inc.description %></p><% } %>
-
-          <div class="incident-updates">
-            <% inc.updates.forEach(function (u) { %>
-            <div class="incident-update">
-              <span class="incident-update-dot" aria-hidden="true"></span>
-              <div>
-                <div class="incident-update-status"><%= u.status %> <span class="muted" style="font-size:11px;font-weight:400">· <%= (u.created_at || '').slice(0, 16).replace('T', ' ') %></span></div>
-                <div class="incident-update-msg"><%= u.message %></div>
-              </div>
-            </div>
-            <% }); %>
-          </div>
-
-          <form method="post" action="/admin3119Musa/incidents/<%= inc.id %>/update" class="form incident-update-form">
-            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-            <div class="grid-2" style="align-items:end">
-              <label><span>New status</span>
-                <select name="status" aria-label="Update status">
-                  <% Object.keys(incidentStatusLabels).forEach(function (s) { %>
-                  <option value="<%= s %>" <%= inc.status === s ? 'selected' : '' %>><%= incidentStatusLabels[s] %></option>
-                  <% }); %>
-                </select>
-              </label>
-              <label><span>Public update</span>
-                <textarea name="message" rows="2" placeholder="e.g. We've identified the cause and are deploying a fix…" required></textarea>
-              </label>
-            </div>
-            <div class="form-actions" style="margin-top:6px">
-              <button class="btn btn-primary btn-sm" type="submit">Post update</button>
-            </div>
-          </form>
-        </article>
-        <% }); %>
-      </div>
-      </div>
-      <% } else { %>
-      <p class="muted">No incidents yet — open one above. The public page will say “All Systems Normal”.</p>
-      <% } %>
+    <!-- Live, auto-refreshing status region ---------------------------------
+         Re-rendered from the server every 20 seconds (and on demand with the
+         Refresh now button, in case polling is blocked). Anything the monitor
+         detects — a degraded component, an auto-opened incident — lands here
+         without a reload, and can be managed from the same cards. -->
+    <div class="st-live-bar">
+      <span class="st-live-note">
+        <span class="st-live-dot" aria-hidden="true"></span>
+        <span data-status-livetext>Auto-refreshing every 20 seconds</span>
+      </span>
+      <button type="button" class="btn btn-ghost btn-sm" data-status-refresh>Refresh now</button>
     </div>
+
+    <div id="admin-status-live" data-status-live data-status-url="/admin3119Musa/incidents/live" data-status-interval="20">
+<%- include('./status-live') %>
+    </div>
+
   </div>
 </section>
 

@@ -56,16 +56,23 @@ const css = fs.readFileSync(path.join(ROOT, 'public/css/app.css'), 'utf8');
 check('CSS constrains the playground response height', /\.playground-response\s*\{[\s\S]*max-height/.test(css) && /\.playground-response[\s\S]*overflow-y\s*:\s*auto/.test(css));
 check('CSS keeps the response body highlighted (no inline-code chrome on .code-block code)', /\.code-block code\s*\{[\s\S]*background\s*:\s*none/.test(css) && /\.code-block code[\s\S]*font\s*:\s*inherit/.test(css));
 
-/* 5. Fresh DB seeds the production API blog post as the newest. */
+/* 5. A fresh DB seeds both API posts, with the newest one leading /blog.
+      The hands-on tutorial is now the lead post; the production guide stays
+      published behind it. */
 const { db } = require(path.join(ROOT, 'src/db.js'));
 const rows = db.prepare("SELECT slug, status FROM blog_posts WHERE status='published' ORDER BY published_at DESC").all();
 const apiPost = rows.find((r) => r.slug === 'firmledger-api-production-guide');
 check('New API blog post is seeded', Boolean(apiPost));
-check('New API blog post is the newest', rows.length > 0 && rows[0].slug === 'firmledger-api-production-guide');
+const tutorial = rows.find((r) => r.slug === 'firmledger-api-tutorial-first-integration');
+check('API tutorial blog post is seeded', Boolean(tutorial));
+check('The newest post is the API tutorial', rows.length > 0 && rows[0].slug === 'firmledger-api-tutorial-first-integration');
 
 /* 6. The blog seed source explains the key requirement for its readers. */
 const blogseed = fs.readFileSync(path.join(ROOT, 'src/lib/blogseed.js'), 'utf8');
 check('Blog seed includes an API how-to post', /firmledger-api-production-guide/.test(blogseed));
+check('Blog seed includes the hands-on API tutorial', /firmledger-api-tutorial-first-integration/.test(blogseed));
+check('The tutorial states keys are a Pro feature', /keys are a (?:FirmLedger )?Pro feature/i.test(blogseed));
+check('The blog seeder backfills new posts without clobbering edits', /if \(exists\.get\(p\.slug\)\) continue;/.test(blogseed));
 check('Blog post explains the API-key requirement', /every endpoint requires an API key/i.test(blogseed) || /every endpoint needs a key/i.test(blogseed) || /requires an API key/i.test(blogseed));
 check('Blog post explains how to use the API', /Step 1 — get a Pro key/i.test(blogseed) || /Step 2 — authenticate/i.test(blogseed) || /How to use the FirmLedger API/i.test(blogseed));
 

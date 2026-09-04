@@ -721,6 +721,15 @@ CREATE TABLE IF NOT EXISTS status_subscribers (
 );
 `);
 
+/* Status auto-detection columns. Mirrors migrations/2026-09-04-status-autodetect.sql:
+   the last probe's evidence on each component, and where an incident came from
+   ('manual' from the console, 'auto' opened by the monitor itself). */
+try { db.exec("ALTER TABLE status_components ADD COLUMN last_note TEXT NOT NULL DEFAULT ''"); } catch { /* column exists */ }
+try { db.exec('ALTER TABLE status_components ADD COLUMN last_latency_ms INTEGER NOT NULL DEFAULT 0'); } catch { /* column exists */ }
+try { db.exec("ALTER TABLE status_components ADD COLUMN last_checked_at TEXT NOT NULL DEFAULT ''"); } catch { /* column exists */ }
+try { db.exec("ALTER TABLE incidents ADD COLUMN source TEXT NOT NULL DEFAULT 'manual'"); } catch { /* column exists */ }
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_incidents_source ON incidents(source, status)'); } catch { /* ignore */ }
+
 /* Status monitor keeps history tidy — anything older than 90 days is noise. */
 try { db.exec('DELETE FROM component_status_history WHERE checked_at < datetime(\'now\', \'-90 days\')'); } catch { /* ignore */ }
 

@@ -19,7 +19,7 @@ const session = require('./src/lib/session');
 const util = require('./src/lib/util');
 
 /* Bumped on every deploy that changes public/ assets — defeats the 7-day static cache. */
-const ASSET_V = '48';
+const ASSET_V = '49';
 
 const app = express();
 app.set('trust proxy', true);
@@ -190,7 +190,43 @@ app.listen(PORT, '0.0.0.0', () => {
   /* Start the public status monitor once we're listening, so the first
      self-probe against our own origin succeeds. */
   try {
-    require('./src/lib/statusMonitor').startMonitoring();
+    const monitor = require('./src/lib/statusMonitor');
+    /* Anything the monitor detects on its own becomes a real incident: it is
+       announced in the admin inbox (where it can be updated, resolved or
+       deleted) and emailed to status subscribers exactly like a hand-written
+       one. The hook lives here so statusMonitor stays free of the mail stack. */
+    monitor.onAutoIncident((ev) => {
+      const opened = ev.action === 'opened';
+      try {
+        require('./src/lib/notify').notifyAdmin({
+          kind: 'status',
+          title: opened ? `Auto-detected: ${ev.title}` : `Auto-resolved: ${ev.title}`,
+          body: opened
+            ? `The status monitor opened this incident automatically (${ev.severity}). Manage it in Admin → Status.`
+            : `${ev.component} is responding normally again — the monitor closed its own incident.`,
+          url: '/admin3119Musa/incidents',
+        });
+      } catch (e) { console.error('[status-monitor] notify failed:', e && e.message); }
+      monitor.notifySubscribers(
+        opened ? `FirmLedger status: ${ev.title}` : `FirmLedger status: ${ev.title} resolved`,
+        {
+          kicker: 'Status update',
+          title: opened ? ev.title : `Resolved: ${ev.title}`,
+          preheader: opened ? 'A FirmLedger component is degraded.' : 'FirmLedger is back to normal.',
+          alert: opened
+            ? `Our monitoring detected a problem with <b>${ev.component}</b>.`
+            : `<b>${ev.component}</b> is operating normally again.`,
+          alertTone: opened ? 'warn' : 'ok',
+          paragraphs: [opened
+            ? 'This incident was detected automatically and is being investigated. We will post updates as we learn more.'
+            : 'The automated checks are green again and the incident is closed.'],
+          cta: { label: 'View status', url: util.siteUrl('/status') },
+          note: 'You received this because you subscribed to FirmLedger status updates. Unsubscribe any time from the status page.',
+        }
+      ).catch(() => {});
+      console.log(`[status-monitor] incident ${ev.action} automatically — ${ev.title}`);
+    });
+    monitor.startMonitoring();
   } catch (e) {
     console.error('[status-monitor] failed to start:', e && e.message);
   }

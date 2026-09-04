@@ -175,6 +175,62 @@ async function emailCheck() {
   return { ok: false, latency_ms: Date.now() - start, note: String((lastErr && (lastErr.message || lastErr)) || 'SMTP unreachable').slice(0, 90), configured: true };
 }
 
+/* Persist what the last probe actually saw, so the admin console can show the
+   evidence behind a detected state ("HTTP 503", "timed out", 143 ms) and not
+   just a coloured pill. */
+function recordProbe(id, result) {
+  try {
+    db.prepare("UPDATE status_components SET last_note=?, last_latency_ms=?, last_checked_at=datetime('now') WHERE id=?")
+      .run(String((result && result.note) || '').slice(0, 200), Math.max(0, Math.round((result && result.latency_ms) || 0)), id);
+  } catch { /* pre-migration database — evidence columns are optional */ }
+}
+
+/**
+ * Auto-detected incidents.
+ *
+ * When a probe puts a component into a non-operational state and no incident is
+ * already open against it, the monitor opens one itself with `source='auto'`.
+ * It is a first-class incident: it shows on /status, emails subscribers through
+ * the caller, and an admin can update, resolve or permanently delete it from
+ * Admin → Status exactly like a hand-written one. When the probe goes green
+ * again, the monitor closes its own incident (never a manual one) and heals the
+ * component. Returns a description of what changed, or null.
+ */
+function autoIncidentForProbe(comp, status, note) {
+  const open = db.prepare(
+    "SELECT * FROM incidents WHERE component_id=? AND status!='resolved' ORDER BY id DESC LIMIT 1"
+  ).get(comp.id);
+
+  if (status !== STATUS.operational) {
+    if (open) return null;                     // already tracked (manual or auto)
+    const severity = status === STATUS.major_outage ? 'critical'
+      : status === STATUS.partial_outage ? 'major' : 'minor';
+    const title = `${comp.name} — ${STATUS_LABELS[status]}`;
+    const description = `Detected automatically by the FirmLedger status monitor. Last probe: ${note || 'check failed'}.`;
+    const info = db.prepare(
+      "INSERT INTO incidents (title, description, status, severity, component_id, source) VALUES (?,?,?,?,?,'auto')"
+    ).run(title, description, 'investigating', severity, comp.id);
+    db.prepare('INSERT INTO incident_updates (incident_id, status, message) VALUES (?,?,?)')
+      .run(info.lastInsertRowid, 'investigating', description);
+    return { action: 'opened', id: info.lastInsertRowid, title, severity, component: comp.name };
+  }
+
+  // Green probe: only the monitor's own incidents are auto-resolved.
+  if (open && open.source === 'auto') {
+    addIncidentUpdate(open.id, {
+      status: 'resolved',
+      message: `Automatically resolved — ${comp.name} is responding normally again (${note || 'probe healthy'}).`,
+    });
+    return { action: 'resolved', id: open.id, title: open.title, component: comp.name };
+  }
+  return null;
+}
+
+/* Hook the app can register so auto-detected incidents reach the admin inbox
+   and status subscribers without statusMonitor depending on the mail stack. */
+let autoIncidentHook = null;
+function onAutoIncident(fn) { autoIncidentHook = typeof fn === 'function' ? fn : null; }
+
 /* Check a single component and persist its outcome. */
 async function checkComponent(comp) {
   let result;
@@ -193,18 +249,31 @@ async function checkComponent(comp) {
     case 'email': result = await emailCheck(); break;
     default: result = { ok: true, latency_ms: 0, note: 'no check defined' }; break;
   }
+  recordProbe(comp.id, result);
+
   // Respect an open incident even on a green probe.
   if (hasOpenIncident(comp.id)) {
     if (result.ok) db.prepare('INSERT INTO component_status_history (component_id, status, checked_at) VALUES (?,?,datetime(\'now\'))')
       .run(comp.id, comp.status);
-    return { component: comp, ok: result.ok, note: result.note, latency_ms: result.latency_ms, status: comp.status };
+    // A green probe against an auto-opened incident closes it and heals the component.
+    const healed = result.ok ? autoIncidentForProbe(comp, STATUS.operational, result.note) : null;
+    if (healed && autoIncidentHook) { try { autoIncidentHook(healed); } catch { /* never break the loop */ } }
+    const after = componentById(comp.id) || comp;
+    return { component: after, ok: result.ok, note: result.note, latency_ms: result.latency_ms, status: after.status, auto: healed };
   }
   const nextStatus = decideProbeStatus(comp.id, result.ok);
   const updated = setComponentStatus(comp.id, nextStatus, { viaProbe: true });
-  return { component: updated, ok: result.ok, note: result.note, latency_ms: result.latency_ms, status: updated.status };
+  const auto = autoIncidentForProbe(updated, updated.status, result.note);
+  if (auto && autoIncidentHook) { try { autoIncidentHook(auto); } catch { /* never break the loop */ } }
+  return { component: componentById(comp.id) || updated, ok: result.ok, note: result.note, latency_ms: result.latency_ms, status: updated.status, auto };
 }
 
-/* Run every component check; returns a fresh snapshot. */
+/* Run every component check; returns the probe results. `lastRunAt` lets the
+   admin console and the public page tell the visitor when the monitor last
+   actually ran, independent of when a state last changed. */
+let lastRunAt = '';
+let running = null;
+
 async function checkAll() {
   ensureComponents();
   const comps = components();
@@ -214,7 +283,17 @@ async function checkAll() {
     catch (e) { results.push({ component: c, ok: false, note: String((e && e.message) || e || '').slice(0, 90), latency_ms: 0 }); }
   }
   pruneHistory();
+  lastRunAt = new Date().toISOString();
   return results;
+}
+
+/* Coalesced manual run — used by the "Refresh now" buttons on the public status
+   page and in the admin console. Concurrent callers share one in-flight sweep so
+   a jammed refresh button cannot stampede the probes. */
+function runChecksNow() {
+  if (running) return running;
+  running = checkAll().finally(() => { running = null; });
+  return running;
 }
 
 /* Keep only the last 90 days of history. */
@@ -443,6 +522,8 @@ function snapshot() {
     id: c.id, name: c.name, slug: c.slug, description: c.description,
     status: c.status, status_label: STATUS_LABELS[c.status] || c.status,
     display_order: c.display_order, updated_at: c.updated_at,
+    last_note: c.last_note || '', last_latency_ms: c.last_latency_ms || 0,
+    last_checked_at: c.last_checked_at || '',
     uptime: uptimeSummary(c.id),
   }));
   const overall = overallStatus();
@@ -465,6 +546,7 @@ function snapshot() {
       '24h': overallUptime(1), '7d': overallUptime(7), '30d': overallUptime(30), '90d': overallUptime(90),
     },
     total_subscribers: subscriberCount(),
+    last_run_at: lastRunAt,
     monitor: {
       interval_sec: Math.max(15, parseInt(process.env.STATUS_UPDATE_INTERVAL || '60', 10) || 60),
       env_from: process.env.STATUS_EMAIL_FROM || '',
@@ -527,7 +609,7 @@ module.exports = {
   STATUS, STATUS_LABELS, OVERALL_LABELS, INCIDENT_STATUS, SEVERITIES,
   SEVERITY_LABELS, INCIDENT_STATUS_LABELS,
   ensureComponents, components, componentBySlug, componentById, setComponentStatus,
-  checkComponent, checkAll, pruneHistory, hasOpenIncident,
+  checkComponent, checkAll, runChecksNow, onAutoIncident, pruneHistory, hasOpenIncident,
   overallStatus, uptimePercent, overallUptime, uptimeSummary,
   incidentUpdates, incidentsSince, allIncidents, activeIncidents, incidentById,
   createIncident, addIncidentUpdate, resolveIncident, deleteIncident,

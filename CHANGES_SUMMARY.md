@@ -1,5 +1,78 @@
 # FirmLedger — change summary
 
+## 2026-09-04 — Live status auto-refresh, auto-detected incidents, API tutorial
+
+### 1. Status auto-refresh (public + admin)
+
+The status area now updates itself. Both pages render their live region
+server-side (so nothing breaks with JavaScript off) and then swap in a freshly
+rendered fragment on an interval.
+
+| Piece | Where |
+| --- | --- |
+| Public live fragment | `GET /status/live` — `views/status/live.ejs` |
+| Admin live fragment | `GET /admin3119Musa/incidents/live` — `views/admin/status-live.ejs` |
+| Poller + manual button | `public/js/main.js` (`[data-status-live]`, `[data-status-refresh]`) |
+| Bar styling | `.st-live-bar` in `public/css/app.css` |
+
+* **Public `/status`** refreshes every **30s**; **Admin → Status** every **20s**.
+* **`Refresh now` button on both pages** — the fallback if polling is blocked.
+  It calls the fragment with `?force=1`, which re-runs the probes first, so the
+  reading is genuinely fresh rather than the last cached sweep.
+* Polling pauses on a hidden tab and refreshes once on return. Failures degrade
+  to "Auto-refresh unavailable — use Refresh now" instead of silently stalling.
+* `mon.runChecksNow()` coalesces concurrent manual refreshes into one sweep, so
+  a jammed button cannot stampede the probes.
+
+### 2. Detected status is always shown, and always manageable
+
+The monitor now opens incidents by itself and records what it saw.
+
+* **Probe evidence persisted** — `status_components.last_note`,
+  `last_latency_ms`, `last_checked_at`. Admin → Status shows the probe's own
+  words ("HTTP 503", "SMTP unreachable", "timed out") with latency and check
+  time, next to state and 24h uptime.
+* **Auto incidents** — a failing probe opens a real incident with
+  `incidents.source = 'auto'`, severity derived from the state. It appears on
+  public `/status`, emails subscribers and lands in the admin inbox.
+* **Self-healing** — a green probe closes the monitor's *own* incident and heals
+  the component. A manual incident is never touched by the monitor.
+* **Full admin control** — auto incidents are tagged `auto` in the console and
+  carry the same Resolve / Post update / **Delete** controls. Deleting removes
+  the row and its whole timeline from `/status`, from history and from the
+  console, healing the component if nothing else holds it down.
+* Migration: `migrations/2026-09-04-status-autodetect.sql`, mirrored in `src/db.js`.
+
+### 3. New blog post — "Build your first FirmLedger integration"
+
+A real, hands-on API tutorial at
+`/blog/firmledger-api-tutorial-first-integration`, written against the actual
+`/api/v1` code: keys and scopes, discovery, directory search with every real
+filter and sort, sparse fieldsets, the domain check, owner CRUD, CSV export,
+webhooks with HMAC and idempotency, and the exact error codes and limits.
+
+* **Every code block is `<pre><code>`**, which `.blog-body pre` renders as a
+  contained, horizontally scrollable box (`max-width:100%`, `box-sizing:border-box`)
+  — long curl and JSON lines can never widen the 780px prose column on any screen.
+* **It states plainly that a key is required for every endpoint, and that keys
+  are a FirmLedger Pro feature**, linking to `/pricing`, `/dashboard/api`,
+  the playground and `/api/docs`.
+* `seedBlog()` is now **idempotent per slug**, so new posts reach existing
+  deployments without a re-seed and without overwriting editorial edits.
+
+### 4. Tests
+
+```
+npm test              # everything
+npm run test:status   # status auto-refresh, auto-detection, the new post
+```
+
+`tests/status-live.test.js` (50 checks) boots the real server and asserts the
+live regions, the fragments and their no-store headers, the forced re-probe,
+auto incident open/close, manual incidents left alone, the admin fragment's
+manage + delete controls, a real delete through the admin route, and the blog
+post's layout, Pro/key messaging and contained code blocks.
+
 ## 2026-09-03 — Google Indexing API, featured-records marquee, permanent incident delete
 
 ### 1. Google Indexing API (`src/lib/googleIndexing.js`, new)

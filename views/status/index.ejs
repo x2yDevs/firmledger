@@ -13,59 +13,20 @@
     <% if (ok) { %><div class="alert alert-ok"><%= ok %></div><% } %>
     <% if (err) { %><div class="alert alert-err"><%= err %></div><% } %>
 
-    <!-- Overall status hero -->
-    <div class="st-hero rv st-<%= snap.status %>" role="status" aria-live="polite">
-      <div class="st-hero-dot" aria-hidden="true"></div>
-      <div>
-        <h2 class="st-hero-title"><%= labels[snap.status] %></h2>
-        <p class="st-hero-sub">
-          <% if (snap.active_incidents.length) { %>
-            <b><%= snap.active_incidents.length %> active incident<%= snap.active_incidents.length === 1 ? '' : 's' %></b> — we're on it.
-          <% } else if (snap.status === 'operational') { %>
-            All monitored systems are up and responding normally.
-          <% } else { %>
-            Some systems are experiencing issues. We're working to restore normal service.
-          <% } %>
-        </p>
-      </div>
-      <div class="st-hero-meta">
-        <span class="st-meta-label">Last checked</span>
-        <span class="st-meta-val"><%= (snap.last_checked || snap.timestamp || '').slice(0, 16).replace('T', ' ') %> UTC</span>
-      </div>
+    <!-- Live area — replaced in place by the auto-refresher every 30s.
+         Everything inside status/live.ejs is rendered from one snapshot, so a
+         refresh swaps the hero, uptime, components and incident history
+         atomically and never leaves the page half-updated. -->
+    <div class="st-live-bar rv">
+      <span class="st-live-note">
+        <span class="st-live-dot" aria-hidden="true"></span>
+        <span data-status-livetext>Auto-refreshing every 30 seconds</span>
+      </span>
+      <button type="button" class="btn btn-ghost btn-sm" data-status-refresh>Refresh now</button>
     </div>
 
-    <!-- Uptime summary -->
-    <div class="st-uptime rv" style="--d:60ms">
-      <span class="st-up-label">Uptime</span>
-      <div class="st-up-cell"><span class="st-up-n"><%= snap.uptime['24h'] %>%</span><span class="st-up-l">24h</span></div>
-      <div class="st-up-cell"><span class="st-up-n"><%= snap.uptime['7d'] %>%</span><span class="st-up-l">7d</span></div>
-      <div class="st-up-cell"><span class="st-up-n"><%= snap.uptime['30d'] %>%</span><span class="st-up-l">30d</span></div>
-      <div class="st-up-cell"><span class="st-up-n"><%= snap.uptime['90d'] %>%</span><span class="st-up-l">90d</span></div>
-    </div>
-
-    <!-- Components -->
-    <div class="st-components rv" style="--d:120ms">
-      <h3 class="h-section" style="margin-bottom:14px">Components</h3>
-      <% snap.components.forEach(function (c) { %>
-      <div class="st-component">
-        <div class="st-cmp-name">
-          <span class="st-dot st-dot-<%= c.status %>" aria-hidden="true"></span>
-          <div>
-            <div class="st-cmp-title"><%= c.name %></div>
-            <div class="st-cmp-desc"><%= c.description %></div>
-          </div>
-        </div>
-        <div class="st-cmp-status">
-          <span class="st-pill st-pill-<%= c.status %>"><%= c.status_label %></span>
-          <div class="st-cmp-uptime">
-            <span class="st-cmp-up"><i class="st-bar st-bar-<%= c.uptime['24h'] >= 99 ? 'ok' : 'warn' %>" style="width:<%= c.uptime['24h'] %>%"></i><%= c.uptime['24h'] %>%</span>
-            <span class="st-cmp-up"><i class="st-bar st-bar-<%= c.uptime['7d'] >= 99 ? 'ok' : 'warn' %>" style="width:<%= c.uptime['7d'] %>%"></i><%= c.uptime['7d'] %>%</span>
-            <span class="st-cmp-up"><i class="st-bar st-bar-<%= c.uptime['30d'] >= 99 ? 'ok' : 'warn' %>" style="width:<%= c.uptime['30d'] %>%"></i><%= c.uptime['30d'] %>%</span>
-            <span class="st-cmp-up"><i class="st-bar st-bar-<%= c.uptime['90d'] >= 99 ? 'ok' : 'warn' %>" style="width:<%= c.uptime['90d'] %>%"></i><%= c.uptime['90d'] %>%</span>
-          </div>
-        </div>
-      </div>
-      <% }); %>
+    <div id="st-live" data-status-live data-status-interval="30">
+<%- include('./live') %>
     </div>
 
     <!-- Subscribe -->
@@ -80,47 +41,6 @@
         <button class="btn btn-primary" type="submit">Subscribe</button>
       </form>
     </div>
-
-    <% if (snap.incidents_30d.length) { %>
-    <!-- Incident history -->
-    <div class="st-incidents rv" style="--d:240ms">
-      <h3 class="h-section" style="margin-bottom:6px">Incident history</h3>
-      <p class="muted" style="margin:0 0 18px">The last 30 days of incidents and their resolution timelines.</p>
-      <% snap.incidents_30d.forEach(function (inc) { %>
-      <article class="st-incident">
-        <div class="st-inc-head">
-          <div>
-            <h4 class="st-inc-title"><%= inc.title %></h4>
-            <div class="st-inc-meta">
-              <span class="st-pill st-pill-sev-<%= inc.severity %>"><%= inc.severity %></span>
-              <% if (inc.component_name) { %><span class="st-inc-cmp"><%= inc.component_name %></span><% } %>
-              <span class="st-inc-date"><%= (inc.created_at || '').slice(0, 10) %></span>
-            </div>
-          </div>
-          <span class="st-pill st-pill-<%= inc.status === 'resolved' ? 'operational' : (inc.status === 'monitoring' ? 'degraded' : 'partial_outage') %>"><%= inc.status %></span>
-        </div>
-        <% if (inc.description) { %><p class="st-inc-desc"><%= inc.description %></p><% } %>
-        <div class="st-timeline">
-          <% inc.updates.forEach(function (u) { %>
-          <div class="st-tl-row">
-            <span class="st-tl-dot st-tl-dot-<%= u.status === 'resolved' ? 'ok' : (u.status === 'monitoring' ? 'warn' : 'err') %>" aria-hidden="true"></span>
-            <div>
-              <div class="st-tl-status"><%= u.status %></div>
-              <div class="st-tl-msg"><%= u.message %></div>
-            </div>
-            <span class="st-tl-time"><%= (u.created_at || '').slice(0, 16).replace('T', ' ') %></span>
-          </div>
-          <% }); %>
-        </div>
-      </article>
-      <% }); %>
-    </div>
-    <% } else { %>
-    <div class="st-noincidents rv" style="--d:240ms">
-      <div class="st-inc-title" style="margin-bottom:6px">No incidents in the last 30 days</div>
-      <p class="muted" style="margin:0">FirmLedger has been running smoothly. We'll post here the moment anything changes.</p>
-    </div>
-    <% } %>
 
     <!-- What this page monitors -->
     <div class="st-subscribe rv" style="--d:300ms">

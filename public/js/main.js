@@ -343,3 +343,76 @@
     });
   });
 })();
+
+// ---- Live status auto-refresh (public /status and Admin → Status)
+// Both pages render their live region server-side and mark it with
+// [data-status-live] plus the fragment URL. This poller swaps in a freshly
+// rendered fragment on an interval, so a status the monitor detects appears
+// without anyone reloading. Everything here is progressive enhancement: with
+// JavaScript off the page still shows a correct, server-rendered snapshot, and
+// the "Refresh now" button is the manual fallback if polling is blocked.
+(function () {
+  'use strict';
+
+  document.querySelectorAll('[data-status-live]').forEach(function (region) {
+    var url = region.getAttribute('data-status-url') || '/status/live';
+    var every = Math.max(10, parseInt(region.getAttribute('data-status-interval') || '30', 10) || 30) * 1000;
+    var note = document.querySelector('[data-status-livetext]');
+    var buttons = Array.prototype.slice.call(document.querySelectorAll('[data-status-refresh]'));
+    var timer = null;
+    var busy = false;
+    var fails = 0;
+
+    function say(msg) { if (note) note.textContent = msg; }
+
+    function stamp() {
+      var d = new Date();
+      return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+
+    function load(force) {
+      if (busy) return;
+      busy = true;
+      buttons.forEach(function (b) { b.disabled = true; });
+      if (force) say('Refreshing…');
+      fetch(url + (force ? (url.indexOf('?') > -1 ? '&' : '?') + 'force=1' : ''), {
+        headers: { 'X-Requested-With': 'fetch' },
+        credentials: 'same-origin',
+        cache: 'no-store'
+      }).then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.text();
+      }).then(function (html) {
+        // Keep any open <details> / focused control from being yanked mid-read:
+        // only replace when the markup actually changed.
+        if (html && html.trim() && html !== region.innerHTML) region.innerHTML = html;
+        region.querySelectorAll('.rv').forEach(function (el) { el.classList.add('in'); });
+        fails = 0;
+        say('Updated ' + stamp() + ' · auto-refreshing every ' + Math.round(every / 1000) + 's');
+      }).catch(function () {
+        fails++;
+        say(fails > 2
+          ? 'Auto-refresh unavailable — use Refresh now'
+          : 'Could not refresh — retrying…');
+      }).then(function () {
+        busy = false;
+        buttons.forEach(function (b) { b.disabled = false; });
+      });
+    }
+
+    function start() { if (!timer) timer = setInterval(function () { load(false); }, every); }
+    function stop() { if (timer) { clearInterval(timer); timer = null; } }
+
+    buttons.forEach(function (b) {
+      b.addEventListener('click', function () { load(true); });
+    });
+
+    // Don't poll a tab nobody is looking at; refresh once on return.
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden) { stop(); } else { load(false); start(); }
+    });
+
+    say('Auto-refreshing every ' + Math.round(every / 1000) + 's');
+    start();
+  });
+})();

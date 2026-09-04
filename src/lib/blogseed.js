@@ -174,19 +174,206 @@ curl "https://firmledger.co.ke/api/v1/listings?category=Fintech&amp;country=Keny
 <h2>Production readiness</h2>
 <p><code>v1</code> is the stable public contract. Response shapes, field names and error codes are frozen; breaking changes ship only as <code>/api/v2</code> and <code>v1</code> keeps working. If your plan lapses, keys reply <code>403 pro_required</code> with an <code>upgrade_url</code> so your integration can point customers somewhere useful — and the same key works again the moment Pro is active. The <em>web</em> stays fully public, so your users can browse <a href="/directory">the directory</a> or read any profile even while your key is parked. If you just want to read about companies, the browser is already enough; if you want to build on the ledger, the key is your door.</p>`,
   },
+  {
+    slug: 'firmledger-api-tutorial-first-integration',
+    title: 'Build your first FirmLedger integration: a hands-on API tutorial',
+    excerpt: 'Step by step, with real requests and real responses: get a Pro API key, authenticate, search the ledger, page through results, trim payloads with sparse fieldsets, publish a record, export CSV and subscribe to webhooks — plus the errors and limits to code against.',
+    body: `<p class="lead">This is the practical companion to the <a href="/api/docs">API reference</a>: a walkthrough that starts with an empty terminal and ends with a working integration. Every request below is a real call against <code>v1</code>, the stable public contract. One rule frames everything that follows — <b>you need an API key, and keys are a FirmLedger Pro feature</b>. There is no anonymous tier and no public endpoint, not even the health check.</p>
+
+<h2>Before you start: the key, and why it is Pro-only</h2>
+<p>FirmLedger is a curated ledger: records are moderated, sourced and re-verified, and profiles carry contact details that took real work to establish. Serving that to anonymous clients means serving it to scrapers, and it makes the surface impossible to meter fairly. So the whole of <code>/api/v1</code> sits behind a key, and a key only works while the account behind it holds an active <b>FirmLedger Pro</b> plan.</p>
+<p>Practically, that means three things for your integration:</p>
+<ol>
+<li><b>Get Pro first.</b> Upgrade on the <a href="/pricing">pricing page</a>. Pro also unlocks full directory access, the verified tick and Featured placement.</li>
+<li><b>Create the key in your console</b> at <a href="/dashboard/api">/dashboard/api</a>. Label it for the thing that will use it — <code>crm-sync</code>, <code>staging</code> — so revoking later is a one-second decision.</li>
+<li><b>Copy it immediately.</b> Keys look like <code>fl_live_</code> plus 32 characters and are shown exactly once; FirmLedger stores only a SHA-256 hash and cannot show it to you again. You may hold up to 3 active keys at a time.</li>
+</ol>
+<p>If the plan lapses, calls answer <code>403 pro_required</code> with an <code>upgrade_url</code> in the error details, and the very same key starts working again the moment Pro is active. Nothing to rotate, nothing to re-deploy.</p>
+
+<h2>Step 1 — say hello</h2>
+<p>Send the key as a Bearer token in the <code>Authorization</code> header. Never place it in a query string, a request body, browser JavaScript, a mobile bundle or a public repository — proxy every call through your own backend.</p>
+<pre><code>curl -s https://firmledger.co.ke/api/v1/health \\
+  -H "Authorization: Bearer fl_live_your_key"
+
+{
+  "ok": true,
+  "service": "FirmLedger API",
+  "version": "v1",
+  "time": "2026-09-04T09:14:02.881Z"
+}</code></pre>
+<p>Drop the header and you get the shape every failure uses:</p>
+<pre><code>{
+  "error": {
+    "code": "missing_key",
+    "message": "No API key provided. Send it as \\"Authorization: Bearer fl_live_…\\".",
+    "details": { "docs": "https://firmledger.co.ke/api/docs" }
+  }
+}</code></pre>
+<p>If a proxy strips <code>Authorization</code>, <code>X-API-Key: fl_live_your_key</code> is accepted as an alternative header.</p>
+
+<h2>Step 2 — discover the surface</h2>
+<p><code>GET /api/v1</code> returns the endpoint map, the scope catalogue, the webhook event list and your live limits. It is the fastest way to confirm a key works and to see what the running version of the API supports, rather than what a document claims.</p>
+<pre><code>curl -s https://firmledger.co.ke/api/v1 \\
+  -H "Authorization: Bearer fl_live_your_key"</code></pre>
+
+<h2>Step 3 — search the ledger</h2>
+<p><code>GET /api/v1/listings</code> is the workhorse. It returns approved, moderated records with full profile fields — including contact details — and accepts <code>q</code>, <code>type</code>, <code>category</code>, <code>country</code>, <code>city</code>, <code>region</code>, <code>sponsored</code>, <code>sort</code>, <code>page</code> and <code>per_page</code> (maximum 50). <code>sort</code> takes <code>featured</code> (the default), <code>newest</code>, <code>name</code>, <code>confidence</code> or <code>country</code>.</p>
+<pre><code>curl -s -G https://firmledger.co.ke/api/v1/listings \\
+  -H "Authorization: Bearer fl_live_your_key" \\
+  --data-urlencode "category=Fintech" \\
+  --data-urlencode "country=Kenya" \\
+  --data-urlencode "sort=confidence" \\
+  --data-urlencode "per_page=25"
+
+{
+  "data": [ { "id": 412, "slug": "safiri-pay", "name": "Safiri Pay", "…": "…" } ],
+  "meta": { "page": 1, "per_page": 25, "total": 63, "total_pages": 3 }
+}</code></pre>
+<p>Page with <code>meta.total_pages</code>, not by guessing until you get an empty array — and pace yourself, because the read budget is per rolling minute.</p>
+<pre><code>const KEY = process.env.FIRMLEDGER_API_KEY;      // server-side only
+
+async function* everyListing(params = {}) {
+  let page = 1, pages = 1;
+  do {
+    const qs = new URLSearchParams({ ...params, page, per_page: 50 });
+    const res = await fetch(
+      'https://firmledger.co.ke/api/v1/listings?' + qs,
+      { headers: { Authorization: 'Bearer ' + KEY } }
+    );
+    if (res.status === 429) {                     // respect the server, always
+      await new Promise(r => setTimeout(r, (+res.headers.get('Retry-After') || 5) * 1000));
+      continue;
+    }
+    if (!res.ok) throw new Error((await res.json()).error.code);
+    const { data, meta } = await res.json();
+    pages = meta.total_pages;
+    yield* data;
+  } while (page++ < pages);
+}</code></pre>
+
+<h2>Step 4 — read one company, and only the fields you need</h2>
+<p><code>GET /api/v1/listings/:slug</code> returns the full profile: description, category, location, contacts, socials, confidence score, the <code>sources</code> provenance array, the detected <code>tech</code> stack and the hiring link. Sparse fieldsets keep responses small — <code>id</code> and <code>slug</code> are always included so a trimmed record is still a usable identifier, and an unknown field name is rejected with <code>422 invalid_fields</code> rather than silently ignored.</p>
+<pre><code>curl -s -G https://firmledger.co.ke/api/v1/listings/safiri-pay \\
+  -H "Authorization: Bearer fl_live_your_key" \\
+  --data-urlencode "fields=name,website,country,confidence"
+
+{
+  "data": {
+    "id": 412,
+    "slug": "safiri-pay",
+    "name": "Safiri Pay",
+    "website": "https://safiripay.example",
+    "country": "Kenya",
+    "confidence": 78
+  }
+}</code></pre>
+
+<h2>Step 5 — the small endpoints that make a good UI</h2>
+<div class="table-wrap">
+<table class="table">
+<thead><tr><th>Endpoint</th><th>Use it for</th></tr></thead>
+<tbody>
+<tr><td><code>GET /api/v1/categories</code></td><td>Filter menus — each category with its slug and a live approved count.</td></tr>
+<tr><td><code>GET /api/v1/countries</code></td><td>Country facets, counted the same way.</td></tr>
+<tr><td><code>GET /api/v1/suggest?q=</code></td><td>Type-ahead: mixed listing, category, country and city hits, up to 25.</td></tr>
+<tr><td><code>GET /api/v1/verify/domain/:domain</code></td><td>Signup and CRM de-duplication — is this domain already in the ledger?</td></tr>
+<tr><td><code>GET /api/v1/me</code> · <code>/usage</code></td><td>Your plan, the key's scopes, and durable monthly and per-endpoint usage.</td></tr>
+</tbody>
+</table>
+</div>
+<p>The domain check is the one most teams reach for first: paste a customer's website at signup and find out whether they already have a profile.</p>
+<pre><code>curl -s https://firmledger.co.ke/api/v1/verify/domain/safiripay.example \\
+  -H "Authorization: Bearer fl_live_your_key"
+
+{ "listed": true, "domain": "safiripay.example", "listing": { "slug": "safiri-pay", "…": "…" }, "matches": [ … ] }</code></pre>
+
+<h2>Step 6 — publish and maintain your own records</h2>
+<p><code>/api/v1/my/listings</code> is full CRUD over the records your account owns, through the same moderation pipeline as the dashboard: new records enter as <code>pending</code> and go live once a human approves them. Unknown fields are rejected, so a typo fails loudly instead of quietly dropping data. Send only what changes on an update.</p>
+<pre><code>curl -s -X POST https://firmledger.co.ke/api/v1/my/listings \\
+  -H "Authorization: Bearer fl_live_your_key" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "name": "Acme Cold Chain Ltd",
+    "tagline": "Refrigerated freight and bonded storage for East African exporters",
+    "description": "Acme Cold Chain runs refrigerated trucking and bonded warehousing between Mombasa, Nairobi and Kampala for perishable exporters.",
+    "website": "https://acme-cold-chain.example",
+    "type": "company",
+    "country": "Kenya",
+    "city": "Mombasa",
+    "founded": "2019",
+    "tags": ["logistics", "cold-chain"]
+  }'</code></pre>
+<p>A successful create answers <code>201</code> with a <code>Location</code> header pointing at the new record. Updates use <code>PUT /api/v1/my/listings/:id</code>; deletes answer <code>204</code> with no body.</p>
+
+<h2>Step 7 — bulk export</h2>
+<p>For analysis rather than live lookups, <code>GET /api/v1/export/listings.csv</code> streams the approved ledger as CSV and honours the same filters as the directory. It needs the <code>export</code> scope.</p>
+<pre><code>curl -s -G https://firmledger.co.ke/api/v1/export/listings.csv \\
+  -H "Authorization: Bearer fl_live_your_key" \\
+  --data-urlencode "country=Kenya" \\
+  --output firmledger-kenya.csv</code></pre>
+
+<h2>Step 8 — stop polling, start listening</h2>
+<p>If you are re-fetching the directory on a timer to spot changes, use webhooks instead. Create one with the <code>manage:webhooks</code> scope, subscribe to the events you care about — <code>listing.created</code>, <code>listing.approved</code>, <code>listing.updated</code>, <code>listing.rejected</code>, <code>listing.deleted</code>, <code>claim.verified</code> — and FirmLedger pushes each one to your URL, signed with HMAC.</p>
+<pre><code>curl -s -X POST https://firmledger.co.ke/api/v1/webhooks \\
+  -H "Authorization: Bearer fl_live_your_key" \\
+  -H "Content-Type: application/json" \\
+  -d '{ "url": "https://your-app.example/hooks/firmledger",
+        "events": ["listing.approved", "listing.updated"] }'</code></pre>
+<p>The signing secret is returned <b>once</b>, at creation — store it then, or rotate to get a new one. On your side: verify the signature against the <em>raw</em> request body before parsing it, reject deliveries whose timestamp is far from now, and treat <code>X-Idempotency-Key</code> as the deduplication key so a retry cannot double-apply. Failed deliveries retry with backoff, and every attempt is inspectable at <code>GET /api/v1/webhooks/:id/deliveries</code>.</p>
+
+<h2>Scopes: give each integration only what it needs</h2>
+<div class="table-wrap">
+<table class="table">
+<thead><tr><th>Scope</th><th>Unlocks</th></tr></thead>
+<tbody>
+<tr><td><code>read:listings</code></td><td>Directory, profiles, categories, countries, suggestions, domain checks.</td></tr>
+<tr><td><code>write:listings</code></td><td>Create, update and delete the records you own.</td></tr>
+<tr><td><code>export</code></td><td>The CSV export.</td></tr>
+<tr><td><code>manage:webhooks</code></td><td>Creating, editing, testing and inspecting webhooks.</td></tr>
+<tr><td><code>read:usage</code></td><td><code>/me</code> and <code>/usage</code> analytics.</td></tr>
+</tbody>
+</table>
+</div>
+<p>Call an endpoint outside a key's scopes and the reply is <code>403 insufficient_scope</code>, with <code>required_scope</code> and the key's current scopes in <code>error.details</code> — so the fix is obvious from the response alone. A read-only reporting job should carry <code>read:listings</code> and nothing else.</p>
+
+<h2>Limits, and coding against them</h2>
+<p>Budgets are per key and per rolling 60 seconds, with reads and writes counted separately; there is also a concurrency gate on simultaneous in-flight requests per key and a brute-force guard that temporarily locks a network address after repeated bad keys. Every response carries <code>X-RateLimit-Limit</code>, <code>X-RateLimit-Remaining</code> and <code>X-RateLimit-Reset</code>, plus an <code>X-Request-Id</code> worth quoting in any support message. Read your live numbers from <code>GET /api/v1/me</code> rather than hard-coding them.</p>
+<div class="table-wrap">
+<table class="table">
+<thead><tr><th>Status</th><th>Code</th><th>What to do</th></tr></thead>
+<tbody>
+<tr><td><code>401</code></td><td><code>missing_key</code> · <code>invalid_key</code> · <code>key_revoked</code></td><td>Fix or re-create the key. Do not retry in a loop — that trips the brute-force guard.</td></tr>
+<tr><td><code>403</code></td><td><code>pro_required</code></td><td>The plan lapsed. Surface the <code>upgrade_url</code> to whoever owns the account.</td></tr>
+<tr><td><code>403</code></td><td><code>insufficient_scope</code></td><td>Add the scope named in <code>details.required_scope</code>, or use a different key.</td></tr>
+<tr><td><code>422</code></td><td><code>invalid_fields</code> and validation errors</td><td>Fix the payload; <code>details</code> names the offending field.</td></tr>
+<tr><td><code>429</code></td><td><code>rate_limited</code> · <code>too_many_concurrent</code></td><td>Sleep for <code>Retry-After</code> seconds, then retry. Never hot-loop.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2>Going to production</h2>
+<p>Keep the key in an environment variable or a secret manager, never in source control. Use one key per environment so staging noise never eats production budget. Log <code>X-Request-Id</code> alongside your own request identifiers. Handle <code>429</code> and <code>5xx</code> with exponential backoff and treat everything as retryable except <code>4xx</code> that you caused. And pin nothing to undocumented behaviour: <code>v1</code> field names, response shapes and error codes are frozen — breaking changes will ship as <code>/api/v2</code> while <code>v1</code> keeps working.</p>
+<p>You can rehearse all of this without writing code. The <a href="/dashboard/api/playground">API playground</a> runs real calls through the exact same code path, key rules and limits, and shows you the status, the rate-limit headers and the JSON body. When you are ready for the exhaustive detail — every parameter, every error, a curl example per endpoint — that lives in the <a href="/api/docs">API reference</a>.</p>
+<p>Two sentences to take away: the browser side of FirmLedger stays free to read, so send people to <a href="/directory">the directory</a> whenever a human is doing the looking. The machine-readable side needs a key, that key needs Pro, and it takes about a minute to <a href="/pricing">set up</a>.</p>`,
+  },
 ];
 
 function seedBlog(db) {
-  const count = db.prepare('SELECT COUNT(*) c FROM blog_posts').get().c;
-  if (count) return;
   const ins = db.prepare(
     "INSERT INTO blog_posts (slug, title, excerpt, body, status, published_at) VALUES (?,?,?,?,'published', ?)"
   );
+  const exists = db.prepare('SELECT 1 FROM blog_posts WHERE slug=?');
   // Space the seed dates out so the array order == blog order (newest last), and
-  // the lead post (the API announcement) sits at the top of /blog on a fresh DB.
+  // the lead post sits at the top of /blog on a fresh database.
+  //
+  // Idempotent per slug: an established deployment already holds the earlier
+  // posts (and may have edited them, which we never touch), so only genuinely
+  // new entries in POSTS are inserted. That is how a post added to this file
+  // reaches a live site without a re-seed and without clobbering edits.
   const now = Date.now();
   for (let i = 0; i < POSTS.length; i++) {
     const p = POSTS[i];
+    if (exists.get(p.slug)) continue;
     const daysAgo = (POSTS.length - 1 - i) * 2;
     ins.run(p.slug, p.title, p.excerpt, p.body, new Date(now - daysAgo * 86400000).toISOString().slice(0, 19).replace('T', ' '));
   }

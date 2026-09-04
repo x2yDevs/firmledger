@@ -1,0 +1,113 @@
+<%
+/* Live status region for Admin → Status.
+   Rendered server-side on first paint and re-rendered on its own by
+   /admin3119Musa/incidents/live every 20 seconds (or on "Refresh now"), so a
+   status the monitor detects is always in front of the admin without a reload.
+   Everything the monitor found — the state, the probe's own words, its latency
+   and the auto-opened incident behind it — is shown here. */
+%>
+<div class="side-card">
+  <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap">
+    <h3 style="margin-bottom:4px">Detected status</h3>
+    <span class="muted" style="font-size:12px">
+      Overall: <b><%= overallLabel %></b>
+      <% if (snap.last_run_at) { %> · last sweep <%= snap.last_run_at.slice(11, 19) %> UTC<% } %>
+    </span>
+  </div>
+  <p class="muted" style="font-size:13.5px;margin:0 0 12px">Every component is probed automatically. What the last probe saw is shown verbatim — a failing probe opens an incident on its own, and it appears in the list below where you can update, resolve or delete it.</p>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Component</th><th>State</th><th>Last probe</th><th>Latency</th><th>Uptime 24h</th><th>Checked</th></tr></thead>
+      <tbody>
+        <% snap.components.forEach(function (c) { %>
+        <tr>
+          <td><b><%= c.name %></b><div class="muted" style="font-size:12px"><%= c.description %></div></td>
+          <td><span class="st-pill st-pill-<%= c.status %>"><%= c.status_label %></span></td>
+          <td class="muted" style="font-size:12.5px;max-width:280px"><%= c.last_note || '—' %></td>
+          <td class="muted" style="font-size:12.5px"><%= c.last_latency_ms ? c.last_latency_ms + ' ms' : '—' %></td>
+          <td class="muted" style="font-size:12.5px"><%= c.uptime['24h'] %>%</td>
+          <td class="muted" style="font-size:12.5px"><%= (c.last_checked_at || c.updated_at || '').slice(0, 19).replace('T', ' ') %></td>
+        </tr>
+        <% }); %>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="side-card">
+  <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap">
+    <h3 style="margin-bottom:4px">Incidents</h3>
+    <span class="muted" style="font-size:12px"><%= incidents.filter(function (i) { return i.status !== 'resolved'; }).length %> open · <%= incidents.length %> total</span>
+  </div>
+  <p class="muted" style="font-size:13.5px;margin:0 0 12px">Auto-detected incidents are tagged <b>auto</b>. They are ordinary incidents: post a public update, resolve them, or delete them permanently — deleting removes the whole timeline from <a href="/status">/status</a> and heals the component if nothing else is holding it down.</p>
+
+  <% if (incidents.length) { %>
+  <div class="scroll-panel">
+  <div class="incident-list">
+    <% incidents.forEach(function (inc) { %>
+    <article class="incident-card">
+      <div class="section-head" style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
+        <div>
+          <div class="incident-title"><%= inc.title %></div>
+          <div class="incident-meta">
+            <span class="pill pill-<%= inc.status === 'resolved' ? 'approved' : (inc.status === 'monitoring' ? 'pending' : 'rejected') %>"><%= inc.status %></span>
+            <span class="pill pill-<%= inc.severity === 'critical' ? 'rejected' : inc.severity === 'major' ? 'pending' : 'approved' %>"><%= inc.severity %></span>
+            <span class="pill <%= inc.source === 'auto' ? 'pill-pending' : 'pill-approved' %>" title="<%= inc.source === 'auto' ? 'Opened automatically by the status monitor' : 'Opened by an admin' %>"><%= inc.source === 'auto' ? 'auto' : 'manual' %></span>
+            <% if (inc.component_name) { %><span class="muted" style="font-size:12px"><%= inc.component_name %></span><% } %>
+            <span class="muted" style="font-size:12px">opened <%= (inc.created_at || '').slice(0, 16).replace('T', ' ') %></span>
+          </div>
+        </div>
+        <div class="incident-actions">
+          <% if (inc.status !== 'resolved') { %>
+          <form method="post" action="/admin3119Musa/incidents/<%= inc.id %>/resolve" class="inline" onsubmit="return confirm('Resolve this incident?');">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <button class="btn btn-primary btn-xs" type="submit">Resolve</button>
+          </form>
+          <% } %>
+          <form method="post" action="/admin3119Musa/incidents/<%= inc.id %>/delete" class="inline" onsubmit="return confirm('Delete this incident permanently? The incident and its whole timeline are removed from the public status page and from history. This cannot be undone.');">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <button class="btn btn-danger btn-xs" type="submit">Delete</button>
+          </form>
+        </div>
+      </div>
+      <% if (inc.description) { %><p class="muted" style="font-size:14px;margin-bottom:12px"><%= inc.description %></p><% } %>
+
+      <div class="incident-updates">
+        <% inc.updates.forEach(function (u) { %>
+        <div class="incident-update">
+          <span class="incident-update-dot" aria-hidden="true"></span>
+          <div>
+            <div class="incident-update-status"><%= u.status %> <span class="muted" style="font-size:11px;font-weight:400">· <%= (u.created_at || '').slice(0, 16).replace('T', ' ') %></span></div>
+            <div class="incident-update-msg"><%= u.message %></div>
+          </div>
+        </div>
+        <% }); %>
+      </div>
+
+      <form method="post" action="/admin3119Musa/incidents/<%= inc.id %>/update" class="form incident-update-form">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <div class="grid-2" style="align-items:end">
+          <label><span>New status</span>
+            <select name="status" aria-label="Update status">
+              <% Object.keys(incidentStatusLabels).forEach(function (s) { %>
+              <option value="<%= s %>" <%= inc.status === s ? 'selected' : '' %>><%= incidentStatusLabels[s] %></option>
+              <% }); %>
+            </select>
+          </label>
+          <label><span>Public update</span>
+            <textarea name="message" rows="2" placeholder="e.g. We've identified the cause and are deploying a fix…" required></textarea>
+          </label>
+        </div>
+        <div class="form-actions" style="margin-top:6px">
+          <button class="btn btn-primary btn-sm" type="submit">Post update</button>
+        </div>
+      </form>
+    </article>
+    <% }); %>
+  </div>
+  </div>
+  <% } else { %>
+  <p class="muted">No incidents yet — nothing detected and nothing opened by hand. The public page says “All Systems Normal”.</p>
+  <% } %>
+</div>

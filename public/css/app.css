@@ -1791,6 +1791,15 @@ body:has(.admin-bar) #main .scroll-table .table-wrap {
 .st-tl-msg { font-size: 14px; color: var(--ink2); }
 .st-tl-time { margin-left: auto; font: 500 11.5px/1 var(--fm); color: var(--muted); white-space: nowrap; }
 .st-noincidents { background: var(--surface); border: 1px solid var(--hair); border-radius: var(--r); padding: 24px; text-align: center; }
+
+/* Auto-refresh bar — sits above the live region on /status and in Admin → Status.
+   The manual "Refresh now" button is the fallback whenever polling is blocked. */
+.st-live-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 0 0 14px; }
+.st-live-note { display: inline-flex; align-items: center; gap: 8px; font: 500 12.5px/1.4 var(--fm); color: var(--muted); }
+.st-live-dot { width: 8px; height: 8px; border-radius: 50%; background: #16A34A; flex: none; box-shadow: 0 0 0 0 rgba(22,163,74,.45); animation: stLive 2.2s ease-out infinite; }
+@keyframes stLive { 70% { box-shadow: 0 0 0 7px rgba(22,163,74,0); } 100% { box-shadow: 0 0 0 0 rgba(22,163,74,0); } }
+@media (prefers-reduced-motion: reduce) { .st-live-dot { animation: none; } }
+[data-status-refresh][disabled] { opacity: .55; cursor: progress; }
 @media (max-width: 640px) {
   .st-hero-meta { margin-left: 0; text-align: left; }
   .st-uptime { grid-template-columns: 1fr 1fr; gap: 18px 14px; }

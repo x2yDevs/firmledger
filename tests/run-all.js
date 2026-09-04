@@ -10,6 +10,9 @@
  *                cancellation and honest failure reporting (Groq stubbed).
  *   backup       .firmledger round trip — users, all listings + configuration.
  *   admin-pages  every admin page renders and its long list scrolls in place.
+ *   status-live  /status auto-refreshes, the monitor opens and closes its own
+ *                incidents, admin can manage or delete them, and the API
+ *                tutorial post renders with contained code blocks.
    indexing     Google Indexing API (stubbed) + the homepage featured rail:
                 URL_UPDATED pings, the never-ping-twice ledger, the 200/day
                 quota and the admin console wired to all of it.
@@ -25,6 +28,7 @@ const suites = [
   ['API surface & discovery', 'api.test.js'],
   ['Google Indexing + featured rail', 'google-indexing.test.js'],
   ['Robots & Auth OAuth', 'robots-auth.test.js'],
+  ['Status auto-refresh & detection', 'status-live.test.js'],
 ];
 
 const results = [];

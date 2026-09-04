@@ -46,8 +46,35 @@ router.get('/', (req, res) => {
   });
 });
 
+/* ---------------- Live fragment (auto-refresh) ----------------
+   The page polls this every 30 seconds and swaps the returned HTML into
+   #st-live, so the hero, uptime figures, component states and incident history
+   all update together without a reload. `?force=1` (the "Refresh now" button)
+   runs the probes first so the visitor sees a genuinely fresh reading rather
+   than the last cached sweep. */
+router.get('/live', async (req, res) => {
+  if (req.query.force === '1') {
+    try { await mon.runChecksNow(); } catch { /* fall through to last known state */ }
+  }
+  const snap = mon.snapshot();
+  res.set('Cache-Control', 'no-store');
+  res.render('status/live', {
+    layout: false,
+    snap,
+    labels: mon.OVERALL_LABELS,
+    componentLabels: mon.STATUS_LABELS,
+  }, (err, html) => {
+    if (err) return res.status(500).json({ error: 'render_failed' });
+    res.type('html').send(html);
+  });
+});
+
 /* ---------------- JSON API ---------------- */
-router.get('/api', (req, res) => {
+router.get('/api', async (req, res) => {
+  if (req.query.force === '1') {
+    try { await mon.runChecksNow(); } catch { /* serve the last known state */ }
+  }
+  res.set('Cache-Control', 'no-store');
   res.json(mon.snapshot());
 });
 
