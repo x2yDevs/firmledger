@@ -13,6 +13,9 @@
    indexing     Google Indexing API (stubbed) + the homepage featured rail:
                 URL_UPDATED pings, the never-ping-twice ledger, the 200/day
                 quota and the admin console wired to all of it.
+   status       /status accuracy: no false "Major Outage" without a monitor
+                API key, real failures walk the outage ladder and heal,
+                and a poisoned state self-heals on the live server.
  */
 const path = require('path');
 const { spawnSync } = require('child_process');
@@ -25,6 +28,7 @@ const suites = [
   ['API surface & discovery', 'api.test.js'],
   ['Google Indexing + featured rail', 'google-indexing.test.js'],
   ['Robots & Auth OAuth', 'robots-auth.test.js'],
+  ['Status monitor accuracy', 'status-monitor.test.js'],
 ];
 
 const results = [];

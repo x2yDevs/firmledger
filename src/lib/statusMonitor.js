@@ -8,9 +8,20 @@
  * component; an unresolved incident keeps that component out of the "operational"
  * state even after the monitor's next green check.
  *
- * The monitor is self-healing: a single flaky probe only downgrades to degraded;
- * two consecutive failures escalate to major_outage. It never *upgrades* a
- * component that still has an open incident.
+ * The monitor is self-healing and graduated: a single flaky probe only downgrades
+ * to degraded, two consecutive failures escalate to partial_outage and three to
+ * major_outage — a transient slow response can never declare a Major Outage on
+ * its own. The next healthy probe heals the component back to operational. The
+ * monitor never *upgrades* a component that still has an open incident.
+ *
+ * API probing understands the API's auth contract: every /api/v1 endpoint
+ * (including /health) is key-gated, so the monitor sends STATUS_API_KEY when it
+ * has one, and otherwise treats the API's well-formed "key required" 401/403
+ * envelope as *proof the API is up and enforcing auth as designed* — a missing
+ * monitor key is not an outage. Genuine failures (5xx, timeouts, connection
+ * errors, malformed responses) are still reported. A provisioned key that the
+ * API rejects (revoked, expired Pro, …) is retired for the life of this process
+ * so the probe can't burn the brute-force lockout budget of its own host's IP.
  */
 const { db, getSetting, setSetting } = require('../db');
 const { siteUrl } = require('./util');
@@ -142,6 +153,10 @@ function detectedChanges(hours = 48, limit = 40) {
   ).all(`-${Math.max(1, Number(hours) || 48)} hours`, Math.max(1, Number(limit) || 40));
 }
 
+/* Graduated escalation: one flaky probe → degraded, two consecutive →
+   partial_outage, three or more → major_outage. A genuine recovery heals the
+   component on the very next healthy probe. */
+const FAIL_STEPS = [STATUS.degraded, STATUS.partial_outage, STATUS.major_outage];
 function decideProbeStatus(id, ok) {
   if (ok) {
     consecutiveFails.delete(id);
@@ -149,7 +164,7 @@ function decideProbeStatus(id, ok) {
   }
   const n = (consecutiveFails.get(id) || 0) + 1;
   consecutiveFails.set(id, n);
-  return n >= 2 ? STATUS.major_outage : STATUS.degraded;
+  return FAIL_STEPS[Math.min(n, FAIL_STEPS.length) - 1];
 }
 
 /* ---------------- Health checks ---------------- */
@@ -212,20 +227,69 @@ async function emailCheck() {
   return { ok: false, latency_ms: Date.now() - start, note: String((lastErr && (lastErr.message || lastErr)) || 'SMTP unreachable').slice(0, 90), configured: true };
 }
 
+/* JSON error codes the API middleware answers with when the stack is healthy
+   and enforcing its key requirement as designed. A well-formed envelope with
+   one of these proves the whole request pipeline (router, auth, guards) is
+   alive — the probe treats it as "API up", never as an outage. */
+const API_ENFORCED_CODES = new Set([
+  'missing_key', 'invalid_key', 'key_revoked', 'pro_required',
+  'account_suspended', 'insufficient_scope', 'ip_locked',
+  'rate_limited', 'too_many_concurrent', 'payload_too_large', 'invalid_json',
+]);
+
+/* Codes that mean the monitor key itself is unusable. When the probe sent
+   STATUS_API_KEY and got one of these back, the key is retired (until the
+   operator sets a different one) so repeated probes can't stack brute-force
+   failures against the server's own IP. */
+const API_KEY_DEAD_CODES = new Set(['invalid_key', 'key_revoked', 'pro_required', 'account_suspended']);
+let retiredStatusKey = null;
+
+async function apiHealthCheck() {
+  const envKey = String(process.env.STATUS_API_KEY || '').trim();
+  const key = envKey && envKey !== retiredStatusKey ? envKey : '';
+  const headers = key ? { Authorization: `Bearer ${key}` } : {};
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  const start = Date.now();
+  try {
+    const res = await fetch(siteUrl('/api/v1/health'), {
+      method: 'GET', redirect: 'follow', signal: controller.signal,
+      headers: { 'user-agent': 'FirmLedgerStatusMonitor/1.0', accept: 'application/json', ...headers },
+    });
+    const ms = Date.now() - start;
+    clearTimeout(timer);
+    // Authenticated liveness — fully green.
+    if (res.status >= 200 && res.status < 400) return { ok: true, latency_ms: ms, note: `HTTP ${res.status}` };
+    // Parse the API's JSON error envelope (tolerates non-JSON bodies).
+    let code = '';
+    try {
+      const body = await res.json();
+      code = String((body && body.error && body.error.code) || '');
+    } catch { /* not JSON — falls through to a failure below */ }
+    if (res.status >= 400 && res.status < 500 && API_ENFORCED_CODES.has(code)) {
+      if (key && API_KEY_DEAD_CODES.has(code)) {
+        retiredStatusKey = key;
+        console.warn(`[status-monitor] STATUS_API_KEY rejected by /api/v1 (${code}) — probing keyless until a fresh key is set (Admin → API → Keys).`);
+      }
+      const why = code === 'missing_key' ? 'up, auth enforced (no monitor key)' : `up, auth enforced (${code})`;
+      return { ok: true, latency_ms: ms, note: `HTTP ${res.status} · ${why}` };
+    }
+    // 5xx, or an unexpected/malformed response — that is a real failure.
+    return { ok: false, latency_ms: ms, note: code ? `HTTP ${res.status} · ${code}` : `HTTP ${res.status} (unexpected response)` };
+  } catch (e) {
+    clearTimeout(timer);
+    const msg = e && e.name === 'AbortError' ? 'timed out'
+      : String((e && (e.cause && e.cause.code)) || (e && e.message) || e || '').slice(0, 90);
+    return { ok: false, latency_ms: Date.now() - start, note: msg };
+  }
+}
+
 /* Check a single component and persist its outcome. */
 async function checkComponent(comp) {
   let result;
   switch (comp.slug) {
     case 'web': result = await httpStatus(siteUrl('/')); break;
-    case 'api': {
-      // Every /api/v1 endpoint (including /health) requires a Pro API key now, so
-      // the monitor authenticates with the dedicated_STATUS_API_KEY env var. Set
-      // STATUS_API_KEY to a Pro key from Admin → API → Keys to keep this green.
-      const key = process.env.STATUS_API_KEY || '';
-      const headers = key ? { Authorization: `Bearer ${key}` } : {};
-      result = await httpStatus(siteUrl('/api/v1/health'), 8000, headers);
-      break;
-    }
+    case 'api': result = await apiHealthCheck(); break;
     case 'database': result = dbCheck(); break;
     case 'email': result = await emailCheck(); break;
     default: result = { ok: true, latency_ms: 0, note: 'no check defined' }; break;

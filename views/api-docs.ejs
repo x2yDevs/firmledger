@@ -120,7 +120,7 @@
 
       <div class="form-card docs-anchor" id="ep-health">
         <h3 class="form-section"><span class="m-chip m-get">GET</span>&nbsp; <code>/api/v1/health</code> — liveness</h3>
-        <p class="muted">Liveness probe — returns a 200 and no business data. Still <b>authenticated</b>: it needs a key like everything else, so the status monitor carries one via <code>STATUS_API_KEY</code>.</p>
+        <p class="muted">Liveness probe — returns a 200 and no business data. Still <b>authenticated</b>: it needs a key like everything else. The status monitor carries one via <code>STATUS_API_KEY</code> when configured; without a key it verifies the API is up and enforcing auth, so /status stays accurate either way.</p>
         <div class="code-block"><span class="code-label">curl</span>curl <%= SITE %>/api/v1/health -H "Authorization: Bearer fl_live_your_key"</div>
       </div>
 

@@ -9,7 +9,8 @@
     "test:ai": "node tests/ai-tools.test.js && node tests/ai-agent.test.js",
     "test:backup": "node tests/backup.test.js",
     "test:pages": "node tests/admin-pages.test.js",
-    "test:indexing": "node tests/google-indexing.test.js"
+    "test:indexing": "node tests/google-indexing.test.js",
+    "test:status": "node tests/status-monitor.test.js"
   },
   "keywords": [],
   "author": "",
