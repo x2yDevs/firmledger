@@ -26,6 +26,7 @@ const nl = require('./newsletter');
 const health = require('./health');
 const { runCheck } = require('./verify');
 const { finalizeVerifiedClaim } = require('./claimflow');
+const listingEvents = require('./listingevents');
 
 function findListing(idOrSlug) {
   const raw = String(idOrSlug || '').trim();
@@ -48,6 +49,7 @@ function approveListingRow(l) {
   const firstApproval = l.status !== 'approved';
   db.prepare("UPDATE listings SET status='approved', last_verified_at=?, updated_at=datetime('now') WHERE id=?")
     .run(new Date().toISOString(), l.id);
+  if (firstApproval) listingEvents.approved(db.prepare('SELECT * FROM listings WHERE id=?').get(l.id), true);
   if (firstApproval) {
     const catSlug = (db.prepare('SELECT slug FROM categories WHERE name = ?').get(l.category) || {}).slug;
     submitForIndexing([`/listing/${l.slug}`, catSlug ? `/directory/c/${catSlug}` : null].filter(Boolean));
@@ -66,6 +68,7 @@ function approveListingRow(l) {
 
 function rejectListingRow(l) {
   db.prepare("UPDATE listings SET status='rejected', updated_at=datetime('now') WHERE id=?").run(l.id);
+  if (l.status !== 'rejected') listingEvents.rejected(db.prepare('SELECT * FROM listings WHERE id=?').get(l.id));
   if (l.owner_user_id) {
     notify.notifyUser(l.owner_user_id, {
       kind: 'listing',

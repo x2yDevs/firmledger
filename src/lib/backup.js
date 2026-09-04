@@ -25,7 +25,12 @@ const FORMAT = 'firmledger-backup@2';
 /* Tables that make up the admin configuration and ledger. Transient credentials and
    one-time tokens are intentionally excluded; they are never needed to restore the
    application and should not travel in a downloadable file. */
-const BACKUP_EXCLUDED_TABLES = new Set(['sessions', 'resets', 'reg_otps', 'user_totp']);
+const BACKUP_EXCLUDED_TABLES = new Set([
+  'sessions', 'resets', 'reg_otps', 'user_totp',
+  // API credentials, encrypted webhook signing material and high-volume usage
+  // aggregates never belong in a downloadable account/admin backup.
+  'api_keys', 'api_usage_daily', 'api_usage_endpoint_daily', 'api_webhooks', 'api_webhook_deliveries',
+]);
 function databaseSnapshot() {
   const tables = db.prepare("SELECT name, sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all();
   const snapshot = {};

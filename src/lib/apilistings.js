@@ -8,6 +8,7 @@ const { TYPES, SIZES } = require('./taxonomy');
 const catLib = require('./categories');
 const { SOCIAL_KEYS } = require('./socialicons');
 const { slugify, normalizeUrl, parseComma, isEmail, domainOf, siteUrl } = require('./util');
+const listingEvents = require('./listingevents');
 
 class ApiServiceError extends Error {
   constructor(status, code, message, details) {
@@ -256,8 +257,27 @@ function apiSerialize(row) {
   });
 }
 
+const API_FIELDS = Object.freeze(Object.keys(apiSerialize({
+  id: 0, slug: '', name: '', tagline: '', description: '', type: '', category: '', website: '', email: '', phone: '',
+  country: '', city: '', region: '', address: '', logo_url: '', founded: '', size: '', tags: '', socials: '{}', status: '',
+  claimed: 0, confidence: 0, last_verified_at: null, created_at: '', updated_at: '', sources: '[]', tech: '[]', hiring_url: '', plan: '',
+})));
+
+/** Optional sparse fieldsets keep integrations from over-fetching while always
+ * retaining id + slug as stable record identifiers. */
+function projectFields(value, rawFields) {
+  const raw = String(rawFields || '').trim();
+  if (!raw) return value;
+  const fields = [...new Set(raw.split(',').map((f) => f.trim()).filter(Boolean))];
+  const unknown = fields.filter((f) => !API_FIELDS.includes(f));
+  if (unknown.length) fail(422, 'invalid_fields', `Unknown fields: ${unknown.join(', ')}.`, { allowed: API_FIELDS });
+  const out = {};
+  for (const key of ['id', 'slug', ...fields]) if (Object.prototype.hasOwnProperty.call(value, key)) out[key] = value[key];
+  return out;
+}
+
 /** Directory — approved listings with filters & pagination. */
-function directory({ page = 1, per_page = 20, q = '', type = '', category = '', country = '', city = '', region = '', sort = 'featured', sponsored = '' } = {}) {
+function directory({ page = 1, per_page = 20, q = '', type = '', category = '', country = '', city = '', region = '', sort = 'featured', sponsored = '', fields = '' } = {}) {
   page = Math.max(1, parseInt(page, 10) || 1);
   per_page = Math.min(50, Math.max(1, parseInt(per_page, 10) || 20));
   const clauses = ["l.status='approved'"];
@@ -282,20 +302,20 @@ function directory({ page = 1, per_page = 20, q = '', type = '', category = '', 
   const total = db.prepare(`SELECT COUNT(*) c FROM listings l ${where}`).get(...params).c;
   const rows = db.prepare(`SELECT l.* FROM listings l ${where} ORDER BY ${order} LIMIT ? OFFSET ?`).all(...params, per_page, (page - 1) * per_page);
   return {
-    data: rows.map(apiSerialize),
-    meta: { page, per_page, total, total_pages: Math.max(1, Math.ceil(total / per_page)) },
+    data: rows.map((row) => projectFields(apiSerialize(row), fields)),
+    meta: { page, per_page, total, total_pages: Math.max(1, Math.ceil(total / per_page)), ...(fields ? { fields: String(fields).split(',').map((f) => f.trim()).filter(Boolean) } : {}) },
   };
 }
 
 /** Full company profile by slug (approved only). */
-function profileBySlug(slug) {
+function profileBySlug(slug, fields = '') {
   const row = db.prepare("SELECT * FROM listings WHERE slug=? AND status='approved'").get(String(slug || '').slice(0, 120));
   if (!row) return null;
-  return apiSerialize(row);
+  return projectFields(apiSerialize(row), fields);
 }
 
 /** Global search across the approved ledger. */
-function search({ q = '', page = 1, per_page = 20, type = '', country = '', category = '' } = {}) {
+function search({ q = '', page = 1, per_page = 20, type = '', country = '', category = '', fields = '' } = {}) {
   q = String(q || '').trim().slice(0, 120);
   if (!q) fail(400, 'missing_query', 'Provide a search term, e.g. ?q=fintech.');
   page = Math.max(1, parseInt(page, 10) || 1);
@@ -310,8 +330,8 @@ function search({ q = '', page = 1, per_page = 20, type = '', country = '', cate
   const total = db.prepare(`SELECT COUNT(*) c FROM listings l ${where}`).get(...params).c;
   const rows = db.prepare(`SELECT l.* FROM listings l ${where} ORDER BY l.featured DESC, l.confidence DESC, l.name ASC LIMIT ? OFFSET ?`).all(...params, per_page, (page - 1) * per_page);
   return {
-    data: rows.map(apiSerialize),
-    meta: { query: q, page, per_page, total, total_pages: Math.max(1, Math.ceil(total / per_page)) },
+    data: rows.map((row) => projectFields(apiSerialize(row), fields)),
+    meta: { query: q, page, per_page, total, total_pages: Math.max(1, Math.ceil(total / per_page)), ...(fields ? { fields: String(fields).split(',').map((f) => f.trim()).filter(Boolean) } : {}) },
   };
 }
 
@@ -428,7 +448,7 @@ function exportCsv({ category = '', country = '', type = '' } = {}) {
 }
 
 /* ---------- CRUD ---------- */
-function listMine(user, { page = 1, per_page = 20, status = '' } = {}) {
+function listMine(user, { page = 1, per_page = 20, status = '', fields = '' } = {}) {
   page = Math.max(1, parseInt(page, 10) || 1);
   per_page = Math.min(50, Math.max(1, parseInt(per_page, 10) || 20));
   const clauses = ['owner_user_id = ?'];
@@ -441,8 +461,8 @@ function listMine(user, { page = 1, per_page = 20, status = '' } = {}) {
   const total = db.prepare(`SELECT COUNT(*) c FROM listings ${where}`).get(...params).c;
   const rows = db.prepare(`SELECT * FROM listings ${where} ORDER BY id DESC LIMIT ? OFFSET ?`).all(...params, per_page, (page - 1) * per_page);
   return {
-    data: rows.map(serialize),
-    meta: { page, per_page, total, total_pages: Math.max(1, Math.ceil(total / per_page)) },
+    data: rows.map((row) => projectFields(serialize(row), fields)),
+    meta: { page, per_page, total, total_pages: Math.max(1, Math.ceil(total / per_page)), ...(fields ? { fields: String(fields).split(',').map((f) => f.trim()).filter(Boolean) } : {}) },
   };
 }
 
@@ -486,6 +506,9 @@ function updateListing(user, id, body) {
   const nextStatus = (row.status === 'approved' || row.status === 'rejected') ? 'pending' : row.status;
   db.prepare(`UPDATE listings SET ${setSql ? setSql + ',' : ''} status=?, updated_at=datetime('now') WHERE id=?`).run(...vals, nextStatus, row.id);
   const fresh = db.prepare('SELECT * FROM listings WHERE id=?').get(row.id);
+  listingEvents.updated(fresh, { previous_status: row.status });
+  if (nextStatus === 'approved' && row.status !== 'approved') listingEvents.approved(fresh, true);
+  if (nextStatus === 'rejected' && row.status !== 'rejected') listingEvents.rejected(fresh);
   if (nextStatus === 'pending') {
     try { require('./ai').scheduleModeration(fresh.id); } catch { /* AI moderation is best-effort */ }
   }
@@ -494,6 +517,7 @@ function updateListing(user, id, body) {
 
 function deleteListing(user, id) {
   const row = getOwned(user, id);
+  listingEvents.deleted(row);
   const tx = db.transaction(() => {
     for (const t of ['listing_events', 'jobs', 'favorites', 'removal_requests', 'payments']) {
       db.prepare(`DELETE FROM ${t} WHERE listing_id=?`).run(row.id);
@@ -506,8 +530,8 @@ function deleteListing(user, id) {
 }
 
 module.exports = {
-  ApiServiceError, LIMITS, FIELD_KEYS,
-  parseFields, serialize, listMine, getOwned, createListing, updateListing, deleteListing,
+  ApiServiceError, LIMITS, FIELD_KEYS, API_FIELDS,
+  parseFields, projectFields, serialize, listMine, getOwned, createListing, updateListing, deleteListing,
   publicSerialize, publicListings, publicListing,
   apiSerialize, directory, profileBySlug, search, categories, countries, suggest,
   relationships, verifyDomain, exportCsv,

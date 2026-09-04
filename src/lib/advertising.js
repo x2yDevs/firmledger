@@ -11,6 +11,7 @@
  * viewing + perks; advertising buys a home page slot.
  */
 const { db } = require('../db');
+const listingEvents = require('./listingevents');
 
 /* ---------------- Packages ---------------- */
 function allPackages(activeOnly = false) {
@@ -84,6 +85,7 @@ function grantSponsorship(listingId, days, ref = 'admin') {
   }
   db.prepare('UPDATE listings SET sponsored=1, sponsored_expires_at=?, ad_reference=? WHERE id=?')
     .run(until, String(ref || 'admin').slice(0, 120), l.id);
+  listingEvents.updated(db.prepare('SELECT * FROM listings WHERE id=?').get(l.id), { change: 'sponsorship' });
   return { ok: true, listing: l.name, until: until || 'lifetime' };
 }
 
@@ -92,6 +94,7 @@ function revokeSponsorship(listingId) {
   const l = db.prepare('SELECT id, name FROM listings WHERE id=?').get(Number(listingId) || 0);
   if (!l) return { ok: false, error: 'Listing not found.' };
   db.prepare("UPDATE listings SET sponsored=0, sponsored_expires_at='' WHERE id=?").run(l.id);
+  listingEvents.updated(db.prepare('SELECT * FROM listings WHERE id=?').get(l.id), { change: 'sponsorship' });
   return { ok: true, listing: l.name };
 }
 

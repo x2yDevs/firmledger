@@ -10,7 +10,8 @@
  *
  *   GET    /api/v1                     → index (discovery)
  *   GET    /api/v1/health              → liveness (authenticated)
- *   GET    /api/v1/me                  → account, plan, limits, usage
+ *   GET    /api/v1/me                  → account, scopes, limits, usage
+ *   GET    /api/v1/usage               → durable monthly + endpoint usage analytics
  *   GET    /api/v1/listings            → directory (approved, filters & pagination)
  *   POST   /api/v1/listings            → create (201, owner only)
  *   GET    /api/v1/listings/:slug      → full company profile by slug
@@ -26,15 +27,19 @@
  *   GET    /api/v1/relationships/:slug → company relationship graph
  *   GET    /api/v1/verify/domain/:domain → check if a domain is listed
  *   GET    /api/v1/export/listings.csv → bulk export (Pro)
+ *   GET/POST/PATCH/DELETE /api/v1/webhooks → signed event subscriptions
  *
  * Access is a FirmLedger Pro feature: every key resolves to a user with an
- * active Pro plan, otherwise 403 { error.code = "pro_required" }.
+ * active Pro plan, otherwise 403 { error.code = "pro_required" }. Keys can be
+ * narrowed with read:listings, write:listings, read:relationships, export,
+ * manage:webhooks and read:usage scopes.
  */
 const express = require('express');
 const crypto = require('crypto');
 const apikeys = require('../lib/apikeys');
 const lim = require('../lib/apilimit');
 const svc = require('../lib/apilistings');
+const webhooks = require('../lib/webhooks');
 const { hasProAccess } = require('../lib/plans');
 const { siteUrl } = require('../lib/util');
 
@@ -114,6 +119,31 @@ router.use((req, res, next) => {
   next();
 });
 
+/* ---------- scope enforcement ---------- */
+function requiredScope(req) {
+  const path = String(req.path || '').replace(/\/$/, '') || '/';
+  const method = req.method.toUpperCase();
+  if (path === '/me' || path === '/usage') return 'read:usage';
+  if (path === '/webhooks' || path.startsWith('/webhooks/')) return 'manage:webhooks';
+  if (path.startsWith('/relationships/')) return 'read:relationships';
+  if (path === '/export/listings.csv') return 'export';
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)
+      && (/^\/listings(?:\/|$)/.test(path) || /^\/my\/listings(?:\/|$)/.test(path))) return 'write:listings';
+  if (method === 'GET' && (/^\/(?:listings|directory|my\/listings)(?:\/|$)/.test(path)
+      || ['/search', '/categories', '/countries', '/suggest'].includes(path)
+      || path.startsWith('/verify/domain/'))) return 'read:listings';
+  return null;
+}
+
+router.use((req, res, next) => {
+  const scope = requiredScope(req);
+  if (!scope || apikeys.hasScope(req.apiKey, scope)) return next();
+  res.set('WWW-Authenticate', `Bearer error="insufficient_scope", scope="${scope}"`);
+  return lim.apiError(res, 403, 'insufficient_scope', `This API key does not include the ${scope} scope. Update its scopes in the FirmLedger API console or use a key with the required access.`, {
+    details: { required_scope: scope, scopes: apikeys.parseScopes(req.apiKey), docs: DocsURL() },
+  });
+});
+
 /* ---------- rate limiting + concurrency gate ---------- */
 router.use((req, res, next) => {
   const isWrite = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method);
@@ -139,7 +169,7 @@ router.use((req, res, next) => {
   }
   if (isWrite) lim.chargeGlobalWrite();
   lim.rateHeaders(res, c, isWrite);
-  apikeys.recordUsage(req.apiKey.id, isWrite);
+  apikeys.recordUsage(req.apiKey.id, isWrite, apikeys.usageEndpoint(req.method, req.path));
   next();
 });
 
@@ -153,7 +183,7 @@ function deliver(res, result, req) {
 }
 
 function serviceError(res, e) {
-  if (e instanceof svc.ApiServiceError) {
+  if (e instanceof svc.ApiServiceError || e instanceof webhooks.WebhookServiceError) {
     return lim.apiError(res, e.status, e.code, e.message, { details: e.details });
   }
   throw e;
@@ -172,6 +202,7 @@ router.get('/', (req, res) => {
     endpoints: {
       health: 'GET /api/v1/health',
       me: 'GET /api/v1/me',
+      usage: 'GET /api/v1/usage',
       directory: 'GET /api/v1/listings',
       directory_alias: ['GET /api/v1/directory', 'GET /api/v1/directory/:slug'],
       profile: 'GET /api/v1/listings/:slug',
@@ -186,9 +217,19 @@ router.get('/', (req, res) => {
       relationships: 'GET /api/v1/relationships/:slug',
       verify: 'GET /api/v1/verify/domain/:domain',
       export: 'GET /api/v1/export/listings.csv',
+      webhooks: {
+        list: 'GET /api/v1/webhooks',
+        create: 'POST /api/v1/webhooks',
+        update: 'PATCH /api/v1/webhooks/:id',
+        remove: 'DELETE /api/v1/webhooks/:id',
+        test: 'POST /api/v1/webhooks/:id/test',
+        deliveries: 'GET /api/v1/webhooks/:id/deliveries',
+      },
     },
-    limits: { read_requests_per_minute: lim.READ_RPM, write_requests_per_minute: lim.WRITE_RPM, max_concurrent_per_key: lim.MAX_INFLIGHT, max_keys_per_account: apikeys.MAX_ACTIVE_KEYS },
-    note: 'API access is a FirmLedger Pro feature. Every endpoint needs a key — there is no public endpoint, including /health.',
+    scopes: apikeys.SCOPE_DEFINITIONS,
+    webhook_events: webhooks.EVENTS,
+    limits: { read_requests_per_minute: lim.READ_RPM, write_requests_per_minute: lim.WRITE_RPM, max_concurrent_per_key: lim.MAX_INFLIGHT, max_keys_per_account: apikeys.MAX_ACTIVE_KEYS, max_webhooks_per_account: webhooks.MAX_WEBHOOKS_PER_USER },
+    note: 'API access is a FirmLedger Pro feature. Every endpoint needs a key — there is no public endpoint, including /health. Narrow keys with scopes and use webhooks for push notifications.',
   });
 });
 
@@ -204,15 +245,36 @@ router.get('/me', (req, res) => {
       plan_expires_at: req.apiUser.plan_expires_at || null,
       api: {
         key_prefix: req.apiKey.prefix,
+        scopes: apikeys.parseScopes(req.apiKey),
         active_keys: apikeys.activeKeyCount(req.apiUser.id),
         max_keys: apikeys.MAX_ACTIVE_KEYS,
         limits: {
           read_requests_per_minute: lim.READ_RPM,
           write_requests_per_minute: lim.WRITE_RPM,
           max_concurrent_per_key: lim.MAX_INFLIGHT,
+          current_key: {
+            read: lim.snapshot('k' + req.apiKey.id, false),
+            write: lim.snapshot('k' + req.apiKey.id, true),
+          },
         },
         usage,
       },
+    },
+  });
+});
+
+/* Durable usage data is intentionally separate from /me so a service can
+   poll analytics without re-fetching account identity fields. */
+router.get('/usage', (req, res) => {
+  res.json({
+    data: apikeys.usageSummary(req.apiUser.id),
+    meta: {
+      current_key: {
+        prefix: req.apiKey.prefix,
+        read: lim.snapshot('k' + req.apiKey.id, false),
+        write: lim.snapshot('k' + req.apiKey.id, true),
+      },
+      period: 'current calendar month (UTC) plus trailing 31 days',
     },
   });
 });
@@ -226,7 +288,7 @@ router.get('/listings', (req, res) => {
 /* ---------- full company profile by slug ---------- */
 router.get('/listings/:slug', (req, res) => {
   try {
-    const row = svc.profileBySlug(req.params.slug);
+    const row = svc.profileBySlug(req.params.slug, req.query.fields);
     if (!row) return lim.apiError(res, 404, 'not_found', 'No approved public listing with that slug.');
     res.json({ data: row });
   } catch (e) { serviceError(res, e); }
@@ -256,7 +318,7 @@ router.get('/directory', (req, res) => {
 });
 router.get('/directory/:slug', (req, res) => {
   try {
-    const row = svc.profileBySlug(req.params.slug);
+    const row = svc.profileBySlug(req.params.slug, req.query.fields);
     if (!row) return lim.apiError(res, 404, 'not_found', 'No approved public listing with that slug.');
     res.json({ data: row });
   } catch (e) { serviceError(res, e); }
@@ -274,7 +336,17 @@ router.post('/my/listings', (req, res) => {
 });
 
 router.get('/my/listings/:id', (req, res) => {
-  try { res.json({ data: svc.serialize(svc.getOwned(req.apiUser, req.params.id)) }); }
+  try { res.json({ data: svc.projectFields(svc.serialize(svc.getOwned(req.apiUser, req.params.id)), req.query.fields) }); }
+  catch (e) { serviceError(res, e); }
+});
+
+router.put('/my/listings/:id', (req, res) => {
+  try { deliver(res, svc.updateListing(req.apiUser, req.params.id, req.body), req); }
+  catch (e) { serviceError(res, e); }
+});
+
+router.delete('/my/listings/:id', (req, res) => {
+  try { deliver(res, svc.deleteListing(req.apiUser, req.params.id), req); }
   catch (e) { serviceError(res, e); }
 });
 
@@ -325,6 +397,65 @@ router.get('/export/listings.csv', (req, res) => {
     res.set('Content-Disposition', `attachment; filename="firmledger-listings-${new Date().toISOString().slice(0, 10)}.csv"`);
     res.send(csv);
   } catch (e) { serviceError(res, e); }
+});
+
+/* ---------- webhooks (push delivery, not polling) ---------- */
+router.get('/webhooks', (req, res) => {
+  try { res.json({ data: webhooks.list(req.apiUser.id), meta: { events: webhooks.EVENTS } }); }
+  catch (e) { serviceError(res, e); }
+});
+
+router.post('/webhooks', (req, res) => {
+  try {
+    const created = webhooks.create(req.apiUser.id, req.body && typeof req.body === 'object' ? req.body : {});
+    const data = webhooks.serialize(created.row);
+    res.status(201).json({ data: { ...data, secret: created.secret }, meta: { secret_once: true, note: 'Store this secret now. Rotate it to receive a new one; FirmLedger cannot display it again.' } });
+  } catch (e) { serviceError(res, e); }
+});
+
+router.get('/webhooks/:id', (req, res) => {
+  try { res.json({ data: webhooks.serialize(webhooks.getOwned(req.apiUser.id, req.params.id)) }); }
+  catch (e) { serviceError(res, e); }
+});
+
+function updateWebhookRoute(req, res) {
+  try { res.json({ data: webhooks.serialize(webhooks.update(req.apiUser.id, req.params.id, req.body && typeof req.body === 'object' ? req.body : {})) }); }
+  catch (e) { serviceError(res, e); }
+}
+router.patch('/webhooks/:id', updateWebhookRoute);
+router.put('/webhooks/:id', updateWebhookRoute);
+
+router.post('/webhooks/:id/rotate-secret', (req, res) => {
+  try {
+    const rotated = webhooks.rotateSecret(req.apiUser.id, req.params.id);
+    res.json({ data: { ...webhooks.serialize(rotated.row), secret: rotated.secret }, meta: { secret_once: true, note: 'The previous signing secret is invalid immediately.' } });
+  } catch (e) { serviceError(res, e); }
+});
+
+router.post('/webhooks/:id/test', (req, res) => {
+  try {
+    const delivery = webhooks.test(req.apiUser.id, req.params.id);
+    res.status(202).json({ data: { delivery_id: delivery.id, event: 'webhook.test', status: 'pending' }, meta: { note: 'The test is queued and will be delivered in the background.' } });
+  } catch (e) { serviceError(res, e); }
+});
+
+router.get('/webhooks/:id/deliveries', (req, res) => {
+  try {
+    const rows = webhooks.listDeliveries(req.apiUser.id, req.params.id, req.query.limit);
+    res.json({ data: rows, meta: { total: rows.length } });
+  } catch (e) { serviceError(res, e); }
+});
+
+router.post('/webhooks/:id/deliveries/:deliveryId/retry', (req, res) => {
+  try {
+    webhooks.retryDelivery(req.apiUser.id, req.params.id, req.params.deliveryId);
+    res.status(202).json({ data: { delivery_id: Number(req.params.deliveryId), status: 'pending' } });
+  } catch (e) { serviceError(res, e); }
+});
+
+router.delete('/webhooks/:id', (req, res) => {
+  try { webhooks.remove(req.apiUser.id, req.params.id); res.status(204).end(); }
+  catch (e) { serviceError(res, e); }
 });
 
 /* ---------- JSON 404 for anything else under /api/v1 ---------- */

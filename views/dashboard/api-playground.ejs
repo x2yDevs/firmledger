@@ -41,14 +41,14 @@
         <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
           <label class="fl" style="margin:0;flex:0 0 auto"><span>Method</span>
             <select class="cadence-select" name="method" id="pgMethod" style="min-width:0;width:130px">
-              <% ['GET','POST','PUT','DELETE'].forEach(function (m) { %>
+              <% ['GET','POST','PUT','PATCH','DELETE'].forEach(function (m) { %>
               <option value="<%= m %>" <%= form.method === m ? 'selected' : '' %>><%= m %></option>
               <% }) %>
             </select>
           </label>
           <label class="fl" style="margin:0;flex:1;min-width:200px"><span>Path</span><input class="input mono" name="path" id="pgPath" value="<%= form.path %>" placeholder="/api/v1/listings" spellcheck="false" style="font-size:13px"></label>
         </div>
-        <label class="fl" id="pgBodyWrap"><span>JSON body <span class="muted" style="text-transform:none;letter-spacing:0">(POST &amp; PUT — leave empty otherwise)</span></span>
+        <label class="fl" id="pgBodyWrap"><span>JSON body <span class="muted" style="text-transform:none;letter-spacing:0">(POST, PUT &amp; PATCH — leave empty otherwise)</span></span>
           <textarea class="input mono" name="body" id="pgBody" rows="12" spellcheck="false" style="font-size:12.5px;line-height:1.7;resize:vertical"><%= form.body %></textarea>
         </label>
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
@@ -101,12 +101,14 @@ GET    /api/v1/export/listings.csv  <span class="c">→ CSV export</span></div>
   if (!sel || !method) return;
   function syncBodyVisibility() {
     var m = method.value;
-    wrap.style.display = (m === 'POST' || m === 'PUT') ? '' : 'none';
+    wrap.style.display = (m === 'POST' || m === 'PUT' || m === 'PATCH') ? '' : 'none';
   }
   var SAMPLE_ID = '<%= typeof sampleId !== 'undefined' && sampleId ? sampleId : '' %>';
+  var SAMPLE_WEBHOOK_ID = '<%= typeof sampleWebhookId !== 'undefined' && sampleWebhookId ? sampleWebhookId : '' %>';
   var SAMPLE_SLUG = '<%= typeof sampleSlug !== 'undefined' && sampleSlug ? sampleSlug : '' %>';
   function fillPath(p) {
     return (p.path || '')
+      .replace(/\/webhooks\/\{id\}/g, '/webhooks/' + SAMPLE_WEBHOOK_ID)
       .replace(/\{slug\}/g, SAMPLE_SLUG)
       .replace(/\{id\}/g, SAMPLE_ID)
       .replace(/\/+$/, '');

@@ -69,6 +69,20 @@ function charge(name, isWrite, { commit = true } = {}) {
   return { ok: true, remaining: limit - used - (commit ? 1 : 0), resetInSec, limit, kind: isWrite ? 'write' : 'read' };
 }
 
+/** Current budget without charging it — used by /me and the developer console. */
+function snapshot(name, isWrite) {
+  const b = bucketFor(name);
+  const live = liveLimits();
+  const limit = isWrite ? live.write : live.read;
+  const used = isWrite ? b.writes : b.reads;
+  return {
+    limit,
+    remaining: Math.max(0, limit - used),
+    resetInSec: Math.max(1, Math.ceil((WINDOW_MS - (nowMs() - b.start)) / 1000)),
+    kind: isWrite ? 'write' : 'read',
+  };
+}
+
 /** Global ceiling on writes across ALL keys — protects the journal from floods. */
 function chargeGlobalWrite({ commit = true } = {}) {
   const b = bucketFor('__global_writes__');
@@ -131,6 +145,6 @@ function rateHeaders(res, chargeInfo, isWrite) {
 
 module.exports = {
   READ_RPM, WRITE_RPM, GLOBAL_WRITE_RPM, MAX_INFLIGHT, BRUTE_MAX_FAILS, BRUTE_LOCK_MIN,
-  charge, chargeGlobalWrite, acquireSlot, releaseSlot,
+  charge, snapshot, chargeGlobalWrite, acquireSlot, releaseSlot,
   ipLocked, registerFail, clearFails, apiError, rateHeaders,
 };

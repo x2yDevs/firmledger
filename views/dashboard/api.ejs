@@ -8,7 +8,7 @@
         <h2>Developer API
           <% if (pro) { %><span class="pill pill-pro" style="vertical-align:middle;margin-left:8px">PRO</span><% } %>
         </h2>
-        <span class="muted">REST access to the FirmLedger ledger — directory, search, categories, countries, verification, export and CRUD over the records you own. Every endpoint needs a key. <b>Included with FirmLedger Pro.</b></span>
+        <span class="muted">REST access to the FirmLedger ledger — directory, search, categories, countries, verification, export, scoped keys and signed event delivery over webhooks. Every endpoint needs a key. <b>Included with FirmLedger Pro.</b></span>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <a class="btn btn-ghost btn-sm" href="/api/docs" target="_blank" rel="noopener">API documentation ↗</a>
@@ -26,6 +26,10 @@
       <button class="btn btn-primary btn-sm" type="button" data-copy="#newApiKey">Copy key</button>
     </div>
     <% } %>
+    <% if (typeof webhookSecret !== 'undefined' && webhookSecret) { %>
+    <div class="alert alert-ok" style="margin-bottom:10px"><strong>Save this webhook signing secret now</strong> — it is shown once. Use it to verify <code>X-FirmLedger-Signature</code> before processing an event.</div>
+    <div class="token-box webhook-secret-box" style="margin-top:0"><code id="newWebhookSecret"><%= webhookSecret %></code><button class="btn btn-primary btn-sm" type="button" data-copy="#newWebhookSecret">Copy secret</button></div>
+    <% } %>
 
     <% if (!pro) { %>
     <div class="form-card" style="text-align:center;padding:clamp(28px,4vw,44px)">
@@ -42,16 +46,26 @@
     <div class="form-card">
       <h3 class="form-section">API keys</h3>
       <p class="muted">Keys authenticate every request as an <code>Authorization: Bearer</code> header. You can hold up to <b><%= maxKeys %></b> active keys — use separate keys per integration so one leak never touches the rest. Only hashes are stored: a raw key is shown once, at creation.</p>
-      <form method="post" action="/dashboard/api/keys" class="form" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:6px">
+      <form method="post" action="/dashboard/api/keys" class="form" style="margin-bottom:6px">
         <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-        <label class="fl" style="flex:1;min-width:240px;margin:0"><span>Label for the new key</span><input class="input" name="label" maxlength="60" placeholder="e.g. CRM sync · production" required></label>
-        <button class="btn btn-primary" type="submit">Generate API key</button>
+        <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+          <label class="fl" style="flex:1;min-width:240px;margin:0"><span>Label for the new key</span><input class="input" name="label" maxlength="60" placeholder="e.g. CRM sync · production" required></label>
+          <button class="btn btn-primary" type="submit">Generate API key</button>
+        </div>
+        <fieldset class="scope-picker" style="margin-top:16px">
+          <legend>Permissions <small>— start narrow, add access only when an integration needs it</small></legend>
+          <div class="scope-grid">
+            <% scopeDefinitions.forEach(function (scope) { %>
+            <label class="scope-option"><input type="checkbox" name="scopes" value="<%= scope.id %>" checked><span><b><%= scope.label %></b><small><code><%= scope.id %></code> · <%= scope.description %></small></span></label>
+            <% }) %>
+          </div>
+        </fieldset>
       </form>
-      <p class="form-note" style="margin-top:0">The full key appears once on the next screen — copy it immediately.</p>
+      <p class="form-note" style="margin-top:0">The full key appears once on the next screen — copy it immediately. Existing keys can be narrowed below without rotating the credential.</p>
       <% if (keys.length) { %>
       <div class="table-wrap" style="margin-top:14px">
         <table class="table">
-          <thead><tr><th>Label</th><th>Key</th><th>Created</th><th>Last used</th><th>Requests</th><th>State</th><th class="ta-right">Actions</th></tr></thead>
+          <thead><tr><th>Label</th><th>Key</th><th>Created</th><th>Last used</th><th>Requests</th><th>Scopes</th><th>State</th><th class="ta-right">Actions</th></tr></thead>
           <tbody>
             <% keys.forEach(function (k) { %>
             <tr>
@@ -60,9 +74,18 @@
               <td class="muted" style="font-size:12.5px"><%= (k.created_at || '').slice(0, 10) %></td>
               <td class="muted" style="font-size:12.5px"><%= k.last_used_at ? k.last_used_at.slice(0, 16) : 'never' %></td>
               <td><span class="mono" style="font-size:12.5px"><%= k.total_requests %></span> <span class="muted" style="font-size:11.5px">(<%= k.write_requests %> writes)</span></td>
+              <td><div class="scope-pills"><% k.scopes.slice(0, 3).forEach(function (s) { %><span class="scope-pill"><%= s %></span><% }) %><% if (k.scopes.length > 3) { %><span class="scope-pill">+<%= k.scopes.length - 3 %></span><% } %></div></td>
               <td><% if (k.revoked_at) { %><span class="pill pill-rejected">revoked</span><% } else { %><span class="pill pill-approved">active</span><% } %></td>
               <td class="ta-right">
                 <% if (!k.revoked_at) { %>
+                <details class="scope-details">
+                  <summary>Scopes</summary>
+                  <form method="post" action="/dashboard/api/keys/<%= k.id %>/scopes" class="scope-edit-form">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                    <% scopeDefinitions.forEach(function (scope) { %><label><input type="checkbox" name="scopes" value="<%= scope.id %>" <%= k.scopes.includes(scope.id) ? 'checked' : '' %>><code><%= scope.id %></code></label><% }) %>
+                    <button class="btn btn-primary btn-xs" type="submit">Save scopes</button>
+                  </form>
+                </details>
                 <form method="post" action="/dashboard/api/keys/<%= k.id %>/revoke" class="inline" onsubmit="return confirm('Revoke this key immediately? Every integration using it starts receiving 401 responses.');">
                   <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                   <button class="btn btn-danger btn-xs" type="submit">Revoke</button>
@@ -79,15 +102,57 @@
       <% } %>
     </div>
 
-    <div class="form-card">
-      <h3 class="form-section">Usage — across all your keys</h3>
-      <div class="stats-strip" style="margin-top:6px">
+    <div class="form-card api-usage-card">
+      <div class="api-card-head"><div><h3 class="form-section">Usage &amp; health</h3><p class="muted" style="margin:4px 0 0">Durable aggregates across every key. The month resets on the first day of the UTC calendar month.</p></div><span class="api-live-mark"><i></i> live limits</span></div>
+      <div class="stats-strip api-stats" style="margin-top:18px">
+        <div class="stat-cell"><div class="stat-n"><%= usage.month_requests %></div><div class="stat-l">Requests this month</div></div>
+        <div class="stat-cell"><div class="stat-n"><%= usage.month_writes %></div><div class="stat-l">Writes this month</div></div>
         <div class="stat-cell"><div class="stat-n"><%= usage.today_requests %></div><div class="stat-l">Requests today</div></div>
-        <div class="stat-cell"><div class="stat-n"><%= usage.today_writes %></div><div class="stat-l">Writes today</div></div>
         <div class="stat-cell"><div class="stat-n"><%= usage.total_requests %></div><div class="stat-l">All-time requests</div></div>
-        <div class="stat-cell"><div class="stat-n"><%= usage.total_writes %></div><div class="stat-l">All-time writes</div></div>
       </div>
-      <p class="form-note">Counters update on every authenticated call. The <a href="/dashboard/api/playground" style="color:var(--accent);font-weight:600">playground</a> runs against your own data with the same per-minute rules.</p>
+      <div class="usage-grid">
+        <div class="usage-chart-panel">
+          <div class="usage-panel-title"><b>Requests over time</b><span class="muted">trailing 31 days</span></div>
+          <% const maxUsage = Math.max(1, ...usage.daily.map(function (d) { return Number(d.requests) || 0; })); %>
+          <div class="usage-chart" role="img" aria-label="API requests over the trailing 31 days">
+            <% usage.daily.forEach(function (d) { const h = Math.max(4, Math.round(((Number(d.requests) || 0) / maxUsage) * 100)); %><div class="usage-bar-wrap" title="<%= d.day %>: <%= d.requests %> requests"><span class="usage-bar" style="height:<%= h %>%"></span></div><% }) %>
+          </div>
+          <div class="usage-axis"><span><%= usage.daily.length ? usage.daily[0].day.slice(5) : '' %></span><span>today</span></div>
+          <div class="chart-legend"><span><i class="legend-dot"></i> requests</span><span><i class="legend-line"></i> writes included in total</span></div>
+        </div>
+        <div class="usage-top-panel">
+          <div class="usage-panel-title"><b>Most-used endpoints</b><span class="muted">this month</span></div>
+          <% if (usage.top_endpoints.length) { %><div class="endpoint-rank"><% usage.top_endpoints.forEach(function (e, i) { %><div class="endpoint-row"><span class="rank"><%= String(i + 1).padStart(2, '0') %></span><code><%= e.method %> <%= e.endpoint %></code><strong><%= e.requests %></strong></div><% }) %></div><% } else { %><p class="muted" style="margin-top:18px">Endpoint rankings appear after your first API calls.</p><% } %>
+        </div>
+      </div>
+      <div class="limit-snapshot-grid">
+        <% keys.filter(function (k) { return !k.revoked_at; }).slice(0, 3).forEach(function (k) { %><% const rs = typeof rateSnapshot === 'function' ? rateSnapshot(k.id, false) : { remaining: limits.READ_RPM, limit: limits.READ_RPM, resetInSec: 60 }; const ws = typeof rateSnapshot === 'function' ? rateSnapshot(k.id, true) : { remaining: limits.WRITE_RPM, limit: limits.WRITE_RPM, resetInSec: 60 }; %>
+        <div class="limit-snapshot"><div><span class="mono"><%= k.prefix %></span><span class="muted"> · <%= k.label || 'Untitled key' %></span></div><div class="limit-values"><b><%= rs.remaining %>/<%= rs.limit %></b><span>reads left</span><b><%= ws.remaining %>/<%= ws.limit %></b><span>writes left</span></div><small>rolling window resets in <%= Math.max(rs.resetInSec, ws.resetInSec) %>s</small></div>
+        <% }) %>
+      </div>
+      <p class="form-note">Counters update on every authenticated call. Rate-limit snapshots are per key and roll every 60 seconds. The <a href="/dashboard/api/playground" style="color:var(--accent);font-weight:600">playground</a> follows the same fair-use rules.</p>
+    </div>
+
+    <div class="form-card webhook-card">
+      <div class="api-card-head"><div><h3 class="form-section">Webhooks — push events to your systems</h3><p class="muted" style="margin:4px 0 0">FirmLedger queues signed POST notifications in the background. Subscribe to owner changes, category additions and verified claims — no polling loop required.</p></div><span class="webhook-lock">HMAC signed</span></div>
+      <form method="post" action="/dashboard/api/webhooks" class="form webhook-form">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <div class="form-row">
+          <label class="fl"><span>Label</span><input class="input" name="label" maxlength="80" placeholder="CRM production"></label>
+          <label class="fl"><span>Receiver URL <small>HTTPS required in production</small></span><input class="input mono" name="url" type="url" maxlength="500" placeholder="https://crm.example.com/hooks/firmledger" required></label>
+        </div>
+        <div class="webhook-options"><div><b class="option-title">Events</b><div class="event-checks"><% webhookEvents.forEach(function (event) { %><label><input type="checkbox" name="events" value="<%= event %>" <%= webhookDefaults.includes(event) ? 'checked' : '' %>><code><%= event %></code></label><% }) %></div></div><label class="fl category-field"><span>Category filter <small>comma-separated; blank means every category</small></span><input class="input" name="categories" placeholder="Fintech, Logistics"></label></div>
+        <div class="form-actions"><button class="btn btn-primary" type="submit">Create webhook</button><span class="form-note">The signing secret appears once. Keep it server-side and verify the timestamped signature.</span></div>
+      </form>
+      <% if (webhooks.length) { %>
+      <div class="webhook-list"><% webhooks.forEach(function (hook) { %>
+        <div class="webhook-row <%= hook.active ? '' : 'is-paused' %>">
+          <div class="webhook-main"><div class="webhook-title"><strong><%= hook.label %></strong><span class="pill <%= hook.active ? 'pill-approved' : 'pill-rejected' %>"><%= hook.active ? 'active' : 'paused' %></span></div><code class="webhook-url"><%= hook.url %></code><div class="webhook-meta"><span><%= hook.events.length %> event<%= hook.events.length === 1 ? '' : 's' %></span><span><%= hook.categories.length ? hook.categories.join(', ') : 'all categories' %></span><span>secret <%= hook.secret_prefix %></span><span><%= hook.last_success_at ? 'last success ' + hook.last_success_at.slice(0, 16) : (hook.last_delivery_at ? 'last attempt ' + hook.last_delivery_at.slice(0, 16) : 'not delivered yet') %></span><% if (hook.failure_count) { %><span class="webhook-fail"><%= hook.failure_count %> consecutive failure<%= hook.failure_count === 1 ? '' : 's' %></span><% } %></div></div>
+          <div class="webhook-actions"><form method="post" action="/dashboard/api/webhooks/<%= hook.id %>/test" class="inline"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-ghost btn-xs" type="submit">Send test</button></form><form method="post" action="/dashboard/api/webhooks/<%= hook.id %>/rotate" class="inline" onsubmit="return confirm('Rotate this signing secret? Your receiver must be updated immediately.');"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-ghost btn-xs" type="submit">Rotate secret</button></form><form method="post" action="/dashboard/api/webhooks/<%= hook.id %>/toggle" class="inline"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-ghost btn-xs" type="submit"><%= hook.active ? 'Pause' : 'Resume' %></button></form><form method="post" action="/dashboard/api/webhooks/<%= hook.id %>/delete" class="inline" onsubmit="return confirm('Remove this webhook and its delivery history?');"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-danger btn-xs" type="submit">Remove</button></form></div>
+        </div>
+      <% }) %></div>
+      <% } else { %><div class="webhook-empty"><span class="webhook-empty-icon">↗</span><div><b>No webhook destinations yet</b><p class="muted">Create one above to make approvals, updates and verified claims flow straight into your CRM or monitoring system.</p></div></div><% } %>
+      <p class="form-note" style="margin-bottom:0">Deliveries are retried with backoff on timeouts, 429s and 5xx responses. A receiver that fails repeatedly is paused automatically; resume it here after fixing the endpoint.</p>
     </div>
 
     <div class="form-card">
