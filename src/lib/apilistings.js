@@ -132,7 +132,7 @@ function duplicateGuard({ name, website }, excludeId = null) {
   sql += ' LIMIT 1';
   const dup = db.prepare(sql).get(...params);
   if (dup) {
-    fail(409, 'duplicate_listing', `A record for this name or domain already exists (slug "${dup.slug}"). Update it with PUT /api/v1/listings/${dup.id} if you own it.`, { existing: { id: dup.id, slug: dup.slug } });
+    fail(409, 'duplicate_listing', `A record for this name or domain already exists (slug "${dup.slug}"). Update it with PUT /api/v1/my/listings/${dup.id} if you own it.`, { existing: { id: dup.id, slug: dup.slug } });
   }
 }
 
@@ -200,7 +200,8 @@ function publicSerialize(row) {
   };
 }
 
-/** Public directory — approved listings only, always available without a key. */
+/** Public directory read (approved listings only) — used by the site's own
+ *  marketing/web surfaces; the API exposes this same data behind the key gate. */
 function publicListings({ page = 1, per_page = 20, q = '', type = '', category = '', country = '', sort = 'featured' } = {}) {
   page = Math.max(1, parseInt(page, 10) || 1);
   per_page = Math.min(50, Math.max(1, parseInt(per_page, 10) || 20));
@@ -233,6 +234,197 @@ function publicListing(slug) {
   const row = db.prepare("SELECT * FROM listings WHERE slug=? AND status='approved'").get(String(slug || '').slice(0, 120));
   if (!row) return null;
   return publicSerialize(row);
+}
+
+/* ============================================================================
+ * PUBLIC (key + Pro) read surface.
+ *
+ * These run behind the same key + Pro gate as the CRUD endpoints, so a Pro
+ * member gets the full profile fields — including contact details — for any
+ * approved record on the ledger, not just their own.
+ * ==========================================================================*/
+
+function apiSerialize(row) {
+  const s = serialize(row);
+  let sources = []; try { sources = JSON.parse(row.sources || '[]'); } catch { /* ignore */ }
+  let tech = []; try { tech = JSON.parse(row.tech || '[]'); } catch { /* ignore */ }
+  return Object.assign({}, s, {
+    sources,
+    tech,
+    hiring_url: row.hiring_url || '',
+    plan: row.plan || 'free',
+  });
+}
+
+/** Directory — approved listings with filters & pagination. */
+function directory({ page = 1, per_page = 20, q = '', type = '', category = '', country = '', city = '', region = '', sort = 'featured', sponsored = '' } = {}) {
+  page = Math.max(1, parseInt(page, 10) || 1);
+  per_page = Math.min(50, Math.max(1, parseInt(per_page, 10) || 20));
+  const clauses = ["l.status='approved'"];
+  const params = [];
+  if (q) {
+    const like = `%${String(q).slice(0, 80)}%`;
+    clauses.push('(l.name LIKE ? OR l.tagline LIKE ? OR l.description LIKE ? OR l.tags LIKE ? OR l.city LIKE ? OR l.category LIKE ?)');
+    params.push(like, like, like, like, like, like);
+  }
+  if (type) { clauses.push('l.type = ?'); params.push(String(type).slice(0, 40)); }
+  if (category) { clauses.push('l.category = ?'); params.push(String(category).slice(0, 60)); }
+  if (country) { clauses.push('l.country = ?'); params.push(String(country).slice(0, 60)); }
+  if (city) { clauses.push('l.city = ?'); params.push(String(city).slice(0, 80)); }
+  if (region) { clauses.push('l.region = ?'); params.push(String(region).slice(0, 80)); }
+  if (sponsored === '1' || sponsored === 'true') clauses.push('l.sponsored = 1');
+  const order = sort === 'newest' ? 'l.created_at DESC'
+    : sort === 'name' ? 'l.name ASC'
+    : sort === 'confidence' ? 'l.confidence DESC'
+    : sort === 'country' ? 'l.country ASC, l.name ASC'
+    : 'l.featured DESC, l.sponsored DESC, l.confidence DESC, l.name ASC';
+  const where = `WHERE ${clauses.join(' AND ')}`;
+  const total = db.prepare(`SELECT COUNT(*) c FROM listings l ${where}`).get(...params).c;
+  const rows = db.prepare(`SELECT l.* FROM listings l ${where} ORDER BY ${order} LIMIT ? OFFSET ?`).all(...params, per_page, (page - 1) * per_page);
+  return {
+    data: rows.map(apiSerialize),
+    meta: { page, per_page, total, total_pages: Math.max(1, Math.ceil(total / per_page)) },
+  };
+}
+
+/** Full company profile by slug (approved only). */
+function profileBySlug(slug) {
+  const row = db.prepare("SELECT * FROM listings WHERE slug=? AND status='approved'").get(String(slug || '').slice(0, 120));
+  if (!row) return null;
+  return apiSerialize(row);
+}
+
+/** Global search across the approved ledger. */
+function search({ q = '', page = 1, per_page = 20, type = '', country = '', category = '' } = {}) {
+  q = String(q || '').trim().slice(0, 120);
+  if (!q) fail(400, 'missing_query', 'Provide a search term, e.g. ?q=fintech.');
+  page = Math.max(1, parseInt(page, 10) || 1);
+  per_page = Math.min(50, Math.max(1, parseInt(per_page, 10) || 20));
+  const like = `%${q}%`;
+  const clauses = ["l.status='approved'", "(l.name LIKE ? OR l.tagline LIKE ? OR l.description LIKE ? OR l.category LIKE ? OR l.city LIKE ? OR l.tags LIKE ? OR l.country LIKE ?)"];
+  const params = [like, like, like, like, like, like, like];
+  if (type) { clauses.push('l.type = ?'); params.push(String(type).slice(0, 40)); }
+  if (country) { clauses.push('l.country = ?'); params.push(String(country).slice(0, 60)); }
+  if (category) { clauses.push('l.category = ?'); params.push(String(category).slice(0, 60)); }
+  const where = 'WHERE ' + clauses.join(' AND ');
+  const total = db.prepare(`SELECT COUNT(*) c FROM listings l ${where}`).get(...params).c;
+  const rows = db.prepare(`SELECT l.* FROM listings l ${where} ORDER BY l.featured DESC, l.confidence DESC, l.name ASC LIMIT ? OFFSET ?`).all(...params, per_page, (page - 1) * per_page);
+  return {
+    data: rows.map(apiSerialize),
+    meta: { query: q, page, per_page, total, total_pages: Math.max(1, Math.ceil(total / per_page)) },
+  };
+}
+
+/** Category list with live approved counts. */
+function categories() {
+  const rows = db.prepare(
+    `SELECT c.name, c.slug, c.official,
+       (SELECT COUNT(*) FROM listings l WHERE l.category = c.name AND l.status='approved') AS listings_count
+     FROM categories c ORDER BY listings_count DESC, c.name ASC`
+  ).all();
+  return { data: rows, meta: { total: rows.length } };
+}
+
+/** Distinct approved countries with counts. */
+function countries() {
+  const rows = db.prepare(
+    `SELECT country, COUNT(*) AS listings_count FROM listings
+     WHERE status='approved' AND country != '' GROUP BY country
+     ORDER BY listings_count DESC, country ASC`
+  ).all();
+  return { data: rows.map((r) => ({ country: r.country, listings_count: r.listings_count })), meta: { total: rows.length } };
+}
+
+/** Autocomplete — listings first, then categories, countries, cities. */
+function suggest({ q = '', limit = 8 } = {}) {
+  q = String(q || '').trim().slice(0, 80);
+  if (!q) return { data: [], meta: { query: '' } };
+  limit = Math.min(25, Math.max(1, parseInt(limit, 10) || 8));
+  const like = `%${q}%`;
+  const items = [];
+  const seen = new Set();
+  const listRows = db.prepare(
+    `SELECT slug, name, type, category, city, country, confidence FROM listings
+     WHERE status='approved' AND (name LIKE ? OR category LIKE ? OR city LIKE ? OR tags LIKE ?)
+     ORDER BY featured DESC, confidence DESC, name ASC LIMIT ?`
+  ).all(like, like, like, like, limit);
+  for (const r of listRows) {
+    items.push({ type: 'listing', value: r.name, slug: r.slug, category: r.category, city: r.city, country: r.country, confidence: r.confidence });
+    seen.add('listing|' + r.slug);
+  }
+  const catRows = db.prepare('SELECT name, slug FROM categories WHERE name LIKE ? ORDER BY name ASC LIMIT ?').all(like, limit);
+  for (const r of catRows) {
+    const key = 'category|' + r.name;
+    if (!seen.has(key)) { seen.add(key); items.push({ type: 'category', value: r.name, slug: r.slug }); }
+  }
+  const countryRows = db.prepare("SELECT DISTINCT country FROM listings WHERE status='approved' AND country LIKE ? ORDER BY country ASC LIMIT ?").all(like, limit);
+  for (const r of countryRows) {
+    const key = 'country|' + r.country;
+    if (!seen.has(key)) { seen.add(key); items.push({ type: 'country', value: r.country }); }
+  }
+  const cityRows = db.prepare("SELECT DISTINCT city FROM listings WHERE status='approved' AND city LIKE ? ORDER BY city ASC LIMIT ?").all(like, limit);
+  for (const r of cityRows) {
+    const key = 'city|' + r.city;
+    if (!seen.has(key)) { seen.add(key); items.push({ type: 'city', value: r.city, country: r.country }); }
+  }
+  const order = { listing: 0, category: 1, country: 2, city: 3 };
+  items.sort((a, b) => (order[a.type] || 4) - (order[b.type] || 4));
+  return { data: items.slice(0, Math.max(4, limit * 2)), meta: { query: q } };
+}
+
+/** Company relationship graph by listing slug. */
+function relationships(slug) {
+  const row = db.prepare("SELECT * FROM listings WHERE slug=? AND status='approved'").get(String(slug || '').slice(0, 120));
+  if (!row) return null;
+  const graph = require('./graph').buildGraph(row);
+  return {
+    slug: row.slug,
+    name: row.name,
+    type: row.type,
+    claimed: !!row.claimed,
+    center: graph.center,
+    items: graph.items,
+  };
+}
+
+/** Check whether a domain is already listed (approved). */
+function verifyDomain(domain) {
+  let d = String(domain || '').trim().toLowerCase();
+  if (!d) fail(400, 'invalid_domain', 'Provide a domain, e.g. acme.com.');
+  if (/^https?:\/\//.test(d)) d = domainOf(d);
+  else d = domainOf('https://' + d);
+  if (!d) fail(400, 'invalid_domain', 'Provide a valid domain, e.g. acme.com.');
+  const like = `%${d}%`;
+  const rows = db.prepare("SELECT * FROM listings WHERE status='approved' AND website LIKE ? ORDER BY claimed DESC, confidence DESC LIMIT 5").all(like);
+  const matches = rows.map(apiSerialize);
+  return { listed: matches.length > 0, domain: d, listing: matches[0] || null, matches };
+}
+
+/* ---------- Bulk export (Pro) ---------- */
+function csvEscape(v) {
+  v = v == null ? '' : String(v);
+  return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+}
+
+/** Bulk export of approved listings as CSV. Filters narrow the row set. */
+function exportCsv({ category = '', country = '', type = '' } = {}) {
+  const clauses = ["l.status='approved'"];
+  const params = [];
+  if (category) { clauses.push('l.category = ?'); params.push(String(category).slice(0, 60)); }
+  if (country) { clauses.push('l.country = ?'); params.push(String(country).slice(0, 60)); }
+  if (type) { clauses.push('l.type = ?'); params.push(String(type).slice(0, 40)); }
+  const rows = db.prepare(`SELECT * FROM listings l WHERE ${clauses.join(' AND ')} ORDER BY l.name ASC`).all(...params);
+  const headers = ['id', 'slug', 'name', 'tagline', 'description', 'type', 'category', 'website', 'email', 'phone', 'country', 'city', 'region', 'address', 'logo_url', 'founded', 'size', 'tags', 'confidence', 'status', 'claimed', 'featured', 'sponsored', 'url', 'created_at', 'updated_at'];
+  const lines = [headers.join(',')];
+  for (const r of rows) {
+    const row = [
+      r.id, r.slug, r.name, r.tagline, r.description, r.type, r.category, r.website, r.email, r.phone,
+      r.country, r.city, r.region, r.address, r.logo_url, r.founded, r.size, r.tags, r.confidence, r.status,
+      r.claimed ? 1 : 0, r.featured ? 1 : 0, r.sponsored ? 1 : 0, siteUrl('/listing/' + r.slug), r.created_at, r.updated_at,
+    ];
+    lines.push(row.map(csvEscape).join(','));
+  }
+  return lines.join('\n');
 }
 
 /* ---------- CRUD ---------- */
@@ -317,4 +509,6 @@ module.exports = {
   ApiServiceError, LIMITS, FIELD_KEYS,
   parseFields, serialize, listMine, getOwned, createListing, updateListing, deleteListing,
   publicSerialize, publicListings, publicListing,
+  apiSerialize, directory, profileBySlug, search, categories, countries, suggest,
+  relationships, verifyDomain, exportCsv,
 };

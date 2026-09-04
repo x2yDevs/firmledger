@@ -61,15 +61,71 @@ const POSTS = [
 <p>Most African SMEs do not have Wikipedia articles, and that is fine. Notability is a property of encyclopedias, not of legitimacy. A small business belongs on FirmLedger exactly as much as a blue-chip — it simply enters through manual submission instead of the one-click fetch, and its profile honestly reports that its data is submission-sourced until cited references exist. Owners can then make the record first-party true by claiming it through domain verification.</p>
 <p>We would rather ship a ledger that is slightly harder to fill than one that is easy to fill with noise. The bet is simple: ten records a skeptic can verify beat a hundred a skeptic cannot.</p>`,
   },
+  {
+    slug: 'introducing-the-firmledger-api',
+    title: 'Introducing the FirmLedger API: one key for the whole ledger',
+    excerpt: 'Every FirmLedger API endpoint now needs a key — no public reads remain. Here is what a single Pro key unlocks, how to get one, and how to use the new endpoints.',
+    body: `<p class="lead">FirmLedger’s directory has always been open for reading — that was the point of a public ledger. From today the same records are available over a single, key-authenticated REST API, and reading it requires a key like everything else. Unlocking it is one FirmLedger Pro plan, which also unlocks the directory, verified ticks and Featured placement.</p>
+<h2>Why every endpoint now needs a key</h2>
+<p>We used to keep a small set of public read endpoints — a liveness probe, a discovery index and a couple of directory reads — on the theory that “open data” should be open. In practice that made the directory easy to scrape wholesale and impossible to meter or protect. So we closed the door. There is no public, key-less endpoint left on <code>/api/v1</code>: <code>/health</code>, the discovery index, the directory, search — all of them answer <code>401 missing_key</code> unless you send a valid key.</p>
+<p>The trade-off is deliberately generous. A single Pro API key unlocks the entire surface, per-key read and write rate limits keep things fair, and the endpoints return the same approved, sourced, moderated records your browser sees — with the contact details and CSV export you would otherwise have to hand-collect.</p>
+<h2>What you can do</h2>
+<div class="table-wrap">
+<table class="table">
+<thead><tr><th>Endpoint</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td><code>GET /api/v1</code></td><td>Discovery — name, version, the endpoint list and live limits.</td></tr>
+<tr><td><code>GET /api/v1/health</code></td><td>Liveness probe. Still key-authenticated, returns no business data.</td></tr>
+<tr><td><code>GET /api/v1/listings</code></td><td>The approved directory, with <code>q</code>, <code>type</code>, <code>category</code>, <code>country</code>, <code>city</code>, <code>region</code>, <code>sponsored</code>, <code>sort</code> and pagination.</td></tr>
+<tr><td><code>GET /api/v1/listings/:slug</code></td><td>The full company profile, with sources, technology radar and hiring link.</td></tr>
+<tr><td><code>GET /api/v1/search</code></td><td>Global search across the approved ledger.</td></tr>
+<tr><td><code>GET /api/v1/categories</code></td><td>Every category, with its slug and a live listing count.</td></tr>
+<tr><td><code>GET /api/v1/countries</code></td><td>The countries present in the ledger, each with its count.</td></tr>
+<tr><td><code>GET /api/v1/suggest</code></td><td>Autocomplete — listings, categories, countries, cities for a search box.</td></tr>
+<tr><td><code>GET /api/v1/relationships/:slug</code></td><td>The relationship and ecosystem graph for a company.</td></tr>
+<tr><td><code>GET /api/v1/verify/domain/:domain</code></td><td>Check whether a domain is already listed.</td></tr>
+<tr><td><code>GET /api/v1/export/listings.csv</code></td><td>The approved ledger as a downloadable CSV.</td></tr>
+<tr><td><code>GET/POST /api/v1/my/listings</code></td><td>CRUD over the records you own, exactly like the dashboard.</td></tr>
+</tbody>
+</table>
+</div>
+<h2>Get a key in under a minute</h2>
+<p>Keys are created in the dashboard under <strong>Developer API</strong>. The console also holds your usage counters, rate-limit settings and a live playground that runs real calls against the ledger so you can try everything without writing a line of code.</p>
+<pre><code># 1. Go Pro, then create a key at /dashboard/api
+# 2. Browse the approved directory
+curl "https://firmledger.co.ke/api/v1/listings?category=Fintech" \\
+  -H "Authorization: Bearer fl_live_your_key"
+
+# 3. Search the whole ledger
+curl "https://firmledger.co.ke/api/v1/search?q=freight" \\
+  -H "Authorization: Bearer fl_live_your_key"
+
+# 4. Export it all as CSV
+curl "https://firmledger.co.ke/api/v1/export/listings.csv?country=Kenya" \\
+  -H "Authorization: Bearer fl_live_your_key" \\
+  --output firmledger-listings.csv</code></pre>
+<h2>One key, one plan</h2>
+<p>Every endpoint is a FirmLedger Pro feature. If your plan lapses, keys reply <code>403 pro_required</code> with an <code>upgrade_url</code> so your integration can point customers somewhere useful — and the moment Pro is active again the same key works. Keys are shown once at creation and stored only as a hash; revoke or rotate them instantly from the console.</p>
+<p>Rate limits are honest and per rolling 60 seconds: reads and writes are budgeted separately, a concurrency gate rejects pile-ups, and a brute-force guard locks out an address after too many bad keys. Every response carries <code>X-RateLimit-*</code> headers and a <code>X-Request-Id</code> you can quote when writing to support. The full reference — parameters, errors and curl for every endpoint — lives at <a href="/api/docs">/api/docs</a>.</p>
+<h2>What stays open</h2>
+<p>The <em>web</em> remains fully public — browse <a href="/directory">the directory</a>, read any profile, subscribe to <a href="/feed.xml">RSS</a>. The API is the paid, metered, machine-readable door. If you just want to read about companies, the browser is already enough.</p>`,
+  },
 ];
 
 function seedBlog(db) {
   const count = db.prepare('SELECT COUNT(*) c FROM blog_posts').get().c;
   if (count) return;
   const ins = db.prepare(
-    "INSERT INTO blog_posts (slug, title, excerpt, body, status, published_at) VALUES (?,?,?,?,'published', datetime('now'))"
+    "INSERT INTO blog_posts (slug, title, excerpt, body, status, published_at) VALUES (?,?,?,?,'published', ?)"
   );
-  for (const p of POSTS) ins.run(p.slug, p.title, p.excerpt, p.body);
+  // Space the seed dates out so the array order == blog order (newest last), and
+  // the lead post (the API announcement) sits at the top of /blog on a fresh DB.
+  const now = Date.now();
+  for (let i = 0; i < POSTS.length; i++) {
+    const p = POSTS[i];
+    const daysAgo = (POSTS.length - 1 - i) * 2;
+    ins.run(p.slug, p.title, p.excerpt, p.body, new Date(now - daysAgo * 86400000).toISOString().slice(0, 19).replace('T', ' '));
+  }
 }
 
 module.exports = { seedBlog };

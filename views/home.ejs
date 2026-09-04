@@ -195,21 +195,22 @@
     <div class="rv">
       <p class="klabel">FirmLedger API</p>
       <h2 style="margin-top:12px">A unified, source-backed business intelligence API</h2>
-      <p>A <b>free, keyless directory API</b> pulls FirmLedger's public listings into your own site, and Pro members get key-authenticated CRUD over the records they own — honest rate limits, full docs and a live playground. <strong>Directory API is free; key access is included with Pro.</strong></p>
+      <p>One Pro API key unlocks the whole surface — browse and search the approved directory, read company profiles and relationship graphs, verify domains, check categories and countries, export the ledger as CSV, and run CRUD over the records you own. Honest rate limits, full docs and a live playground included.</p>
       <div class="band-cta">
         <a class="btn btn-accent" href="/api">Explore the API</a>
         <a class="btn btn-ghost" href="/api/docs">Read the docs</a>
       </div>
     </div>
     <div class="rv" style="--d:100ms">
-      <div class="code-block" style="margin:0"><span class="code-label">free · no key</span><span class="c"># GET /api/v1/directory — public listings</span>
-curl <%= SITE %>/api/v1/directory?category=Logistics
+      <div class="code-block" style="margin:0"><span class="code-label">one key · all Pro</span><span class="c"># GET /api/v1/listings — the approved directory</span>
+curl "<%= SITE %>/api/v1/listings?category=Logistics" \
+  -H <span class="s">"Authorization: Bearer fl_live_your_key"</span>
 
 {
-  <span class="k">"data"</span>: [ { <span class="k">"slug"</span>: <span class="s">"acme-ltd"</span>,
-    <span class="k">"name"</span>: <span class="s">"Acme Ltd"</span>,
+  <span class="k">"data"</span>: [ { <span class="k">"slug"</span>: <span class="s">"acme-logistics-ltd"</span>,
+    <span class="k">"name"</span>: <span class="s">"Acme Logistics Ltd"</span>,
     <span class="k">"confidence"</span>: <span class="s">84</span> } ],
-  <span class="k">"meta"</span>: { <span class="k">"total"</span>: <span class="s">3</span> }
+  <span class="k">"meta"</span>: { <span class="k">"page"</span>: <span class="s">1</span>, <span class="k">"total"</span>: <span class="s">1</span> }
 }</div>
     </div>
   </div>

@@ -6,7 +6,7 @@
     <div class="section-head" style="align-items:flex-end">
       <div>
         <h2>API playground</h2>
-        <span class="muted">Run real v1 calls against <b>your own records</b> — the exact code path and limits as <code>/api/v1</code>. Writes are live: a POST creates, a DELETE deletes.</span>
+        <span class="muted">Run real v1 calls against the ledger — the exact code path, key rules and limits as <code>/api/v1</code>. Every endpoint needs your Pro API key; writes are live: a POST creates, a DELETE deletes.</span>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <a class="btn btn-ghost btn-sm" href="/dashboard/api">API keys &amp; usage</a>
@@ -76,11 +76,13 @@
         <% } %>
         <% } else { %>
         <p class="muted" style="margin-top:6px">Pick a preset or compose your own request on the left and press <b>Send request</b>. The status, rate-limit headers and JSON body land here — exactly what a real API client would receive.</p>
-        <div class="code-block"><span class="code-label">example</span><span class="c"># create a listing, then clean up after yourself</span>
-POST /api/v1/listings        <span class="c">→ 201 + the new record (id in body)</span>
-GET  /api/v1/listings/&lt;id&gt;  <span class="c">→ 200 + the record</span>
-PUT  /api/v1/listings/&lt;id&gt;  <span class="c">→ 200 + the updated record</span>
-DELETE /api/v1/listings/&lt;id&gt; <span class="c">→ 204 (gone)</span></div>
+        <div class="code-block"><span class="code-label">example</span><span class="c"># browse the directory, then manage your own records</span>
+GET    /api/v1/listings          <span class="c">→ 200 + directory (filters &amp; pagination)</span>
+GET    /api/v1/listings/&lt;slug&gt;  <span class="c">→ 200 + full company profile</span>
+GET    /api/v1/my/listings       <span class="c">→ 200 + the records you own</span>
+POST   /api/v1/my/listings       <span class="c">→ 201 + the new record (id in body)</span>
+GET    /api/v1/relationships/&lt;slug&gt;  <span class="c">→ company graph</span>
+GET    /api/v1/export/listings.csv  <span class="c">→ CSV export</span></div>
         <% } %>
       </div>
     </div>
@@ -102,11 +104,17 @@ DELETE /api/v1/listings/&lt;id&gt; <span class="c">→ 204 (gone)</span></div>
     wrap.style.display = (m === 'POST' || m === 'PUT') ? '' : 'none';
   }
   var SAMPLE_ID = '<%= typeof sampleId !== 'undefined' && sampleId ? sampleId : '' %>';
+  var SAMPLE_SLUG = '<%= typeof sampleSlug !== 'undefined' && sampleSlug ? sampleSlug : '' %>';
+  function fillPath(p) {
+    return (p.path || '')
+      .replace(/\{slug\}/g, SAMPLE_SLUG)
+      .replace(/\{id\}/g, SAMPLE_ID)
+      .replace(/\/+$/, '');
+  }
   sel.addEventListener('change', function () {
     var p = presets[Number(sel.value)];
     if (!p) return;
-    method.value = p.m; path.value = p.path; body.value = p.body || '';
-    if (SAMPLE_ID && p.path.indexOf('listings/') > -1) path.value = '/api/v1/listings/' + SAMPLE_ID;
+    method.value = p.m; path.value = fillPath(p); body.value = p.body || '';
     syncBodyVisibility();
   });
   method.addEventListener('change', syncBodyVisibility);

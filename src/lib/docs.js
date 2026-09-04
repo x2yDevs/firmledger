@@ -77,10 +77,10 @@ const SECTIONS = [
   {
     id: 'api',
     title: 'The API — live with Pro',
-    lede: 'REST access, keys, limits and the Playground.',
+    lede: 'REST access to the whole ledger, keys, limits and the Playground.',
     body: [
-      'The FirmLedger API is live for Pro members: full CRUD over the records you own (GET, POST, PUT, DELETE), API-key authentication, per-key read/write rate limits, a concurrency gate and a brute-force lockout guard. The complete endpoint reference lives at /api/docs.',
-      'Keys are created in the dashboard under Developer API — up to three per account, shown once and stored hashed. The same page holds usage counters and a live playground that runs real calls against your own records. API access is included with FirmLedger Pro; if your plan lapses, keys reply 403 pro_required until you renew.',
+      'The FirmLedger API is live for Pro members. Every endpoint — including the liveness probe and the public-facing directory reads — requires an API key: browse the approved directory (with filters, search, categories, countries, autocomplete, relationship graphs, domain verification and a CSV export) or run full CRUD over the records you own. No public, key-less endpoint remains.',
+      'Keys are created in the dashboard under Developer API — up to three per account, shown once and stored hashed. The same page holds usage counters and a live playground that runs real calls against the ledger. API access is included with FirmLedger Pro; if your plan lapses, keys reply 403 pro_required until you renew. The complete endpoint reference lives at /api/docs.',
     ],
   },
 ];

@@ -923,15 +923,33 @@ router.post('/dashboard/api/keys/:id/revoke', (req, res) => {
 const PLAYGROUND_ENDPOINTS = [
   { m: 'GET', path: '/api/v1/me', body: '' },
   { m: 'GET', path: '/api/v1/listings', body: '' },
-  { m: 'POST', path: '/api/v1/listings', body: '{\n  "name": "Acme Logistics Ltd",\n  "tagline": "Cold-chain freight for East African exporters end to end",\n  "description": "Acme Logistics Ltd runs refrigerated trucking and bonded warehousing between Mombasa, Nairobi and Kampala, giving horticulture and pharma exporters a single audited cold chain from packhouse to airport.",\n  "website": "https://acme-logistics.example",\n  "country": "Kenya",\n  "type": "company",\n  "founded": "2019",\n  "city": "Nairobi",\n  "tags": ["logistics", "cold-chain", "freight"]\n}' },
-  { m: 'GET', path: '/api/v1/listings/1', body: '' },
-  { m: 'PUT', path: '/api/v1/listings/1', body: '{\n  "tagline": "Cold-chain freight and bonded warehousing, Mombasa to Kampala",\n  "city": "Mombasa"\n}' },
-  { m: 'DELETE', path: '/api/v1/listings/1', body: '' },
+  { m: 'GET', path: '/api/v1/listings/{slug}', body: '' },
+  { m: 'GET', path: '/api/v1/my/listings', body: '' },
+  { m: 'POST', path: '/api/v1/my/listings', body: '{\n  \"name\": \"Acme Logistics Ltd\",\n  \"tagline\": \"Cold-chain freight for East African exporters end to end\",\n  \"description\": \"Acme Logistics Ltd runs refrigerated trucking and bonded warehousing between Mombasa, Nairobi and Kampala, giving horticulture and pharma exporters a single audited cold chain from packhouse to airport.\",\n  \"website\": \"https://acme-logistics.example\",\n  \"country\": \"Kenya\",\n  \"type\": \"company\",\n  \"founded\": \"2019\",\n  \"city\": \"Nairobi\",\n  \"tags\": [\"logistics\", \"cold-chain\", \"freight\"]\n}' },
+  { m: 'GET', path: '/api/v1/my/listings/{id}', body: '' },
+  { m: 'PUT', path: '/api/v1/my/listings/{id}', body: '{\n  \"tagline\": \"Cold-chain freight and bonded warehousing, Mombasa to Kampala\",\n  \"city\": \"Mombasa\"\n}' },
+  { m: 'DELETE', path: '/api/v1/my/listings/{id}', body: '' },
+  { m: 'GET', path: '/api/v1/search', body: '' },
+  { m: 'GET', path: '/api/v1/categories', body: '' },
+  { m: 'GET', path: '/api/v1/countries', body: '' },
+  { m: 'GET', path: '/api/v1/suggest', body: '' },
+  { m: 'GET', path: '/api/v1/relationships/{slug}', body: '' },
+  { m: 'GET', path: '/api/v1/verify/domain/example.com', body: '' },
+  { m: 'GET', path: '/api/v1/export/listings.csv', body: '' },
 ];
+
+function parseQuery(qs) {
+  const out = {};
+  if (!qs) return out;
+  for (const [k, v] of new URLSearchParams(qs)) out[k] = v;
+  return out;
+}
 
 function runPlaygroundCall(user, method, path, rawBody) {
   const m = method.toUpperCase();
-  const parts = path.replace(/^\/+/, '').split('/');
+  const [pathname, qs] = path.split('?');
+  const query = parseQuery(qs);
+  const parts = pathname.replace(/^\/+/, '').split('/');
   // normalise: accept paths with or without the /api/v1 prefix
   const segs = parts[0] === 'api' ? parts.slice(2) : (parts[0] === 'v1' ? parts.slice(1) : parts[0] === '' ? parts.slice(1) : parts);
   let body = null;
@@ -942,22 +960,45 @@ function runPlaygroundCall(user, method, path, rawBody) {
   if (segs[0] === 'me' && segs.length === 1 && m === 'GET') {
     return { status: 200, json: { data: { id: user.id, email: user.email, name: user.name, plan: 'pro', plan_expires_at: user.plan_expires_at || null } } };
   }
-  if (segs[0] === 'listings' && segs.length === 1 && m === 'GET') return { status: 200, json: apisvc.listMine(user, {}) };
+  // Directory + owner CRUD on /listings
+  if (segs[0] === 'listings' && segs.length === 1 && m === 'GET') return { status: 200, json: apisvc.directory(query) };
   if (segs[0] === 'listings' && segs.length === 1 && m === 'POST') { const r = apisvc.createListing(user, body); return { status: r.status, json: r.body }; }
-  if (segs[0] === 'listings' && segs.length === 2 && m === 'GET') return { status: 200, json: { data: apisvc.serialize(apisvc.getOwned(user, segs[1])) } };
+  if (segs[0] === 'listings' && segs.length === 2 && m === 'GET') {
+    const row = apisvc.profileBySlug(segs[1]);
+    if (!row) return { status: 404, json: { error: { code: 'not_found', message: 'No approved public listing with that slug.' } } };
+    return { status: 200, json: { data: row } };
+  }
   if (segs[0] === 'listings' && segs.length === 2 && m === 'PUT') { const r = apisvc.updateListing(user, segs[1], body); return { status: r.status, json: r.body }; }
   if (segs[0] === 'listings' && segs.length === 2 && m === 'DELETE') return apisvc.deleteListing(user, segs[1]);
-  return { status: 404, json: { error: { code: 'unknown_endpoint', message: 'The playground covers the documented v1 endpoints: GET /api/v1/me, GET+POST /api/v1/listings, GET+PUT+DELETE /api/v1/listings/:id.' } } };
+  // My listings (owner CRUD)
+  if (segs[0] === 'my' && segs[1] === 'listings' && segs.length === 2 && m === 'GET') return { status: 200, json: apisvc.listMine(user, query) };
+  if (segs[0] === 'my' && segs[1] === 'listings' && segs.length === 2 && m === 'POST') { const r = apisvc.createListing(user, body); return { status: r.status, json: r.body }; }
+  if (segs[0] === 'my' && segs[1] === 'listings' && segs.length === 3 && m === 'GET') return { status: 200, json: { data: apisvc.serialize(apisvc.getOwned(user, segs[2])) } };
+  // Read helpers
+  if (segs[0] === 'search' && segs.length === 1 && m === 'GET') return { status: 200, json: apisvc.search(query) };
+  if (segs[0] === 'categories' && segs.length === 1 && m === 'GET') return { status: 200, json: apisvc.categories() };
+  if (segs[0] === 'countries' && segs.length === 1 && m === 'GET') return { status: 200, json: apisvc.countries() };
+  if (segs[0] === 'suggest' && segs.length === 1 && m === 'GET') return { status: 200, json: apisvc.suggest(query) };
+  if (segs[0] === 'relationships' && segs.length === 2 && m === 'GET') {
+    const g = apisvc.relationships(segs[1]);
+    if (!g) return { status: 404, json: { error: { code: 'not_found', message: 'No approved public listing with that slug.' } } };
+    return { status: 200, json: { data: g } };
+  }
+  if (segs[0] === 'verify' && segs[1] === 'domain' && segs.length === 3 && m === 'GET') return { status: 200, json: apisvc.verifyDomain(segs[2]) };
+  if (segs[0] === 'export' && segs[1] === 'listings.csv' && m === 'GET') return { status: 200, json: { data: apisvc.exportCsv(query), meta: { note: 'CSV body shown — to download it, call the endpoint and stream to a file.' } } };
+  return { status: 404, json: { error: { code: 'unknown_endpoint', message: 'The playground covers the documented v1 endpoints: /me, /listings, /listings/:slug, /my/listings, /my/listings/:id, plus /search, /categories, /countries, /suggest, /relationships/:slug, /verify/domain/:domain and /export/listings.csv.' } } };
 }
 
 router.get('/dashboard/api/playground', (req, res) => {
-  const newest = db.prepare('SELECT id FROM listings WHERE owner_user_id=? ORDER BY id DESC LIMIT 1').get(req.user.id);
+  const newest = db.prepare('SELECT id, slug FROM listings WHERE owner_user_id=? ORDER BY id DESC LIMIT 1').get(req.user.id);
+  const newestApproved = db.prepare("SELECT slug FROM listings WHERE owner_user_id=? AND status='approved' ORDER BY id DESC LIMIT 1").get(req.user.id);
   res.render('dashboard/api-playground', {
     meta: { title: 'API Playground — FirmLedger', description: 'Try the FirmLedger API live against your own data.', robots: 'noindex' },
     pro: hasProAccess(req.user),
     endpoints: PLAYGROUND_ENDPOINTS,
     limits: apilim,
     sampleId: newest ? newest.id : null,
+    sampleSlug: (newestApproved && newestApproved.slug) || (newest && newest.slug) || '',
     result: null, ok: req.query.ok || '', err: req.query.err || '',
     form: { method: 'GET', path: '/api/v1/listings', body: '' },
   });
@@ -970,10 +1011,13 @@ router.post('/dashboard/api/playground', (req, res) => {
   const body = String(req.body.body || '').slice(0, 40_000);
   const form = { method, path, body };
   const render = (extra) => {
-    const newestPost = db.prepare('SELECT id FROM listings WHERE owner_user_id=? ORDER BY id DESC LIMIT 1').get(req.user.id);
+    const newestPost = db.prepare('SELECT id, slug FROM listings WHERE owner_user_id=? ORDER BY id DESC LIMIT 1').get(req.user.id);
+    const newestApproved = db.prepare("SELECT slug FROM listings WHERE owner_user_id=? AND status='approved' ORDER BY id DESC LIMIT 1").get(req.user.id);
     return res.render('dashboard/api-playground', {
       meta: { title: 'API Playground — FirmLedger', description: 'Try the FirmLedger API live against your own data.', robots: 'noindex' },
-      pro, endpoints: PLAYGROUND_ENDPOINTS, limits: apilim, sampleId: newestPost ? newestPost.id : null, form, ok: '', err: '', ...extra,
+      pro, endpoints: PLAYGROUND_ENDPOINTS, limits: apilim, sampleId: newestPost ? newestPost.id : null,
+      sampleSlug: (newestApproved && newestApproved.slug) || (newestPost && newestPost.slug) || '',
+      form, ok: '', err: '', ...extra,
     });
   };
   if (!pro) return render({ result: null, err: 'The playground is a FirmLedger Pro feature — upgrade to run live calls.' });
