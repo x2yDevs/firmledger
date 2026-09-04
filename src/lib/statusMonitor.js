@@ -237,9 +237,11 @@ async function checkComponent(comp) {
   switch (comp.slug) {
     case 'web': result = await httpStatus(siteUrl('/')); break;
     case 'api': {
-      // Every /api/v1 endpoint (including /health) requires a Pro API key now, so
-      // the monitor authenticates with the dedicated_STATUS_API_KEY env var. Set
-      // STATUS_API_KEY to a Pro key from Admin → API → Keys to keep this green.
+      // Every /api/v1 endpoint (including /health) requires a Pro API key, so the
+      // monitor authenticates with the dedicated STATUS_API_KEY env var. Create the
+      // value as any Pro user at /dashboard/api → "Create key" (grant that account
+      // Pro from Admin → Users → Plan first). Without it the probe gets 401 and the
+      // API component reads as degraded. See .env.example for the full walkthrough.
       const key = process.env.STATUS_API_KEY || '';
       const headers = key ? { Authorization: `Bearer ${key}` } : {};
       result = await httpStatus(siteUrl('/api/v1/health'), 8000, headers);
