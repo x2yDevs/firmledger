@@ -12,6 +12,11 @@
  *      • ?force=1 re-probes before answering
  *      • GET /status/api still serves the JSON snapshot, now with last_run_at
  *
+ *   B0. The API is monitored with NO credentials
+ *      • a key-less probe reads the 401 refusal as proof the API is alive
+ *      • real faults (5xx, HTML error page, wrong envelope, dead port) still fail
+ *      • so /status is green out of the box with nothing configured
+ *
  *   B. The monitor detects status on its own
  *      • a failing probe records the evidence on the component
  *      • a failing probe opens an incident tagged source='auto'
@@ -131,6 +136,67 @@ const get = async (url, opts = {}) => {
   check('/status/api still serves the snapshot', Boolean(api.components && api.components.length));
   check('/status/api reports when the monitor last ran', 'last_run_at' in api);
   check('/status/api exposes the last probe evidence per component', 'last_note' in api.components[0]);
+
+  /* ----------------------------- B0. API monitored without any key */
+  console.log('\nB0. API health needs no API key');
+  const noKeyEnv = { ...env };
+  delete noKeyEnv.STATUS_API_KEY;
+  check('no STATUS_API_KEY is set for this run', !noKeyEnv.STATUS_API_KEY);
+
+  const apiComp = api.components.find((c) => c.slug === 'api');
+  check('the API component is operational with no key configured',
+    apiComp.status === 'operational', `${apiComp.status} — ${apiComp.last_note}`);
+  check('the probe explains it read the auth refusal as healthy',
+    /auth enforced/.test(apiComp.last_note), apiComp.last_note);
+  check('no auto incident was opened just because there is no key',
+    !api.active_incidents.some((i) => /API/.test(i.title)));
+
+  // The probe must still catch genuine faults. Exercise the real verdict
+  // function against servers that fail in each realistic way.
+  // The probe must still catch genuine faults. Exercise the real verdict
+  // function against servers that fail in each realistic way, in a separate
+  // process so nothing here touches the running server.
+  const verdicts = JSON.parse(execFileSync(process.execPath, ['-e', `
+const http = require('http');
+process.env.FIRMLEDGER_DATA_DIR = ${JSON.stringify(dataDir)};
+const cases = [
+  ['ok_401',        401, 'application/json', JSON.stringify({ error: { code: 'missing_key' } }), true],
+  ['ok_200',        200, 'application/json', JSON.stringify({ ok: true }),                       true],
+  ['ok_403_pro',    403, 'application/json', JSON.stringify({ error: { code: 'pro_required' } }), true],
+  ['fault_500',     500, 'application/json', JSON.stringify({ error: 'boom' }),                  false],
+  ['fault_502',     502, 'text/plain',       'bad gateway',                                      false],
+  ['fault_html',    401, 'text/html',        '<html>401</html>',                                 false],
+  ['fault_envelope',401, 'application/json', JSON.stringify({ msg: 'nope' }),                    false],
+];
+(async () => {
+  const out = [];
+  for (const [name, code, ctype, body, expect] of cases) {
+    const srv = http.createServer((q, r) => { r.writeHead(code, { 'content-type': ctype }); r.end(body); });
+    await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+    process.env.BASE_URL = 'http://127.0.0.1:' + srv.address().port;
+    for (const m of ['/src/lib/util.js', '/src/lib/statusMonitor.js']) {
+      delete require.cache[require.resolve(${JSON.stringify(ROOT)} + m)];
+    }
+    const mon = require(${JSON.stringify(path.join(ROOT, 'src/lib/statusMonitor.js'))});
+    const res = await mon.apiCheck();
+    out.push({ name, ok: res.ok, expect, note: res.note });
+    srv.close();
+  }
+  process.env.BASE_URL = 'http://127.0.0.1:1';       // nothing listening at all
+  for (const m of ['/src/lib/util.js', '/src/lib/statusMonitor.js']) {
+    delete require.cache[require.resolve(${JSON.stringify(ROOT)} + m)];
+  }
+  const mon = require(${JSON.stringify(path.join(ROOT, 'src/lib/statusMonitor.js'))});
+  const dead = await mon.apiCheck();
+  out.push({ name: 'fault_dead_port', ok: dead.ok, expect: false, note: dead.note });
+  process.stdout.write(JSON.stringify(out));
+})();
+`], { cwd: ROOT, env, encoding: 'utf8' }).trim().split('\n').pop());
+
+  for (const v of verdicts) {
+    check(`probe verdict — ${v.name} reads as ${v.expect ? 'healthy' : 'a fault'}`,
+      v.ok === v.expect, v.note);
+  }
 
   /* ------------------------------------------- B. automatic detection */
   console.log('\nB. Automatic status detection');

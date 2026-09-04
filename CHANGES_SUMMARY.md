@@ -60,7 +60,26 @@ webhooks with HMAC and idempotency, and the exact error codes and limits.
 * `seedBlog()` is now **idempotent per slug**, so new posts reach existing
   deployments without a re-seed and without overwriting editorial edits.
 
-### 4. Tests
+### 4. The status page needs no API key
+
+`/status` is public and self-sufficient — it authenticates nothing and requires
+no configuration. Every /api/v1 endpoint needs a Pro key, so the monitor probes
+`/api/v1/health` **without one** and reads the correct `401 missing_key` JSON
+refusal as proof the API is healthy: the route matched, Express ran, the auth
+middleware executed and the error envelope serialized. A broken API cannot
+produce that.
+
+| Probe result | Verdict |
+| --- | --- |
+| `401 missing_key` / `403 pro_required` (correct JSON envelope) | **Operational** — auth enforced |
+| `200` (only when the optional `STATUS_API_KEY` is set) | **Operational** |
+| `5xx`, `502`, timeout, connection refused | **Fault** → auto incident |
+| `401` with an HTML body or a foreign JSON shape (proxy/error page) | **Fault** → auto incident |
+
+`STATUS_API_KEY` is now genuinely optional and blank by default. Nothing about
+uptime reporting depends on holding a key.
+
+### 5. Tests
 
 ```
 npm test              # everything

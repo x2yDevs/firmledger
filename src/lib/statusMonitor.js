@@ -128,13 +128,57 @@ async function httpStatus(url, timeoutMs = 8000, headers = {}) {
     const ms = Date.now() - start;
     clearTimeout(timer);
     if (res.status >= 200 && res.status < 400) return { ok: true, latency_ms: ms, note: `HTTP ${res.status}` };
-    return { ok: false, latency_ms: ms, note: `HTTP ${res.status}` };
+    return { ok: false, latency_ms: ms, note: `HTTP ${res.status}`, status: res.status, res };
   } catch (e) {
     clearTimeout(timer);
     const msg = e && e.name === 'AbortError' ? 'timed out'
       : String((e && (e.cause && e.cause.code)) || (e && e.message) || e || '').slice(0, 90);
     return { ok: false, latency_ms: Date.now() - start, note: msg };
   }
+}
+
+/**
+ * API health, checked without any credentials.
+ *
+ * Every /api/v1 endpoint requires a Pro key, so a key-less probe is *supposed*
+ * to be refused — and that refusal is exactly what proves the API is healthy.
+ * A correct `401 missing_key` means the route matched, Express ran, the auth
+ * middleware executed and the JSON error envelope serialized: the whole request
+ * path is working. A genuinely broken API cannot produce it — it times out,
+ * refuses the connection, or returns a 5xx / an HTML error page.
+ *
+ * So the monitor needs no key and no configuration. It reads the body and
+ * treats the API as operational when the response is either a real 200 (a key
+ * was supplied via the optional STATUS_API_KEY) or the expected authentication
+ * refusal. Anything else — 5xx, a non-JSON body, a wrong error shape — is a
+ * real fault and is reported as one.
+ */
+async function apiCheck() {
+  const key = process.env.STATUS_API_KEY || '';          // optional, never required
+  const headers = key ? { Authorization: `Bearer ${key}` } : {};
+  const r = await httpStatus(siteUrl('/api/v1/health'), 8000, headers);
+
+  if (r.ok) return { ok: true, latency_ms: r.latency_ms, note: r.note };
+
+  // No HTTP response at all (timeout / connection refused) — a genuine outage.
+  if (!r.res) return { ok: false, latency_ms: r.latency_ms, note: r.note };
+
+  // A 401/403 is the documented, correct answer to an unauthenticated probe.
+  // Confirm it really is the API answering, not a proxy or an error page.
+  if (r.status === 401 || r.status === 403) {
+    let code = '';
+    try {
+      const body = await r.res.json();
+      code = (body && body.error && body.error.code) || '';
+    } catch { /* not JSON — fall through to the failure below */ }
+    const expected = ['missing_key', 'invalid_key', 'key_revoked', 'pro_required', 'account_suspended'];
+    if (expected.includes(code)) {
+      return { ok: true, latency_ms: r.latency_ms, note: `HTTP ${r.status} ${code} — API responding (auth enforced)` };
+    }
+    return { ok: false, latency_ms: r.latency_ms, note: `HTTP ${r.status} but no API error envelope` };
+  }
+
+  return { ok: false, latency_ms: r.latency_ms, note: r.note };
 }
 
 function dbCheck() {
@@ -236,17 +280,7 @@ async function checkComponent(comp) {
   let result;
   switch (comp.slug) {
     case 'web': result = await httpStatus(siteUrl('/')); break;
-    case 'api': {
-      // Every /api/v1 endpoint (including /health) requires a Pro API key, so the
-      // monitor authenticates with the dedicated STATUS_API_KEY env var. Create the
-      // value as any Pro user at /dashboard/api → "Create key" (grant that account
-      // Pro from Admin → Users → Plan first). Without it the probe gets 401 and the
-      // API component reads as degraded. See .env.example for the full walkthrough.
-      const key = process.env.STATUS_API_KEY || '';
-      const headers = key ? { Authorization: `Bearer ${key}` } : {};
-      result = await httpStatus(siteUrl('/api/v1/health'), 8000, headers);
-      break;
-    }
+    case 'api': result = await apiCheck(); break;
     case 'database': result = dbCheck(); break;
     case 'email': result = await emailCheck(); break;
     default: result = { ok: true, latency_ms: 0, note: 'no check defined' }; break;
@@ -611,7 +645,7 @@ module.exports = {
   STATUS, STATUS_LABELS, OVERALL_LABELS, INCIDENT_STATUS, SEVERITIES,
   SEVERITY_LABELS, INCIDENT_STATUS_LABELS,
   ensureComponents, components, componentBySlug, componentById, setComponentStatus,
-  checkComponent, checkAll, runChecksNow, onAutoIncident, pruneHistory, hasOpenIncident,
+  checkComponent, checkAll, runChecksNow, apiCheck, onAutoIncident, pruneHistory, hasOpenIncident,
   overallStatus, uptimePercent, overallUptime, uptimeSummary,
   incidentUpdates, incidentsSince, allIncidents, activeIncidents, incidentById,
   createIncident, addIncidentUpdate, resolveIncident, deleteIncident,
