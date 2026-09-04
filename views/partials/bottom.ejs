@@ -106,7 +106,9 @@
   <div class="foot-bottom">
     <div class="container" style="display:flex;align-items:center;gap:18px;flex-wrap:wrap">
       <span>© 2026 FirmLedger</span>
-      <a href="/status" title="Live system status"><span class="ok-dot"></span>All systems operational</a>
+      <% const _fs = (typeof footerStatus !== 'undefined' && footerStatus) ? footerStatus : { status: 'operational', label: 'All systems operational', incidents: 0 }; %>
+      <% const _fsCls = _fs.status === 'operational' ? 'ok' : (_fs.status === 'degraded' ? 'warn' : (_fs.status === 'partial_outage' ? 'part' : 'err')); %>
+      <a href="/status" title="Live system status" class="foot-status-<%= _fsCls %>"><span class="ok-dot fs-dot <%= _fsCls %>"></span><%= _fs.label %><% if (_fs.incidents) { %> (<%= _fs.incidents %>)<% } %></a>
       <div class="fb-r">
         <a href="/directory">Directory</a>
         <a href="/api">API</a>

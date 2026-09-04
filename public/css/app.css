@@ -619,6 +619,16 @@ code { font-family: var(--fm); font-size: .9em; background: var(--paper); border
 .foot-bottom .fb-r { margin-left: auto; display: flex; gap: 18px; flex-wrap: wrap; }
 .foot-bottom a:hover { color: var(--accent); }
 .foot-bottom .ok-dot { width: 6px; height: 6px; border-radius: 50%; background: #3DD68C; display: inline-block; margin-right: 6px; }
+/* Live status grows from a single green dot to a colour-coded system dot when
+   the platform is degraded or in an outage, and the label reflects the real
+   overall state instead of always saying "All systems operational". */
+.foot-bottom .fs-dot.warn { background: var(--warn); box-shadow: 0 0 0 3px var(--warn-soft); }
+.foot-bottom .fs-dot.part { background: #C2410C; box-shadow: 0 0 0 3px #FFEDE0; }
+.foot-bottom .fs-dot.err { background: var(--bad); box-shadow: 0 0 0 3px var(--bad-soft); animation: fsPulse 1.6s ease-in-out infinite; }
+.foot-bottom a.foot-status-warn { color: #A16207; }
+.foot-bottom a.foot-status-part { color: #C2410C; font-weight: 600; }
+.foot-bottom a.foot-status-err { color: #B3261E; font-weight: 600; }
+@keyframes fsPulse { 0%,100% { box-shadow: 0 0 0 3px var(--bad-soft); } 50% { box-shadow: 0 0 0 5px var(--bad-soft); } }
 
 /* ---------- misc ---------- */
 .empty-state { background: var(--surface); border: 1px dashed var(--hair2); border-radius: var(--r); text-align: center; padding: 3rem 1.5rem; }
@@ -1716,6 +1726,12 @@ body:has(.admin-bar) #main .scroll-table .table-wrap {
 .st-section { padding: clamp(2rem, 4vw, 3.5rem) 0 clamp(3rem, 6vw, 4.5rem); }
 .st-container { max-width: 1040px; }
 .st-container > .rv { margin-bottom: clamp(22px, 3.5vw, 34px); }
+/* Auto-refresh control — a quiet toolbar above the hero, so the page stays
+   readable while still showing the latest status. */
+.st-refresh { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 10px 14px; border: 1px solid var(--hair); border-radius: var(--r, 14px); background: var(--surface); margin-bottom: clamp(18px, 3vw, 26px); }
+.st-refresh-status { font: 500 12.5px/1.4 var(--fm); color: var(--muted); }
+.st-refresh-status::before { content: "\25CF"; margin-right: 8px; color: var(--accent2); animation: stPulse 2.4s ease-in-out infinite; }
+.st-refresh .btn + .btn { margin-left: 6px; }
 .st-hero { display: flex; align-items: center; gap: clamp(18px, 3vw, 28px); padding: clamp(26px, 4vw, 44px) clamp(24px, 4vw, 42px); border-radius: var(--r); background: var(--surface); border: 1px solid var(--hair); box-shadow: var(--shadow); margin-bottom: clamp(22px, 3.5vw, 34px); flex-wrap: wrap; }
 .st-hero-dot { flex: 0 0 auto; width: 54px; height: 54px; border-radius: 50%; position: relative; }
 .st-hero-dot::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: currentColor; opacity: .22; animation: stPulse 2.4s ease-in-out infinite; }

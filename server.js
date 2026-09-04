@@ -114,6 +114,22 @@ app.use((req, res, next) => {
       "SELECT slug, title, published_at FROM blog_posts WHERE status='published' ORDER BY published_at DESC LIMIT 3"
     ).all();
   } catch { res.locals.footerNews = []; }
+  /* Footer status: reflect the live overall state so the footer never claims
+     "All systems operational" during an incident. Lightweight — reads the
+     component states and open incidents, not a full snapshot. */
+  try {
+    const mon = require('./src/lib/statusMonitor');
+    mon.ensureComponents();
+    const status = mon.overallStatus();
+    const active = mon.activeIncidents().length;
+    res.locals.footerStatus = {
+      status,
+      label: status === 'operational' ? 'All systems operational'
+        : status === 'degraded' ? 'Degraded performance'
+        : status === 'partial_outage' ? 'Partial outage' : 'Major outage',
+      incidents: active,
+    };
+  } catch { res.locals.footerStatus = { status: 'operational', label: 'All systems operational', incidents: 0 }; }
   res.locals.qs = (overrides = {}) => {
     const merged = { ...req.query, ...overrides };
     const parts = Object.entries(merged).filter(([, v]) => v !== undefined && v !== null && v !== '' && v !== false);
