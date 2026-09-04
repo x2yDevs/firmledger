@@ -28,6 +28,7 @@ const notify = require('../lib/notify');
 const notifications = require('../lib/notifications');
 const spam = require('../lib/spam');
 const ad = require('../lib/advertising');
+const listingEvents = require('../lib/listingevents');
 
 const router = express.Router();
 router.use('/dashboard', requireUser);
@@ -302,6 +303,7 @@ router.post('/dashboard/listings/new', spam.gate('listing'), async (req, res) =>
   }
 
   if (status === 'approved') {
+    listingEvents.approved(db.prepare('SELECT * FROM listings WHERE id=?').get(newId), true);
     const catSlug = catLib.all().find((c) => c.name === f.category)?.slug;
     submitForIndexing([`/listing/${slug}`, catSlug ? `/directory/c/${catSlug}` : null].filter(Boolean));
     // Google Indexing API — fires in the background, never delays the redirect.
@@ -399,6 +401,7 @@ router.post('/dashboard/listings/:id/edit', ownListing, async (req, res) => {
   ).run(f.name, f.tagline, f.description, f.type, f.category, f.website, f.email, f.phone,
     f.country, f.city, f.region, f.address, f.logo_url, f.founded, f.size, f.tags, f.socials, confidence,
     needsReview ? 'pending' : l.status, l.id);
+  listingEvents.updated(db.prepare('SELECT * FROM listings WHERE id=?').get(l.id), { previous_status: l.status });
 
   // refresh the technology snapshot whenever the website changed (or none exists yet)
   if (f.website && (f.website !== l.website || !l.tech_checked_at)) {
@@ -456,6 +459,7 @@ router.post('/dashboard/listings/:id/refresh-tech', ownListing, async (req, res)
   const snap = await detectTech(l.website);
   db.prepare('UPDATE listings SET tech = ?, tech_checked_at = ?, hiring_url = ? WHERE id = ?')
     .run(JSON.stringify(snap.tech), new Date().toISOString().slice(0, 10), (snap.hiring && snap.hiring.url) || '', l.id);
+  listingEvents.updated(db.prepare('SELECT * FROM listings WHERE id=?').get(l.id), { change: 'technology_snapshot' });
   if (JSON.stringify(snap.tech) !== _oldTech && snap.tech.length) {
     nl.notifyWatchers(l.id, [`Technology stack refreshed — <b>${snap.tech.length}</b> technologies now detected (${snap.tech.slice(0, 6).map(escHtml).join(', ')}${snap.tech.length > 6 ? '…' : ''})`]).catch(() => {});
   }
@@ -466,6 +470,7 @@ router.post('/dashboard/listings/:id/refresh-tech', ownListing, async (req, res)
 
 router.post('/dashboard/listings/:id/delete', ownListing, (req, res) => {
   const name = req.listing.name;
+  listingEvents.deleted(req.listing);
   deleteLogo(req.listing.logo_url);
   db.prepare('DELETE FROM listings WHERE id = ?').run(req.listing.id);
   notify.notifyAdmin({
@@ -865,9 +870,11 @@ router.post('/dashboard/listings/:id/jobs/:jobId/close', ownListing, (req, res) 
 const apikeys = require('../lib/apikeys');
 const apilim = require('../lib/apilimit');
 const apisvc = require('../lib/apilistings');
+const apiwebhooks = require('../lib/webhooks');
 
 /* One-time key reveal: raw keys are shown exactly once, right after creation. */
 const pendingReveals = new Map(); // nonce -> { userId, raw, exp }
+const pendingWebhookReveals = new Map(); // nonce -> { userId, secret, exp }
 function stashReveal(userId, raw) {
   const nonce = require('crypto').randomBytes(16).toString('hex');
   pendingReveals.set(nonce, { userId, raw, exp: Date.now() + 10 * 60_000 });
@@ -879,32 +886,51 @@ function takeReveal(nonce, userId) {
   pendingReveals.delete(nonce);
   return r.raw;
 }
+function stashWebhookReveal(userId, secret) {
+  const nonce = require('crypto').randomBytes(16).toString('hex');
+  pendingWebhookReveals.set(nonce, { userId, secret, exp: Date.now() + 10 * 60_000 });
+  return nonce;
+}
+function takeWebhookReveal(nonce, userId) {
+  const r = pendingWebhookReveals.get(nonce);
+  if (!r || r.userId !== userId || r.exp < Date.now()) return null;
+  pendingWebhookReveals.delete(nonce);
+  return r.secret;
+}
 setInterval(() => {
   const t = Date.now();
   for (const [k, v] of pendingReveals) if (v.exp < t) pendingReveals.delete(k);
+  for (const [k, v] of pendingWebhookReveals) if (v.exp < t) pendingWebhookReveals.delete(k);
 }, 60_000).unref();
 
 function renderApiConsole(req, res, extra = {}) {
   const pro = hasProAccess(req.user);
   const keys = apikeys.listKeys(req.user.id);
   res.render('dashboard/api', {
-    meta: { title: 'Developer API — FirmLedger', description: 'Manage FirmLedger API keys, limits and usage.', robots: 'noindex' },
+    meta: { title: 'Developer API — FirmLedger', description: 'Manage FirmLedger API keys, scopes, webhooks and usage.', robots: 'noindex' },
     pro, keys, usage: apikeys.usageSummary(req.user.id),
+    webhooks: apiwebhooks.list(req.user.id),
     limits: apilim,
     maxKeys: apikeys.MAX_ACTIVE_KEYS,
+    scopeDefinitions: apikeys.SCOPE_DEFINITIONS,
+    webhookEvents: apiwebhooks.EVENTS,
+    webhookDefaults: apiwebhooks.DEFAULT_EVENTS,
+    rateSnapshot: (keyId, isWrite) => apilim.snapshot('k' + keyId, isWrite),
     ...extra,
   });
 }
 
 router.get('/dashboard/api', (req, res) => {
   const reveal = req.query.reveal ? takeReveal(String(req.query.reveal), req.user.id) : null;
-  renderApiConsole(req, res, { reveal, ok: req.query.ok || '', err: req.query.err || '' });
+  const webhookSecret = req.query.webhook_reveal ? takeWebhookReveal(String(req.query.webhook_reveal), req.user.id) : null;
+  renderApiConsole(req, res, { reveal, webhookSecret, ok: req.query.ok || '', err: req.query.err || '' });
 });
 
 router.post('/dashboard/api/keys', (req, res) => {
   if (!hasProAccess(req.user)) return res.redirect('/dashboard/api?err=' + encodeURIComponent('API keys are a FirmLedger Pro feature — upgrade to create one.'));
   try {
-    const { raw } = apikeys.createKey(req.user.id, req.body.label);
+    const scopes = Array.isArray(req.body.scopes) ? req.body.scopes : (req.body.scopes ? [req.body.scopes] : undefined);
+    const { raw } = apikeys.createKey(req.user.id, req.body.label, scopes);
     const nonce = stashReveal(req.user.id, raw);
     res.redirect('/dashboard/api?reveal=' + encodeURIComponent(nonce) + '&ok=' + encodeURIComponent('API key created — copy it now, it is shown only once.'));
   } catch (e) {
@@ -919,9 +945,67 @@ router.post('/dashboard/api/keys/:id/revoke', (req, res) => {
     : 'err=' + encodeURIComponent('That key was already revoked.')));
 });
 
+router.post('/dashboard/api/keys/:id/scopes', (req, res) => {
+  try {
+    const scopes = Array.isArray(req.body.scopes) ? req.body.scopes : (req.body.scopes ? [req.body.scopes] : []);
+    const done = apikeys.updateScopes(Number(req.params.id), req.user.id, scopes);
+    res.redirect('/dashboard/api?' + (done
+      ? 'ok=' + encodeURIComponent('Key scopes updated. Existing integrations see the new permissions immediately.')
+      : 'err=' + encodeURIComponent('That key was not found or has already been revoked.')));
+  } catch (e) {
+    res.redirect('/dashboard/api?err=' + encodeURIComponent(e.message || 'Could not update key scopes.'));
+  }
+});
+
+/* --- Webhook console actions --- */
+router.post('/dashboard/api/webhooks', (req, res) => {
+  if (!hasProAccess(req.user)) return res.redirect('/dashboard/api?err=' + encodeURIComponent('Webhooks are a FirmLedger Pro feature — upgrade to create one.'));
+  try {
+    const events = Array.isArray(req.body.events) ? req.body.events : (req.body.events ? [req.body.events] : undefined);
+    const created = apiwebhooks.create(req.user.id, { label: req.body.label, url: req.body.url, events, categories: req.body.categories });
+    const nonce = stashWebhookReveal(req.user.id, created.secret);
+    res.redirect('/dashboard/api?webhook_reveal=' + encodeURIComponent(nonce) + '&ok=' + encodeURIComponent('Webhook created — copy the signing secret now; it is shown once.'));
+  } catch (e) {
+    res.redirect('/dashboard/api?err=' + encodeURIComponent(e.message || 'Could not create the webhook.'));
+  }
+});
+
+router.post('/dashboard/api/webhooks/:id/test', (req, res) => {
+  try {
+    apiwebhooks.test(req.user.id, req.params.id);
+    res.redirect('/dashboard/api?ok=' + encodeURIComponent('Test delivery queued. The endpoint receives it in the background.'));
+  } catch (e) { res.redirect('/dashboard/api?err=' + encodeURIComponent(e.message || 'Could not queue the test delivery.')); }
+});
+
+router.post('/dashboard/api/webhooks/:id/rotate', (req, res) => {
+  try {
+    const rotated = apiwebhooks.rotateSecret(req.user.id, req.params.id);
+    const nonce = stashWebhookReveal(req.user.id, rotated.secret);
+    res.redirect('/dashboard/api?webhook_reveal=' + encodeURIComponent(nonce) + '&ok=' + encodeURIComponent('Signing secret rotated — update your receiver now.'));
+  } catch (e) { res.redirect('/dashboard/api?err=' + encodeURIComponent(e.message || 'Could not rotate the secret.')); }
+});
+
+router.post('/dashboard/api/webhooks/:id/toggle', (req, res) => {
+  try {
+    const row = apiwebhooks.getOwned(req.user.id, req.params.id);
+    apiwebhooks.update(req.user.id, req.params.id, { active: !row.active });
+    res.redirect('/dashboard/api?ok=' + encodeURIComponent(row.active ? 'Webhook paused.' : 'Webhook resumed.'));
+  } catch (e) { res.redirect('/dashboard/api?err=' + encodeURIComponent(e.message || 'Could not change webhook state.')); }
+});
+
+router.post('/dashboard/api/webhooks/:id/delete', (req, res) => {
+  try { apiwebhooks.remove(req.user.id, req.params.id); res.redirect('/dashboard/api?ok=' + encodeURIComponent('Webhook removed.')); }
+  catch (e) { res.redirect('/dashboard/api?err=' + encodeURIComponent(e.message || 'Could not remove the webhook.')); }
+});
+
 /* --- Playground: calls run through the same service layer as /api/v1 --- */
 const PLAYGROUND_ENDPOINTS = [
   { m: 'GET', path: '/api/v1/me', body: '' },
+  { m: 'GET', path: '/api/v1/usage', body: '' },
+  { m: 'GET', path: '/api/v1/webhooks', body: '' },
+  { m: 'POST', path: '/api/v1/webhooks', body: '{\n  "label": "Production receiver",\n  "url": "https://example.com/firmledger",\n  "events": ["listing.approved", "listing.rejected", "claim.verified"]\n}' },
+  { m: 'GET', path: '/api/v1/webhooks/{id}/deliveries', body: '' },
+  { m: 'POST', path: '/api/v1/webhooks/{id}/test', body: '' },
   { m: 'GET', path: '/api/v1/listings', body: '' },
   { m: 'GET', path: '/api/v1/listings/{slug}', body: '' },
   { m: 'GET', path: '/api/v1/my/listings', body: '' },
@@ -958,7 +1042,26 @@ function runPlaygroundCall(user, method, path, rawBody) {
     catch { return { status: 400, json: { error: { code: 'invalid_json', message: 'The playground body is not valid JSON — fix it and re-run.' } } }; }
   }
   if (segs[0] === 'me' && segs.length === 1 && m === 'GET') {
-    return { status: 200, json: { data: { id: user.id, email: user.email, name: user.name, plan: 'pro', plan_expires_at: user.plan_expires_at || null } } };
+    return { status: 200, json: { data: { id: user.id, email: user.email, name: user.name, plan: 'pro', plan_expires_at: user.plan_expires_at || null, api: { usage: apikeys.usageSummary(user.id) } } } };
+  }
+  if (segs[0] === 'usage' && segs.length === 1 && m === 'GET') return { status: 200, json: { data: apikeys.usageSummary(user.id) } };
+  if (segs[0] === 'webhooks' && segs.length === 1 && m === 'GET') return { status: 200, json: { data: apiwebhooks.list(user.id), meta: { events: apiwebhooks.EVENTS } } };
+  if (segs[0] === 'webhooks' && segs.length === 1 && m === 'POST') {
+    const created = apiwebhooks.create(user.id, body);
+    return { status: 201, json: { data: { ...apiwebhooks.serialize(created.row), secret: created.secret }, meta: { secret_once: true } } };
+  }
+  if (segs[0] === 'webhooks' && segs.length === 2 && /^\d+$/.test(segs[1]) && m === 'GET') {
+    return { status: 200, json: { data: apiwebhooks.serialize(apiwebhooks.getOwned(user.id, segs[1])) } };
+  }
+  if (segs[0] === 'webhooks' && segs.length === 2 && /^\d+$/.test(segs[1]) && m === 'PATCH') {
+    return { status: 200, json: { data: apiwebhooks.serialize(apiwebhooks.update(user.id, segs[1], body)) } };
+  }
+  if (segs[0] === 'webhooks' && segs.length === 3 && /^\d+$/.test(segs[1]) && segs[2] === 'test' && m === 'POST') {
+    const delivery = apiwebhooks.test(user.id, segs[1]);
+    return { status: 202, json: { data: { delivery_id: delivery.id, event: 'webhook.test', status: 'pending' } } };
+  }
+  if (segs[0] === 'webhooks' && segs.length === 3 && /^\d+$/.test(segs[1]) && segs[2] === 'deliveries' && m === 'GET') {
+    return { status: 200, json: { data: apiwebhooks.listDeliveries(user.id, segs[1], query.limit), meta: { events: apiwebhooks.EVENTS } } };
   }
   // Directory + owner CRUD on /listings
   if (segs[0] === 'listings' && segs.length === 1 && m === 'GET') return { status: 200, json: apisvc.directory(query) };
@@ -974,6 +1077,8 @@ function runPlaygroundCall(user, method, path, rawBody) {
   if (segs[0] === 'my' && segs[1] === 'listings' && segs.length === 2 && m === 'GET') return { status: 200, json: apisvc.listMine(user, query) };
   if (segs[0] === 'my' && segs[1] === 'listings' && segs.length === 2 && m === 'POST') { const r = apisvc.createListing(user, body); return { status: r.status, json: r.body }; }
   if (segs[0] === 'my' && segs[1] === 'listings' && segs.length === 3 && m === 'GET') return { status: 200, json: { data: apisvc.serialize(apisvc.getOwned(user, segs[2])) } };
+  if (segs[0] === 'my' && segs[1] === 'listings' && segs.length === 3 && m === 'PUT') { const r = apisvc.updateListing(user, segs[2], body); return { status: r.status, json: r.body }; }
+  if (segs[0] === 'my' && segs[1] === 'listings' && segs.length === 3 && m === 'DELETE') return apisvc.deleteListing(user, segs[2]);
   // Read helpers
   if (segs[0] === 'search' && segs.length === 1 && m === 'GET') return { status: 200, json: apisvc.search(query) };
   if (segs[0] === 'categories' && segs.length === 1 && m === 'GET') return { status: 200, json: apisvc.categories() };
@@ -992,12 +1097,14 @@ function runPlaygroundCall(user, method, path, rawBody) {
 router.get('/dashboard/api/playground', (req, res) => {
   const newest = db.prepare('SELECT id, slug FROM listings WHERE owner_user_id=? ORDER BY id DESC LIMIT 1').get(req.user.id);
   const newestApproved = db.prepare("SELECT slug FROM listings WHERE owner_user_id=? AND status='approved' ORDER BY id DESC LIMIT 1").get(req.user.id);
+  const newestWebhook = db.prepare('SELECT id FROM api_webhooks WHERE user_id=? ORDER BY id DESC LIMIT 1').get(req.user.id);
   res.render('dashboard/api-playground', {
     meta: { title: 'API Playground — FirmLedger', description: 'Try the FirmLedger API live against your own data.', robots: 'noindex' },
     pro: hasProAccess(req.user),
     endpoints: PLAYGROUND_ENDPOINTS,
     limits: apilim,
     sampleId: newest ? newest.id : null,
+    sampleWebhookId: newestWebhook ? newestWebhook.id : null,
     sampleSlug: (newestApproved && newestApproved.slug) || (newest && newest.slug) || '',
     result: null, ok: req.query.ok || '', err: req.query.err || '',
     form: { method: 'GET', path: '/api/v1/listings', body: '' },
@@ -1013,15 +1120,17 @@ router.post('/dashboard/api/playground', (req, res) => {
   const render = (extra) => {
     const newestPost = db.prepare('SELECT id, slug FROM listings WHERE owner_user_id=? ORDER BY id DESC LIMIT 1').get(req.user.id);
     const newestApproved = db.prepare("SELECT slug FROM listings WHERE owner_user_id=? AND status='approved' ORDER BY id DESC LIMIT 1").get(req.user.id);
+    const newestWebhook = db.prepare('SELECT id FROM api_webhooks WHERE user_id=? ORDER BY id DESC LIMIT 1').get(req.user.id);
     return res.render('dashboard/api-playground', {
       meta: { title: 'API Playground — FirmLedger', description: 'Try the FirmLedger API live against your own data.', robots: 'noindex' },
       pro, endpoints: PLAYGROUND_ENDPOINTS, limits: apilim, sampleId: newestPost ? newestPost.id : null,
+      sampleWebhookId: newestWebhook ? newestWebhook.id : null,
       sampleSlug: (newestApproved && newestApproved.slug) || (newestPost && newestPost.slug) || '',
       form, ok: '', err: '', ...extra,
     });
   };
   if (!pro) return render({ result: null, err: 'The playground is a FirmLedger Pro feature — upgrade to run live calls.' });
-  if (!['GET', 'POST', 'PUT', 'DELETE'].includes(method)) return render({ result: null, err: 'Pick a method: GET, POST, PUT or DELETE.' });
+  if (!['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) return render({ result: null, err: 'Pick a method: GET, POST, PUT, PATCH or DELETE.' });
 
   // Same protection posture as the wire: per-account minute windows + write gate.
   const isWrite = method !== 'GET';
@@ -1045,7 +1154,7 @@ router.post('/dashboard/api/playground', (req, res) => {
   try {
     outcome = runPlaygroundCall(req.user, method, path, body);
   } catch (e) {
-    if (e instanceof apisvc.ApiServiceError) {
+    if (e instanceof apisvc.ApiServiceError || e instanceof apiwebhooks.WebhookServiceError) {
       outcome = { status: e.status, json: { error: { code: e.code, message: e.message, details: e.details } } };
     } else throw e;
   }

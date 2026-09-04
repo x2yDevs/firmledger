@@ -28,6 +28,7 @@ const { finalizeVerifiedClaim } = require('../lib/claimflow');
 const ad = require('../lib/advertising');
 const careers = require('../lib/careers');
 const mon = require('../lib/statusMonitor');
+const listingEvents = require('../lib/listingevents');
 
 const router = express.Router();
 const adminmail2fa = require('../lib/adminmail2fa');
@@ -387,6 +388,7 @@ router.post('/admin3119Musa/listings/:id/approve', (req, res) => {
   const firstApproval = l.status !== 'approved';
   db.prepare("UPDATE listings SET status='approved', last_verified_at=?, updated_at=datetime('now') WHERE id=?")
     .run(new Date().toISOString(), l.id);
+  if (firstApproval) listingEvents.approved(db.prepare('SELECT * FROM listings WHERE id=?').get(l.id), true);
   if (firstApproval) {
     const catSlug = (db.prepare('SELECT slug FROM categories WHERE name = ?').get(l.category) || {}).slug;
     submitForIndexing([`/listing/${l.slug}`, catSlug ? `/directory/c/${catSlug}` : null].filter(Boolean));
@@ -407,6 +409,7 @@ router.post('/admin3119Musa/listings/:id/approve', (req, res) => {
 router.post('/admin3119Musa/listings/:id/reject', (req, res) => {
   const l = db.prepare('SELECT * FROM listings WHERE id=?').get(req.params.id);
   db.prepare("UPDATE listings SET status='rejected', updated_at=datetime('now') WHERE id=?").run(req.params.id);
+  if (l && l.status !== 'rejected') listingEvents.rejected(db.prepare('SELECT * FROM listings WHERE id=?').get(req.params.id));
   if (l && l.owner_user_id) {
     notify.notifyUser(l.owner_user_id, {
       kind: 'listing',
@@ -438,6 +441,7 @@ router.post('/admin3119Musa/listings/bulk', (req, res) => {
     if (act === 'approve') {
       db.prepare("UPDATE listings SET status='approved', last_verified_at=?, updated_at=datetime('now') WHERE id=?")
         .run(new Date().toISOString(), l.id);
+      listingEvents.approved(db.prepare('SELECT * FROM listings WHERE id=?').get(l.id), true);
       const catSlug = (db.prepare('SELECT slug FROM categories WHERE name = ?').get(l.category) || {}).slug;
       submitForIndexing([`/listing/${l.slug}`, catSlug ? `/directory/c/${catSlug}` : null].filter(Boolean));
       googleIndexing.pingGoogleNewListingBackground(siteUrl(`/listing/${l.slug}`));
@@ -450,6 +454,7 @@ router.post('/admin3119Musa/listings/bulk', (req, res) => {
       }
     } else {
       db.prepare("UPDATE listings SET status='rejected', updated_at=datetime('now') WHERE id=?").run(l.id);
+      listingEvents.rejected(db.prepare('SELECT * FROM listings WHERE id=?').get(l.id));
       if (l.owner_user_id) {
         notify.notifyUser(l.owner_user_id, {
           kind: 'listing', title: `${l.name} was not approved`,
@@ -466,14 +471,20 @@ router.post('/admin3119Musa/listings/bulk', (req, res) => {
 });
 
 router.post('/admin3119Musa/listings/:id/feature', (req, res) => {
-  const l = db.prepare('SELECT featured FROM listings WHERE id=?').get(req.params.id);
-  if (l) db.prepare('UPDATE listings SET featured=? WHERE id=?').run(l.featured ? 0 : 1, req.params.id);
+  const l = db.prepare('SELECT * FROM listings WHERE id=?').get(req.params.id);
+  if (l) {
+    db.prepare('UPDATE listings SET featured=? WHERE id=?').run(l.featured ? 0 : 1, req.params.id);
+    listingEvents.updated(db.prepare('SELECT * FROM listings WHERE id=?').get(l.id), { change: 'featured' });
+  }
   res.redirect('/admin3119Musa/listings?ok=' + encodeURIComponent(l && l.featured ? 'Removed from featured.' : 'Marked as featured.'));
 });
 
 router.post('/admin3119Musa/listings/:id/delete', (req, res) => {
-  const l = db.prepare('SELECT logo_url FROM listings WHERE id=?').get(req.params.id);
-  if (l) deleteLogo(l.logo_url);
+  const l = db.prepare('SELECT * FROM listings WHERE id=?').get(req.params.id);
+  if (l) {
+    listingEvents.deleted(l);
+    deleteLogo(l.logo_url);
+  }
   db.prepare('DELETE FROM listings WHERE id=?').run(req.params.id);
   res.redirect('/admin3119Musa/listings?ok=' + encodeURIComponent('Listing deleted.'));
 });
@@ -492,14 +503,17 @@ router.post('/admin3119Musa/listings/:id/plan', (req, res) => {
     const expiry = new Date(Math.max(cur.getTime(), now.getTime()) + 30 * 24 * 3600 * 1000);
     db.prepare('UPDATE listings SET plan=?, plan_expires_at=? WHERE id=?')
       .run('pro', expiry.toISOString().slice(0, 10), l.id);
+    listingEvents.updated(db.prepare('SELECT * FROM listings WHERE id=?').get(l.id), { change: 'plan' });
     return ok(`Pro boost granted to ${l.name} (30 days, until ${expiry.toISOString().slice(0, 10)}).`);
   }
   if (act === 'lifetime') {
     db.prepare('UPDATE listings SET plan=?, plan_expires_at=? WHERE id=?').run('pro', '', l.id);
+    listingEvents.updated(db.prepare('SELECT * FROM listings WHERE id=?').get(l.id), { change: 'plan' });
     return ok(`Lifetime Pro boost granted to ${l.name}.`);
   }
   if (act === 'revoke') {
     db.prepare("UPDATE listings SET plan='free', plan_expires_at='' WHERE id=?").run(l.id);
+    listingEvents.updated(db.prepare('SELECT * FROM listings WHERE id=?').get(l.id), { change: 'plan' });
     return ok(`Listing-level Pro revoked — ${l.name} keeps perks only if the owner's account is Pro.`);
   }
   res.redirect('/admin3119Musa/listings');
@@ -609,6 +623,7 @@ router.post('/admin3119Musa/listings/:id/edit', async (req, res) => {
     (b.last_verified_at || '').trim() || null,
     l.id
   );
+  listingEvents.transition(l, db.prepare('SELECT * FROM listings WHERE id=?').get(l.id));
   submitForIndexing([`/listing/${l.slug}`]);
   // Only ping Google when the record is still public after the edit.
   if ((['pending', 'approved', 'rejected'].includes(b.status) ? b.status : l.status) === 'approved') {
@@ -623,6 +638,7 @@ router.post('/admin3119Musa/listings/:id/events', (req, res) => {
   if (title) {
     db.prepare('INSERT INTO listing_events (listing_id, event_date, kind, title) VALUES (?,?,?,?)')
       .run(req.params.id, (req.body.event_date || '').trim(), (req.body.kind || 'milestone').slice(0, 30), title);
+    listingEvents.updated(db.prepare('SELECT * FROM listings WHERE id=?').get(req.params.id), { change: 'timeline' });
   }
   res.redirect(`/admin3119Musa/listings/${req.params.id}/edit#timeline`);
 });
@@ -631,6 +647,7 @@ router.post('/admin3119Musa/events/:eid/delete', (req, res) => {
   const e = db.prepare('SELECT * FROM listing_events WHERE id=?').get(req.params.eid);
   if (e) {
     db.prepare('DELETE FROM listing_events WHERE id=?').run(e.id);
+    listingEvents.updated(db.prepare('SELECT * FROM listings WHERE id=?').get(e.listing_id), { change: 'timeline' });
     return res.redirect(`/admin3119Musa/listings/${e.listing_id}/edit#timeline`);
   }
   res.redirect('/admin3119Musa/listings');
@@ -1564,8 +1581,11 @@ router.post('/admin3119Musa/listings/new', async (req, res) => {
     Math.max(0, Math.min(97, parseInt(b.confidence, 10) || 55))
   );
   if (status === 'approved') {
+    listingEvents.approved(db.prepare('SELECT * FROM listings WHERE id=?').get(info.lastInsertRowid), true);
     submitForIndexing([`/listing/${slug}`]);
     googleIndexing.pingGoogleNewListingBackground(siteUrl(`/listing/${slug}`));
+  } else if (status === 'rejected') {
+    listingEvents.rejected(db.prepare('SELECT * FROM listings WHERE id=?').get(info.lastInsertRowid));
   }
   if (status === 'pending') {
     try { require('../lib/ai').scheduleModeration(info.lastInsertRowid); } catch { /* AI moderation is best-effort */ }

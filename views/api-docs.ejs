@@ -23,6 +23,8 @@
         <a href="#errors">Errors</a>
         <a href="#ep-discovery">GET /api/v1</a>
         <a href="#ep-health">GET /api/v1/health</a>
+        <a href="#ep-usage">GET /api/v1/usage</a>
+        <a href="#webhooks">Webhooks</a>
         <a href="#ep-directory">GET /api/v1/listings</a>
         <a href="#ep-profile">GET /api/v1/listings/:slug</a>
         <a href="#ep-create">POST /api/v1/listings</a>
@@ -52,6 +54,16 @@
           <tr><th>Keys per account</th><td>Up to <strong><%= limits.MAX_KEYS %></strong> active — use one per integration, revoke instantly from the console</td></tr>
           <tr><th>Access requirement</th><td>An active <strong>FirmLedger Pro</strong> subscription — lapsed plans receive <code>403 pro_required</code> until renewal</td></tr>
           <tr><th>Failures</th><td>Unknown key → <code>401 invalid_key</code> · revoked → <code>401 key_revoked</code> · malformed → <code>401 invalid_key</code> (counted by the brute-force guard)</td></tr>
+        </table>
+        <h4 style="margin:22px 0 8px">Scopes</h4>
+        <p class="muted">Keys can be narrowed per integration. Existing keys created before scopes were introduced retain full access. A missing permission returns <code>403 insufficient_scope</code> with <code>required_scope</code> in <code>error.details</code>.</p>
+        <table class="facts">
+          <tr><th><code>read:listings</code></th><td>Approved directory, profiles, search, categories, countries, suggestions, domain verification and <code>GET /my/listings</code></td></tr>
+          <tr><th><code>write:listings</code></th><td>Create, update and delete listing records you own</td></tr>
+          <tr><th><code>read:relationships</code></th><td><code>GET /relationships/:slug</code></td></tr>
+          <tr><th><code>export</code></th><td><code>GET /export/listings.csv</code></td></tr>
+          <tr><th><code>manage:webhooks</code></th><td>Create, inspect, test, rotate and remove webhooks</td></tr>
+          <tr><th><code>read:usage</code></th><td><code>/me</code> and <code>/usage</code>, including rate-limit snapshots</td></tr>
         </table>
       </div>
 
@@ -91,11 +103,11 @@
             <tbody>
               <tr><td>400</td><td><code>invalid_json</code> · <code>invalid_body</code> · <code>missing_query</code> · <code>invalid_domain</code></td><td>Body isn't valid JSON/object, or a required query/domain param is missing or malformed.</td></tr>
               <tr><td>401</td><td><code>missing_key</code> · <code>invalid_key</code> · <code>key_revoked</code></td><td>No/unknown/dead key. Create a fresh one in the console; revoked keys never come back.</td></tr>
-              <tr><td>403</td><td><code>pro_required</code> · <code>account_suspended</code></td><td>Pro plan inactive (renew at /pricing) or the account is suspended.</td></tr>
+              <tr><td>403</td><td><code>pro_required</code> · <code>account_suspended</code> · <code>insufficient_scope</code></td><td>Pro plan inactive, account suspended, or this key needs one of the documented scopes.</td></tr>
               <tr><td>404</td><td><code>not_found</code> · <code>unknown_endpoint</code></td><td>That listing/slug/domain isn't on the ledger, or the path/method isn't in v1.</td></tr>
-              <tr><td>409</td><td><code>duplicate_listing</code></td><td>A record with that name or domain already exists — <code>details.existing</code> carries its id/slug.</td></tr>
+              <tr><td>409</td><td><code>duplicate_listing</code> · <code>webhook_exists</code> · <code>webhook_limit</code></td><td>A record/domain or receiver URL already exists — <code>details.existing</code> carries listing identity where applicable.</td></tr>
               <tr><td>413</td><td><code>payload_too_large</code></td><td>Body over 100 KB — trim the description or split the work.</td></tr>
-              <tr><td>422</td><td><code>validation_failed</code> · <code>unknown_fields</code> · <code>invalid_filter</code></td><td>Field-level problems — <code>details.errors[]</code> names each one; unknown keys are rejected instead of ignored.</td></tr>
+              <tr><td>422</td><td><code>validation_failed</code> · <code>unknown_fields</code> · <code>invalid_fields</code> · <code>invalid_filter</code> · <code>invalid_scope</code> · <code>scope_required</code> · <code>events_required</code> · <code>invalid_url</code> · <code>private_url</code></td><td>Field-level, scope or webhook URL problems — <code>details.errors[]</code> names listing validation issues.</td></tr>
               <tr><td>429</td><td><code>rate_limited</code> · <code>too_many_concurrent</code> · <code>global_write_limit</code> · <code>ip_locked</code></td><td>Back off for <code>Retry-After</code> seconds, then resume.</td></tr>
             </tbody>
           </table>
@@ -114,6 +126,40 @@
         <div class="code-block"><span class="code-label">curl</span>curl <%= SITE %>/api/v1/health -H "Authorization: Bearer fl_live_your_key"</div>
       </div>
 
+      <div class="form-card docs-anchor" id="ep-usage">
+        <h3 class="form-section"><span class="m-chip m-get">GET</span>&nbsp; <code>/api/v1/usage</code> — usage dashboard data</h3>
+        <p class="muted">Returns this account's current-calendar-month totals, writes, top endpoint aggregates and a trailing 31-day series. The <code>meta.current_key</code> object is the live rolling read/write budget for the key making the request.</p>
+        <div class="code-block"><span class="code-label">curl</span>curl <%= SITE %>/api/v1/usage -H "Authorization: Bearer fl_live_your_key"</div>
+        <div class="code-block"><span class="code-label">shape</span>{
+  <span class="k">"data"</span>: { <span class="k">"month_requests"</span>: <span class="s">1842</span>, <span class="k">"month_writes"</span>: <span class="s">17</span>, <span class="k">"top_endpoints"</span>: [ { <span class="k">"method"</span>: <span class="s">"GET"</span>, <span class="k">"endpoint"</span>: <span class="s">"/listings"</span>, <span class="k">"requests"</span>: <span class="s">1200</span> } ], <span class="k">"daily"</span>: [ { <span class="k">"day"</span>: <span class="s">"2026-09-04"</span>, <span class="k">"requests"</span>: <span class="s">42</span>, <span class="k">"writes"</span>: <span class="s">1</span> } ] },
+  <span class="k">"meta"</span>: { <span class="k">"current_key"</span>: { <span class="k">"read"</span>: { <span class="k">"remaining"</span>: <span class="s">58</span> }, <span class="k">"write"</span>: { <span class="k">"remaining"</span>: <span class="s">20</span> } } }
+}</div>
+      </div>
+
+      <div class="form-card docs-anchor" id="webhooks">
+        <h3 class="form-section">Webhooks — push, not poll</h3>
+        <p class="muted">Register one or more receiver URLs. FirmLedger queues a signed <code>POST</code> after a listing you own is approved, rejected, updated or deleted; when a listing is approved for the first time, subscribers to its category receive <code>listing.created</code>; and the verified owner receives <code>claim.verified</code>. Delivery happens after the API/admin request returns.</p>
+        <table class="facts">
+          <tr><th>Events</th><td><code>listing.approved</code> · <code>listing.rejected</code> · <code>listing.updated</code> · <code>listing.created</code> · <code>listing.deleted</code> · <code>claim.verified</code></td></tr>
+          <tr><th>Filters</th><td><code>categories</code> is optional and filters the broadcast <code>listing.created</code> stream; a blank array receives every category. Owner lifecycle events are never hidden by a category filter.</td></tr>
+          <tr><th>Authentication</th><td><code>manage:webhooks</code> scope. The signing secret is returned only from create/rotate — store it in your secret manager. Up to 10 receiver URLs per account.</td></tr>
+          <tr><th>Retries</th><td>Timeouts, 408, 425, 429 and 5xx responses retry up to five attempts with backoff. Ten terminal failures pause a subscription automatically.</td></tr>
+        </table>
+        <div class="code-block"><span class="code-label">create</span>curl -X POST <%= SITE %>/api/v1/webhooks \
+  -H "Authorization: Bearer fl_live_your_key" \
+  -H "Content-Type: application/json" \
+  -d '{"label":"CRM production","url":"https://crm.example.com/hooks/firmledger","events":["listing.approved","listing.updated","claim.verified"],"categories":["Fintech"]}'</div>
+        <div class="code-block"><span class="code-label">signed receiver headers</span>X-FirmLedger-Event: listing.approved
+X-FirmLedger-Delivery: evt_…
+X-FirmLedger-Timestamp: 1778000000
+X-FirmLedger-Signature: v1=…
+X-Idempotency-Key: evt_…</div>
+        <div class="code-block"><span class="code-label">manage</span>curl <%= SITE %>/api/v1/webhooks/7/deliveries -H "Authorization: Bearer fl_live_your_key"
+curl -X POST <%= SITE %>/api/v1/webhooks/7/rotate-secret -H "Authorization: Bearer fl_live_your_key"
+curl -X POST <%= SITE %>/api/v1/webhooks/7/test -H "Authorization: Bearer fl_live_your_key"</div>
+        <p class="fine-print">Verify <code>HMAC_SHA256(timestamp + '.' + raw_request_body, secret)</code> and reject timestamps older than five minutes. Treat <code>X-Idempotency-Key</code> as the dedupe key — retries keep the same event id.</p>
+      </div>
+
       <div class="form-card docs-anchor" id="ep-directory">
         <h3 class="form-section"><span class="m-chip m-get">GET</span>&nbsp; <code>/api/v1/listings</code> — company directory</h3>
         <p class="muted">Browse FirmLedger's <b>public, approved listings</b> with filters and pagination. <b>Requires a Pro key</b> and returns full profile fields, including contact details.</p>
@@ -123,6 +169,7 @@
           <tr><th><code>type</code> · <code>category</code> · <code>country</code> · <code>city</code> · <code>region</code></th><td>Filter by entity type, category name, country, city or region</td></tr>
           <tr><th><code>sponsored</code></th><td><code>1</code> to return only sponsored placements</td></tr>
           <tr><th><code>sort</code></th><td><code>featured</code> (default) · <code>newest</code> · <code>name</code> · <code>confidence</code> · <code>country</code></td></tr>
+          <tr><th><code>fields</code></th><td>Optional comma-separated sparse fieldset, e.g. <code>fields=name,category,website</code>. <code>id</code> and <code>slug</code> are always retained.</td></tr>
         </table>
         <div class="code-block"><span class="code-label">curl</span>curl "<%= SITE %>/api/v1/listings?category=Fintech&amp;sort=newest&amp;per_page=50" \
   -H "Authorization: Bearer fl_live_your_key"</div>
@@ -135,7 +182,7 @@
 
       <div class="form-card docs-anchor" id="ep-profile">
         <h3 class="form-section"><span class="m-chip m-get">GET</span>&nbsp; <code>/api/v1/listings/:slug</code> — full company profile</h3>
-        <p class="muted">Fetch a single approved listing by its <code>slug</code> — the full profile, with sources, technology radar and hiring link. Returns <code>404 not_found</code> if unknown or not yet approved.</p>
+        <p class="muted">Fetch a single approved listing by its <code>slug</code> — the full profile, with sources, technology radar and hiring link. Returns <code>404 not_found</code> if unknown or not yet approved. Add <code>?fields=name,category,website</code> when you only need a sparse response.</p>
         <div class="code-block"><span class="code-label">curl</span>curl <%= SITE %>/api/v1/listings/acme-logistics-ltd \
   -H "Authorization: Bearer fl_live_your_key"</div>
       </div>
@@ -221,6 +268,7 @@ curl <%= SITE %>/api/v1/my/listings/42 -H "Authorization: Bearer fl_live_your_ke
         <table class="facts">
           <tr><th><code>q</code> *</th><td>Required search term, up to 120 characters</td></tr>
           <tr><th><code>type</code> · <code>country</code> · <code>category</code> · <code>page</code> · <code>per_page</code></th><td>Optional refinements</td></tr>
+          <tr><th><code>fields</code></th><td>Optional sparse fieldset; <code>id</code> and <code>slug</code> remain present</td></tr>
         </table>
         <div class="code-block"><span class="code-label">curl</span>curl "<%= SITE %>/api/v1/search?q=fintech&amp;per_page=50" \
   -H "Authorization: Bearer fl_live_your_key"</div>

@@ -6,7 +6,7 @@
       <div class="l">
         <p class="klabel">Developer platform</p>
         <h2>The FirmLedger API — <span style="color:var(--accent)">live</span></h2>
-        <p>A unified, source-backed business intelligence API. Every endpoint — from browsing the approved directory and searching the whole ledger to CRUD over the records you own — is <b>key-authenticated</b>, so a single Pro API key unlocks the lot. <strong style="color:var(--accent)">API access is included with FirmLedger Pro</strong> — alongside the full directory, verified ticks and Featured placement.</p>
+        <p>A unified, source-backed business intelligence API. Every endpoint — from browsing the approved directory and searching the whole ledger to CRUD over the records you own — is <b>key-authenticated</b>. Narrow each integration with scopes, push record changes to signed webhooks and use the usage console to see what is happening. <strong style="color:var(--accent)">API access is included with FirmLedger Pro</strong> — alongside the full directory, verified ticks and Featured placement.</p>
       </div>
       <span class="idx">API / V1</span>
     </div>
@@ -33,8 +33,12 @@
             <p>Up to 3 keys per Pro account, shown once and stored hashed. Every request carries <code>Authorization: Bearer fl_live_…</code> — only approved, paying accounts hold keys.</p>
           </div>
           <div class="feature">
+            <h3>Event-driven webhooks</h3>
+            <p>Push signed, retryable notifications for listing approvals, rejections, updates, new category matches and verified claims — no polling required.</p>
+          </div>
+          <div class="feature">
             <h3>Protected by design</h3>
-            <p>Per-key read &amp; write rate limits, an in-flight concurrency gate, a platform write ceiling and a brute-force lockout guard keep the API fast and fair for everyone.</p>
+            <p>Per-key scopes, read &amp; write rate limits, an in-flight concurrency gate, a platform write ceiling and a brute-force lockout guard keep the API fast and fair for everyone.</p>
           </div>
         </div>
       </div>
@@ -68,12 +72,17 @@ curl "<%= SITE %>/api/v1/listings?category=Fintech" \
           <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1/relationships/:slug</code></td><td>Company relationship &amp; ecosystem graph</td><td><span class="pill pill-approved">Live</span></td></tr>
           <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1/verify/domain/:domain</code></td><td>Check whether a domain is listed</td><td><span class="pill pill-approved">Live</span></td></tr>
           <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1/export/listings.csv</code></td><td>Bulk CSV export of the approved ledger</td><td><span class="pill pill-approved">Live</span></td></tr>
-          <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1/me</code></td><td>Your account, plan, key usage and limits</td><td><span class="pill pill-approved">Live</span></td></tr>
+          <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1/me</code></td><td>Your account, scopes, key usage and live limits</td><td><span class="pill pill-approved">Live</span></td></tr>
+          <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1/usage</code></td><td>Monthly totals, endpoint rankings and trailing 31-day usage series</td><td><span class="pill pill-approved">Live</span></td></tr>
           <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1/my/listings</code></td><td>Your listings, paginated (status filter)</td><td><span class="pill pill-approved">Live</span></td></tr>
           <tr><td><span class="m-chip m-post">POST</span></td><td><code>/api/v1/my/listings</code></td><td>Create a listing — enters moderation as <code>pending</code></td><td><span class="pill pill-approved">Live</span></td></tr>
           <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1/my/listings/:id</code></td><td>Fetch one of your listings by id</td><td><span class="pill pill-approved">Live</span></td></tr>
           <tr><td><span class="m-chip m-put">PUT</span></td><td><code>/api/v1/my/listings/:id</code></td><td>Update any writable fields on your listing</td><td><span class="pill pill-approved">Live</span></td></tr>
           <tr><td><span class="m-chip m-delete">DELETE</span></td><td><code>/api/v1/my/listings/:id</code></td><td>Remove your listing and its attachments</td><td><span class="pill pill-approved">Live</span></td></tr>
+          <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1/webhooks</code></td><td>List your signed event subscriptions</td><td><span class="pill pill-approved">Live</span></td></tr>
+          <tr><td><span class="m-chip m-post">POST</span></td><td><code>/api/v1/webhooks</code></td><td>Register a receiver URL and event/category filters</td><td><span class="pill pill-approved">Live</span></td></tr>
+          <tr><td><span class="m-chip m-patch">PATCH</span></td><td><code>/api/v1/webhooks/:id</code></td><td>Update filters, URL or pause state</td><td><span class="pill pill-approved">Live</span></td></tr>
+          <tr><td><span class="m-chip m-delete">DELETE</span></td><td><code>/api/v1/webhooks/:id</code></td><td>Remove a receiver and its delivery history</td><td><span class="pill pill-approved">Live</span></td></tr>
         </tbody>
       </table>
     </div>

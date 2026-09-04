@@ -10,6 +10,7 @@ const notify = require('./notify');
 const { submitForIndexing } = require('./indexing');
 const googleIndexing = require('./googleIndexing');
 const { isProListingActive } = require('./plans');
+const webhooks = require('./webhooks');
 
 function finalizeVerifiedClaim(c, l, newUser) {
   const prevOwnerId = l.owner_user_id;
@@ -20,6 +21,12 @@ function finalizeVerifiedClaim(c, l, newUser) {
     "UPDATE listings SET claimed=1, owner_user_id=?, last_verified_at=?, confidence=MIN(97, confidence + 13), updated_at=datetime('now') WHERE id=?"
   ).run(newUser.id, now, l.id);
   db.prepare("UPDATE claims SET status='rejected' WHERE listing_id=? AND id<>? AND status='pending'").run(l.id, c.id);
+  const claimedListing = db.prepare('SELECT * FROM listings WHERE id=?').get(l.id);
+  webhooks.dispatch('claim.verified', {
+    listing: claimedListing || l,
+    targetUserId: newUser.id,
+    data: { claim: { id: c.id, method: c.method, domain: c.domain, verified_at: now } },
+  });
   if (l.slug) {
     submitForIndexing([`/listing/${l.slug}`]);
     // Ownership just became verified — nudge Google to re-crawl the live record.
