@@ -6,7 +6,7 @@
     <div class="section-head" style="align-items:flex-end">
       <div>
         <h2>API playground</h2>
-        <span class="muted">Run real v1 calls against the ledger — the exact code path, key rules and limits as <code>/api/v1</code>. Every endpoint needs your Pro API key; writes are live: a POST creates, a DELETE deletes.</span>
+        <span class="muted">Run supported v1 calls against the ledger — the exact code path, key rules and limits as <code>/api/v1</code>. Every endpoint needs your Pro API key; writes are live: a POST creates, a DELETE deletes.</span>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <a class="btn btn-ghost btn-sm" href="/dashboard/api">API keys &amp; usage</a>
@@ -81,7 +81,6 @@ GET    /api/v1/listings          <span class="c">→ 200 + directory (filters &a
 GET    /api/v1/listings/&lt;slug&gt;  <span class="c">→ 200 + full company profile</span>
 GET    /api/v1/my/listings       <span class="c">→ 200 + the records you own</span>
 POST   /api/v1/my/listings       <span class="c">→ 201 + the new record (id in body)</span>
-GET    /api/v1/relationships/&lt;slug&gt;  <span class="c">→ company graph</span>
 GET    /api/v1/export/listings.csv  <span class="c">→ CSV export</span></div>
         <% } %>
       </div>

@@ -31,11 +31,9 @@
         <a href="#ep-update">PUT /api/v1/listings/:id</a>
         <a href="#ep-delete">DELETE /api/v1/listings/:id</a>
         <a href="#ep-mine">GET /api/v1/my/listings</a>
-        <a href="#ep-search">GET /api/v1/search</a>
         <a href="#ep-categories">GET /api/v1/categories</a>
         <a href="#ep-countries">GET /api/v1/countries</a>
         <a href="#ep-suggest">GET /api/v1/suggest</a>
-        <a href="#ep-relationships">GET /api/v1/relationships/:slug</a>
         <a href="#ep-verify">GET /api/v1/verify/domain/:domain</a>
         <a href="#ep-export">GET /api/v1/export/listings.csv</a>
         <a href="#etiquette">Fair-use rules</a>
@@ -58,9 +56,8 @@
         <h4 style="margin:22px 0 8px">Scopes</h4>
         <p class="muted">Keys can be narrowed per integration. Existing keys created before scopes were introduced retain full access. A missing permission returns <code>403 insufficient_scope</code> with <code>required_scope</code> in <code>error.details</code>.</p>
         <table class="facts">
-          <tr><th><code>read:listings</code></th><td>Approved directory, profiles, search, categories, countries, suggestions, domain verification and <code>GET /my/listings</code></td></tr>
+          <tr><th><code>read:listings</code></th><td>Approved directory, profiles, directory filters, categories, countries, suggestions, domain verification and <code>GET /my/listings</code></td></tr>
           <tr><th><code>write:listings</code></th><td>Create, update and delete listing records you own</td></tr>
-          <tr><th><code>read:relationships</code></th><td><code>GET /relationships/:slug</code></td></tr>
           <tr><th><code>export</code></th><td><code>GET /export/listings.csv</code></td></tr>
           <tr><th><code>manage:webhooks</code></th><td>Create, inspect, test, rotate and remove webhooks</td></tr>
           <tr><th><code>read:usage</code></th><td><code>/me</code> and <code>/usage</code>, including rate-limit snapshots</td></tr>
@@ -262,18 +259,6 @@ curl <%= SITE %>/api/v1/my/listings/42 -H "Authorization: Bearer fl_live_your_ke
         <p class="fine-print">Newest first. <code>meta</code> echoes page, per_page, total and total_pages.</p>
       </div>
 
-      <div class="form-card docs-anchor" id="ep-search">
-        <h3 class="form-section"><span class="m-chip m-get">GET</span>&nbsp; <code>/api/v1/search</code> — global search</h3>
-        <p class="muted">Search the entire approved ledger across name, tagline, description, category, city, tags and country. Paginated like the directory, with the same <code>meta</code> shape plus the echoed query.</p>
-        <table class="facts">
-          <tr><th><code>q</code> *</th><td>Required search term, up to 120 characters</td></tr>
-          <tr><th><code>type</code> · <code>country</code> · <code>category</code> · <code>page</code> · <code>per_page</code></th><td>Optional refinements</td></tr>
-          <tr><th><code>fields</code></th><td>Optional sparse fieldset; <code>id</code> and <code>slug</code> remain present</td></tr>
-        </table>
-        <div class="code-block"><span class="code-label">curl</span>curl "<%= SITE %>/api/v1/search?q=fintech&amp;per_page=50" \
-  -H "Authorization: Bearer fl_live_your_key"</div>
-      </div>
-
       <div class="form-card docs-anchor" id="ep-categories">
         <h3 class="form-section"><span class="m-chip m-get">GET</span>&nbsp; <code>/api/v1/categories</code> — category list</h3>
         <p class="muted">Every category in the site tree, with its <code>slug</code>, whether it's official, and a live <code>listings_count</code> of approved records.</p>
@@ -294,13 +279,6 @@ curl <%= SITE %>/api/v1/my/listings/42 -H "Authorization: Bearer fl_live_your_ke
           <tr><th><code>limit</code></th><td>Max items (default <code>8</code>, cap <code>25</code>)</td></tr>
         </table>
         <div class="code-block"><span class="code-label">curl</span>curl "<%= SITE %>/api/v1/suggest?q=fintech" \
-  -H "Authorization: Bearer fl_live_your_key"</div>
-      </div>
-
-      <div class="form-card docs-anchor" id="ep-relationships">
-        <h3 class="form-section"><span class="m-chip m-get">GET</span>&nbsp; <code>/api/v1/relationships/:slug</code> — company graph</h3>
-        <p class="muted">The relationship and ecosystem graph for a listing by slug: the centre node plus every neighbouring entity with its relationship label and direction (out/in). Returns <code>404 not_found</code> if the slug isn't approved.</p>
-        <div class="code-block"><span class="code-label">curl</span>curl <%= SITE %>/api/v1/relationships/acme-logistics-ltd \
   -H "Authorization: Bearer fl_live_your_key"</div>
       </div>
 

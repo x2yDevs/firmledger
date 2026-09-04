@@ -8,7 +8,7 @@
         <h2>Developer API
           <% if (pro) { %><span class="pill pill-pro" style="vertical-align:middle;margin-left:8px">PRO</span><% } %>
         </h2>
-        <span class="muted">REST access to the FirmLedger ledger — directory, search, categories, countries, verification, export, scoped keys and signed event delivery over webhooks. Every endpoint needs a key. <b>Included with FirmLedger Pro.</b></span>
+        <span class="muted">REST access to the FirmLedger ledger — directory filters, categories, countries, verification, export, scoped keys and signed event delivery over webhooks. Every endpoint needs a key. <b>Included with FirmLedger Pro.</b></span>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <a class="btn btn-ghost btn-sm" href="/api/docs" target="_blank" rel="noopener">API documentation ↗</a>
@@ -34,7 +34,7 @@
     <% if (!pro) { %>
     <div class="form-card" style="text-align:center;padding:clamp(28px,4vw,44px)">
       <h3 class="form-section" style="text-align:center;border-bottom:0;padding-bottom:0">API access is a FirmLedger Pro feature</h3>
-      <p class="muted" style="max-width:560px;margin:6px auto 18px">Pro members generate API keys here and get full REST access — browse and search the approved directory, check categories and countries, verify domains, run relationship graphs, export the ledger as CSV, and create, read, update and delete the listings they own. With documentation, sensible rate limits and a live playground.</p>
+      <p class="muted" style="max-width:560px;margin:6px auto 18px">Pro members generate API keys here and get full REST access — browse and filter the approved directory, check categories and countries, verify domains, export the ledger as CSV, and create, read, update and delete the listings they own. With documentation, sensible rate limits and a live playground.</p>
       <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
         <a class="btn btn-accent" href="/dashboard/upgrade">Upgrade to Pro</a>
         <a class="btn btn-ghost" href="/pricing">See pricing</a>

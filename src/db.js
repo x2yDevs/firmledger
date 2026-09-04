@@ -119,7 +119,7 @@ CREATE TABLE IF NOT EXISTS api_keys (
   revoked_at TEXT,
   total_requests INTEGER NOT NULL DEFAULT 0,
   write_requests INTEGER NOT NULL DEFAULT 0,
-  scopes TEXT NOT NULL DEFAULT '["read:listings","write:listings","read:relationships","export","manage:webhooks","read:usage"]'
+  scopes TEXT NOT NULL DEFAULT '["read:listings","write:listings","export","manage:webhooks","read:usage"]'
 );
 CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys(user_id);
 
@@ -249,7 +249,7 @@ CREATE INDEX IF NOT EXISTS idx_maillog_created ON admin_mail_log(created_at DESC
 
 /* Migrate older databases forward */
 try {
-  db.exec(`ALTER TABLE api_keys ADD COLUMN scopes TEXT NOT NULL DEFAULT '["read:listings","write:listings","read:relationships","export","manage:webhooks","read:usage"]'`);
+  db.exec(`ALTER TABLE api_keys ADD COLUMN scopes TEXT NOT NULL DEFAULT '["read:listings","write:listings","export","manage:webhooks","read:usage"]'`);
 } catch { /* column exists */ }
 try { db.exec("ALTER TABLE listings ADD COLUMN region TEXT NOT NULL DEFAULT ''"); } catch { /* column exists */ }
 try { db.exec("ALTER TABLE listings ADD COLUMN tech TEXT NOT NULL DEFAULT '[]'"); } catch { /* column exists */ }

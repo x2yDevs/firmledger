@@ -2440,3 +2440,33 @@ body.ai-modal-open { overflow: hidden; }
   .sponsor-card { scroll-snap-align: start; }
   .sponsor-card--dup, .sponsor-toggle { display: none; }
 }
+
+/* API console: responses are deliberately contained so a large JSON document
+   never pushes the request controls below an unnecessarily tall page. */
+.play-grid .code-block {
+  max-height: min(42vh, 480px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  white-space: pre;
+  scrollbar-width: thin;
+}
+.play-grid .form-card { min-width: 0; }
+.play-grid .code-block code { overflow-wrap: normal; }
+
+/* Admin data pages remain usable between tablet and desktop widths.  Tables
+   scroll inside their cards; form grids never create horizontal overflow. */
+.admin-form-cap { width: min(100%, 1020px); box-sizing: border-box; }
+.admin-form-cap .form-card { min-width: 0; }
+.admin-form-cap .form-card > .grid-2,
+.admin-form-cap .form-card > .grid-3 { min-width: 0; }
+.admin-form-cap .input, .admin-form-cap select, .admin-form-cap textarea { max-width: 100%; box-sizing: border-box; }
+@media (max-width: 720px) {
+  .admin-form-cap { padding-inline: 0; }
+  .admin-form-cap .form-card { padding: 18px 16px; }
+  .admin-form-cap .claim-form-row { align-items: stretch; flex-wrap: wrap; }
+  .admin-form-cap .claim-form-row .btn { width: 100%; }
+  .admin-form-cap .fetch-row { flex-wrap: wrap; }
+  .admin-form-cap .fetch-input, .admin-form-cap .fetch-btn { width: 100%; min-width: 0; }
+  .admin-form-cap .form-actions { flex-wrap: wrap; }
+  .admin-form-cap .form-actions .btn { max-width: 100%; }
+}
