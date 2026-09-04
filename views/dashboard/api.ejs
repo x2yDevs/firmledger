@@ -53,13 +53,12 @@
           <button class="btn btn-primary" type="submit">Generate API key</button>
         </div>
         <fieldset class="scope-picker" style="margin-top:16px">
-          <legend>Permissions <small>— nothing is preselected; start narrow and add access only when an integration needs it</small></legend>
+          <legend>Permissions <small>— start narrow, add access only when an integration needs it</small></legend>
           <div class="scope-grid">
             <% scopeDefinitions.forEach(function (scope) { %>
-            <label class="scope-option"><input type="checkbox" name="scopes" value="<%= scope.id %>"><span><b><%= scope.label %></b><small><code><%= scope.id %></code> · <%= scope.description %></small></span></label>
+            <label class="scope-option"><input type="checkbox" name="scopes" value="<%= scope.id %>" checked><span><b><%= scope.label %></b><small><code><%= scope.id %></code> · <%= scope.description %></small></span></label>
             <% }) %>
           </div>
-          <p class="form-note" style="margin:10px 0 0">Choose at least one permission before generating the key. Existing keys keep showing their current permissions below.</p>
         </fieldset>
       </form>
       <p class="form-note" style="margin-top:0">The full key appears once on the next screen — copy it immediately. Existing keys can be narrowed below without rotating the credential.</p>
@@ -142,7 +141,7 @@
           <label class="fl"><span>Label</span><input class="input" name="label" maxlength="80" placeholder="CRM production"></label>
           <label class="fl"><span>Receiver URL <small>HTTPS required in production</small></span><input class="input mono" name="url" type="url" maxlength="500" placeholder="https://crm.example.com/hooks/firmledger" required></label>
         </div>
-        <div class="webhook-options"><div><b class="option-title">Events <small class="muted">— leave all unchecked for the standard event set</small></b><div class="event-checks"><% webhookEvents.forEach(function (event) { %><label><input type="checkbox" name="events" value="<%= event %>"><code><%= event %></code></label><% }) %></div></div><label class="fl category-field"><span>Category filter <small>comma-separated; blank means every category</small></span><input class="input" name="categories" placeholder="Fintech, Logistics"></label></div>
+        <div class="webhook-options"><div><b class="option-title">Events</b><div class="event-checks"><% webhookEvents.forEach(function (event) { %><label><input type="checkbox" name="events" value="<%= event %>" <%= webhookDefaults.includes(event) ? 'checked' : '' %>><code><%= event %></code></label><% }) %></div></div><label class="fl category-field"><span>Category filter <small>comma-separated; blank means every category</small></span><input class="input" name="categories" placeholder="Fintech, Logistics"></label></div>
         <div class="form-actions"><button class="btn btn-primary" type="submit">Create webhook</button><span class="form-note">The signing secret appears once. Keep it server-side and verify the timestamped signature.</span></div>
       </form>
       <% if (webhooks.length) { %>

@@ -929,11 +929,7 @@ router.get('/dashboard/api', (req, res) => {
 router.post('/dashboard/api/keys', (req, res) => {
   if (!hasProAccess(req.user)) return res.redirect('/dashboard/api?err=' + encodeURIComponent('API keys are a FirmLedger Pro feature — upgrade to create one.'));
   try {
-    // The dashboard intentionally starts with no permissions selected. Keep the
-    // explicit empty array so the key service rejects an accidental full-access
-    // key instead of treating a missing field as the backwards-compatible
-    // full-scope default used by API callers.
-    const scopes = Array.isArray(req.body.scopes) ? req.body.scopes : (req.body.scopes ? [req.body.scopes] : []);
+    const scopes = Array.isArray(req.body.scopes) ? req.body.scopes : (req.body.scopes ? [req.body.scopes] : undefined);
     const { raw } = apikeys.createKey(req.user.id, req.body.label, scopes);
     const nonce = stashReveal(req.user.id, raw);
     res.redirect('/dashboard/api?reveal=' + encodeURIComponent(nonce) + '&ok=' + encodeURIComponent('API key created — copy it now, it is shown only once.'));
