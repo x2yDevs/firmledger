@@ -541,6 +541,10 @@ mark { background: #FBF0CB; color: inherit; border-radius: 3px; padding: 0 1px; 
 .kv span { font: 600 10.5px/1 var(--fm); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); min-width: 86px; }
 .code-block { background: #0B1526; border: 1px solid #1C2A44; border-radius: 11px; padding: 16px 18px; font: 400 12.6px/1.85 var(--fm); color: #B9C4D6; overflow-x: auto; margin: 14px 0; position: relative; white-space: pre; }
 .code-block .k { color: #8AB4F8; } .code-block .s { color: #A9C79A; } .code-block .c { color: #5E6C84; font-style: italic; }
+/* A <code> inside a code block (e.g. the API playground response body) must not
+   inherit the inline-code chrome — light paper background, border, padding and
+   smaller type would smother the dark block and its .k/.s token colours. */
+.code-block code { background: none; border: 0; padding: 0; font: inherit; color: inherit; white-space: pre; word-break: normal; overflow-wrap: normal; }
 .code-label { position: absolute; top: 10px; right: 14px; font: 500 10px/1 var(--fm); color: #5E6C84; letter-spacing: .1em; text-transform: uppercase; }
 .claim-form-row { display: flex; gap: 10px; align-items: flex-end; }
 .claim-form-row select, .claim-form-row input { flex: 1; }
