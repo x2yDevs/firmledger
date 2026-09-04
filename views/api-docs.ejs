@@ -4,7 +4,7 @@
   <div class="container">
     <p class="kicker">API reference</p>
     <h1 class="h-display">FirmLedger <em style="font-style:normal;color:var(--accent2)">API v1</em></h1>
-    <p class="lede">REST access to FirmLedger — a <b>free public directory API</b> to fetch listings into your own site, plus key-authenticated CRUD over the records you own. Predictable JSON, honest rate limits. <b>Key-authenticated endpoints are included with FirmLedger Pro.</b></p>
+    <p class="lede">REST access to FirmLedger — a <b>key-authenticated</b> developer API to browse the public ledger and manage the records you own. Predictable JSON, honest rate limits, included with <b>FirmLedger Pro</b>.</p>
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">
       <% if (user) { %><a class="btn btn-primary" href="/dashboard/api">Open your API console</a><% } else { %><a class="btn btn-primary" href="/pricing">Get Pro &amp; an API key</a><% } %>
       <a class="btn btn-ghost" href="<%= user ? '/dashboard/api/playground' : '/login?next=/dashboard/api/playground' %>">Open the playground</a>
@@ -22,13 +22,20 @@
         <a href="#limits">Rate limits &amp; protection</a>
         <a href="#errors">Errors</a>
         <a href="#ep-discovery">GET /api/v1</a>
-        <a href="#ep-public">Public directory (no key)</a>
-        <a href="#ep-me">GET /api/v1/me</a>
-        <a href="#ep-list">GET /api/v1/listings</a>
+        <a href="#ep-health">GET /api/v1/health</a>
+        <a href="#ep-directory">GET /api/v1/listings</a>
+        <a href="#ep-profile">GET /api/v1/listings/:slug</a>
         <a href="#ep-create">POST /api/v1/listings</a>
-        <a href="#ep-get">GET /api/v1/listings/:id</a>
         <a href="#ep-update">PUT /api/v1/listings/:id</a>
         <a href="#ep-delete">DELETE /api/v1/listings/:id</a>
+        <a href="#ep-mine">GET /api/v1/my/listings</a>
+        <a href="#ep-search">GET /api/v1/search</a>
+        <a href="#ep-categories">GET /api/v1/categories</a>
+        <a href="#ep-countries">GET /api/v1/countries</a>
+        <a href="#ep-suggest">GET /api/v1/suggest</a>
+        <a href="#ep-relationships">GET /api/v1/relationships/:slug</a>
+        <a href="#ep-verify">GET /api/v1/verify/domain/:domain</a>
+        <a href="#ep-export">GET /api/v1/export/listings.csv</a>
         <a href="#etiquette">Fair-use rules</a>
       </p>
     </div>
@@ -37,7 +44,7 @@
 
       <div class="form-card docs-anchor" id="auth">
         <h3 class="form-section">Authentication</h3>
-        <p class="muted">Every request must carry an API key created by a <b>FirmLedger Pro</b> account at <a href="/dashboard/api" style="color:var(--accent)">/dashboard/api</a>. Send it in the <code>Authorization</code> header — never in URLs or bodies.</p>
+        <p class="muted">Every endpoint — including the liveness probe — requires an API key created by a <b>FirmLedger Pro</b> account at <a href="/dashboard/api" style="color:var(--accent)">/dashboard/api</a>. Send it in the <code>Authorization</code> header — never in URLs or bodies. There are <b>no public endpoints</b>: key-less requests receive <code>401 missing_key</code>.</p>
         <div class="code-block"><span class="code-label">headers</span>Authorization: Bearer fl_live_your_key_here
 <span class="c"># X-API-Key: fl_live_your_key_here   ← accepted alternative</span></div>
         <table class="facts">
@@ -82,10 +89,10 @@
           <table class="table">
             <thead><tr><th>HTTP</th><th><code>error.code</code></th><th>Meaning &amp; fix</th></tr></thead>
             <tbody>
-              <tr><td>400</td><td><code>invalid_json</code> / <code>invalid_body</code></td><td>Body isn't valid JSON or isn't an object — check quotes, send <code>Content-Type: application/json</code>.</td></tr>
+              <tr><td>400</td><td><code>invalid_json</code> · <code>invalid_body</code> · <code>missing_query</code> · <code>invalid_domain</code></td><td>Body isn't valid JSON/object, or a required query/domain param is missing or malformed.</td></tr>
               <tr><td>401</td><td><code>missing_key</code> · <code>invalid_key</code> · <code>key_revoked</code></td><td>No/unknown/dead key. Create a fresh one in the console; revoked keys never come back.</td></tr>
               <tr><td>403</td><td><code>pro_required</code> · <code>account_suspended</code></td><td>Pro plan inactive (renew at /pricing) or the account is suspended.</td></tr>
-              <tr><td>404</td><td><code>not_found</code> · <code>unknown_endpoint</code></td><td>That listing id isn't on your account, or the path/method isn't in v1.</td></tr>
+              <tr><td>404</td><td><code>not_found</code> · <code>unknown_endpoint</code></td><td>That listing/slug/domain isn't on the ledger, or the path/method isn't in v1.</td></tr>
               <tr><td>409</td><td><code>duplicate_listing</code></td><td>A record with that name or domain already exists — <code>details.existing</code> carries its id/slug.</td></tr>
               <tr><td>413</td><td><code>payload_too_large</code></td><td>Body over 100 KB — trim the description or split the work.</td></tr>
               <tr><td>422</td><td><code>validation_failed</code> · <code>unknown_fields</code> · <code>invalid_filter</code></td><td>Field-level problems — <code>details.errors[]</code> names each one; unknown keys are rejected instead of ignored.</td></tr>
@@ -97,61 +104,40 @@
 
       <div class="form-card docs-anchor" id="ep-discovery">
         <h3 class="form-section"><span class="m-chip m-get">GET</span>&nbsp; <code>/api/v1</code> — discovery</h3>
-        <p class="muted">Returns the API name, version, endpoint list and live limits. <b>Public — no key needed.</b> Handy for health checks.</p>
-        <div class="code-block"><span class="code-label">curl</span>curl <%= SITE %>/api/v1</div>
+        <p class="muted">Returns the API name, version, endpoint list and live limits. <b>Requires a key.</b> Handy for printing the surface a client supports.</p>
+        <div class="code-block"><span class="code-label">curl</span>curl <%= SITE %>/api/v1 -H "Authorization: Bearer fl_live_your_key"</div>
       </div>
 
-      <div class="form-card docs-anchor" id="ep-public">
-        <h3 class="form-section"><span class="m-chip m-get">GET</span>&nbsp; <code>/api/v1/directory</code> — public listings (no key)</h3>
-        <p class="muted">Pull FirmLedger's <b>public, approved listings</b> into your own site. <b>No API key required</b> and it's <b>free</b> — just rate-limited per IP (the same <code>X-RateLimit-*</code> headers apply). These are the same non-sensitive pages engines crawl.</p>
+      <div class="form-card docs-anchor" id="ep-health">
+        <h3 class="form-section"><span class="m-chip m-get">GET</span>&nbsp; <code>/api/v1/health</code> — liveness</h3>
+        <p class="muted">Liveness probe — returns a 200 and no business data. Still <b>authenticated</b>: it needs a key like everything else, so the status monitor carries one via <code>STATUS_API_KEY</code>.</p>
+        <div class="code-block"><span class="code-label">curl</span>curl <%= SITE %>/api/v1/health -H "Authorization: Bearer fl_live_your_key"</div>
+      </div>
+
+      <div class="form-card docs-anchor" id="ep-directory">
+        <h3 class="form-section"><span class="m-chip m-get">GET</span>&nbsp; <code>/api/v1/listings</code> — company directory</h3>
+        <p class="muted">Browse FirmLedger's <b>public, approved listings</b> with filters and pagination. <b>Requires a Pro key</b> and returns full profile fields, including contact details.</p>
         <table class="facts">
           <tr><th><code>page</code> · <code>per_page</code></th><td>Pagination — default <code>1</code> / <code>20</code>, max <code>50</code></td></tr>
           <tr><th><code>q</code></th><td>Free-text search over name, tagline, description, tags, city &amp; category</td></tr>
-          <tr><th><code>type</code> · <code>category</code> · <code>country</code></th><td>Filter by entity type, category name or country</td></tr>
-          <tr><th><code>sort</code></th><td><code>featured</code> (default) · <code>newest</code> · <code>name</code> · <code>confidence</code></td></tr>
-          <tr><th>Fields returned</th><td>Public profile fields — name, slug, tagline, description, type, category, website, city, country, founded, size, tags, confidence, claimed, sponsored, url. <b>Contact details stay Pro.</b></td></tr>
+          <tr><th><code>type</code> · <code>category</code> · <code>country</code> · <code>city</code> · <code>region</code></th><td>Filter by entity type, category name, country, city or region</td></tr>
+          <tr><th><code>sponsored</code></th><td><code>1</code> to return only sponsored placements</td></tr>
+          <tr><th><code>sort</code></th><td><code>featured</code> (default) · <code>newest</code> · <code>name</code> · <code>confidence</code> · <code>country</code></td></tr>
         </table>
-        <div class="code-block"><span class="code-label">curl</span>curl "<%= SITE %>/api/v1/directory?category=Logistics&amp;sort=newest&amp;per_page=50"</div>
-        <div class="code-block"><span class="code-label">200 OK</span>{\n  <span class="k">\"data\"</span>: [ { <span class=\"k\">\"slug\"</span>: <span class=\"s\">\"acme-ltd\"</span>, <span class=\"k\">\"name\"</span>: <span class=\"s\">\"Acme Ltd\"</span>, <span class=\"k\">\"category\"</span>: <span class=\"s\">\"Logistics\"</span>, <span class=\"k\">\"confidence\"</span>: <span class=\"s\">84</span>, <span class=\"k\">\"url\"</span>: <span class=\"s\">\"...\"</span> } ],\n  <span class=\"k\">\"meta\"</span>: { <span class=\"k\">\"page\"</span>: <span class=\"s\">1</span>, <span class=\"k\">\"per_page\"</span>: <span class=\"s\">20</span>, <span class=\"k\">\"total\"</span>: <span class=\"s\">3</span>, <span class=\"k\">\"total_pages\"</span>: <span class=\"s\">1</span> }\n}</div>
-        <p class="fine-print">Use it server-side and cache the results — it is intended for secondary display of FirmLedger data, not as a substitute for your own first-party sources.</p>
-        <h3 class="form-section" style="margin-top:18px"><span class="m-chip m-get">GET</span>&nbsp; <code>/api/v1/directory/:slug</code> — one public listing</h3>
-        <p class="muted">Fetch a single approved listing by its <code>slug</code>. Public, no key. Returns <code>404 not_found</code> if unknown or not yet approved.</p>
-        <div class="code-block"><span class="code-label">curl</span>curl <%= SITE %>/api/v1/directory/acme-ltd</div>
-      </div>
-
-      <div class="form-card docs-anchor" id="ep-me">
-        <h3 class="form-section"><span class="m-chip m-get">GET</span>&nbsp; <code>/api/v1/me</code> — account &amp; usage</h3>
-        <p class="muted">Who this key belongs to, the plan state, live limits and usage counters across all your keys.</p>
-        <div class="code-block"><span class="code-label">curl</span>curl <%= SITE %>/api/v1/me -H "Authorization: Bearer fl_live_your_key"</div>
+        <div class="code-block"><span class="code-label">curl</span>curl "<%= SITE %>/api/v1/listings?category=Fintech&amp;sort=newest&amp;per_page=50" \
+  -H "Authorization: Bearer fl_live_your_key"</div>
+        <p class="fine-print">The key-gated legacy aliases <code>GET /api/v1/directory</code> and <code>GET /api/v1/directory/:slug</code> still work and return the same data — <code>/listings</code> is the canonical path.</p>
         <div class="code-block"><span class="code-label">200 OK</span>{
-  <span class="k">"data"</span>: {
-    <span class="k">"id"</span>: <span class="s">7</span>,
-    <span class="k">"email"</span>: <span class="s">"dev@acme.com"</span>,
-    <span class="k">"name"</span>: <span class="s">"Acme Dev"</span>,
-    <span class="k">"plan"</span>: <span class="s">"pro"</span>,
-    <span class="k">"plan_expires_at"</span>: <span class="s">"2027-01-01"</span>,
-    <span class="k">"api"</span>: {
-      <span class="k">"key_prefix"</span>: <span class="s">"fl_live_a3Kd…"</span>,
-      <span class="k">"active_keys"</span>: <span class="s">1</span>, <span class="k">"max_keys"</span>: <span class="s"><%= limits.MAX_KEYS %></span>,
-      <span class="k">"limits"</span>: { <span class="k">"read_requests_per_minute"</span>: <span class="s"><%= limits.READ_RPM %></span>,
-        <span class="k">"write_requests_per_minute"</span>: <span class="s"><span><%= limits.WRITE_RPM %></span></span>,
-        <span class="k">"max_concurrent_per_key"</span>: <span class="s"><%= limits.MAX_INFLIGHT %></span> },
-      <span class="k">"usage"</span>: { <span class="k">"today_requests"</span>: <span class="s">41</span>, <span class="k">"today_writes"</span>: <span class="s">6</span>,
-        <span class="k">"total_requests"</span>: <span class="s">1290</span>, <span class="k">"total_writes"</span>: <span class="s">118</span> }
-    }
-  }
+  <span class="k">"data"</span>: [ { <span class="k">"slug"</span>: <span class="s">"safiri-fintech"</span>, <span class="k">"name"</span>: <span class="s">"Safiri Fintech"</span>, <span class="k">"category"</span>: <span class="s">"Fintech"</span>, <span class="k">"confidence"</span>: <span class="s">72</span>, <span class="k">"email"</span>: <span class="s">"..."</span>, <span class="k">"url"</span>: <span class="s">".../listing/safiri-fintech"</span> } ],
+  <span class="k">"meta"</span>: { <span class="k">"page"</span>: <span class="s">1</span>, <span class="k">"per_page"</span>: <span class="s">20</span>, <span class="k">"total"</span>: <span class="s">1</span>, <span class="k">"total_pages"</span>: <span class="s">1</span> }
 }</div>
       </div>
 
-      <div class="form-card docs-anchor" id="ep-list">
-        <h3 class="form-section"><span class="m-chip m-get">GET</span>&nbsp; <code>/api/v1/listings</code> — your records</h3>
-        <table class="facts">
-          <tr><th><code>page</code></th><td>Page number, default <code>1</code></td></tr>
-          <tr><th><code>per_page</code></th><td>Page size, default <code>20</code>, max <code>50</code></td></tr>
-          <tr><th><code>status</code></th><td>Optional: <code>pending</code>, <code>approved</code> or <code>rejected</code></td></tr>
-        </table>
-        <div class="code-block"><span class="code-label">curl</span>curl "<%= SITE %>/api/v1/listings?status=approved&amp;per_page=50" -H "Authorization: Bearer fl_live_your_key"</div>
-        <p class="fine-print">Newest first. <code>meta</code> echoes page, per_page, total and total_pages.</p>
+      <div class="form-card docs-anchor" id="ep-profile">
+        <h3 class="form-section"><span class="m-chip m-get">GET</span>&nbsp; <code>/api/v1/listings/:slug</code> — full company profile</h3>
+        <p class="muted">Fetch a single approved listing by its <code>slug</code> — the full profile, with sources, technology radar and hiring link. Returns <code>404 not_found</code> if unknown or not yet approved.</p>
+        <div class="code-block"><span class="code-label">curl</span>curl <%= SITE %>/api/v1/listings/acme-logistics-ltd \
+  -H "Authorization: Bearer fl_live_your_key"</div>
       </div>
 
       <div class="form-card docs-anchor" id="ep-create">
@@ -178,7 +164,7 @@
             </tbody>
           </table>
         </div>
-        <div class="code-block"><span class="code-label">curl</span>curl -X POST <%= SITE %>/api/v1/listings \
+        <div class="code-block"><span class="code-label">curl</span>curl -X POST <%= SITE %>/api/v1/my/listings \
   -H "Authorization: Bearer fl_live_your_key" \
   -H "Content-Type: application/json" \
   -d '{
@@ -191,22 +177,16 @@
     "founded": "2019",
     "tags": ["logistics", "cold-chain"]
   }'</div>
-        <div class="code-block"><span class="code-label">201 Created</span><span class="c"># Location: /api/v1/listings/42</span>
+        <div class="code-block"><span class="code-label">201 Created</span><span class="c"># Location: /api/v1/my/listings/42</span>
 {
   <span class="k">"data"</span>: { <span class="k">"id"</span>: <span class="s">42</span>, <span class="k">"slug"</span>: <span class="s">"acme-logistics-ltd"</span>, <span class="k">"status"</span>: <span class="s">"pending"</span>, … },
-  <span class="k">"meta"</span>: { <span class="k">"note"</span>: <span class="s">"Created with status \"pending\" — goes live after moderation…"</span> }
+  <span class="k">"meta"</span>: { <span class="k">"note"</span>: <span class="s">"Created with status "pending" — goes live after moderation…"</span> }
 }</div>
-      </div>
-
-      <div class="form-card docs-anchor" id="ep-get">
-        <h3 class="form-section"><span class="m-chip m-get">GET</span>&nbsp; <code>/api/v1/listings/:id</code> — fetch one</h3>
-        <p class="muted">Full serialized record — every field, tags as an array, socials as an object, plus the canonical <code>url</code>. Only records you own: others' ids return <code>404 not_found</code>.</p>
-        <div class="code-block"><span class="code-label">curl</span>curl <%= SITE %>/api/v1/listings/42 -H "Authorization: Bearer fl_live_your_key"</div>
       </div>
 
       <div class="form-card docs-anchor" id="ep-update">
         <h3 class="form-section"><span class="m-chip m-put">PUT</span>&nbsp; <code>/api/v1/listings/:id</code> — update</h3>
-        <p class="muted">Send only the fields you want to change (any of the writable fields from POST). Unknown fields are rejected with <code>422 unknown_fields</code> so typos never silently drop. The response is the fully updated record.</p>
+        <p class="muted">Send only the fields you want to change (any of the writable fields from POST). Unknown fields are rejected with <code>422 unknown_fields</code> so typos never silently drop. The response is the fully updated record. Only records you own.</p>
         <div class="code-block"><span class="code-label">curl</span>curl -X PUT <%= SITE %>/api/v1/listings/42 \
   -H "Authorization: Bearer fl_live_your_key" \
   -H "Content-Type: application/json" \
@@ -215,9 +195,84 @@
 
       <div class="form-card docs-anchor" id="ep-delete">
         <h3 class="form-section"><span class="m-chip m-delete">DELETE</span>&nbsp; <code>/api/v1/listings/:id</code> — remove</h3>
-        <p class="muted">Deletes the record and everything attached to it (events, jobs, watchlist stars, relationships) in one transaction. Returns <code>204 No Content</code>. Deleting is permanent — the same record can always be re-created with POST.</p>
+        <p class="muted">Deletes the record and everything attached to it (events, jobs, watchlist stars, relationships) in one transaction. Returns <code>204 No Content</code>. Deleting is permanent — the same record can always be re-created. Only records you own.</p>
         <div class="code-block"><span class="code-label">curl</span>curl -X DELETE <%= SITE %>/api/v1/listings/42 -H "Authorization: Bearer fl_live_your_key"
 <span class="c"># → 204, empty body</span></div>
+      </div>
+
+      <div class="form-card docs-anchor" id="ep-mine">
+        <h3 class="form-section"><span class="m-chip m-get">GET</span>&nbsp; <code>/api/v1/my/listings</code> — your records</h3>
+        <p class="muted">The records <b>you own</b>, paginated and filterable by status. This is where owner CRUD lives.</p>
+        <table class="facts">
+          <tr><th><code>page</code></th><td>Page number, default <code>1</code></td></tr>
+          <tr><th><code>per_page</code></th><td>Page size, default <code>20</code>, max <code>50</code></td></tr>
+          <tr><th><code>status</code></th><td>Optional: <code>pending</code>, <code>approved</code> or <code>rejected</code></td></tr>
+        </table>
+        <div class="code-block"><span class="code-label">curl</span>curl "<%= SITE %>/api/v1/my/listings?status=approved&amp;per_page=50" \
+  -H "Authorization: Bearer fl_live_your_key"</div>
+        <div class="code-block"><span class="code-label">GET /api/v1/my/listings/:id</span><span class="c"># one of yours — full serialized record</span>
+curl <%= SITE %>/api/v1/my/listings/42 -H "Authorization: Bearer fl_live_your_key"</div>
+        <p class="fine-print">Newest first. <code>meta</code> echoes page, per_page, total and total_pages.</p>
+      </div>
+
+      <div class="form-card docs-anchor" id="ep-search">
+        <h3 class="form-section"><span class="m-chip m-get">GET</span>&nbsp; <code>/api/v1/search</code> — global search</h3>
+        <p class="muted">Search the entire approved ledger across name, tagline, description, category, city, tags and country. Paginated like the directory, with the same <code>meta</code> shape plus the echoed query.</p>
+        <table class="facts">
+          <tr><th><code>q</code> *</th><td>Required search term, up to 120 characters</td></tr>
+          <tr><th><code>type</code> · <code>country</code> · <code>category</code> · <code>page</code> · <code>per_page</code></th><td>Optional refinements</td></tr>
+        </table>
+        <div class="code-block"><span class="code-label">curl</span>curl "<%= SITE %>/api/v1/search?q=fintech&amp;per_page=50" \
+  -H "Authorization: Bearer fl_live_your_key"</div>
+      </div>
+
+      <div class="form-card docs-anchor" id="ep-categories">
+        <h3 class="form-section"><span class="m-chip m-get">GET</span>&nbsp; <code>/api/v1/categories</code> — category list</h3>
+        <p class="muted">Every category in the site tree, with its <code>slug</code>, whether it's official, and a live <code>listings_count</code> of approved records.</p>
+        <div class="code-block"><span class="code-label">curl</span>curl <%= SITE %>/api/v1/categories -H "Authorization: Bearer fl_live_your_key"</div>
+      </div>
+
+      <div class="form-card docs-anchor" id="ep-countries">
+        <h3 class="form-section"><span class="m-chip m-get">GET</span>&nbsp; <code>/api/v1/countries</code> — country list</h3>
+        <p class="muted">The distinct countries present in the approved ledger, each with its <code>listings_count</code>.</p>
+        <div class="code-block"><span class="code-label">curl</span>curl <%= SITE %>/api/v1/countries -H "Authorization: Bearer fl_live_your_key"</div>
+      </div>
+
+      <div class="form-card docs-anchor" id="ep-suggest">
+        <h3 class="form-section"><span class="m-chip m-get">GET</span>&nbsp; <code>/api/v1/suggest</code> — autocomplete</h3>
+        <p class="muted">Type-ahead suggestions for a search box: matching listings first, then categories, countries and cities. Each item carries a <code>type</code> so your UI can style it.</p>
+        <table class="facts">
+          <tr><th><code>q</code> *</th><td>Required prefix, up to 80 characters</td></tr>
+          <tr><th><code>limit</code></th><td>Max items (default <code>8</code>, cap <code>25</code>)</td></tr>
+        </table>
+        <div class="code-block"><span class="code-label">curl</span>curl "<%= SITE %>/api/v1/suggest?q=fintech" \
+  -H "Authorization: Bearer fl_live_your_key"</div>
+      </div>
+
+      <div class="form-card docs-anchor" id="ep-relationships">
+        <h3 class="form-section"><span class="m-chip m-get">GET</span>&nbsp; <code>/api/v1/relationships/:slug</code> — company graph</h3>
+        <p class="muted">The relationship and ecosystem graph for a listing by slug: the centre node plus every neighbouring entity with its relationship label and direction (out/in). Returns <code>404 not_found</code> if the slug isn't approved.</p>
+        <div class="code-block"><span class="code-label">curl</span>curl <%= SITE %>/api/v1/relationships/acme-logistics-ltd \
+  -H "Authorization: Bearer fl_live_your_key"</div>
+      </div>
+
+      <div class="form-card docs-anchor" id="ep-verify">
+        <h3 class="form-section"><span class="m-chip m-get">GET</span>&nbsp; <code>/api/v1/verify/domain/:domain</code> — check if listed</h3>
+        <p class="muted">Check whether a domain is already on the ledger. Accepts a bare domain (<code>acme.com</code>) or a full URL, normalises it, and returns <code>listed</code>, the resolved <code>domain</code>, the matching <code>listing</code> (if any) and all <code>matches</code>.</p>
+        <div class="code-block"><span class="code-label">curl</span>curl <%= SITE %>/api/v1/verify/domain/acme-logistics.example \
+  -H "Authorization: Bearer fl_live_your_key"</div>
+      </div>
+
+      <div class="form-card docs-anchor" id="ep-export">
+        <h3 class="form-section"><span class="m-chip m-get">GET</span>&nbsp; <code>/api/v1/export/listings.csv</code> — bulk export (Pro)</h3>
+        <p class="muted">Download the approved ledger as a CSV. <b>Pro only.</b> Optional <code>category</code>, <code>country</code> and <code>type</code> filters narrow the row set. The response is <code>text/csv</code> with a <code>Content-Disposition: attachment</code> header.</p>
+        <table class="facts">
+          <tr><th><code>category</code> · <code>country</code> · <code>type</code></th><td>Optional filters</td></tr>
+          <tr><th>Columns</th><td>id, slug, name, tagline, description, type, category, website, email, phone, country, city, region, address, logo_url, founded, size, tags, confidence, status, claimed, featured, sponsored, url, created_at, updated_at</td></tr>
+        </table>
+        <div class="code-block"><span class="code-label">curl</span>curl "<%= SITE %>/api/v1/export/listings.csv?country=Kenya" \
+  -H "Authorization: Bearer fl_live_your_key" \
+  --output firmledger-listings.csv</div>
       </div>
 
       <div class="form-card docs-anchor" id="etiquette">

@@ -116,14 +116,14 @@ function decideProbeStatus(id, ok) {
 }
 
 /* ---------------- Health checks ---------------- */
-async function httpStatus(url, timeoutMs = 8000) {
+async function httpStatus(url, timeoutMs = 8000, headers = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   const start = Date.now();
   try {
     const res = await fetch(url, {
       method: 'GET', redirect: 'follow', signal: controller.signal,
-      headers: { 'user-agent': 'FirmLedgerStatusMonitor/1.0', accept: 'application/json,text/html' },
+      headers: { 'user-agent': 'FirmLedgerStatusMonitor/1.0', accept: 'application/json,text/html', ...headers },
     });
     const ms = Date.now() - start;
     clearTimeout(timer);
@@ -180,7 +180,15 @@ async function checkComponent(comp) {
   let result;
   switch (comp.slug) {
     case 'web': result = await httpStatus(siteUrl('/')); break;
-    case 'api': result = await httpStatus(siteUrl('/api/v1/health')); break;
+    case 'api': {
+      // Every /api/v1 endpoint (including /health) requires a Pro API key now, so
+      // the monitor authenticates with the dedicated_STATUS_API_KEY env var. Set
+      // STATUS_API_KEY to a Pro key from Admin → API → Keys to keep this green.
+      const key = process.env.STATUS_API_KEY || '';
+      const headers = key ? { Authorization: `Bearer ${key}` } : {};
+      result = await httpStatus(siteUrl('/api/v1/health'), 8000, headers);
+      break;
+    }
     case 'database': result = dbCheck(); break;
     case 'email': result = await emailCheck(); break;
     default: result = { ok: true, latency_ms: 0, note: 'no check defined' }; break;

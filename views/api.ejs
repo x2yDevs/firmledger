@@ -6,7 +6,7 @@
       <div class="l">
         <p class="klabel">Developer platform</p>
         <h2>The FirmLedger API — <span style="color:var(--accent)">live</span></h2>
-        <p>A unified, source-backed business intelligence API. A <b>free public directory API</b> lets any developer pull FirmLedger's approved listings into their own site <b>with no key</b>, and Pro members get key-authenticated CRUD over the records they own. <strong style="color:var(--accent)">Key access is included with FirmLedger Pro</strong> — alongside the unlocked directory, verified ticks and Featured placement.</p>
+        <p>A unified, source-backed business intelligence API. Every endpoint — from browsing the approved directory and searching the whole ledger to CRUD over the records you own — is <b>key-authenticated</b>, so a single Pro API key unlocks the lot. <strong style="color:var(--accent)">API access is included with FirmLedger Pro</strong> — alongside the full directory, verified ticks and Featured placement.</p>
       </div>
       <span class="idx">API / V1</span>
     </div>
@@ -40,14 +40,14 @@
       </div>
       <div>
         <div class="code-block"><span class="code-label">quick start</span><span class="c"># 1. Go Pro, then create a key at /dashboard/api</span>
-<span class="c"># 2. List your records</span>
-curl <%= SITE %>/api/v1/listings \
+<span class="c"># 2. Browse the approved directory</span>
+curl "<%= SITE %>/api/v1/listings?category=Fintech" \
   -H <span class="s">"Authorization: Bearer fl_live_your_key"</span>
 
 {
-  <span class="k">"data"</span>: [ { <span class="k">"id"</span>: <span class="s">12</span>, <span class="k">"slug"</span>: <span class="s">"acme-ltd"</span>,
-    <span class="k">"name"</span>: <span class="s">"Acme Ltd"</span>, <span class="k">"status"</span>: <span class="s">"approved"</span>, … } ],
-  <span class="k">"meta"</span>: { <span class="k">"page"</span>: <span class="s">1</span>, <span class="k">"per_page"</span>: <span class="s">20</span>, <span class="k">"total"</span>: <span class="s">3</span> }
+  <span class="k">"data"</span>: [ { <span class="k">"slug"</span>: <span class="s">"safiri-fintech"</span>,
+    <span class="k">"name"</span>: <span class="s">"Safiri Fintech"</span>, <span class="k">"category"</span>: <span class="s">"Fintech"</span>, <span class="k">"url"</span>: <span class="s">"…/listing/safiri-fintech"</span> } ],
+  <span class="k">"meta"</span>: { <span class="k">"page"</span>: <span class="s">1</span>, <span class="k">"per_page"</span>: <span class="s">20</span>, <span class="k">"total"</span>: <span class="s">1</span> }
 }</div>
       </div>
     </div>
@@ -58,15 +58,22 @@ curl <%= SITE %>/api/v1/listings \
         <thead><tr><th>Method</th><th>Endpoint</th><th>Description</th><th>Status</th></tr></thead>
         <tbody>
           <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1</code></td><td>Discovery — versions, endpoints, limits</td><td><span class="pill pill-approved">Live</span></td></tr>
-          <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1/health</code></td><td>Liveness probe — no key, returns 200 when the API is up</td><td><span class="pill pill-approved">Live</span></td></tr>
-          <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1/directory</code></td><td>Public listings — no key, free, filterable</td><td><span class="pill pill-approved">Live</span></td></tr>
-          <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1/directory/:slug</code></td><td>Public single listing by slug — no key</td><td><span class="pill pill-approved">Live</span></td></tr>
+          <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1/health</code></td><td>Liveness probe — authenticated, returns 200 when the API is up</td><td><span class="pill pill-approved">Live</span></td></tr>
+          <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1/listings</code></td><td>Directory — approved listings with filters &amp; pagination</td><td><span class="pill pill-approved">Live</span></td></tr>
+          <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1/listings/:slug</code></td><td>Full company profile by slug</td><td><span class="pill pill-approved">Live</span></td></tr>
+          <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1/search</code></td><td>Global search across the approved ledger</td><td><span class="pill pill-approved">Live</span></td></tr>
+          <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1/categories</code></td><td>Category list with live listing counts</td><td><span class="pill pill-approved">Live</span></td></tr>
+          <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1/countries</code></td><td>Countries present in the approved ledger</td><td><span class="pill pill-approved">Live</span></td></tr>
+          <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1/suggest</code></td><td>Autocomplete — listings, categories, countries, cities</td><td><span class="pill pill-approved">Live</span></td></tr>
+          <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1/relationships/:slug</code></td><td>Company relationship &amp; ecosystem graph</td><td><span class="pill pill-approved">Live</span></td></tr>
+          <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1/verify/domain/:domain</code></td><td>Check whether a domain is listed</td><td><span class="pill pill-approved">Live</span></td></tr>
+          <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1/export/listings.csv</code></td><td>Bulk CSV export of the approved ledger</td><td><span class="pill pill-approved">Live</span></td></tr>
           <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1/me</code></td><td>Your account, plan, key usage and limits</td><td><span class="pill pill-approved">Live</span></td></tr>
-          <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1/listings</code></td><td>Your listings, paginated (status filter)</td><td><span class="pill pill-approved">Live</span></td></tr>
-          <tr><td><span class="m-chip m-post">POST</span></td><td><code>/api/v1/listings</code></td><td>Create a listing — enters moderation as <code>pending</code></td><td><span class="pill pill-approved">Live</span></td></tr>
-          <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1/listings/:id</code></td><td>Fetch one of your listings by id</td><td><span class="pill pill-approved">Live</span></td></tr>
-          <tr><td><span class="m-chip m-put">PUT</span></td><td><code>/api/v1/listings/:id</code></td><td>Update any writable fields on your listing</td><td><span class="pill pill-approved">Live</span></td></tr>
-          <tr><td><span class="m-chip m-delete">DELETE</span></td><td><code>/api/v1/listings/:id</code></td><td>Remove your listing and its attachments</td><td><span class="pill pill-approved">Live</span></td></tr>
+          <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1/my/listings</code></td><td>Your listings, paginated (status filter)</td><td><span class="pill pill-approved">Live</span></td></tr>
+          <tr><td><span class="m-chip m-post">POST</span></td><td><code>/api/v1/my/listings</code></td><td>Create a listing — enters moderation as <code>pending</code></td><td><span class="pill pill-approved">Live</span></td></tr>
+          <tr><td><span class="m-chip m-get">GET</span></td><td><code>/api/v1/my/listings/:id</code></td><td>Fetch one of your listings by id</td><td><span class="pill pill-approved">Live</span></td></tr>
+          <tr><td><span class="m-chip m-put">PUT</span></td><td><code>/api/v1/my/listings/:id</code></td><td>Update any writable fields on your listing</td><td><span class="pill pill-approved">Live</span></td></tr>
+          <tr><td><span class="m-chip m-delete">DELETE</span></td><td><code>/api/v1/my/listings/:id</code></td><td>Remove your listing and its attachments</td><td><span class="pill pill-approved">Live</span></td></tr>
         </tbody>
       </table>
     </div>
@@ -86,11 +93,11 @@ curl <%= SITE %>/api/v1/listings \
       </div>
     </div>
     <div class="rv" style="--d:100ms">
-      <div class="code-block" style="margin:0"><span class="code-label">today</span><span class="c"># live endpoints, no key needed</span>
-GET /api/v1/directory <span class="c"># public listings — pull into your site</span>
-GET /sitemap.xml      <span class="c"># auto-indexed</span>
-GET /feed.xml         <span class="c"># new + updated records</span>
-GET /listing/:slug    <span class="c"># canonical profiles</span></div>
+      <div class="code-block" style="margin:0"><span class="code-label">today</span><span class="c"># one Pro key unlocks the whole API</span>
+GET /api/v1/listings          <span class="c"># directory — filters &amp; pagination</span>
+GET /api/v1/search?q=fintech  <span class="c"># global search</span>
+GET /api/v1/export/listings.csv <span class="c"># bulk CSV export</span>
+GET /sitemap.xml              <span class="c"># public, auto-indexed</span></div>
     </div>
   </div>
 </section>

@@ -1489,6 +1489,11 @@ h2.h-display { font-size: clamp(1.9rem, 3.4vw, 2.7rem); }
   .trial-band .trial-cta .btn { width: 100%; justify-content: center; }
 }
 
+/* Admin Settings, Categories and Email get a comfortable content width that uses
+   more of the screen than a form-only column, while keeping text-entry fields
+   readable (grids collapse on phones). Opt in with .admin-form-cap. */
+.admin-form-cap { max-width: 1020px; }
+
 /* Admin data surfaces stay compact and independently scrollable. This keeps long
    queues usable without turning the whole console into an extra-tall page. */
 body:has(.admin-bar) #main .table-wrap {
