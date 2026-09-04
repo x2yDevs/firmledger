@@ -3,25 +3,26 @@
  *
  *   node tests/status-monitor.test.js
  *
- * Pins down both halves of honest status reporting:
+ * Pins down honest status reporting and the free, preconfigured monitor key:
  *
- *   A. No false outages — with no STATUS_API_KEY (the fresh-deploy default)
- *      the API component must report Operational as long as /api/v1/health
- *      answers with the API's well-formed "key required" envelope: a missing
- *      monitor key is not an outage. Same for a stale key the API rejects —
- *      it is retired so the probe can't brute-force-lock its own host's IP.
+ *   A. Free status, preconfigured API health key — /status and /status/api
+ *      need no key at all, and the API health probe authenticates with a
+ *      *normal* API key the monitor provisions itself: an internal
+ *      lifetime-Pro account created through the standard apikeys flow, the
+ *      raw key stored in settings. No operator setup. Revoked or rejected
+ *      keys are re-issued on the next probe; STATUS_API_KEY still overrides.
  *
- *   B. Real outages are still reported — connection refused, HTTP 500 and
- *      malformed responses must walk the API component down the
- *      degraded → partial_outage → major_outage ladder over consecutive
- *      failing probes, flip the headline to "Major Outage", and heal back to
- *      operational on the next healthy probe. Incident handling is unchanged.
+ *   B. No false outages — even when the probe ends up keyless, the API's
+ *      well-formed "key required" envelope means Operational, never an
+ *      outage. Real failures (connection refused, HTTP 500, malformed or
+ *      unexpected responses) still walk the degraded → partial_outage →
+ *      major_outage ladder and heal on the next healthy probe. Incident
+ *      handling is unchanged.
  *
- * Part A runs the real monitor in-process with scripted network responses.
- * Part B boots the real server against a throwaway database whose API
- * component is pre-poisoned to major_outage and verifies the first live
- * keyless probe heals it to Operational — while /api/v1/health itself still
- * refuses keyless requests (the API stays fully key-gated).
+ *   C. End-to-end — the real server boots against a throwaway database whose
+ *      API component is pre-poisoned to major_outage; the first live probe
+ *      heals it to Operational using its auto-provisioned key (verified in
+ *      the DB), while /api/v1/health itself still refuses keyless requests.
  */
 const fs = require('fs');
 const os = require('os');
@@ -46,7 +47,9 @@ process.env.FIRMLEDGER_DATA_DIR = dataDirA;
 process.env.BASE_URL = 'http://status-monitor.test';
 delete process.env.STATUS_API_KEY;
 
+const { db, getSetting } = require(path.join(ROOT, 'src/db.js'));
 const mon = require(path.join(ROOT, 'src/lib/statusMonitor.js'));
+const apikeys = require(path.join(ROOT, 'src/lib/apikeys.js'));
 mon.ensureComponents();
 const apiId = mon.componentBySlug('api').id;
 
@@ -80,43 +83,66 @@ global.fetch = async (url, opts = {}) => {
 
 const apiStatus = () => mon.componentBySlug('api').status;
 const reset = () => mon.resetComponentStatus(apiId);
-const VALID_KEY = 'fl_live_' + 'a'.repeat(32);
+const storedKey = () => getSetting('status_monitor_api_key', '');
+const sentBearer = () => String((apiCall && apiCall.headers.Authorization) || '').replace(/^Bearer /, '');
 
 (async () => {
-  /* --- A1. No key at all: the auth-enforcing 401 is NOT an outage --- */
-  apiResponder = () => enforcedEnvelope('missing_key');
-  await mon.checkAll();
-  check('no STATUS_API_KEY + auth-enforcing 401 → API Operational', apiStatus() === 'operational', apiStatus());
-  check('no STATUS_API_KEY → overall stays All Systems Normal', mon.overallStatus() === 'operational', mon.overallStatus());
-  check('no STATUS_API_KEY → probe sent keyless', !apiCall.headers.Authorization);
-  const snapKeyless = mon.snapshot();
-  check('no STATUS_API_KEY → snapshot headline is All Systems Normal', snapKeyless.status === 'operational' && snapKeyless.status_label === 'All Systems Normal', snapKeyless.status_label);
-
-  /* --- A2. A valid key still gets the fully-authenticated 200 check --- */
-  process.env.STATUS_API_KEY = VALID_KEY;
+  /* --- A1. Zero config: the monitor provisions its own normal API key --- */
   apiResponder = () => jsonResponse(200, { ok: true, service: 'FirmLedger API' });
   await mon.checkAll();
-  check('valid STATUS_API_KEY → API Operational via HTTP 200', apiStatus() === 'operational', apiStatus());
-  check('valid STATUS_API_KEY → probe authenticates', apiCall.headers.Authorization === `Bearer ${VALID_KEY}`);
+  const autoKey1 = storedKey();
+  check('preconfigured: a monitor API key is auto-provisioned (no setup)', apikeys.isWellFormed(autoKey1), autoKey1 || 'none');
+  check('preconfigured: probe authenticates with the auto key', sentBearer() === autoKey1 && autoKey1 !== '', sentBearer());
+  check('preconfigured: API component Operational via authenticated 200', apiStatus() === 'operational', apiStatus());
+  const internalUser = db.prepare("SELECT * FROM users WHERE email='status-monitor@firmledger.internal'").get();
+  check('internal monitor account exists (lifetime Pro, member role)',
+    Boolean(internalUser && internalUser.plan === 'pro' && !internalUser.plan_expires_at && internalUser.role === 'member'));
+  check('internal account can never log in (marked non-bcrypt hash)',
+    Boolean(internalUser && String(internalUser.password_hash).startsWith('!firmledger-internal:')));
+  const keyRow = db.prepare('SELECT * FROM api_keys WHERE user_id=? AND revoked_at IS NULL').get(internalUser.id);
+  check('auto key is a normal api_keys row (labeled, unrevoked)',
+    Boolean(keyRow && keyRow.label === 'FirmLedger status monitor'), keyRow && keyRow.label);
+  check('overall headline is All Systems Normal', mon.overallStatus() === 'operational', mon.overallStatus());
 
-  /* --- A3. A stale key: reported healthy, retired, never retried --- */
-  const STALE_KEY = 'fl_live_' + 'b'.repeat(32);
-  process.env.STATUS_API_KEY = STALE_KEY;
+  /* --- A2. STATUS_API_KEY still overrides the auto key --- */
+  const VALID_KEY = 'fl_live_' + 'a'.repeat(32);
+  process.env.STATUS_API_KEY = VALID_KEY;
+  await mon.checkAll();
+  check('STATUS_API_KEY override: probe uses the env key', sentBearer() === VALID_KEY, sentBearer());
+  check('STATUS_API_KEY override: API Operational', apiStatus() === 'operational', apiStatus());
+
+  /* --- A3. A stale env key is retired; the auto key takes over --- */
+  process.env.STATUS_API_KEY = 'fl_live_' + 'b'.repeat(32);
   apiResponder = () => enforcedEnvelope('invalid_key');
   await mon.checkAll();
-  check('stale STATUS_API_KEY rejected → API still Operational (not outage)', apiStatus() === 'operational', apiStatus());
-  apiCall = null;
-  apiResponder = () => enforcedEnvelope('missing_key');
-  await mon.checkAll();
-  check('rejected key retired → next probe goes out keyless', apiCall && !apiCall.headers.Authorization);
-  const FRESH_KEY = 'fl_live_' + 'c'.repeat(32);
-  process.env.STATUS_API_KEY = FRESH_KEY;
+  check('stale STATUS_API_KEY rejected → still Operational (no false outage)', apiStatus() === 'operational', apiStatus());
   apiResponder = () => jsonResponse(200, { ok: true });
   await mon.checkAll();
-  check('a fresh STATUS_API_KEY is tried again (200)', apiCall.headers.Authorization === `Bearer ${FRESH_KEY}` && apiStatus() === 'operational');
+  check('retired env key → probe falls back to the auto key', sentBearer() === autoKey1, sentBearer());
   delete process.env.STATUS_API_KEY;
 
-  /* --- A4. Real outage: consecutive failures walk the ladder --- */
+  /* --- A4. Auto key revoked somewhere → fresh one issued on next probe --- */
+  const beforeRevoke = storedKey();
+  const hitA4 = apikeys.lookup(beforeRevoke);
+  apikeys.revokeKey(hitA4.key.id, hitA4.key.user_id);
+  await mon.checkAll();
+  const afterRevoke = storedKey();
+  check('revoked auto key re-issued automatically', apikeys.isWellFormed(afterRevoke) && afterRevoke !== beforeRevoke);
+  check('probe uses the re-issued key', sentBearer() === afterRevoke, sentBearer());
+  check('API Operational after key re-issue', apiStatus() === 'operational', apiStatus());
+
+  /* --- A5. Auto key rejected by the API → dropped and re-issued --- */
+  const beforeReject = storedKey();
+  apiResponder = () => enforcedEnvelope('pro_required');
+  await mon.checkAll();
+  check('rejected auto key → still Operational (no false outage)', apiStatus() === 'operational', apiStatus());
+  const hitA5 = apikeys.lookup(beforeReject);
+  check('rejected auto key was revoked', Boolean(hitA5 && hitA5.key.revoked_at));
+  apiResponder = () => jsonResponse(200, { ok: true });
+  await mon.checkAll();
+  check('fresh auto key issued after rejection', apikeys.isWellFormed(storedKey()) && storedKey() !== beforeReject && sentBearer() === storedKey());
+
+  /* --- B1. Real outage: consecutive failures walk the ladder --- */
   reset();
   apiResponder = connRefused;
   await mon.checkAll();
@@ -128,13 +154,13 @@ const VALID_KEY = 'fl_live_' + 'a'.repeat(32);
   const snapOutage = mon.snapshot();
   check('real outage → headline flips to Major Outage', snapOutage.status === 'major_outage' && snapOutage.status_label === 'Major Outage', snapOutage.status_label);
 
-  /* --- A5. Recovery heals on the next healthy probe --- */
-  apiResponder = () => enforcedEnvelope('missing_key');
+  /* --- B2. Recovery heals on the next healthy probe --- */
+  apiResponder = () => jsonResponse(200, { ok: true });
   await mon.checkAll();
   check('recovery → API heals back to Operational', apiStatus() === 'operational', apiStatus());
   check('recovery → headline back to All Systems Normal', mon.overallStatus() === 'operational', mon.overallStatus());
 
-  /* --- A6/A7/A8. Other genuinely-broken responses still fail --- */
+  /* --- B3. Other genuinely-broken responses still fail --- */
   reset();
   apiResponder = () => jsonResponse(500, { error: { code: 'boom' } });
   await mon.checkAll();
@@ -151,8 +177,8 @@ const VALID_KEY = 'fl_live_' + 'a'.repeat(32);
   check('unexpected 4xx envelope code counts as a real failure', apiStatus() === 'degraded', apiStatus());
   reset();
 
-  /* --- A9. Incident machinery untouched: open incident holds, resolve heals --- */
-  apiResponder = () => enforcedEnvelope('missing_key');
+  /* --- B4. Incident machinery untouched: open incident holds, resolve heals --- */
+  apiResponder = () => jsonResponse(200, { ok: true });
   const inc = mon.createIncident({ title: 'Scripted API incident', severity: 'critical', component_id: apiId });
   check('critical incident forces Major Outage on its component', inc.ok && apiStatus() === 'major_outage', apiStatus());
   await mon.checkAll();
@@ -163,9 +189,9 @@ const VALID_KEY = 'fl_live_' + 'a'.repeat(32);
   global.fetch = realFetch;
 
   /* ===================================================================== */
-  /* B. End-to-end: real server, keyless, heals a poisoned Major Outage    */
+  /* C. End-to-end: real server, zero config, heals a poisoned outage      */
   /* ===================================================================== */
-  console.log('\nB. Real server, keyless — poisoned Major Outage heals');
+  console.log('\nC. Real server, zero config — poisoned Major Outage heals');
 
   const dataDirB = fs.mkdtempSync(path.join(os.tmpdir(), 'firmledger-status-b-'));
   const PORT = 4500 + (process.pid % 400);
@@ -208,7 +234,7 @@ console.log('seeded:' + mon.componentBySlug('api').status);
   }
 
   const apiComp = snap && (snap.components || []).find((c) => c.slug === 'api');
-  check('live keyless probe heals the poisoned Major Outage → API Operational',
+  check('live probe heals the poisoned Major Outage → API Operational',
     Boolean(apiComp && apiComp.status === 'operational'),
     apiComp ? apiComp.status : 'server never reported' + (serverLog ? ` — ${serverLog.split('\n')[0]}` : ''));
   check('overall headline is All Systems Normal', snap && snap.status === 'operational' && snap.status_label === 'All Systems Normal',
@@ -227,10 +253,26 @@ console.log('seeded:' + mon.componentBySlug('api').status);
   try {
     const page = await fetch(`${BASE}/status`);
     const html = await page.text();
-    check('public /status page renders All Systems Normal', page.status === 200 && html.includes('All Systems Normal'), `HTTP ${page.status}`);
+    check('public /status page renders All Systems Normal (free, no key)', page.status === 200 && html.includes('All Systems Normal'), `HTTP ${page.status}`);
   } catch (e) {
-    check('public /status page renders All Systems Normal', false, String(e.message));
+    check('public /status page renders All Systems Normal (free, no key)', false, String(e.message));
   }
+
+  // The server's own DB must show the preconfigured key did the real work.
+  const Database = require('better-sqlite3');
+  const ro = new Database(path.join(dataDirB, 'firmledger.db'), { readonly: true });
+  const liveKey = ro.prepare("SELECT value FROM settings WHERE key='status_monitor_api_key'").get();
+  const liveUser = ro.prepare("SELECT * FROM users WHERE email='status-monitor@firmledger.internal'").get();
+  const liveKeyRow = liveUser
+    ? ro.prepare('SELECT * FROM api_keys WHERE user_id=? ORDER BY id DESC').all(liveUser.id).find((k) => !k.revoked_at)
+    : null;
+  check('server DB: auto-provisioned key persisted in settings',
+    Boolean(liveKey && apikeys.isWellFormed(liveKey.value)), liveKey ? liveKey.value : 'none');
+  check('server DB: internal account is lifetime Pro',
+    Boolean(liveUser && liveUser.plan === 'pro' && !liveUser.plan_expires_at));
+  check('server DB: the API health probe really used the key (usage recorded)',
+    Boolean(liveKeyRow && liveKeyRow.total_requests >= 1), liveKeyRow ? `requests=${liveKeyRow.total_requests}` : 'no key row');
+  ro.close();
 
   server.kill('SIGTERM');
   await sleep(500);

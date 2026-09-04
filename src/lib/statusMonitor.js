@@ -14,14 +14,15 @@
  * its own. The next healthy probe heals the component back to operational. The
  * monitor never *upgrades* a component that still has an open incident.
  *
- * API probing understands the API's auth contract: every /api/v1 endpoint
- * (including /health) is key-gated, so the monitor sends STATUS_API_KEY when it
- * has one, and otherwise treats the API's well-formed "key required" 401/403
- * envelope as *proof the API is up and enforcing auth as designed* — a missing
- * monitor key is not an outage. Genuine failures (5xx, timeouts, connection
- * errors, malformed responses) are still reported. A provisioned key that the
- * API rejects (revoked, expired Pro, …) is retired for the life of this process
- * so the probe can't burn the brute-force lockout budget of its own host's IP.
+ * API probing: /api/v1 is key-gated, so the monitor authenticates exactly like
+ * any other API client. It maintains its own ordinary fl_live_ key — a
+ * dedicated internal account with lifetime Pro, auto-provisioned through the
+ * standard apikeys flow and persisted in settings, so the API component is
+ * accurate with zero operator setup (STATUS_API_KEY still overrides it). A
+ * revoked or rejected key is re-issued on the next probe, and the API's
+ * well-formed "key required" envelope is understood as proof the API is up,
+ * so even a provisioning hiccup can never fake an outage. Genuine failures
+ * (5xx, timeouts, connection errors, malformed responses) are still reported.
  */
 const { db, getSetting, setSetting } = require('../db');
 const { siteUrl } = require('./util');
@@ -237,16 +238,106 @@ const API_ENFORCED_CODES = new Set([
   'rate_limited', 'too_many_concurrent', 'payload_too_large', 'invalid_json',
 ]);
 
-/* Codes that mean the monitor key itself is unusable. When the probe sent
-   STATUS_API_KEY and got one of these back, the key is retired (until the
-   operator sets a different one) so repeated probes can't stack brute-force
-   failures against the server's own IP. */
+/* Codes that mean the key we sent is unusable right now. Env keys get retired
+   for the life of this process; the auto-provisioned key is revoked on the
+   spot and a fresh one is issued on the next probe. Either way the probe never
+   stacks brute-force failures against the server's own IP. */
 const API_KEY_DEAD_CODES = new Set(['invalid_key', 'key_revoked', 'pro_required', 'account_suspended']);
-let retiredStatusKey = null;
+let retiredEnvKey = null;
+let autoKeyRejections = 0;
+let autoKeyGivenUp = false;
+
+/* ---------------- Auto-provisioned monitor API key ----------------
+   Viewing /status is free and public — no key, no setup. The API health
+   probe, however, authenticates with a *normal* API key like every other
+   /api/v1 client. Instead of making an operator paste one into the env, the
+   monitor provisions its own: a dedicated internal account (login-impossible
+   password hash, lifetime Pro) created through the standard apikeys flow,
+   with the raw key persisted in settings. Revoked or rejected keys are
+   re-issued automatically on the next probe. */
+const STATUS_KEY_SETTING = 'status_monitor_api_key';
+const STATUS_USER_EMAIL = 'status-monitor@firmledger.internal';
+const INTERNAL_HASH_MARK = '!firmledger-internal:';
+
+function findInternalUser() {
+  const byEmail = db.prepare('SELECT * FROM users WHERE email=?').get(STATUS_USER_EMAIL);
+  if (byEmail && String(byEmail.password_hash || '').startsWith(INTERNAL_HASH_MARK)) return byEmail;
+  // The canonical email may have been taken before the monitor first ran;
+  // our account is recognizable by its marked, login-impossible hash.
+  return db.prepare("SELECT * FROM users WHERE password_hash LIKE ? || '%' ORDER BY id ASC").get(INTERNAL_HASH_MARK) || null;
+}
+
+/** Find or create the dedicated monitor account and keep it lifetime-Pro. */
+function ensureStatusUser() {
+  const crypto = require('crypto');
+  let row = findInternalUser();
+  if (!row) {
+    const taken = db.prepare('SELECT id FROM users WHERE email=?').get(STATUS_USER_EMAIL);
+    const email = taken
+      ? `status-monitor-${crypto.randomBytes(6).toString('hex')}@firmledger.internal`
+      : STATUS_USER_EMAIL;
+    db.prepare('INSERT INTO users (email, password_hash, name, role) VALUES (?,?,?,?)')
+      .run(email, INTERNAL_HASH_MARK + crypto.randomBytes(24).toString('hex'), 'FirmLedger Status Monitor', 'member');
+    row = db.prepare('SELECT * FROM users WHERE email=?').get(email);
+  }
+  // API access is a Pro feature; the monitor account holds a lifetime grant.
+  require('./plans').grantUserPro(row.id, null);
+  return row;
+}
+
+function statusKeyValid(raw) {
+  const apikeys = require('./apikeys');
+  if (!raw || !apikeys.isWellFormed(raw)) return false;
+  const hit = apikeys.lookup(raw);
+  if (!hit || hit.key.revoked_at) return false;
+  if (!hit.user || hit.user.suspended) return false;
+  return require('./plans').hasProAccess(hit.user);
+}
+
+/** Return a currently-valid monitor API key, issuing one when needed. */
+function ensureStatusKey() {
+  if (autoKeyGivenUp) return '';
+  const apikeys = require('./apikeys');
+  try {
+    const existing = getSetting(STATUS_KEY_SETTING, '');
+    if (statusKeyValid(existing)) return existing;
+    const user = ensureStatusUser();
+    if (existing) {
+      const hit = apikeys.lookup(existing);
+      if (hit && !hit.key.revoked_at) apikeys.revokeKey(hit.key.id, hit.key.user_id);
+    }
+    const { raw } = apikeys.createKey(user.id, 'FirmLedger status monitor', apikeys.DEFAULT_SCOPES);
+    setSetting(STATUS_KEY_SETTING, raw);
+    return raw;
+  } catch (e) {
+    console.warn('[status-monitor] could not provision the monitor API key:', (e && e.message) || e);
+    return '';
+  }
+}
+
+/** Revoke and forget the auto-provisioned key (it rejected by the API). */
+function dropStatusKey() {
+  const apikeys = require('./apikeys');
+  try {
+    const raw = getSetting(STATUS_KEY_SETTING, '');
+    if (raw) {
+      const hit = apikeys.lookup(raw);
+      if (hit && !hit.key.revoked_at) apikeys.revokeKey(hit.key.id, hit.key.user_id);
+    }
+    setSetting(STATUS_KEY_SETTING, '');
+  } catch { /* fall through — the probe degrades to keyless */ }
+}
+
+/** Env override wins; otherwise the auto-provisioned key; else keyless. */
+function currentStatusKey() {
+  const envKey = String(process.env.STATUS_API_KEY || '').trim();
+  if (envKey && envKey !== retiredEnvKey) return { key: envKey, source: 'env' };
+  const auto = ensureStatusKey();
+  return auto ? { key: auto, source: 'auto' } : { key: '', source: 'none' };
+}
 
 async function apiHealthCheck() {
-  const envKey = String(process.env.STATUS_API_KEY || '').trim();
-  const key = envKey && envKey !== retiredStatusKey ? envKey : '';
+  const { key, source } = currentStatusKey();
   const headers = key ? { Authorization: `Bearer ${key}` } : {};
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 8000);
@@ -268,8 +359,19 @@ async function apiHealthCheck() {
     } catch { /* not JSON — falls through to a failure below */ }
     if (res.status >= 400 && res.status < 500 && API_ENFORCED_CODES.has(code)) {
       if (key && API_KEY_DEAD_CODES.has(code)) {
-        retiredStatusKey = key;
-        console.warn(`[status-monitor] STATUS_API_KEY rejected by /api/v1 (${code}) — probing keyless until a fresh key is set (Admin → API → Keys).`);
+        if (source === 'env') {
+          retiredEnvKey = key;
+          console.warn(`[status-monitor] STATUS_API_KEY rejected by /api/v1 (${code}) — falling back to the auto-provisioned monitor key.`);
+        } else {
+          dropStatusKey();
+          autoKeyRejections += 1;
+          if (autoKeyRejections >= 3) {
+            autoKeyGivenUp = true;
+            console.warn('[status-monitor] freshly provisioned monitor keys keep getting rejected — probing keyless until restart.');
+          } else {
+            console.warn(`[status-monitor] monitor API key rejected by /api/v1 (${code}) — revoked it; a fresh one is issued on the next probe.`);
+          }
+        }
       }
       const why = code === 'missing_key' ? 'up, auth enforced (no monitor key)' : `up, auth enforced (${code})`;
       return { ok: true, latency_ms: ms, note: `HTTP ${res.status} · ${why}` };
@@ -629,6 +731,7 @@ module.exports = {
   SEVERITY_LABELS, INCIDENT_STATUS_LABELS,
   ensureComponents, components, componentBySlug, componentById, setComponentStatus,
   resetComponentStatus, detectedChanges,
+  ensureStatusUser, ensureStatusKey, dropStatusKey,
   checkComponent, checkAll, pruneHistory, hasOpenIncident,
   overallStatus, uptimePercent, overallUptime, uptimeSummary,
   incidentUpdates, incidentsSince, allIncidents, activeIncidents, incidentById,
