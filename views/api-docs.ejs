@@ -4,7 +4,8 @@
   <div class="container">
     <p class="kicker">API reference</p>
     <h1 class="h-display">FirmLedger <em style="font-style:normal;color:var(--accent2)">API v1</em></h1>
-    <p class="lede">REST access to FirmLedger — a <b>key-authenticated</b> developer API to browse the public ledger and manage the records you own. Predictable JSON, honest rate limits, included with <b>FirmLedger Pro</b>.</p>
+    <p class="lede">REST access to FirmLedger — a <b>key-authenticated</b>, <b>production-ready</b> developer API to browse the public ledger and manage the records you own. Predictable, versioned JSON contract; honest rate limits; stable response shapes; included with <b>FirmLedger Pro</b>.</p>
+    <p class="muted" style="max-width:720px;margin-top:6px"><span class="pill pill-approved">Production ready</span> · <code>v1</code> is the stable contract — response shapes and field names are guaranteed not to break. Breaking changes ship as <code>/api/v2</code>. Every endpoint, including <code>/health</code>, requires an API key.</p>
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">
       <% if (user) { %><a class="btn btn-primary" href="/dashboard/api">Open your API console</a><% } else { %><a class="btn btn-primary" href="/pricing">Get Pro &amp; an API key</a><% } %>
       <a class="btn btn-ghost" href="<%= user ? '/dashboard/api/playground' : '/login?next=/dashboard/api/playground' %>">Open the playground</a>
@@ -162,7 +163,7 @@ curl -X POST <%= SITE %>/api/v1/webhooks/7/test -H "Authorization: Bearer fl_liv
         <p class="muted">Browse FirmLedger's <b>public, approved listings</b> with filters and pagination. <b>Requires a Pro key</b> and returns full profile fields, including contact details.</p>
         <table class="facts">
           <tr><th><code>page</code> · <code>per_page</code></th><td>Pagination — default <code>1</code> / <code>20</code>, max <code>50</code></td></tr>
-          <tr><th><code>q</code></th><td>Free-text search over name, tagline, description, tags, city &amp; category</td></tr>
+          <tr><th><code>q</code></th><td>Free-text filter over name, tagline, description, tags, city &amp; category (part of the directory listing — there is no separate search endpoint)</td></tr>
           <tr><th><code>type</code> · <code>category</code> · <code>country</code> · <code>city</code> · <code>region</code></th><td>Filter by entity type, category name, country, city or region</td></tr>
           <tr><th><code>sponsored</code></th><td><code>1</code> to return only sponsored placements</td></tr>
           <tr><th><code>sort</code></th><td><code>featured</code> (default) · <code>newest</code> · <code>name</code> · <code>confidence</code> · <code>country</code></td></tr>
@@ -309,7 +310,7 @@ curl <%= SITE %>/api/v1/my/listings/42 -H "Authorization: Bearer fl_live_your_ke
           <tr><th>Serial writes</th><td>Fire writes one after another, not in bursts — the concurrency gate rejects pile-ups</td></tr>
           <tr><th>Cache reads</th><td>Records change slowly; re-fetch on demand, not on a spin</td></tr>
           <tr><th>Keep keys server-side</th><td>Never ship a key in browser/mobile code — proxy through your backend</td></tr>
-          <tr><th>Versioning</th><td>Breaking changes ship as <code>/api/v2</code> — v1 responses and field names stay stable</td></tr>
+          <tr><th>Versioning</th><td><code>v1</code> is production-ready and stable — response shapes, error codes and field names are frozen. Breaking changes ship only as <code>/api/v2</code>, and v1 keeps working</td></tr>
         </table>
       </div>
 

@@ -730,7 +730,7 @@ No platform can guarantee a fixed indexing deadline — crawling is the search e
 
 ## 11. Roadmap hooks already in the schema
 - `listing_events` → company timelines (done — Pro feature, rendered publicly) → can power change alerts later
-- `relationships` → the graph (done) → API `/:slug/relationships` endpoint is a read away
+- `relationships` → the graph (done, rendered publicly on the listing profile) → not exposed as a standalone API endpoint; the API surface intentionally omits a relationships/search endpoint
 - `listings.plan` / `plan_expires_at` + `payments` ledger → Pro subscriptions (done) → renewal reminders / monthly analytics are queries away
 - `waitlist` → early-access list (the developer API itself is live — Pro accounts get keys, docs and a playground)
 - Field-level `sources` (JSON array) → provenance shown publicly (admin-editable today)

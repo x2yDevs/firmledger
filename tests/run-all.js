@@ -22,6 +22,7 @@ const suites = [
   ['AI agent loop', 'ai-agent.test.js'],
   ['Backup round trip', 'backup.test.js'],
   ['Admin pages', 'admin-pages.test.js'],
+  ['API surface & discovery', 'api.test.js'],
   ['Google Indexing + featured rail', 'google-indexing.test.js'],
   ['Robots & Auth OAuth', 'robots-auth.test.js'],
 ];
