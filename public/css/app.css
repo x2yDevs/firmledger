@@ -821,6 +821,37 @@ img.logo-tile { object-fit: contain; padding: 4px; background: #fff; border: 1px
 .blog-body p.lead { font-size: 18px; line-height: 1.7; color: var(--ink); }
 .blog-body h2 { font: 700 23px/1.25 var(--fd); color: var(--ink); margin: 34px 0 12px; }
 .blog-body code { background: var(--bg2, #F4F1EA); border-radius: 4px; padding: 1.5px 6px; font: 500 13px/1.5 var(--fm); overflow-wrap: anywhere; }
+/* Code blocks inside blog articles live in a contained, scrollable box so long
+   curl/JSON lines never spill outside the 780px prose column and break the page.
+   Same look as .code-block so blog tutorials match the docs. */
+.blog-body pre {
+  background: #0B1526;
+  color: #B9C4D6;
+  border: 1px solid #1C2A44;
+  border-radius: 11px;
+  padding: 16px 18px;
+  font: 400 12.6px/1.85 var(--fm);
+  overflow-x: auto;
+  overscroll-behavior: contain;
+  margin: 16px 0;
+  white-space: pre;
+  max-width: 100%;
+  box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: var(--hair2) transparent;
+}
+.blog-body pre::-webkit-scrollbar { height: 9px; }
+.blog-body pre::-webkit-scrollbar-thumb { background: var(--hair2); border-radius: 999px; }
+.blog-body pre::-webkit-scrollbar-track { background: transparent; }
+.blog-body pre code {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  white-space: pre;
+  overflow-wrap: normal;
+}
 .blog-body em { color: var(--ink); }
 
 .search-hero { max-width: 640px; margin-bottom: 20px; }
@@ -2450,6 +2481,25 @@ body.ai-modal-open { overflow: hidden; }
   white-space: pre;
   scrollbar-width: thin;
 }
+/* The whole playground response is one contained, scrollable region, so a big
+   JSON document never stretches the page. The inner code blocks expand freely
+   and scroll together inside the wrapper (one scrollbar, not several). */
+.playground-response {
+  max-height: min(58vh, 520px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--hair);
+  border-radius: 10px;
+  background: var(--surface);
+  scrollbar-width: thin;
+  scrollbar-color: var(--hair2) transparent;
+}
+.playground-response:focus { outline: 2px solid var(--accent2); outline-offset: 2px; }
+.playground-response::-webkit-scrollbar { width: 9px; }
+.playground-response::-webkit-scrollbar-thumb { background: var(--hair2); border-radius: 999px; }
+.playground-response::-webkit-scrollbar-track { background: transparent; }
+.play-grid .playground-response .code-block { max-height: none; overflow: visible; margin: 0; }
+.play-grid .playground-response .code-block + .code-block { margin-top: 12px; }
 .play-grid .form-card { min-width: 0; }
 .play-grid .code-block code { overflow-wrap: normal; }
 

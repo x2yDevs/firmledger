@@ -314,27 +314,6 @@ function profileBySlug(slug, fields = '') {
   return projectFields(apiSerialize(row), fields);
 }
 
-/** Global search across the approved ledger. */
-function search({ q = '', page = 1, per_page = 20, type = '', country = '', category = '', fields = '' } = {}) {
-  q = String(q || '').trim().slice(0, 120);
-  if (!q) fail(400, 'missing_query', 'Provide a search term, e.g. ?q=fintech.');
-  page = Math.max(1, parseInt(page, 10) || 1);
-  per_page = Math.min(50, Math.max(1, parseInt(per_page, 10) || 20));
-  const like = `%${q}%`;
-  const clauses = ["l.status='approved'", "(l.name LIKE ? OR l.tagline LIKE ? OR l.description LIKE ? OR l.category LIKE ? OR l.city LIKE ? OR l.tags LIKE ? OR l.country LIKE ?)"];
-  const params = [like, like, like, like, like, like, like];
-  if (type) { clauses.push('l.type = ?'); params.push(String(type).slice(0, 40)); }
-  if (country) { clauses.push('l.country = ?'); params.push(String(country).slice(0, 60)); }
-  if (category) { clauses.push('l.category = ?'); params.push(String(category).slice(0, 60)); }
-  const where = 'WHERE ' + clauses.join(' AND ');
-  const total = db.prepare(`SELECT COUNT(*) c FROM listings l ${where}`).get(...params).c;
-  const rows = db.prepare(`SELECT l.* FROM listings l ${where} ORDER BY l.featured DESC, l.confidence DESC, l.name ASC LIMIT ? OFFSET ?`).all(...params, per_page, (page - 1) * per_page);
-  return {
-    data: rows.map((row) => projectFields(apiSerialize(row), fields)),
-    meta: { query: q, page, per_page, total, total_pages: Math.max(1, Math.ceil(total / per_page)), ...(fields ? { fields: String(fields).split(',').map((f) => f.trim()).filter(Boolean) } : {}) },
-  };
-}
-
 /** Category list with live approved counts. */
 function categories() {
   const rows = db.prepare(
@@ -390,21 +369,6 @@ function suggest({ q = '', limit = 8 } = {}) {
   const order = { listing: 0, category: 1, country: 2, city: 3 };
   items.sort((a, b) => (order[a.type] || 4) - (order[b.type] || 4));
   return { data: items.slice(0, Math.max(4, limit * 2)), meta: { query: q } };
-}
-
-/** Company relationship graph by listing slug. */
-function relationships(slug) {
-  const row = db.prepare("SELECT * FROM listings WHERE slug=? AND status='approved'").get(String(slug || '').slice(0, 120));
-  if (!row) return null;
-  const graph = require('./graph').buildGraph(row);
-  return {
-    slug: row.slug,
-    name: row.name,
-    type: row.type,
-    claimed: !!row.claimed,
-    center: graph.center,
-    items: graph.items,
-  };
 }
 
 /** Check whether a domain is already listed (approved). */
@@ -533,6 +497,6 @@ module.exports = {
   ApiServiceError, LIMITS, FIELD_KEYS, API_FIELDS,
   parseFields, projectFields, serialize, listMine, getOwned, createListing, updateListing, deleteListing,
   publicSerialize, publicListings, publicListing,
-  apiSerialize, directory, profileBySlug, search, categories, countries, suggest,
-  relationships, verifyDomain, exportCsv,
+  apiSerialize, directory, profileBySlug, categories, countries, suggest,
+  verifyDomain, exportCsv,
 };

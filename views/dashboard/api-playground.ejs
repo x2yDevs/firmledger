@@ -64,16 +64,19 @@
           <% const sc = result.status < 300 ? 'pill-approved' : (result.status === 429 ? 'pill-pending' : 'pill-rejected'); %>
           <span class="pill <%= sc %>" style="font-size:.78rem"><%= result.status === 204 ? '204 No Content' : result.status + ' ' + ({200:'OK',201:'Created',400:'Bad Request',401:'Unauthorized',403:'Forbidden',404:'Not Found',409:'Conflict',413:'Payload Too Large',422:'Unprocessable',429:'Too Many Requests'}[result.status] || '') %></span>
           <span class="mono muted" style="font-size:12px"><%= result.ms %> ms · executed as <%= user.email %></span>
+          <% if (result.json) { %><button class="btn btn-ghost btn-xs" type="button" data-copy="#pgResponseBodyText" style="margin-left:auto">Copy body</button><% } %>
         </div>
+        <div class="playground-response" role="region" aria-label="API response" tabindex="0">
         <div class="code-block" style="margin-top:0"><span class="code-label">headers</span><% Object.entries(result.headers).forEach(function ([k, v]) { %><span class="k"><%= k %></span>: <span class="s"><%= v %></span>
 <% }) %></div>
         <% if (result.json) { %>
-        <div class="code-block"><span class="code-label">body</span><% JSON.stringify(result.json, null, 2).split('\n').forEach(function (line) { const m = line.match(/^(\s*)("[^"]+"\s*:)\s*(.*)$/); if (m) { %><%= m[1] %><span class="k"><%= m[2] %></span> <span class="s"><%= m[3] %></span>
+        <div class="code-block"><span class="code-label">body</span><code id="pgResponseBodyText"><% JSON.stringify(result.json, null, 2).split('\n').forEach(function (line) { const m = line.match(/^(\s*)("[^"]+"\s*:)\s*(.*)$/); if (m) { %><%= m[1] %><span class="k"><%= m[2] %></span> <span class="s"><%= m[3] %></span>
 <% } else { %><%= line %>
-<% } }) %></div>
+<% } }) %></code></div>
         <% } else { %>
         <p class="muted">Empty body — that is the correct answer for this call.</p>
         <% } %>
+        </div>
         <% } else { %>
         <p class="muted" style="margin-top:6px">Pick a preset or compose your own request on the left and press <b>Send request</b>. The status, rate-limit headers and JSON body land here — exactly what a real API client would receive.</p>
         <div class="code-block"><span class="code-label">example</span><span class="c"># browse the directory, then manage your own records</span>

@@ -107,6 +107,73 @@ curl "https://firmledger.co.ke/api/v1/export/listings.csv?country=Kenya" \\
 <h2>What stays open</h2>
 <p>The <em>web</em> remains fully public — browse <a href="/directory">the directory</a>, read any profile, subscribe to <a href="/feed.xml">RSS</a>. The API is the paid, metered, machine-readable door. If you just want to read about companies, the browser is already enough.</p>`,
   },
+  {
+    slug: 'firmledger-api-production-guide',
+    title: 'How to use the FirmLedger API — every endpoint needs a key',
+    excerpt: 'A production walkthrough of the key-authenticated FirmLedger API: getting a key, authenticating every call, reading the directory, CRUD on your own records, webhooks and the limits to respect.',
+    body: `<p class="lead">The FirmLedger API is the machine-readable door to the same approved, sourced, moderated business records you see on this site. It is <b>production-ready</b> — a stable <code>v1</code> contract with predictable JSON, honest rate limits and response shapes that will not break. One rule governs the whole surface: <b>every endpoint requires an API key</b>, including the health check.</p>
+<h2>Why every endpoint needs a key</h2>
+<p>There used to be a few public read endpoints on <code>/api/v1</code> — a liveness probe, a discovery index and some directory reads — on the idea that open data should be open. In practice that let the directory be scraped wholesale and made it impossible to meter or protect. So we closed the door. Now <code>/health</code>, the discovery index, the directory — every one of them answers <code>401 missing_key</code> unless you send a valid key. This is deliberate: it keeps the ledger fair, metered and auditable, and it is why the API is a <b>FirmLedger Pro</b> feature.</p>
+<h2>Step 1 — get a Pro key</h2>
+<p>API access is bundled with FirmLedger Pro. Upgrade from the <a href="/pricing">pricing page</a> or jump straight to <a href="/dashboard/api">your developer console</a> once you are signed in. In the console:</p>
+<ol>
+<li>Create a key — give it a label like <code>production-sync</code> and tick the scopes it needs.</li>
+<li>Copy it <b>immediately</b>. It is shown once, then stored only as a SHA-256 hash. FirmLedger cannot display it again.</li>
+<li>Keep it server-side. Never ship a key in browser code, a public repository or a mobile app — proxy every call through your backend.</li>
+</ol>
+<p>You can hold up to 3 active keys per account, revoke or rotate them instantly, and narrow each one with scopes so an integration only gets the power it needs.</p>
+<h2>Step 2 — authenticate every call</h2>
+<p>Send the key in the <code>Authorization</code> header as a Bearer token. Never put it in a URL or a request body. The same key works on every endpoint.</p>
+<pre><code># Read a single approved company profile
+curl "https://firmledger.co.ke/api/v1/listings/acme-logistics-ltd" \
+  -H "Authorization: Bearer fl_live_your_key"
+
+# X-API-Key: fl_live_your_key   ← accepted alternative header</code></pre>
+<h2>Step 3 — explore the endpoint surface</h2>
+<div class="table-wrap">
+<table class="table">
+<thead><tr><th>Method</th><th>Endpoint</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td><code>GET</code></td><td><code>/api/v1</code></td><td>Discovery — version, the endpoint list and live limits.</td></tr>
+<tr><td><code>GET</code></td><td><code>/api/v1/health</code></td><td>Liveness probe — still key-authenticated, returns no business data.</td></tr>
+<tr><td><code>GET</code></td><td><code>/api/v1/me</code> · <code>/usage</code></td><td>Your account, key scopes and durable usage analytics.</td></tr>
+<tr><td><code>GET</code></td><td><code>/api/v1/listings</code></td><td>The approved directory, filterable by <code>q</code>, <code>type</code>, <code>category</code>, <code>country</code>, <code>city</code>, <code>region</code> and sortable.</td></tr>
+<tr><td><code>GET</code></td><td><code>/api/v1/listings/:slug</code></td><td>The full company profile, with sources, technology radar and hiring link.</td></tr>
+<tr><td><code>GET</code></td><td><code>/api/v1/categories</code> · <code>/countries</code></td><td>Categories and countries present in the ledger, with counts.</td></tr>
+<tr><td><code>GET</code></td><td><code>/api/v1/suggest</code></td><td>Type-ahead suggestions for a search box: listings, categories, countries, cities.</td></tr>
+<tr><td><code>GET</code></td><td><code>/api/v1/verify/domain/:domain</code></td><td>Check whether a domain is already listed.</td></tr>
+<tr><td><code>GET</code></td><td><code>/api/v1/export/listings.csv</code></td><td>Download the approved ledger as a CSV, with optional filters.</td></tr>
+<tr><td><code>GET/POST/PUT/DELETE</code></td><td><code>/api/v1/my/listings</code></td><td>Full CRUD over the records you own — same moderation pipeline as the dashboard.</td></tr>
+<tr><td><code>GET/POST/PATCH/DELETE</code></td><td><code>/api/v1/webhooks</code></td><td>Signed, retryable push notifications instead of polling.</td></tr>
+</tbody>
+</table>
+</div>
+<h2>Step 4 — browse the directory in code</h2>
+<p>The directory is the most common call. It returns approved records with full profile fields (including contact details) for Pro members, paginated and filterable.</p>
+<pre><code># Pull the first page of Kenyan Fintech companies, newest first
+curl "https://firmledger.co.ke/api/v1/listings?category=Fintech&amp;country=Kenya&amp;sort=newest&amp;per_page=50" \
+  -H "Authorization: Bearer fl_live_your_key"
+
+{
+  "data": [ { "slug": "safiri-fintech", "name": "Safiri Fintech", "category": "Fintech", "email": "...", "url": "https://firmledger.co.ke/listing/safiri-fintech" } ],
+  "meta": { "page": 1, "per_page": 50, "total": 1, "total_pages": 1 }
+}</code></pre>
+<h2>Step 5 — manage the records you own</h2>
+<p>Use <code>/api/v1/my/listings</code> to create, update and delete records you own. New records enter as <code>pending</code> and go live after the standard moderation pass — exactly like submissions from the dashboard. Send only the fields you want to change on an update; unknown fields are rejected so typos never silently drop.</p>
+<pre><code>curl -X POST "https://firmledger.co.ke/api/v1/my/listings" \
+  -H "Authorization: Bearer fl_live_your_key" \
+  -H "Content-Type: application/json" \
+  -d '{ "name": "Acme Logistics Ltd", "tagline": "Cold-chain freight for East African exporters end to end", "description": "Acme Logistics runs refrigerated trucking and bonded warehousing between Mombasa, Nairobi and Kampala.", "website": "https://acme-logistics.example", "country": "Kenya", "type": "company", "founded": "2019", "city": "Nairobi", "tags": ["logistics","cold-chain"] }'</code></pre>
+<h2>Scopes, limits and errors</h2>
+<p>Narrow each key with scopes: <code>read:listings</code>, <code>write:listings</code>, <code>export</code>, <code>manage:webhooks</code> and <code>read:usage</code>. A missing permission returns <code>403 insufficient_scope</code> with <code>required_scope</code> in the error details.</p>
+<p>Limits are per rolling 60 seconds, per key — reads and writes are budgeted separately, an in-flight concurrency gate rejects pile-ups, and a brute-force guard locks out an address after too many bad keys. Every response carries <code>X-RateLimit-*</code> headers and an <code>X-Request-Id</code> you can quote when writing to support. Errors are a consistent machine-readable envelope (<code>{ "error": { "code", "message", "details" } }</code>), so parsing a failure is as predictable as parsing a success.</p>
+<h2>Webhooks — stop polling</h2>
+<p>When you need to react to changes, create a webhook with the <code>manage:webhooks</code> scope. FirmLedger signs every delivery with HMAC and returns the secret once — verify the timestamp and the raw request body, and use <code>X-Idempotency-Key</code> so retries are safe. Failed deliveries retry with backoff and can be inspected from the API console.</p>
+<h2>Try it without writing code</h2>
+<p>The <a href="/dashboard/api/playground">API playground</a> runs live calls against the ledger from your browser — the exact code path, key rules and limits as <code>/api/v1</code>. Compose a request or pick a preset, and read the status, rate-limit headers and JSON body directly. The full reference — every parameter, every error code and a curl example per endpoint — is at <a href="/api/docs">/api/docs</a>.</p>
+<h2>Production readiness</h2>
+<p><code>v1</code> is the stable public contract. Response shapes, field names and error codes are frozen; breaking changes ship only as <code>/api/v2</code> and <code>v1</code> keeps working. If your plan lapses, keys reply <code>403 pro_required</code> with an <code>upgrade_url</code> so your integration can point customers somewhere useful — and the same key works again the moment Pro is active. The <em>web</em> stays fully public, so your users can browse <a href="/directory">the directory</a> or read any profile even while your key is parked. If you just want to read about companies, the browser is already enough; if you want to build on the ledger, the key is your door.</p>`,
+  },
 ];
 
 function seedBlog(db) {
