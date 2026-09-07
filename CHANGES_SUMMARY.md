@@ -1,5 +1,41 @@
 # FirmLedger — change summary
 
+## 2026-09-07 — Admin sign-in chain: secret → emailed OTP → authenticator
+
+The admin gate is now a strict three-step chain, everything else untouched:
+
+1. **The admin secret code** (`ADMIN_SECRET`) — the gate screen, as always.
+2. **A one-time 6-digit code emailed to the admin inbox** — a dedicated
+   verification screen right after the secret. The OTP inbox is
+   `admin@firmledger.co.ke` by default: attached to the account in Settings
+   (Admin → Settings → Two-factor → “Sign-in OTP inbox”), overridable with
+   `ADMIN_2FA_EMAIL`. Codes live 10 minutes, work once, a newer email retires
+   the last instantly, resends are one per minute, and five wrong attempts
+   discard the verification.
+3. **The authenticator (or a recovery code), as it always was** — TOTP codes,
+   the 10 one-time recovery codes, the 5-attempt throttle and the Settings
+   reset/regenerate actions are unchanged. The emailed fallback that used to
+   sit *alongside* this step has moved out (it IS step 2 now, and is burned
+   once used).
+
+**The authenticator key is attached to the account, not a device.** The TOTP
+secret lives in the database (`admin_totp_secret`), so the QR is shown exactly
+once — at first enrollment. Every later sign-in, from any device and across
+restarts, asks only for the code; an interrupted enrollment reuses the same
+pending key so a half-scanned QR is never invalidated either.
+
+Mechanically: the pending session now has two stages (`admin-pending` after
+the secret, `admin-pending2` after the emailed code is proven), the step-2
+routes live at `/admin3119Musa/2fa-email` (+ `/resend`), and the mail is a
+real send through the configured SMTP chain (outbox fallback in dev).
+
+```
+npm run test:2fa   # 35 checks: the whole chain, real mail, nothing stubbed
+npm test           # 10 suites
+```
+
+---
+
 ## 2026-09-07 — Indexing health: crawler-proof URLs, hosts and rate limiting
 
 Four fixes for things a search crawler met as errors (Search Console-speak:

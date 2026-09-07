@@ -26,7 +26,7 @@ Stack: Node.js + Express · EJS server-rendered views · SQLite (WAL) · no fron
 | Payments | PayPal REST Orders — credentials in Admin → Settings → Payments (or `PAYPAL_CLIENT_ID`/`PAYPAL_CLIENT_SECRET`/`PAYPAL_MODE` env, which wins). Sandbox charges nothing. Server-side `/billing/callback` capture + verification (order id, exact amount, currency, reference) grants purchased time to the ACCOUNT, stacks on remaining time, emails a receipt, and writes to the `payments` ledger (dashboard + admin) |
 | Plan offers | Admin-managed in **Admin console → Plan offers**: monthly, yearly, or any custom named offer, with price, duration in days, sort order, show/hide, and safe delete (deactivates when payments are attached). /pricing and /dashboard/upgrade render whatever is active |
 | Pro grants | Admin can grant 30-day or lifetime Pro to any user, or revoke it, from **Admin → Users** (the grant emails the member). Admins can also boost a single listing record from Admin → Listings |
-| Admin console | Hidden URL `/admin3119Musa` + secret code **+ TOTP two-factor** (QR enrollment) — global search, in-app inbox, listings search/filters + bulk approve/reject, full listing editor, add listing, categories, claims re-check (emails both claimant and previous submitter), removals, users (view/suspend/unsuspend/delete with email first, admin-initiated password reset), searchable email picker, blog CMS, settings, ticket auto-close, **Protection** (IP/domain lists + rate limits + maintenance mode), **Health** (disk, DB, memory, uptime, last backup), **Promos** |
+| Admin console | Hidden URL `/admin3119Musa` + secret code **+ emailed OTP + TOTP two-factor** (QR enrolled once, on the account) — global search, in-app inbox, listings search/filters + bulk approve/reject, full listing editor, add listing, categories, claims re-check (emails both claimant and previous submitter), removals, users (view/suspend/unsuspend/delete with email first, admin-initiated password reset), searchable email picker, blog CMS, settings, ticket auto-close, **Protection** (IP/domain lists + rate limits + maintenance mode), **Health** (disk, DB, memory, uptime, last backup), **Promos** |
 | Promo codes | Admin generates codes such as `LAUNCH20` (percent off, usage cap, expiry, optional plan lock). Members apply them on Dashboard → Upgrade; PayPal is charged the discounted amount. Notify members by email and/or in-app when a code is created |
 | Maintenance mode | Admin → Protection. Visitors see a branded “we’ll be back soon” page (HTTP 503); a signed-in admin keeps working. Optional email blast to account holders when turning it on |
 | Spam protection | IP allow/block lists, email-domain allow/block (empty allow list = all domains), tunable rate limits on login, register, listings, claims, newsletter, search, scrape, and API RPM |
@@ -62,7 +62,7 @@ Open **http://localhost:3000**. On first boot the app creates `data/firmledger.d
 
 Local smoke tour:
 - `/directory` — the ledger (empty on a fresh boot; add listings from **+ Add a listing** after registering a normal user account at `/register`)
-- `/admin3119Musa` — the hidden admin console: enter the `ADMIN_SECRET` from `.env`, then **enroll two-factor** on the QR screen (scan with Google Authenticator / 1Password / Authy, or type the manual key; enter the 6-digit code shown)
+- `/admin3119Musa` — the hidden admin console: enter the `ADMIN_SECRET` from `.env`, then the **one-time code emailed to the admin inbox** (`admin@firmledger.co.ke` by default), then **enroll the authenticator once** on the QR screen (scan with Google Authenticator / 1Password / Authy, or type the manual key; enter the 6-digit code shown). Later sign-ins are secret → emailed code → authenticator code — the QR is never shown again.
 - `/docs`, `/privacy`, `/terms`, `/blog`, `/search` — the built-in content
 
 Stop with `Ctrl+C`. Data persists in `data/` between runs.
@@ -340,7 +340,7 @@ The SQLite database, 20 official categories and the IndexNow key are generated o
 ### Step 8 — Admin console + two-factor
 1. Open `https://firmledger.co.ke/admin3119Musa` (unlisted URL — never linked publicly; keep it private).
 2. Enter your `ADMIN_SECRET`.
-3. On **first** sign-in you are shown a QR code — scan it with Google Authenticator / 1Password / Authy (or type the manual key beneath it), enter the 6-digit code. That's permanent: every future sign-in requires **secret code + authenticator code**.
+3. Sign-in is a three-step chain: the **admin secret code**, then a **6-digit one-time code emailed to the sign-in OTP inbox** (`admin@firmledger.co.ke` by default — change it in Admin → Settings → Two-factor, or with `ADMIN_2FA_EMAIL`; in dev the codes land in `data/outbox.log`), then the **authenticator**. On the first sign-in the last step enrolls: scan the QR with Google Authenticator / 1Password / Authy (or type the manual key beneath it) and enter the 6-digit code. That one scan is permanent — the key lives on the account in the database, and every future sign-in (from any device) is **secret → emailed code → authenticator code**, never a QR again.
 4. If you ever lose the authenticator: `sqlite3 /srv/firmledger/data/firmledger.db "DELETE FROM settings WHERE key='admin_totp_secret';"` — the next sign-in re-enrolls. (You can also reset from Settings → Console security when signed in.)
 
 ### Step 9 — Search engines
@@ -624,7 +624,7 @@ Sandbox stays available **for you, the operator**, documented right here. Work t
 top to bottom and FirmLedger is ready for real customers:
 
 1. **Domain + HTTPS** — `BASE_URL=https://yourdomain.com` in `.env`, Caddy (or your proxy) terminating TLS. Canonical URLs, OG tags and sitemap all derive from `BASE_URL`.
-2. **Admin gate** — strong `ADMIN_SECRET` in `.env`, then enroll the TOTP two-factor in Admin → Settings → Console security (QR scan) on first login.
+2. **Admin gate** — strong `ADMIN_SECRET` in `.env`; sign-in is secret → emailed OTP (default inbox `admin@firmledger.co.ke`, set `ADMIN_2FA_EMAIL` to override) → TOTP authenticator scanned once on first login (the key stays on the account).
 3. **Payments — flip sandbox to live**:
    - Keep testing free: PayPal developer portal → your **Sandbox** app credentials + `PAYPAL_MODE=sandbox` (charges nothing).
    - Ready for real money: create a **Live** app in the PayPal developer portal, paste its Client ID + Secret into **Admin → Settings → Payments** (or `.env` `PAYPAL_CLIENT_ID` / `PAYPAL_CLIENT_SECRET`), and set **Mode = live** (`PAYPAL_MODE=live`). Env values always win over settings.

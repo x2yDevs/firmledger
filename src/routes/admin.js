@@ -33,26 +33,39 @@ const listingEvents = require('../lib/listingevents');
 const router = express.Router();
 const adminmail2fa = require('../lib/adminmail2fa');
 
-/** Where admin-side notifications go (tickets, 2FA fallbacks…). */
+/** Where admin-side notifications go (tickets, recovery codes…). */
 function adminNotifyEmail() {
   return getSetting('admin_email', '') || process.env.ADMIN_NOTIFY_EMAIL || 'hello@firmledger.co.ke';
 }
 
-/** Emailed one-time admin sign-in code (fallback for a lost authenticator). */
+/**
+ * Where the sign-in OTP email goes — step 2 of the admin chain
+ * (secret → emailed code → authenticator). Attached to the account in
+ * settings, overridable by environment; ships as the admin inbox.
+ */
+function admin2faEmail() {
+  const saved = String(getSetting('admin_2fa_email', '') || '').trim();
+  if (saved) return saved;
+  const env = String(process.env.ADMIN_2FA_EMAIL || '').trim();
+  if (env) return env;
+  return 'admin@firmledger.co.ke';
+}
+
+/** Emailed one-time code — the mandatory second step at the admin gate. */
 function sendAdminEmailCode(code) {
-  const to = adminNotifyEmail();
+  const to = admin2faEmail();
   sendBranded(to, `Your admin sign-in code — ${code}`, {
     kicker: 'Admin security',
     title: 'Your admin sign-in code',
     preheader: 'Use this one-time code to finish signing in to the console.',
     otp: code,
     paragraphs: [
-      `The admin secret code was just entered at the console’s sign-in gate with the correct secret — this email is your second factor while your authenticator is unreachable.`,
-      `Enter the code above within <b>10 minutes</b>. It works exactly once, and asking for another email replaces this one immediately.`,
+      `The admin secret code was just entered correctly at the console’s sign-in gate. Enter the code above to prove control of this inbox — the authenticator check follows as the final step.`,
+      `Enter the code within <b>10 minutes</b>. It works exactly once, and asking for another email replaces this one immediately.`,
       `<b>Wasn't you?</b> If you did not just enter the admin secret code, rotate <code>ADMIN_SECRET</code> immediately — your first factor may be exposed.`,
     ],
     note: 'This is an automated security email. It contains no links on purpose — codes are typed at the console.',
-    text: `Your admin sign-in code: ${code}\n\nValid for 10 minutes, one use. Enter it at the console's two-factor screen.\nIf you did not just enter the admin secret code, rotate ADMIN_SECRET immediately.`,
+    text: `Your admin sign-in code: ${code}\n\nValid for 10 minutes, one use. Enter it at the console's email verification screen.\nIf you did not just enter the admin secret code, rotate ADMIN_SECRET immediately.`,
   }).catch(() => {});
 }
 
@@ -102,34 +115,28 @@ router.post('/admin3119Musa', (req, res) => {
       error: 'Invalid admin code.',
     });
   }
-  // Secret code correct → second factor required: TOTP (Google Authenticator etc.)
+  // Secret code correct → step 2 is ALWAYS the emailed one-time code to the
+  // admin inbox. Step 3 (authenticator / recovery code) follows once it passes.
   if (req.cookies[ADMIN_COOKIE]) destroySession(req.cookies[ADMIN_COOKIE]);
-  const secret = getSetting('admin_totp_secret', '');
   const pending = createSession(null, 'admin-pending');
   res.cookie('fl_admin2fa', pending.token, {
     httpOnly: true, sameSite: 'lax', secure: req.secure, maxAge: 10 * 60 * 1000, path: '/',
   });
-  if (!secret) {
-    // First login ever: generate the authenticator secret for enrollment.
-    // Reuse an already-pending key — re-entering the first factor mid-enrollment
-    // must not invalidate the QR code the operator just scanned.
-    let fresh = getSetting('admin_totp_pending', '');
-    if (!fresh) {
-      fresh = totp.generateSecret();
-      setSetting('admin_totp_pending', fresh);
-    }
-    return res.redirect('/admin3119Musa/2fa-setup');
-  }
-  // First factor passed with 2FA enrolled → email a one-time fallback code
-  // (works exactly like the emailed codes on the member side: keep it in your
-  // inbox, use it in place of the authenticator if the app ever fails).
   sendAdminEmailCode(adminmail2fa.createEmailCode());
-  return res.redirect('/admin3119Musa/2fa');
+  return res.redirect('/admin3119Musa/2fa-email');
 });
 
-/** Pending-2FA session guard (code accepted, authenticator not yet proven). */
-function pendingAdmin(req, res, next) {
+/** Stage 1 guard: secret accepted, emailed code not yet proven. */
+function pendingEmailAdmin(req, res, next) {
   const s = loadSession(req.cookies.fl_admin2fa, 'admin-pending');
+  if (!s) return res.redirect('/admin3119Musa');
+  req.pendingSession = s;
+  next();
+}
+
+/** Stage 2 guard: emailed code proven, authenticator not yet proven. */
+function pendingTotpAdmin(req, res, next) {
+  const s = loadSession(req.cookies.fl_admin2fa, 'admin-pending2');
   if (!s) return res.redirect('/admin3119Musa');
   req.pendingSession = s;
   next();
@@ -162,7 +169,71 @@ function twoFaThrottleResponse(res) {
   });
 }
 
-router.get('/admin3119Musa/2fa-setup', pendingAdmin, async (req, res) => {
+/* ---------------- Step 2: the emailed one-time code ---------------- */
+router.get('/admin3119Musa/2fa-email', pendingEmailAdmin, (req, res) => {
+  res.render('admin/2fa-email', {
+    meta: { title: 'Email verification — FirmLedger Admin', description: '', robots: 'noindex,nofollow' },
+    error: '',
+    ok: req.query.ok || '',
+    pendingCsrf: req.pendingSession.csrf,
+    otpEmail: admin2faEmail(),
+    mailOk: mailConfigured(),
+    firstSignIn: !getSetting('admin_totp_secret', ''),
+  });
+});
+
+router.post('/admin3119Musa/2fa-email', pendingEmailAdmin, (req, res) => {
+  if (!adminmail2fa.verifyEmailCode(String(req.body.code || '').trim()).ok) {
+    if (twoFaThrottle(req, res)) return twoFaThrottleResponse(res);
+    return res.status(403).render('admin/2fa-email', {
+      meta: { title: 'Email verification — FirmLedger Admin', description: '', robots: 'noindex,nofollow' },
+      error: 'That code did not match. Use the 6-digit code from the email we just sent — it is valid for 10 minutes and works once (a newer email retires it).',
+      ok: '',
+      pendingCsrf: req.pendingSession.csrf,
+      otpEmail: admin2faEmail(),
+      mailOk: mailConfigured(),
+      firstSignIn: !getSetting('admin_totp_secret', ''),
+    });
+  }
+  // Emailed code proven → promote the pending session to stage 2 and move on
+  // to the authenticator step (enrollment on the very first sign-in).
+  destroySession(req.pendingSession.token);
+  const pending = createSession(null, 'admin-pending2');
+  res.cookie('fl_admin2fa', pending.token, {
+    httpOnly: true, sameSite: 'lax', secure: req.secure, maxAge: 10 * 60 * 1000, path: '/',
+  });
+  if (!getSetting('admin_totp_secret', '')) {
+    // First login ever: the authenticator secret is generated for enrollment.
+    // Reuse an already-pending key — re-passing the earlier steps mid-enrollment
+    // must never invalidate the QR code the operator just scanned.
+    let fresh = getSetting('admin_totp_pending', '');
+    if (!fresh) {
+      fresh = totp.generateSecret();
+      setSetting('admin_totp_pending', fresh);
+    }
+    return res.redirect('/admin3119Musa/2fa-setup');
+  }
+  res.redirect('/admin3119Musa/2fa');
+});
+
+/* Resend the emailed one-time code (one per minute; each resend invalidates the last). */
+router.post('/admin3119Musa/2fa-email/resend', pendingEmailAdmin, (req, res) => {
+  if (!adminmail2fa.resendAllowed()) {
+    return res.status(429).render('admin/2fa-email', {
+      meta: { title: 'Email verification — FirmLedger Admin', description: '', robots: 'noindex,nofollow' },
+      error: 'Hold on one minute before asking for another email — the most recent code is still on its way (check spam, too).',
+      ok: '',
+      pendingCsrf: req.pendingSession.csrf,
+      otpEmail: admin2faEmail(),
+      mailOk: mailConfigured(),
+      firstSignIn: !getSetting('admin_totp_secret', ''),
+    });
+  }
+  sendAdminEmailCode(adminmail2fa.createEmailCode());
+  res.redirect('/admin3119Musa/2fa-email?ok=' + encodeURIComponent(`Fresh code emailed to ${admin2faEmail()} — it replaces the last one, valid 10 minutes.`));
+});
+
+router.get('/admin3119Musa/2fa-setup', pendingTotpAdmin, async (req, res) => {
   const secret = getSetting('admin_totp_pending', '');
   if (!secret || getSetting('admin_totp_secret', '')) return res.redirect('/admin3119Musa/dashboard');
   const uri = totp.otpAuthUrl(secret);
@@ -177,7 +248,7 @@ router.get('/admin3119Musa/2fa-setup', pendingAdmin, async (req, res) => {
   });
 });
 
-router.post('/admin3119Musa/2fa-setup', pendingAdmin, async (req, res) => {
+router.post('/admin3119Musa/2fa-setup', pendingTotpAdmin, async (req, res) => {
   const secret = getSetting('admin_totp_pending', '');
   if (!secret) return res.redirect('/admin3119Musa');
   const ok = totp.verifyTotp(secret, req.body.code);
@@ -237,59 +308,39 @@ router.post('/admin3119Musa/2fa-recovery.txt', (req, res) => {
   res.send(lines.join('\n'));
 });
 
-router.get('/admin3119Musa/2fa', pendingAdmin, (req, res) => {
+router.get('/admin3119Musa/2fa', pendingTotpAdmin, (req, res) => {
   res.render('admin/2fa', {
     meta: { title: 'Two-factor check — FirmLedger Admin', description: '', robots: 'noindex,nofollow' },
     error: '', pendingCsrf: req.pendingSession.csrf,
     ok: req.query.ok || '',
-    notifyEmail: adminNotifyEmail(),
   });
 });
 
-router.post('/admin3119Musa/2fa', pendingAdmin, (req, res) => {
+router.post('/admin3119Musa/2fa', pendingTotpAdmin, (req, res) => {
   const secret = getSetting('admin_totp_secret', '');
   const input = String(req.body.code || '').trim();
-  // 6 digits → TOTP or the emailed one-time code. xxxx-xxxx-xxxx → a recovery code.
+  // 6 digits → TOTP. xxxx-xxxx-xxxx → a recovery code. (The emailed code was
+  // the previous step — it is burned and never re-accepted here.)
   const viaTotp = /^\d{6}$/.test(input) && totp.verifyTotp(secret, input);
-  const viaEmail = !viaTotp && adminmail2fa.verifyEmailCode(input).ok;
-  const viaRecovery = !viaTotp && !viaEmail && backup.verifyAdminRecovery(input).ok;
-  if (!viaTotp && !viaEmail && !viaRecovery) {
+  const viaRecovery = !viaTotp && backup.verifyAdminRecovery(input).ok;
+  if (!viaTotp && !viaRecovery) {
     if (twoFaThrottle(req, res)) return twoFaThrottleResponse(res);
     return res.status(403).render('admin/2fa', {
       meta: { title: 'Two-factor check — FirmLedger Admin', description: '', robots: 'noindex,nofollow' },
-      error: 'That code did not match. Use the 6-digit app code, the 6-digit code we emailed to the admin inbox, or one of your unused recovery codes (xxxx-xxxx-xxxx).',
+      error: 'That code did not match. Use the current 6-digit code from your authenticator app, or one of your unused recovery codes (xxxx-xxxx-xxxx).',
       pendingCsrf: req.pendingSession.csrf,
       ok: '',
     });
   }
   twofaFails.delete(req.pendingSession.token);
-  adminmail2fa.clearEmailCode(); // sign-in finished — any emailed code dies with it
+  adminmail2fa.clearEmailCode(); // sign-in finished — no emailed code outlives it
   destroySession(req.pendingSession.token); res.clearCookie('fl_admin2fa', { path: '/' });
   const sess = createSession(null, 'admin');
   setSessionCookie(req, res, ADMIN_COOKIE, sess.token);
   if (viaRecovery) {
     return res.redirect('/admin3119Musa/dashboard?ok=' + encodeURIComponent('Signed in with a recovery code — that code is now spent. Regenerate a fresh set in Settings → Two-factor when you can.'));
   }
-  if (viaEmail) {
-    return res.redirect('/admin3119Musa/dashboard?ok=' + encodeURIComponent('Signed in with the emailed code — it is now spent. It always pays to keep the authenticator working, too.'));
-  }
   res.redirect('/admin3119Musa/dashboard');
-});
-
-/* Resend the emailed one-time code (one per minute; each resend invalidates the last). */
-router.post('/admin3119Musa/2fa/resend', pendingAdmin, (req, res) => {
-  if (!getSetting('admin_totp_secret', '')) return res.redirect('/admin3119Musa');
-  if (!adminmail2fa.resendAllowed()) {
-    return res.status(429).render('admin/2fa', {
-      meta: { title: 'Two-factor check — FirmLedger Admin', description: '', robots: 'noindex,nofollow' },
-      error: 'Hold on one minute before asking for another email — the most recent code is still on its way (check spam, too).',
-      pendingCsrf: req.pendingSession.csrf,
-      ok: '',
-    });
-  }
-  sendAdminEmailCode(adminmail2fa.createEmailCode());
-  const show = adminNotifyEmail();
-  res.redirect('/admin3119Musa/2fa?ok=' + encodeURIComponent(`Fresh code emailed to ${show} — it replaces the last one, valid 10 minutes.`));
 });
 
 router.post('/admin3119Musa/logout', (req, res) => {
@@ -1015,6 +1066,8 @@ router.get('/admin3119Musa/settings', (req, res) => {
       smtp_from: getSetting('smtp_from', ''),
       smtp_secure: getSetting('smtp_secure', '0'),
       totp_enrolled: Boolean(getSetting('admin_totp_secret', '')),
+      totp2fa_email: admin2faEmail(),
+      mail_ready: mailConfigured(),
       recovery_remaining: (() => { try { return JSON.parse(getSetting('admin_recovery_codes', '[]')).filter((c) => !c.used).length; } catch { return 0; } })(),
       paypal_env: Boolean(process.env.PAYPAL_CLIENT_ID && process.env.PAYPAL_CLIENT_SECRET),
       paypal_key_set: paypal.configured(),
@@ -1197,6 +1250,20 @@ router.post('/admin3119Musa/settings/2fa-reset', (req, res) => {
   setSetting('admin_recovery_codes', '[]'); // old set must never survive a reset
   adminmail2fa.clearEmailCode(); // and no emailed fallback survives either
   res.redirect('/admin3119Musa/settings?ok=' + encodeURIComponent('Two-factor reset — the authenticator and all recovery codes are wiped. Your next sign-in enrolls a fresh key and a new code set.'));
+});
+
+/*
+ * Where the sign-in OTP email goes (step 2 of the chain). Stored on the
+ * account in settings; blank means "back to the default admin inbox".
+ */
+router.post('/admin3119Musa/settings/2fa-email', (req, res) => {
+  const raw = String(req.body.email || '').trim().slice(0, 120);
+  if (raw && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)) {
+    return res.redirect('/admin3119Musa/settings?err=' + encodeURIComponent('Enter a valid email address for the sign-in OTP inbox.'));
+  }
+  setSetting('admin_2fa_email', raw);
+  const shown = raw || 'admin@firmledger.co.ke (default)';
+  res.redirect('/admin3119Musa/settings?ok=' + encodeURIComponent(`Sign-in OTPs now go to ${shown}. The change applies from the next sign-in.`));
 });
 
 /*
