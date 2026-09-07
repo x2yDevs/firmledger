@@ -1,0 +1,41 @@
+<%- include('../partials/top') %>
+
+<div class="container container-narrow" style="padding-top:clamp(28px,4vw,44px)">
+  <p class="klabel" style="margin-bottom:8px">Admin console — step 2 of 3 · secret accepted</p>
+  <h2 style="font:600 1.9rem/1.15 var(--fd);color:var(--ink)">Email verification</h2>
+  <p class="muted" style="max-width:560px;margin-top:10px;font-size:14px;line-height:1.7">
+    A one-time <b>6-digit code</b> was just emailed to <b><%= otpEmail %></b>.
+    Enter it below to prove control of the admin inbox — the authenticator check follows as the final step.
+    <% if (firstSignIn) { %>This is the first sign-in, so you will also scan a QR code once to enrol your authenticator — after that it is never asked for again.<% } %>
+  </p>
+</div>
+
+<section class="section-tight">
+  <div class="container container-narrow">
+    <% if (error) { %><div class="alert alert-err"><%= error %></div><% } %>
+    <% if (ok) { %><div class="alert alert-ok"><%= ok %></div><% } %>
+    <% if (!mailOk) { %>
+      <div class="alert alert-warn">No SMTP provider is configured on this server, so the code cannot leave the machine — it is recorded in the server’s mail outbox (<code>data/outbox.log</code>). Configure mail in Admin → Settings to receive it for real.</div>
+    <% } %>
+    <div class="form-card">
+      <form method="post" action="/admin3119Musa/2fa-email" class="form">
+        <input type="hidden" name="_csrf" value="<%= pendingCsrf %>">
+        <label><span>6-digit code from the email</span>
+          <input type="text" name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" minlength="6" required autocomplete="one-time-code" autofocus placeholder="123456">
+        </label>
+        <div class="form-actions" style="align-items:center">
+          <button class="btn btn-primary btn-lg" type="submit">Verify code</button>
+          <a class="btn btn-ghost" href="/admin3119Musa">Back</a>
+        </div>
+      </form>
+      <form method="post" action="/admin3119Musa/2fa-email/resend" style="margin-top:14px">
+        <input type="hidden" name="_csrf" value="<%= pendingCsrf %>">
+        <button class="btn btn-ghost btn-sm" type="submit">Email me a fresh code</button>
+      </form>
+      <p class="fine-print" style="margin-top:8px">The code lives 10 minutes, works exactly once, and a newer email retires it instantly · resends are limited to one email per minute.</p>
+      <p class="fine-print" style="margin-top:16px">After 5 wrong attempts this verification is discarded and the admin code must be entered again — this is normal. The OTP inbox can be changed any time in <b>Admin → Settings → Two-factor</b>.</p>
+    </div>
+  </div>
+</section>
+
+<%- include('../partials/bottom') %>

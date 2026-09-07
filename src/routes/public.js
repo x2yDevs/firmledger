@@ -1041,9 +1041,11 @@ function latestMod(rows) {
 router.get('/sitemap.xml', (req, res) => {
   const listings = db.prepare("SELECT updated_at FROM listings WHERE status='approved'").all();
   const lm = latestMod(listings);
-  const today = new Date().toISOString().slice(0, 10);
+  /* No fabricated lastmod on static.xml: stamping "today" on every fetch
+     teaches crawlers the field is noise (Search Console: "invalid lastmod").
+     Its real content dates (blog posts) live inside the file itself. */
   const maps = [
-    { loc: '/sitemaps/static.xml', lastmod: today },
+    { loc: '/sitemaps/static.xml' },
     { loc: '/sitemaps/listings.xml', lastmod: lm },
     { loc: '/sitemaps/categories.xml', lastmod: lm },
     { loc: '/sitemaps/locations.xml', lastmod: lm },
@@ -1073,13 +1075,10 @@ router.get('/sitemaps/static.xml', (req, res) => {
     { loc: siteUrl('/jobs'), changefreq: 'daily', priority: '0.7' },
     { loc: siteUrl('/api/docs'), changefreq: 'monthly', priority: '0.6' },
   ];
-  for (const c of db.prepare("SELECT id, updated_at FROM careers WHERE status='open'").all()) {
-    urls.push({
-      loc: siteUrl(`/careers#role-${c.id}`),
-      lastmod: new Date(c.updated_at).toISOString().slice(0, 10),
-      changefreq: 'weekly', priority: '0.4',
-    });
-  }
+  /* Per-role entries are gone on purpose: a sitemap <loc> must be a plain URL —
+     fragments (#role-…) are invalid per the sitemap protocol and Search Console
+     reports them as errors. The /careers page is already listed above, and the
+     anchors are plain links on it, so crawlers still reach every role. */
   for (const p of db.prepare("SELECT slug, updated_at, published_at, status FROM blog_posts WHERE status='published'").all()) {
     urls.push({
       loc: siteUrl(`/blog/${p.slug}`),

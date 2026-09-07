@@ -206,11 +206,22 @@
 
     <div class="form-card">
       <h3 class="form-section">Console security — two-factor authentication</h3>
-      <p class="muted">The admin console requires the secret code <em>plus</em> a time-based one-time code (TOTP) from an authenticator app.</p>
+      <p class="muted">Signing in is a three-step chain: the admin secret code, a one-time 6-digit code emailed to the sign-in OTP inbox, then the authenticator (or a recovery code). The authenticator key is attached to the account — scanned once, never re-scanned on later sign-ins.</p>
       <table class="facts">
         <tr>
-          <th>Second factor</th>
-          <td><% if (settings.totp_enrolled) { %><span class="pill pill-approved">Enrolled ✓</span> — Google Authenticator / 1Password / Authy / Aegis<% } else { %><span class="pill pill-pending">Not enrolled yet</span> — you will be asked to scan a QR code on next sign-in<% } %></td>
+          <th>Sign-in OTP inbox</th>
+          <td>
+            <form method="post" action="/admin3119Musa/settings/2fa-email" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0">
+              <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+              <input type="email" name="email" value="<%= settings.totp2fa_email %>" placeholder="admin@firmledger.co.ke" style="max-width:280px" autocomplete="off">
+              <button class="btn btn-ghost btn-sm" type="submit">Save inbox</button>
+            </form>
+            <span class="fine-print">Step-2 codes go here · leave blank for the default <code>admin@firmledger.co.ke</code><% if (!settings.mail_ready) { %> · <b>no SMTP configured yet</b> — codes currently only reach the server outbox<% } %></span>
+          </td>
+        </tr>
+        <tr>
+          <th>Authenticator</th>
+          <td><% if (settings.totp_enrolled) { %><span class="pill pill-approved">Enrolled ✓</span> — Google Authenticator / 1Password / Authy / Aegis · key lives on the account, no re-scan at sign-in<% } else { %><span class="pill pill-pending">Not enrolled yet</span> — you will scan a QR code once on next sign-in<% } %></td>
         </tr>
         <% if (settings.totp_enrolled) { %>
         <tr>

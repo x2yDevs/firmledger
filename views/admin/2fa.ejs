@@ -1,12 +1,12 @@
 <%- include('../partials/top') %>
 
 <div class="container container-narrow" style="padding-top:clamp(28px,4vw,44px)">
-  <p class="klabel" style="margin-bottom:8px">Admin console — first factor passed</p>
+  <p class="klabel" style="margin-bottom:8px">Admin console — step 3 of 3 · email verified</p>
   <h2 style="font:600 1.9rem/1.15 var(--fd);color:var(--ink)">Two-factor verification</h2>
   <p class="muted" style="max-width:560px;margin-top:10px;font-size:14px;line-height:1.7">
     Open your authenticator app and enter the current 6-digit code for <b>FirmLedger — admin</b>.
-    If the app is unreachable, we've emailed a <b>one-time 6-digit code</b> (10-min expiry) to your
-    admin email address — or use one of your unused <b>recovery codes</b> (works once each).
+    The key lives on your account, not on this device — it was scanned once and is never asked for again.
+    If the app is unreachable, use one of your unused <b>recovery codes</b> (works once each).
   </p>
 </div>
 
@@ -25,12 +25,7 @@
           <a class="btn btn-ghost" href="/admin3119Musa">Back</a>
         </div>
       </form>
-      <form method="post" action="/admin3119Musa/2fa/resend" style="margin-top:14px">
-        <input type="hidden" name="_csrf" value="<%= pendingCsrf %>">
-        <button class="btn btn-ghost btn-sm" type="submit">Email me a fresh one-time code</button>
-      </form>
-      <p class="fine-print" style="margin-top:8px">The fresh code goes to the admin inbox · replaces the last code · one email per minute.</p>
-      <p class="fine-print" style="margin-top:16px">After 5 wrong attempts the two-factor session is discarded and you re-enter the admin code — this is normal. Fully locked out (no app, no recovery codes)? Wipe the second factor from the database (<code>data/firmledger.db</code>): <code>DELETE FROM settings WHERE key='admin_totp_secret';</code> — the next sign-in re-enrolls a fresh key and new recovery codes.</p>
+      <p class="fine-print" style="margin-top:16px">After 5 wrong attempts the two-factor session is discarded and you re-enter the admin code — this is normal. Fully locked out (no app, no recovery codes)? Wipe the second factor from the database (<code>data/firmledger.db</code>): <code>DELETE FROM settings WHERE key='admin_totp_secret';</code> — the next sign-in re-enrols a fresh key and new recovery codes.</p>
     </div>
   </div>
 </section>

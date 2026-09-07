@@ -10,9 +10,19 @@
  *                cancellation and honest failure reporting (Groq stubbed).
  *   backup       .firmledger round trip — users, all listings + configuration.
  *   admin-pages  every admin page renders and its long list scrolls in place.
+   admin-2fa    the admin sign-in chain end to end, nothing stubbed: secret ->
+                emailed OTP (admin@firmledger.co.ke, codes harvested from the
+                real mail outbox) -> authenticator/recovery, QR scanned exactly
+                once, enrollment surviving restarts, throttles and resend
+                cooldowns, the OTP inbox editable in Settings.
    indexing     Google Indexing API (stubbed) + the homepage featured rail:
                 URL_UPDATED pings, the never-ping-twice ledger, the 200/day
                 quota and the admin console wired to all of it.
+   health       what a search crawler meets: one URL per page (trailing-slash
+                301s), one host per site (www → apex), sitemap hygiene (no
+                fragment URLs, no fake lastmod, every loc answers 200) and a
+                rate limiter that never blocks robots.txt, sitemaps, the feed,
+                the IndexNow key or a reverse-DNS-verified search bot.
    status       /status accuracy: no false "Major Outage" without a monitor
                 API key, real failures walk the outage ladder and heal,
                 and a poisoned state self-heals on the live server.
@@ -25,8 +35,10 @@ const suites = [
   ['AI agent loop', 'ai-agent.test.js'],
   ['Backup round trip', 'backup.test.js'],
   ['Admin pages', 'admin-pages.test.js'],
+  ['Admin 2FA chain', 'admin-2fa.test.js'],
   ['API surface & discovery', 'api.test.js'],
   ['Google Indexing + featured rail', 'google-indexing.test.js'],
+  ['Indexing health (crawl view)', 'indexing-health.test.js'],
   ['Robots & Auth OAuth', 'robots-auth.test.js'],
   ['Status monitor accuracy', 'status-monitor.test.js'],
 ];

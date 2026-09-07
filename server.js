@@ -24,11 +24,31 @@ const ASSET_V = '48';
 const app = express();
 app.set('trust proxy', true);
 
-// ===== REDIRECT onrender.com → firmledger.co.ke =====
+// ===== Canonical host: onrender.com and www → firmledger.co.ke =====
 app.use((req, res, next) => {
   const host = req.get('host');
-  if (host && host.toLowerCase() === 'firmledger.onrender.com') {
+  const h = host && host.toLowerCase();
+  const canonicalHost = (process.env.BASE_URL || '').replace(/^https?:\/\//, '').replace(/\/+$/, '').toLowerCase();
+  if (h === 'firmledger.onrender.com') {
     return res.redirect(301, `https://firmledger.co.ke${req.originalUrl}`);
+  }
+  /* www.<canonical host> is the same site — answer with one 301 so crawlers
+     never see the same page on two hosts (duplicate content / split signals). */
+  if (canonicalHost && h === 'www.' + canonicalHost) {
+    const qs = req.originalUrl.slice(req.path.length);
+    return res.redirect(301, `https://${canonicalHost}${req.path}${qs}`);
+  }
+  next();
+});
+
+// ===== Canonical URLs: /about/ 301→ /about (root "/" stays) =====
+/* Every route is defined without a trailing slash; without this, crawlers
+   index /about/ and /about as two pages with the same content. */
+app.use((req, res, next) => {
+  const p = req.path;
+  if ((req.method === 'GET' || req.method === 'HEAD') && p.length > 1 && p.endsWith('/')) {
+    const qs = req.originalUrl.slice(p.length);
+    return res.redirect(301, p.replace(/\/+$/, '') + (qs || ''));
   }
   next();
 });
