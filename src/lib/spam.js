@@ -32,6 +32,57 @@ const WINDOWS = {
 
 const buckets = new Map();
 
+const dns = require('dns');
+
+/* SEO plumbing a crawler must always reach, even mid rate-limit window:
+   a 429 on robots.txt or a sitemap is reported in Search Console as a crawl
+   error and stalls indexing of every URL behind it. */
+function isSeoFilePath(p) {
+  return p === '/robots.txt' || p === '/sitemap.xml' || p === '/feed.xml'
+    || p.startsWith('/sitemaps/')
+    || /^\/[a-f0-9]{32}\.txt$/.test(p); /* IndexNow key file */
+}
+
+/* Search crawlers we verify by reverse DNS and then exempt from the scrape
+   ceiling. Googlebot/Bingbot fetch in parallel bursts while processing a
+   sitemap — a 429 at that moment reads as "server error" in Search Console
+   and the whole crawl backs off. Verification is the classic two-step
+   (reverse lookup must land on a bot domain, forward lookup must return the
+   same IP), so a spoofed User-agent never earns the free pass; an
+   unverifiable lookup simply falls back to the normal limits. */
+const SEARCH_BOT_UA = /\b(Googlebot|Googlebot-Image|Googlebot-News|Bingbot|Slurp|DuckDuckBot|YandexBot|Baiduspider|Applebot)\b/i;
+const BOT_RDNS_SUFFIXES = [
+  '.googlebot.com', '.google.com',
+  '.search.msn.com', '.bing.com',
+  '.duckduckgo.com',
+  '.yandex.ru', '.yandex.com', '.yandex.net',
+  '.baidu.com', '.baiduspider', '.baidubot.com',
+  '.apple.com',
+];
+const botVerifyCache = new Map(); /* ip → { verified, expires } */
+
+function withTimeout(promise, ms) {
+  return Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('dns timeout')), ms))]);
+}
+
+async function verifySearchBot(ip) {
+  const hit = botVerifyCache.get(ip);
+  const now = Date.now();
+  if (hit && hit.expires > now) return hit.verified;
+  let verified = false;
+  try {
+    const hostnames = await withTimeout(dns.promises.reverse(ip), 3000);
+    const host = String((hostnames && hostnames[0]) || '').toLowerCase();
+    if (host && BOT_RDNS_SUFFIXES.some((s) => host.endsWith(s))) {
+      const addrs = await withTimeout(dns.promises.resolve(host), 3000);
+      verified = (addrs || []).map(String).includes(ip);
+    }
+  } catch { verified = false; }
+  botVerifyCache.set(ip, { verified, expires: now + (verified ? 24 * 60 * 60 * 1000 : 30 * 60 * 1000) });
+  if (botVerifyCache.size > 5000) botVerifyCache.delete(botVerifyCache.keys().next().value);
+  return verified;
+}
+
 function clientIp(req) {
   const xf = req.headers && req.headers['x-forwarded-for'];
   if (xf) return String(xf).split(',')[0].trim().replace(/^::ffff:/, '');
@@ -147,24 +198,33 @@ function gate(kind, opts = {}) {
   };
 }
 
-/** Light GET scraper ceiling — skips static-ish assets and admin. */
+/** Light GET scraper ceiling — skips static-ish assets, admin, SEO files and
+    reverse-DNS-verified search crawlers. */
 function scrapeGate(req, res, next) {
   if (req.method !== 'GET') return next();
   if (req.admin) return next();
   const p = req.path || '';
   if (p.startsWith('/admin3119Musa') || p.startsWith('/uploads') || p.startsWith('/assets')
       || p.startsWith('/fonts') || p.startsWith('/badge')) return next();
+  if (isSeoFilePath(p)) return next();
   const ip = clientIp(req);
   if (ipAllowed(ip)) return next();
   if (ipBlocked(ip)) {
     return deny(req, res, 403, 'Access denied', 'Requests from this network are not accepted.');
   }
-  const r = charge('scrape', ip);
-  if (!r.ok) {
-    res.set('Retry-After', String(r.retryAfterSec || 60));
-    return deny(req, res, 429, 'Slow down', 'Too many page loads from this address. Wait a moment and try again.');
+  const chargeOrDeny = () => {
+    const r = charge('scrape', ip);
+    if (!r.ok) {
+      res.set('Retry-After', String(r.retryAfterSec || 60));
+      return deny(req, res, 429, 'Slow down', 'Too many page loads from this address. Wait a moment and try again.');
+    }
+    next();
+  };
+  if (SEARCH_BOT_UA.test(String(req.headers['user-agent'] || ''))) {
+    verifySearchBot(ip).then((verified) => (verified ? next() : chargeOrDeny())).catch(chargeOrDeny);
+    return;
   }
-  next();
+  chargeOrDeny();
 }
 
 function listIp() { return db.prepare('SELECT * FROM spam_ip ORDER BY kind, id DESC').all(); }
@@ -197,6 +257,7 @@ function removeDomain(id) { db.prepare('DELETE FROM spam_domain WHERE id=?').run
 
 module.exports = {
   DEFAULTS, clientIp, limits, saveLimits, gate, scrapeGate,
+  isSeoFilePath, verifySearchBot,
   emailDomainStatus, ipAllowed, ipBlocked,
   listIp, listDomain, addIp, addDomain, removeIp, removeDomain,
   numSetting,

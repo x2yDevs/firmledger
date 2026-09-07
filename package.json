@@ -10,6 +10,7 @@
     "test:backup": "node tests/backup.test.js",
     "test:pages": "node tests/admin-pages.test.js",
     "test:indexing": "node tests/google-indexing.test.js",
+    "test:health": "node tests/indexing-health.test.js",
     "test:status": "node tests/status-monitor.test.js"
   },
   "keywords": [],

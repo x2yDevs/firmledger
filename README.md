@@ -564,6 +564,7 @@ What happens then:
 ```bash
 node -e "require('./src/lib/googleIndexing')"   # no output = the module loads cleanly
 npm run test:indexing                          # full Google Indexing suite, client stubbed
+npm run test:health                            # crawl view: canonical URLs, hosts, sitemap hygiene, limiter
 ```
 
 **You do these five things once the domain is live:**

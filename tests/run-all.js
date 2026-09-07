@@ -13,6 +13,11 @@
    indexing     Google Indexing API (stubbed) + the homepage featured rail:
                 URL_UPDATED pings, the never-ping-twice ledger, the 200/day
                 quota and the admin console wired to all of it.
+   health       what a search crawler meets: one URL per page (trailing-slash
+                301s), one host per site (www → apex), sitemap hygiene (no
+                fragment URLs, no fake lastmod, every loc answers 200) and a
+                rate limiter that never blocks robots.txt, sitemaps, the feed,
+                the IndexNow key or a reverse-DNS-verified search bot.
    status       /status accuracy: no false "Major Outage" without a monitor
                 API key, real failures walk the outage ladder and heal,
                 and a poisoned state self-heals on the live server.
@@ -27,6 +32,7 @@ const suites = [
   ['Admin pages', 'admin-pages.test.js'],
   ['API surface & discovery', 'api.test.js'],
   ['Google Indexing + featured rail', 'google-indexing.test.js'],
+  ['Indexing health (crawl view)', 'indexing-health.test.js'],
   ['Robots & Auth OAuth', 'robots-auth.test.js'],
   ['Status monitor accuracy', 'status-monitor.test.js'],
 ];

@@ -1,5 +1,66 @@
 # FirmLedger — change summary
 
+## 2026-09-07 — Indexing health: crawler-proof URLs, hosts and rate limiting
+
+Four fixes for things a search crawler met as errors (Search Console-speak:
+"Duplicate without user-selected canonical", "Invalid URL / invalid lastmod",
+"Page fetch failed"). Nothing else moved — same pages, same markup, same limits.
+
+### 1. One URL per page — trailing-slash 301s (`server.js`)
+
+Every route was always defined without a trailing slash, but `/about/`,
+`/directory/`, `/listing/acme/`, `/blog/` answered **200 alongside** the
+canonical URL — the same page indexable twice with split signals. A GET/HEAD
+on any `/path/` now answers **301** onto `/path` (query string preserved,
+root `/` untouched, POSTs never redirected).
+
+### 2. One host per site — `www.` 301s to the apex (`server.js`)
+
+The existing `firmledger.onrender.com → firmledger.co.ke` redirect is joined
+by a general one: a request whose Host is `www.<BASE_URL host>` answers 301 to
+the apex origin, so the site can never be indexed under two hosts.
+
+### 3. Sitemap hygiene (`src/routes/public.js`)
+
+* **No fragment URLs** — `/careers#role-…` entries are gone from
+  `static.xml`: `<loc>` must be a plain URL per the sitemap protocol and
+  Search Console reported the anchors as errors. The `/careers` page itself
+  stays in the sitemap; the role anchors are plain links on it.
+* **No fabricated `lastmod`** — the `static.xml` entry in the sitemap index no
+  longer stamps "today" on every fetch (a lastmod that always says now is
+  noise to crawlers). Real dates (listings, blog posts) are untouched.
+
+### 4. Rate limiting never blocks indexing (`src/lib/spam.js`)
+
+The scrape ceiling (default 180 page loads/min/IP) stays exactly as
+configured — but two carve-outs were added:
+
+* **SEO files are always reachable**: `/robots.txt`, `/sitemap.xml`,
+  `/sitemaps/*`, `/feed.xml` and the IndexNow key file skip the limiter, so a
+  mid-throttle crawler still reads the sitemap instead of meeting a 429.
+* **Verified search bots skip the page ceiling**: a Googlebot/Bingbot/
+  DuckDuckBot/Yandex/Baidu/Applebot User-agent earns nothing by itself — the
+  IP must pass the two-step check (reverse DNS lands on a bot domain, forward
+  DNS returns the same IP, results cached 24 h, failing resolvers fail
+  closed). Verified bots crawl bursts without 429s; spoofed UAs fall back to
+  the normal limits.
+
+### Test
+
+```
+npm run test:health    # 33 checks: the crawl view above, regression-locked
+npm test               # now 9 suites
+```
+
+`tests/indexing-health.test.js` boots the real server and asserts: the 301s
+(slash + www + onrender, query strings riding along), sitemap hygiene (no
+fragments, no fake lastmod, every `<loc>` absolute and every one of them
+answering 200), robots.txt unchanged, and the limiter carve-outs — SEO files
+200 mid-throttle, Retry-After on the 429 page, spoofed Googlebot still
+throttled, real bot verification proven against a stubbed resolver.
+
+---
+
 ## 2026-09-03 — Google Indexing API, featured-records marquee, permanent incident delete
 
 ### 1. Google Indexing API (`src/lib/googleIndexing.js`, new)
