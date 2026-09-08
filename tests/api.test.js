@@ -56,12 +56,17 @@ const css = fs.readFileSync(path.join(ROOT, 'public/css/app.css'), 'utf8');
 check('CSS constrains the playground response height', /\.playground-response\s*\{[\s\S]*max-height/.test(css) && /\.playground-response[\s\S]*overflow-y\s*:\s*auto/.test(css));
 check('CSS keeps the response body highlighted (no inline-code chrome on .code-block code)', /\.code-block code\s*\{[\s\S]*background\s*:\s*none/.test(css) && /\.code-block code[\s\S]*font\s*:\s*inherit/.test(css));
 
-/* 5. Fresh DB seeds the production API blog post as the newest. */
+/* 5. Fresh DB seeds the production API blog post, newer than the announcement
+      it supersedes. (Posts added later legitimately sit above it, so the
+      invariant is relative order, not "top of the list".) */
 const { db } = require(path.join(ROOT, 'src/db.js'));
 const rows = db.prepare("SELECT slug, status FROM blog_posts WHERE status='published' ORDER BY published_at DESC").all();
 const apiPost = rows.find((r) => r.slug === 'firmledger-api-production-guide');
+const apiPostIdx = rows.findIndex((r) => r.slug === 'firmledger-api-production-guide');
+const introIdx = rows.findIndex((r) => r.slug === 'introducing-the-firmledger-api');
 check('New API blog post is seeded', Boolean(apiPost));
-check('New API blog post is the newest', rows.length > 0 && rows[0].slug === 'firmledger-api-production-guide');
+check('New API blog post is published', Boolean(apiPost) && apiPost.status === 'published');
+check('New API blog post sits above the API announcement', apiPostIdx >= 0 && introIdx > apiPostIdx);
 
 /* 6. The blog seed source explains the key requirement for its readers. */
 const blogseed = fs.readFileSync(path.join(ROOT, 'src/lib/blogseed.js'), 'utf8');

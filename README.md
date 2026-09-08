@@ -6,6 +6,11 @@ Production site: **https://firmledger.co.ke**
 
 Stack: Node.js + Express · EJS server-rendered views · SQLite (WAL) · no frontend build step.
 
+> **New here?** Start with **[README_OVERVIEW.md](README_OVERVIEW.md)** — what the
+> site is, every feature, and how the whole thing works end to end. This file is
+> the setup, deployment and day-to-day operations reference. Also see
+> **[README2.md](README2.md)** (architecture) and **[ERD.md](ERD.md)** (database).
+
 ---
 
 ## 1. Feature map

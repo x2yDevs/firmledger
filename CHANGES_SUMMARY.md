@@ -1,5 +1,33 @@
 # FirmLedger — change summary
 
+## 2026-09-08 — Blog: how listing news works, plus a complete site overview README
+
+**Blog post.** A new post ships in the seed (`src/lib/blogseed.js`), so every
+install gets it at the top of `/blog`, in `/feed.xml` and in the sitemap:
+*News on FirmLedger: what a profile is allowed to say about the news*. It follows
+the existing post layout — `<p class="lead">` opener, `<h2>` sections, `<code>`
+and lists — and explains the feature in the same voice as the rest of the blog:
+what counts as a story here, the three doors it can arrive through, the accuracy
+gate (full name as a phrase, or the company's own domain — everything else is
+dropped), why member submissions wait for a moderator, the hourly upkeep that
+keeps stories from going stale, and the list of things we deliberately don't do
+(no machine-written summaries, no paid placement, no story without a citable link).
+
+**New README.** `README_OVERVIEW.md` documents the whole site in one place: what
+FirmLedger is, the eight-stage pipeline (ingest → normalize → resolve → score →
+verify → moderate → enrich → publish), the anatomy of a listing profile with a
+field-by-field provenance table, what visitors / members / owners / moderators can
+each do, the three verification methods, what Pro unlocks and what stays free, a
+map of every console area, the news layer and automated upkeep, the public API,
+trust and safety, the indexing stack, email and notifications, the project layout,
+the stack, how to run and test it, the six principles underneath, and a glossary.
+`README.md` now points at it from the top instead of leaving a new reader to guess.
+
+**Tests.** The news suite grew post-content checks (88 checks, up from 81) and the
+API suite's blog ordering check now asserts the invariant that actually matters —
+the production API guide sits above the announcement it supersedes — rather than
+assuming it will forever be the newest post. All 12 suites pass.
+
 ## 2026-09-08 — Listing news: automatic detection, member submissions, moderation
 
 Every profile can now carry what is being published about the company, and the

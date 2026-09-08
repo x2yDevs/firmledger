@@ -51,6 +51,23 @@ const news = require(path.join(ROOT, 'src/lib/news.js'));
 const upkeep = require(path.join(ROOT, 'src/lib/upkeep.js'));
 const techrefresh = require(path.join(ROOT, 'src/lib/techrefresh.js'));
 
+/* ---------------------------------------------------------------------------
+ * The news feature is documented in the blog — the same way the API is. The
+ * announcement post ships in the seed so every install gets it, and the copy has
+ * to state the promises the code actually keeps: the accuracy gate, the
+ * moderation queue for member submissions, and the "no summary, no link, no
+ * story" rule.
+ * ------------------------------------------------------------------------- */
+const NEWS_POST_SLUG = 'news-on-firmledger-what-a-profile-is-allowed-to-say-about-the-news';
+const newsPost = db.prepare('SELECT slug, status, body, excerpt FROM blog_posts WHERE slug=?').get(NEWS_POST_SLUG);
+check('the news announcement post is seeded', Boolean(newsPost));
+check('the news announcement post is published', Boolean(newsPost) && newsPost.status === 'published');
+check('the news post explains the accuracy gate', /full name/i.test(newsPost?.body || '') && /own domain/i.test(newsPost?.body || ''));
+check('the news post explains that member submissions wait for a human', /pending/i.test(newsPost?.body || '') && /moderat/i.test(newsPost?.body || ''));
+check('the news post states that stories need a citable link', /link/i.test(newsPost?.body || ''));
+check('the news post explains the scheduled upkeep', /hourly/i.test(newsPost?.body || ''));
+check('the news post carries an excerpt for the /blog card', Boolean(newsPost && String(newsPost.excerpt || '').length > 40));
+
 const mkListing = (slug, name, site, status = 'approved') => Number(db.prepare(
   `INSERT INTO listings (slug,name,tagline,description,type,category,website,email,country,status,confidence)
    VALUES (?,?,?,?,'company','Fintech',?,?,'Kenya',?,70)`
