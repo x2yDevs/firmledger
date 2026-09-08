@@ -675,6 +675,7 @@ top to bottom and FirmLedger is ready for real customers:
 | Mail providers + failover | Admin → Settings → Email, or `SMTP_URL` / `SMTP2_URL` in `.env` |
 | Grant Pro without payment | Admin → Users → Grant 30d / Lifetime (emails the member) |
 | Grant/refund Pro manually | Admin → Listings → Grant Pro (30d) · Lifetime · Revoke Pro |
+| Refresh the technology radar | Admin → Listings → **Technology radar maintenance** — one record (row **↻ Tech** or the edit page panel), a ticked selection (bulk action), **Refresh all N in this view**, **Refresh N stale**, or the whole directory. Runs in the background with live progress, and can be stopped |
 
 ## 6. Data & files
 

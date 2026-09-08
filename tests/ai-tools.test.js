@@ -157,6 +157,19 @@ function seed() {
   await tool('accept_all_pending_listings', {}, () => (
     count("SELECT COUNT(*) c FROM listings WHERE status='pending'") === 0 ? null : 'pending listings remain'));
 
+  /* Technology radar refresh — canned homepages, no network, fetch restored after. */
+  const savedFetch = globalThis.fetch;
+  require('./helpers/fetch-stub.js');
+  const scannedToday = new Date().toISOString().slice(0, 10);
+  await tool('refresh_listing_tech', { id_or_slug: 'gamma-group' }, () => (
+    one('SELECT tech_checked_at FROM listings WHERE id=?', f.gamma).tech_checked_at === scannedToday
+      ? null : 'technology scan date not stamped in DB'));
+  await tool('refresh_listing_tech', { id_or_slug: 'no-such-listing' }, null, { expectFail: true });
+  db.prepare("UPDATE listings SET website='' WHERE id=?").run(f.zeta);
+  await tool('refresh_listing_tech', { id_or_slug: 'zeta-holdings' }, null, { expectFail: true });
+  db.prepare('UPDATE listings SET website=? WHERE id=?').run('https://zeta-holdings.example.com', f.zeta);
+  globalThis.fetch = savedFetch;
+
   await tool('feature_listing', { id_or_slug: 'gamma-group', featured: true }, () => (
     one('SELECT featured FROM listings WHERE id=?', f.gamma).featured === 1 ? null : 'featured flag not set'));
   await tool('feature_listing', { id_or_slug: 'gamma-group' }, () => (

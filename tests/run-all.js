@@ -10,6 +10,9 @@
  *                cancellation and honest failure reporting (Groq stubbed).
  *   backup       .firmledger round trip — users, all listings + configuration.
  *   admin-pages  every admin page renders and its long list scrolls in place.
+   tech-refresh admin technology-radar maintenance: one listing, a selection,
+                a filtered view, everything stale or the whole directory —
+                counters, the single-run lock, cancellation and CSRF, offline.
    admin-2fa    the admin sign-in chain end to end, nothing stubbed: secret ->
                 emailed OTP (admin@firmledger.co.ke, codes harvested from the
                 real mail outbox) -> authenticator/recovery, QR scanned exactly
@@ -35,6 +38,7 @@ const suites = [
   ['AI agent loop', 'ai-agent.test.js'],
   ['Backup round trip', 'backup.test.js'],
   ['Admin pages', 'admin-pages.test.js'],
+  ['Admin technology refresh', 'admin-tech-refresh.test.js'],
   ['Admin 2FA chain', 'admin-2fa.test.js'],
   ['API surface & discovery', 'api.test.js'],
   ['Google Indexing + featured rail', 'google-indexing.test.js'],

@@ -27,6 +27,7 @@ const health = require('./health');
 const { runCheck } = require('./verify');
 const { finalizeVerifiedClaim } = require('./claimflow');
 const listingEvents = require('./listingevents');
+const techrefresh = require('./techrefresh');
 
 function findListing(idOrSlug) {
   const raw = String(idOrSlug || '').trim();
@@ -313,6 +314,32 @@ const TOOLS = [
       const approved = [];
       for (const l of rows) { approveListingRow(l); approved.push({ id: l.id, slug: l.slug, name: l.name }); }
       return { approved: approved.length, listings: approved };
+    },
+  },
+  {
+    name: 'refresh_listing_tech', group: 'listings', label: 'Refresh technology radar', mutating: true,
+    description: 'Re-scan one listing\'s public homepage and refresh its technology radar (frameworks, CMS, payments, analytics, hosting) plus the hiring link. Same action as Admin → Listings → ↻ Tech. Bulk/whole-directory refreshes stay in the console UI.',
+    parameters: {
+      type: 'object',
+      properties: { id_or_slug: { type: 'string', description: 'Listing id or slug.' } },
+      required: ['id_or_slug'], additionalProperties: false,
+    },
+    summarize(a) { return `Refresh the technology radar for ${a.id_or_slug}.`; },
+    async run(args) {
+      const l = findListing(args.id_or_slug);
+      if (!l) return { error: 'No listing matches that id or slug.' };
+      const r = await techrefresh.refreshOne(l.id);
+      if (!r.ok) {
+        return { error: r.skipped === 'no-website'
+          ? `${l.name} has no website — add one before scanning.`
+          : 'That listing could not be refreshed.' };
+      }
+      const row = db.prepare('SELECT tech_checked_at, hiring_url FROM listings WHERE id=?').get(l.id);
+      return {
+        ok: true, id: l.id, name: l.name, slug: l.slug,
+        technologies: r.count, tech: r.tech, changed: r.changed,
+        before: r.before, scanned_at: row.tech_checked_at, hiring_url: row.hiring_url || '',
+      };
     },
   },
   {

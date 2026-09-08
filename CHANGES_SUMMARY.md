@@ -1,5 +1,47 @@
 # FirmLedger — change summary
 
+## 2026-09-08 — Admin → Listings: refresh the technology radar (one, a selection, or all)
+
+Keeping every profile's technology snapshot honest is now a first-class admin
+maintenance job instead of something that only happens when a record is created
+or an owner clicks refresh on their own listing.
+
+**One place, five ways to run it** — every path lands on the same engine in
+`src/lib/techrefresh.js`, which calls the existing detector in `lib/enrich.js`:
+
+| Where | Action |
+| --- | --- |
+| Admin → Listings, row button **↻ Tech** | re-scans that one company |
+| Admin → Listings → edit → **Technology radar** panel | shows the current chips + scan date, refreshes in place |
+| Bulk action **Refresh technology radar** | any ticked rows — every row is tickable now, not only pending ones |
+| **Refresh all N in this view** | exactly the rows the current filter renders |
+| **Refresh N stale** / **Refresh entire directory (N)** | never-scanned or older than 90 days, or every listing with a website |
+
+**It runs in the background.** A run takes a pool of four homepages at a time
+(8s timeout each), never stacks a second run on top of a live one, can be
+**Stop**ped mid-flight, and reports `done / changed / unchanged / without a
+website / failed` live on `/admin3119Musa/listings/tech-job.json` — the page
+polls it and reloads when the run lands. The last run's summary is kept on the
+page, and the console gets an in-app notification when a run finishes.
+
+**Nothing is invented.** A page that answers nothing gets `0 technologies`
+recorded with today's scan date, a listing with no website is reported as
+skipped (never "scanned successfully"), and a real change to a stack still
+notifies the listing's watchers exactly as an owner-triggered refresh does.
+The new **Tech** column and the **Any tech scan / Never scanned / Stale / Fresh**
+filter make the backlog visible, and the admin dashboard carries the stale
+count with a one-click shortcut.
+
+The assistant can do it too: `refresh_listing_tech` (61 tools now) re-scans a
+listing by id or slug from the AI Playground.
+
+```
+npm test                            # 11 suites
+node tests/admin-tech-refresh.test.js   # 66 checks, fully offline
+```
+
+---
+
 ## 2026-09-07 — Admin sign-in chain: secret → emailed OTP → authenticator
 
 The admin gate is now a strict three-step chain, everything else untouched:
@@ -245,10 +287,11 @@ npm run test:pages  # every admin page renders and its list scrolls
 
 | Suite | What it proves |
 | --- | --- |
-| `tests/ai-tools.test.js` | all 60 assistant tools really change the database |
+| `tests/ai-tools.test.js` | all 61 assistant tools really change the database |
 | `tests/ai-agent.test.js` | chaining, batched confirmation, cancellation, honest failures (Groq stubbed — no key needed) |
 | `tests/backup.test.js` | backup carries users + all listings + configuration, restores into an empty database, and is idempotent |
 | `tests/admin-pages.test.js` | boots the real server and checks every admin page renders with its list in a scroll region |
+| `tests/admin-tech-refresh.test.js` | technology-radar maintenance end to end, offline: one listing, a selection, a filtered view, stale and whole-directory runs, the single-run lock, cancellation, CSRF and the tech filter |
 
 `FIRMLEDGER_DATA_DIR` was added to `src/db.js` so suites run against a temporary
 database and never touch `data/`.

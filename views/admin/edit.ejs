@@ -85,6 +85,34 @@
       </div>
     </form>
 
+    <div class="form-card" id="tech">
+      <h3 class="form-section">Technology radar</h3>
+      <% if (typeof ok !== 'undefined' && ok) { %><div class="alert alert-ok"><%= ok %></div><% } %>
+      <% if (typeof err !== 'undefined' && err) { %><div class="alert alert-err"><%= err %></div><% } %>
+      <p class="muted" style="font-size:13.5px;margin-bottom:12px">
+        Detected from the company's own public homepage — frameworks, CMS, payments, analytics and
+        hosting signatures, plus any careers link it can find. Shown on the public profile.
+      </p>
+      <% if (tech.length) { %>
+        <div class="tech-chips">
+          <% tech.forEach(function (t) { %><span class="tech-chip"><b><%= t.n %></b><small><%= t.c %></small></span><% }) %>
+        </div>
+      <% } else { %>
+        <p class="muted">No technologies detected yet.</p>
+      <% } %>
+      <div class="jf-row" style="margin-top:14px;align-items:center">
+        <form method="post" action="/admin3119Musa/listings/<%= l.id %>/refresh-tech">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <input type="hidden" name="back" value="edit">
+          <button class="btn btn-primary btn-sm" type="submit" <%= l.website ? '' : 'disabled' %>>Refresh now</button>
+        </form>
+        <span class="muted" style="font-size:13.5px">
+          <%= techCheckedAt ? 'Last scanned ' + techCheckedAt : 'Never scanned' %><% if (l.hiring_url) { %> · hiring link found<% } %>
+        </span>
+      </div>
+      <% if (!l.website) { %><p class="form-note">Add a website to this listing — the scan reads the public homepage.</p><% } %>
+    </div>
+
     <div class="form-card" id="ownership">
       <h3 class="form-section">Ownership — make anyone the owner, or remove the owner</h3>
       <% if (typeof ok !== 'undefined' && ok) { %><div class="alert alert-ok"><%= ok %></div><% } %>
