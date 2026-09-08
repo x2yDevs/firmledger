@@ -12,15 +12,15 @@
   <div class="container">
     <div class="section-head">
       <div>
-        <p class="klabel">Admin · Groq</p>
+        <p class="klabel">Admin · AI</p>
         <h2>AI Playground</h2>
-        <p class="muted ai-lede">Draft listings from a brief, run the admin assistant against real console actions, and let Groq pre-screen new submissions. Reads run immediately; writes ask first unless you allow them under Settings. The API key never leaves this server.</p>
+        <p class="muted ai-lede">Draft listings from a brief, run the admin assistant against real console actions, and let the model pre-screen new submissions. Reads run immediately; writes ask first unless you allow them under Settings — and sensitive actions always ask. Bring your own key from any supported provider; it never leaves this server.</p>
       </div>
       <div class="ai-status-row">
         <% if (ready) { %>
-          <span class="pill pill-approved">Groq ready · <%= settings.groq_key_source === 'env' ? '.env' : 'saved key' %></span>
+          <span class="pill pill-approved"><%= settings.provider_label %> ready · <%= settings.groq_key_source === 'env' ? '.env' : 'saved key' %></span>
         <% } else { %>
-          <span class="pill pill-rejected">Groq key missing</span>
+          <span class="pill pill-rejected"><%= settings.provider_label %> key missing</span>
         <% } %>
         <% if (settings.moderation_on) { %>
           <span class="pill pill-approved">Auto-moderation on</span>
@@ -36,6 +36,7 @@
     </div>
 
     <div class="ai-keyline">
+      <span class="ai-keyline-item"><span class="ai-keyline-k">Provider</span> <b><%= settings.provider_label %></b> <small class="muted">(<%= settings.providers_configured.length %> keyed)</small></span>
       <span class="ai-keyline-item"><span class="ai-keyline-k">Model</span> <b class="mono"><%= settings.groq_model %></b></span>
       <span class="ai-keyline-item"><span class="ai-keyline-k">Key</span> <b class="mono"><%= settings.groq_key_hint || 'none' %></b></span>
       <span class="ai-keyline-item"><span class="ai-keyline-k">Assistant</span> <b>stateless · no saved history</b></span>
@@ -47,7 +48,7 @@
     </div>
 
     <% if (!ready) { %>
-      <div class="alert alert-warn">Add a Groq API key under <b>Settings</b> below (or set <code>GROQ_API_KEY</code> in <code>.env</code>). Create one at <a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com/keys</a> — paste it in Settings, then press <b>Check key &amp; sync models</b>.</div>
+      <div class="alert alert-warn"><%= settings.provider_label %> has no key. Open <b>Settings → Model providers</b> below, paste a key for <%= settings.provider_label %> (or pick another provider you already have a key for), press <b>Save settings</b>, then <b>Test &amp; sync</b>. Environment variables such as <code>GROQ_API_KEY</code>, <code>OPENAI_API_KEY</code>, <code>ANTHROPIC_API_KEY</code> or <code>GEMINI_API_KEY</code> work too and always win.</div>
     <% } %>
     <% if (ok) { %><div class="alert alert-ok" role="status"><%= ok %></div><% } %>
     <% if (err) { %><div class="alert alert-err" role="alert"><%= err %></div><% } %>
@@ -153,7 +154,7 @@
             <button class="btn btn-ghost" type="button" id="gen-discard">Discard</button>
             <span class="muted ai-status" id="save-status" role="status"></span>
           </div>
-          <p class="fine-print">Saved listings enter the review queue. With AI auto-moderation on, Groq approves, rejects, or leaves them pending in the background.</p>
+          <p class="fine-print">Saved listings enter the review queue. With AI auto-moderation on, the selected model approves, rejects, or leaves them pending in the background.</p>
         </form>
       </div>
     </div>
@@ -167,7 +168,7 @@
             <div class="chat-head-name" id="chat-head-title"><%= chatTitle %></div>
             <div class="chat-head-sub">
               <span class="ai-live-dot <%= ready ? 'is-on' : 'is-off' %>" aria-hidden="true"></span>
-              <span id="chat-head-sub"><%= ready ? 'Live · ' + settings.groq_model : 'Groq key required' %> · writes confirm first</span>
+              <span id="chat-head-sub"><%= ready ? 'Live · ' + settings.provider_label + ' · ' + settings.groq_model : settings.provider_label + ' key required' %> · writes confirm first</span>
             </div>
           </div>
           <div class="chat-head-actions">
@@ -210,7 +211,7 @@
             <form class="chat-composer" id="chat-form">
               <div class="composer-box">
                 <label class="sr-only" for="chat-input">Message the admin assistant</label>
-                <textarea id="chat-input" rows="1" maxlength="4000" placeholder="<%= ready ? 'e.g. How many listings are pending?' : 'Add a Groq key in Settings to use the assistant' %>"<%= offAttr %>></textarea>
+                <textarea id="chat-input" rows="1" maxlength="4000" placeholder="<%= ready ? 'e.g. How many listings are pending?' : 'Add a model provider key in Settings to use the assistant' %>"<%= offAttr %>></textarea>
                 <span class="composer-count" id="chat-count">0 / 4000</span>
               </div>
               <button class="composer-send" id="chat-send" type="submit" aria-label="Send message"<%= offAttr %>>
@@ -228,27 +229,75 @@
       <div class="ai-set-grid" id="ai-settings">
         <form method="post" action="/admin3119Musa/ai/settings" class="form form-card ai-card ai-card-tight ai-set-main">
           <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-          <h3 class="form-section">Groq connection</h3>
-          <p class="muted ai-card-note"><code>GROQ_API_KEY</code> in the environment always wins over the saved value. Only the masked hint is kept for display — the key itself is never sent back to the browser.</p>
+          <h3 class="form-section">Model providers</h3>
+          <p class="muted ai-card-note">Choose the service that runs the admin assistant, the listing generator and auto-moderation — and paste keys for as many providers as you like. Providers without a key stay dormant. An environment variable (<code>GROQ_API_KEY</code>, <code>OPENAI_API_KEY</code>, <code>ANTHROPIC_API_KEY</code>, …) always wins over a saved key. Only a masked hint is ever shown; a key is never sent back to the browser.</p>
+
+          <div class="ai-prov-grid" id="prov-grid">
+            <% settings.providers.forEach(function (p) { %>
+              <div class="ai-prov-card<%= p.active ? ' is-active' : '' %><%= p.configured ? ' is-ready' : '' %>" data-prov="<%= p.id %>">
+                <label class="ai-prov-pick">
+                  <input type="radio" name="llm_provider" value="<%= p.id %>" <%= p.active ? 'checked' : '' %>>
+                  <span class="ai-prov-name"><%= p.label %></span>
+                  <% if (p.active) { %><em class="ai-prov-badge on">in use</em><% } %>
+                  <% if (p.key_source === 'env') { %><em class="ai-prov-badge env">.env</em>
+                  <% } else if (p.key_set) { %><em class="ai-prov-badge saved">key saved</em>
+                  <% } else if (!p.needs_key) { %><em class="ai-prov-badge saved">no key needed</em>
+                  <% } else { %><em class="ai-prov-badge off">no key</em><% } %>
+                </label>
+                <p class="ai-prov-blurb"><%= p.blurb %></p>
+
+                <label class="ai-prov-field"><span>API key</span>
+                  <input type="password" name="llm_key_<%= p.id %>" autocomplete="new-password" spellcheck="false"
+                         placeholder="<%= p.key_placeholder %>" data-prov-key="<%= p.id %>"
+                         <%= p.key_source === 'env' ? 'disabled' : '' %>>
+                  <small class="muted ai-field-note" data-prov-hint="<%= p.id %>">
+                    <% if (p.key_source === 'env') { %>✓ from <code><%= p.env[0] %></code> — rotate it there
+                    <% } else if (p.key_set) { %>✓ saved (<%= p.key_hint %>) — paste a new one to rotate
+                    <% } else { %>not saved yet<% } %>
+                  </small>
+                </label>
+
+                <% if (p.key_set && p.key_source !== 'env' && p.needs_key) { %>
+                  <label class="check ai-clear-key"><input type="checkbox" name="llm_key_<%= p.id %>_clear" value="1"><span>Clear this saved key (rotate it at the provider first)</span></label>
+                <% } %>
+
+                <% if (!p.active) { %>
+                  <label class="ai-prov-field"><span>Model</span>
+                    <input type="text" name="llm_model_<%= p.id %>" list="models-<%= p.id %>" value="<%= p.model %>" spellcheck="false" autocomplete="off" placeholder="<%= p.default_model || 'model id' %>">
+                    <datalist id="models-<%= p.id %>">
+                      <% p.models.forEach(function (m) { %><option value="<%= m.id %>"><% }) %>
+                    </datalist>
+                    <small class="muted ai-field-note"><%= p.models.length %> known ids<%= p.allow_custom ? ' · any other id this endpoint serves also works' : '' %></small>
+                  </label>
+                <% } %>
+
+                <label class="ai-prov-field ai-prov-adv"><span>Endpoint <small class="muted">optional override</small></span>
+                  <input type="text" name="llm_base_<%= p.id %>" value="<%= p.base_url %>" placeholder="<%= p.default_base %>" spellcheck="false" autocomplete="off">
+                </label>
+
+                <div class="ai-prov-foot">
+                  <button class="btn btn-xs btn-ghost" type="button" data-test-prov="<%= p.id %>">Test &amp; sync</button>
+                  <% if (p.keys_url) { %><a class="ai-prov-link" href="<%= p.keys_url %>" target="_blank" rel="noopener">Get a key ↗</a><% } %>
+                  <span class="muted ai-prov-status" data-prov-status="<%= p.id %>" role="status"><%= p.live_models.length ? p.live_models.length + ' ids seen' : '' %></span>
+                </div>
+              </div>
+            <% }) %>
+          </div>
+          <p class="fine-print">Testing uses the key that is already saved (or the one in <code>.env</code>) — press <b>Save settings</b> after pasting a new key, then <b>Test &amp; sync</b>.</p>
+
+          <h4 class="form-section form-section-sm">Default model — <span id="prov-model-owner"><%= settings.provider_label %></span></h4>
           <div class="grid-2">
-            <label><span>API key</span>
-              <input type="password" name="groq_api_key" autocomplete="new-password" spellcheck="false" placeholder="gsk_…" <%= settings.groq_env ? 'disabled' : '' %>>
-              <small class="muted ai-field-note">
-                <% if (settings.groq_env) { %>✓ set in <code>.env</code> — rotate there<% } else if (settings.groq_key_set) { %>✓ saved (<%= settings.groq_key_hint %>) — paste a new one to rotate<% } else { %>not saved yet<% } %>
-              </small>
-            </label>
-            <label><span>Default model</span>
-              <select name="groq_model" id="set-model">
-                <% settings.models.forEach(function (m) { %>
-                  <option value="<%= m.id %>" <%= settings.groq_model === m.id ? 'selected' : '' %>><%= m.label %></option>
-                <% }) %>
+            <label><span>Model used by the assistant, generator and moderation</span>
+              <select name="llm_model_<%= settings.provider %>" id="set-model">
+                <% settings.models.forEach(function (m) { %><option value="<%= m.id %>" <%= settings.groq_model === m.id ? 'selected' : '' %>><%= m.label %></option><% }) %>
               </select>
               <small class="muted ai-field-note" id="set-model-note">Selected model: <span class="mono"><%= settings.groq_model %></span></small>
             </label>
+            <div class="ai-quick-card">
+              <h4 class="ai-quick-h">Why the choice matters</h4>
+              <p class="muted ai-card-note">The admin assistant needs <b>tool calling</b> — models without it (DeepSeek Reasoner, Perplexity Sonar) can still draft listings and answer questions but cannot run console actions. JSON mode speeds up the listing generator and auto-moderation.</p>
+            </div>
           </div>
-          <% if (!settings.groq_env && settings.groq_key_set) { %>
-            <label class="check ai-clear-key"><input type="checkbox" name="groq_api_key_clear" value="1"><span>Clear the saved Groq key from this server (rotate it at console.groq.com first)</span></label>
-          <% } %>
           <div class="ai-model-strip" id="model-strip">
             <% settings.models.forEach(function (m) { %>
               <button type="button" class="ai-model-chip <%= m.id === settings.groq_model ? 'on' : '' %>" data-model="<%= m.id %>" title="<%= m.note || '' %> · <%= (m.tools ? 'tools ' : 'no tools ') + (m.json ? '+ JSON mode' : 'no JSON mode') %>">
@@ -262,12 +311,12 @@
             <button class="btn btn-ghost" type="button" id="test-key-btn-2">Test &amp; sync models</button>
             <span class="muted ai-status" id="test-status" role="status"></span>
           </div>
-          <p class="fine-print">Endpoint: <span class="mono"><%= settings.groq_base_url %></span><% if (settings.groq_env) { %> · key source: <span class="mono">.env</span><% } else { %> · key source: settings table<% } %></p>
+          <p class="fine-print" id="prov-endpoint">Endpoint: <span class="mono"><%= settings.groq_base_url %></span><% if (settings.groq_env) { %> · key source: <span class="mono">.env</span><% } else { %> · key source: settings table<% } %></p>
 
           <h3 class="form-section">AI auto-moderation</h3>
           <label class="check check-lg">
             <input type="checkbox" name="ai_moderation_on" value="1" <%= settings.moderation_on ? 'checked' : '' %>>
-            <span><strong>Evaluate every new pending listing with Groq</strong><br><small class="muted">Runs in the background after dashboard, API, admin, or generator creates a listing. Failures leave the record pending and never block creation. Takes precedence over the simple auto-approve toggle.</small></span>
+            <span><strong>Evaluate every new pending listing with the selected model</strong><br><small class="muted">Runs in the background after dashboard, API, admin, or generator creates a listing. Failures leave the record pending and never block creation. Takes precedence over the simple auto-approve toggle.</small></span>
           </label>
           <label class="check check-lg">
             <input type="checkbox" name="ai_moderation_email" value="1" <%= settings.moderation_email ? 'checked' : '' %>>
@@ -306,7 +355,7 @@
           </div>
 
           <h3 class="form-section">Assistant auto-run</h3>
-          <p class="muted ai-card-note">Lookups always run without asking. Tick a write action to let the assistant execute it immediately. Unticked writes propose first and wait for your confirm. Deleting a member account always confirms.</p>
+          <p class="muted ai-card-note">Lookups always run without asking. Tick a write action to let the assistant execute it immediately. Unticked writes propose first and wait for your confirm. Sensitive actions — deletions, bulk listing changes, emailing everyone, maintenance mode, credentials and indexing resets — are locked to confirm and cannot be switched to auto-run.</p>
           <input type="hidden" name="ai_auto_tools_present" value="1">
           <div class="ai-run-summary" id="run-summary">
             <b id="run-count">0</b> write actions will run without asking
@@ -322,12 +371,13 @@
               <h4><%= g.label %> <small class="muted"><%= items.filter(function (t) { return t.mutating && !t.neverAuto; }).length %> write actions</small></h4>
               <div class="ai-tool-grid">
                 <% items.forEach(function (t) { %>
-                  <label class="check ai-tool-item <%= t.neverAuto ? 'is-locked' : '' %> <%= !t.mutating ? 'is-read' : '' %>">
+                  <label class="check ai-tool-item <%= t.sensitive ? 'is-sensitive is-locked' : (t.neverAuto ? 'is-locked' : '') %> <%= !t.mutating ? 'is-read' : '' %>">
                     <input type="checkbox"
                       <% if (t.mutating && !t.neverAuto) { %>name="ai_auto_tools" value="<%= t.name %>" <%= t.auto ? 'checked' : '' %><% } else { %>disabled <%= t.auto || !t.mutating ? 'checked' : '' %><% } %>>
                     <span>
                       <strong><%= t.label %></strong>
-                      <% if (t.neverAuto) { %><em class="ai-tool-tag">always confirm</em>
+                      <% if (t.sensitive) { %><em class="ai-tool-tag sensitive">sensitive · always confirms</em>
+                      <% } else if (t.neverAuto) { %><em class="ai-tool-tag">always confirm</em>
                       <% } else if (!t.mutating) { %><em class="ai-tool-tag">lookup</em>
                       <% } %>
                       <small class="muted"><%= t.description.slice(0, 140) %></small>
@@ -455,6 +505,8 @@
     <ul class="ai-help-list">
       <li><b>Reads run straight away.</b> Counts, lookups and status checks never change anything.</li>
       <li><b>Writes are confirmed.</b> A proposal card appears with the exact arguments; nothing executes until you press Run — unless you allow that action under Settings → Assistant auto-run.</li>
+      <li><b>Sensitive actions always ask.</b> Deletions, bulk listing actions, emailing everyone, maintenance mode, credentials and search-index resets are confirmed every time and can never be switched to auto-run.</li>
+      <li><b>Any provider.</b> Settings → Model providers lets you paste keys for Groq, OpenAI, Claude, Gemini, DeepSeek, Hugging Face, OpenRouter and more, and pick which one runs the console.</li>
       <li><b>Multi-step jobs finish.</b> Ask for a look-up plus an action and the assistant chains them in one turn. Several write actions arrive as a single numbered confirmation and run in order once you approve.</li>
       <li><b>Only real results are reported.</b> Every claim in a reply comes from the tool's actual return value — a failed action is reported as failed, never as done.</li>
       <li><b>No saved history.</b> The assistant can use messages visible in this tab for context, but conversations are not stored or restored after reload.</li>
@@ -473,6 +525,20 @@
   var CSRF = <%- JSON.stringify(csrfToken || '') %>;
   var BASE = '/admin3119Musa/ai';
   var READY = <%- ready ? 'true' : 'false' %>;
+  /* Every provider the console can talk to: id, label, models, endpoint, key state. */
+  var PROVIDERS = <%- JSON.stringify((settings.providers || []).map(function (p) {
+    return {
+      id: p.id, label: p.label, active: !!p.active, needs_key: !!p.needs_key,
+      key_source: p.key_source || '', key_set: !!p.key_set, key_hint: p.key_hint || '',
+      base_url: p.base_url || '', default_base: p.default_base || '',
+      model: p.model || '', default_model: p.default_model || '',
+      models: (p.models || []).map(function (m) {
+        return { id: m.id, label: m.label, tier: m.tier, note: m.note || '', tools: !!m.tools, json: !!m.json, available: m.available == null ? null : !!m.available };
+      }),
+    };
+  })) %>;
+  var ACTIVE = <%- JSON.stringify(settings.provider) %>;
+  var ACTIVE_LABEL = <%- JSON.stringify(settings.provider_label) %>;
   var MODELS = <%- JSON.stringify(settings.models.map(function (m) { return { id: m.id, label: m.label, tier: m.tier, available: m.available == null ? null : !!m.available, note: m.note || '', tools: !!m.tools }; })) %>;
   var START_TAB = <%- JSON.stringify(tab) %>;
   var DEFAULT_RULES = <%- JSON.stringify(settings.default_rules) %>;
@@ -710,7 +776,7 @@
 
   if (genBtn) {
     genBtn.addEventListener('click', function () {
-      if (!READY) { fail(genStatus, new Error('Add a Groq key first (Settings tab).')); return; }
+      if (!READY) { fail(genStatus, new Error('Add a model provider key first (Settings tab).')); return; }
       var prompt = (genPrompt.value || '').trim();
       if (prompt.length < 8) { fail(genStatus, new Error('Add a bit more detail first — name, site, or a couple of facts.')); return; }
       genBtn.disabled = true;
@@ -943,7 +1009,7 @@
   }
 
   function send() {
-    if (!READY) { fail(statusLine, new Error('Add a Groq key first (Settings tab).')); return; }
+    if (!READY) { fail(statusLine, new Error('Add a model provider key first (Settings tab).')); return; }
     if (state.busy) return;
     var text = (input.value || '').trim();
     if (!text) return;
@@ -964,8 +1030,8 @@
       syncUrl();
     }).catch(function (e) {
       killTyping(typing);
-      var bubble = addBubble('assistant', 'Groq could not answer: ' + e.message, { kind: 'bad', ok: false });
-      remember('assistant', 'Groq could not answer: ' + e.message);
+      var bubble = addBubble('assistant', 'The model could not answer: ' + e.message, { kind: 'bad', ok: false });
+      remember('assistant', 'The model could not answer: ' + e.message);
       var retry = el('button', 'btn btn-xs btn-ghost', 'Try again');
       retry.type = 'button';
       retry.addEventListener('click', function () {
@@ -1007,7 +1073,7 @@
     var sub = $('chat-head-sub');
     if (sub) {
       var bits = [];
-      bits.push(READY ? 'Live · ' + modelLabel(chatModel ? chatModel.value : state.model) : 'Groq key required');
+      bits.push(READY ? 'Live · ' + (activeProvider().label || ACTIVE_LABEL) + ' · ' + modelLabel(chatModel ? chatModel.value : state.model) : (ACTIVE_LABEL + ' key required'));
       bits.push('no saved history');
       bits.push('writes confirm first');
       sub.textContent = bits.join(' · ');
@@ -1123,34 +1189,136 @@
   }
 
   $('new-chat-btn').addEventListener('click', function () {
-    if (!READY) { fail(statusLine, new Error('Add a Groq key first (Settings tab).')); return; }
+    if (!READY) { fail(statusLine, new Error('Add a model provider key first (Settings tab).')); return; }
     startFresh();
   });
 
   /* ================= settings tab ================= */
+
+  /* -------- model providers: switching the active provider re-points the
+     default-model select and the chip strip at that provider's catalogue. -------- */
+
+  function activeProvider() {
+    var checked = document.querySelector('input[name="llm_provider"]:checked');
+    var id = checked ? checked.value : ACTIVE;
+    for (var i = 0; i < PROVIDERS.length; i++) if (PROVIDERS[i].id === id) return PROVIDERS[i];
+    return PROVIDERS[0];
+  }
+
+  function setModelNote(id) {
+    var note = $('set-model-note');
+    if (!note) return;
+    note.innerHTML = '';
+    note.appendChild(document.createTextNode('Selected model: '));
+    note.appendChild(el('span', 'mono', id));
+  }
+
+  /** Rebuild a <select> from a provider catalogue, keeping the current pick when possible. */
+  function fillModelSelect(node, p) {
+    if (!node) return;
+    var keep = node.value;
+    node.innerHTML = '';
+    p.models.forEach(function (m) {
+      var o = document.createElement('option');
+      o.value = m.id;
+      o.textContent = m.label + (m.available === false ? ' · not on this key' : '');
+      node.appendChild(o);
+    });
+    node.value = p.models.some(function (m) { return m.id === keep; }) ? keep : (p.model || (p.models[0] || {}).id || '');
+  }
+
+  function renderProviderModels(p) {
+    var sel = $('set-model');
+    if (sel) {
+      sel.innerHTML = '';
+      sel.setAttribute('name', 'llm_model_' + p.id);
+      p.models.forEach(function (m) {
+        var o = document.createElement('option');
+        o.value = m.id;
+        o.textContent = m.label + (m.available === false ? ' · not on this key' : '');
+        o.title = (m.note || '') + ' · ' + (m.tools ? 'tools ' : 'no tools ') + (m.json ? '+ JSON mode' : 'no JSON mode');
+        if (m.id === p.model) o.selected = true;
+        sel.appendChild(o);
+      });
+      if (!sel.value && p.models.length) sel.value = p.models[0].id;
+      setModelNote(sel.value || p.model || p.default_model);
+      state.model = sel.value || p.model;
+    }
+    var strip = $('model-strip');
+    if (strip) {
+      strip.textContent = '';
+      p.models.forEach(function (m) {
+        var b = el('button', 'ai-model-chip' + (sel && m.id === sel.value ? ' on' : ''));
+        b.type = 'button';
+        b.setAttribute('data-model', m.id);
+        b.title = (m.note || '') + ' · ' + (m.tools ? 'tools ' : 'no tools ') + (m.json ? '+ JSON mode' : 'no JSON mode');
+        b.appendChild(el('span', 'mc-label', m.label));
+        b.appendChild(el('span', 'mc-meta', (m.tier || '') + (m.available === false ? ' · unavailable' : '')));
+        strip.appendChild(b);
+      });
+      bindModelChips();
+    }
+    fillModelSelect(chatModel, p);
+    fillModelSelect(genModel, p);
+    if (chatModel) chatModel.value = (sel && sel.value) || chatModel.value;
+    if (genModel) genModel.value = (sel && sel.value) || genModel.value;
+    var owner = $('prov-model-owner');
+    if (owner) owner.textContent = p.label;
+    var ep = $('prov-endpoint');
+    if (ep) {
+      ep.innerHTML = '';
+      ep.appendChild(document.createTextNode('Endpoint: '));
+      ep.appendChild(el('span', 'mono', p.base_url || p.default_base));
+      ep.appendChild(document.createTextNode(p.key_source === 'env' ? ' · key source: .env' : (p.key_set ? ' · key source: settings table' : ' · no key saved yet')));
+    }
+    document.querySelectorAll('.ai-prov-card').forEach(function (card) {
+      card.classList.toggle('is-active', card.getAttribute('data-prov') === p.id);
+    });
+    markModelChips();
+    refreshHeadTitle();
+  }
 
   function markModelChips() {
     document.querySelectorAll('.ai-model-chip').forEach(function (c) {
       c.classList.toggle('on', c.getAttribute('data-model') === (chatModel ? chatModel.value : ''));
     });
   }
-  document.querySelectorAll('.ai-model-chip').forEach(function (chip) {
-    chip.addEventListener('click', function () {
-      var id = chip.getAttribute('data-model');
-      if (chatModel) chatModel.value = id;
-      if (genModel) genModel.value = id;
-      var setSel = $('set-model');
-      if (setSel) setSel.value = id;
-      var note = $('set-model-note');
-      if (note) note.innerHTML = '';
-      if (note) note.appendChild(document.createTextNode('Selected model: '));
-      if (note) note.appendChild(el('span', 'mono', id));
-      state.model = id;
-      markModelChips();
-      refreshHeadTitle();
+  function pickModel(id) {
+    if (chatModel) chatModel.value = id;
+    if (genModel) genModel.value = id;
+    var setSel = $('set-model');
+    if (setSel) setSel.value = id;
+    setModelNote(id);
+    state.model = id;
+    markModelChips();
+    refreshHeadTitle();
+  }
+  function bindModelChips() {
+    document.querySelectorAll('.ai-model-chip').forEach(function (chip) {
+      if (chip.dataset.bound === '1') return;
+      chip.dataset.bound = '1';
+      chip.addEventListener('click', function () { pickModel(chip.getAttribute('data-model')); });
+    });
+  }
+  bindModelChips();
+  markModelChips();
+
+  /* Choosing a provider in the grid re-points the model picker straight away;
+     the change itself is stored when the form is saved. */
+  document.querySelectorAll('input[name="llm_provider"]').forEach(function (radio) {
+    radio.addEventListener('change', function () {
+      if (!radio.checked) return;
+      var p = activeProvider();
+      renderProviderModels(p);
+      var out = $('test-status');
+      if (out) {
+        out.textContent = p.id === ACTIVE
+          ? ''
+          : p.label + ' selected — press Save settings to switch the whole console over to it.';
+        out.className = 'muted ai-status';
+      }
     });
   });
-  markModelChips();
 
   if ($('rules-defaults')) {
     $('rules-defaults').addEventListener('click', function () {
@@ -1179,39 +1347,60 @@
     });
   });
 
-  function testConnection() {
-    var btns = [$('test-key-btn'), $('test-key-btn-2')];
-    btns.forEach(function (b) { if (b) { b.dataset.was = b.textContent.trim(); b.textContent = 'Checking…'; b.disabled = true; } });
-    var out = $('test-status');
-    if (out) out.textContent = 'Asking Groq for the live model list…';
-    api('/test', { method: 'POST', body: { model: chatModel ? chatModel.value : '' } }).then(function (data) {
+  function providerById(id) {
+    for (var i = 0; i < PROVIDERS.length; i++) if (PROVIDERS[i].id === id) return PROVIDERS[i];
+    return null;
+  }
+
+  function markLiveModels(pid, ids) {
+    var p = providerById(pid);
+    if (!p) return;
+    p.models.forEach(function (m) { m.available = ids.indexOf(m.id) > -1; });
+    MODELS = p.models;
+  }
+
+  /** Test one provider — the top buttons use whichever provider is selected. */
+  function testConnection(providerId, statusEl) {
+    var pid = providerId || activeProvider().id;
+    var p = providerById(pid) || {};
+    var btns = [$('test-key-btn'), $('test-key-btn-2'), document.querySelector('[data-test-prov="' + pid + '"]')].filter(Boolean);
+    btns.forEach(function (b) { b.dataset.was = b.textContent.trim(); b.textContent = 'Checking…'; b.disabled = true; });
+    var out = statusEl || $('test-status');
+    if (out) out.textContent = 'Asking ' + (p.label || pid) + ' for the live model list…';
+    var sel = $('set-model');
+    var model = pid === activeProvider().id && sel ? sel.value : (p.model || '');
+    return api('/test', { method: 'POST', body: { provider: pid, model: model } }).then(function (data) {
       var t = data.test || {};
       var line;
       if (t.ok) {
-        line = 'Groq reachable · model ' + (t.used_model || t.model) + ' replied "' + (t.reply || 'ok') + '"'
+        line = (t.provider_label || pid) + ' reachable · model ' + (t.used_model || t.model) + ' replied "' + (t.reply || 'ok') + '"'
           + (t.models ? ' · ' + t.models.length + ' ids available' : '')
           + (t.model_available === false ? ' · selected id not on this key' : '');
       } else {
-        line = 'Groq test failed: ' + (t.error || t.list_error || 'unknown error');
+        line = (t.provider_label || pid) + ' test failed: ' + (t.error || t.list_error || 'unknown error');
       }
       if (out) {
         out.textContent = line;
-        out.className = 'ai-status ' + (t.ok ? 'ai-status-ok' : 'ai-status-bad');
+        out.className = (statusEl ? 'muted ai-prov-status ' : 'ai-status ') + (t.ok ? 'ai-status-ok' : 'ai-status-bad');
       }
-      if (data.settings && data.settings.live_models) {
-        MODELS = MODELS.map(function (m) {
-          m.available = data.settings.live_models.indexOf(m.id) > -1;
-          return m;
-        });
-      }
-      toast(t.ok ? 'ok' : 'err', line.slice(0, 180), 'Groq connection');
+      if (t.models && t.models.length) markLiveModels(pid, t.models);
+      if (pid === activeProvider().id) renderProviderModels(providerById(pid));
+      toast(t.ok ? 'ok' : 'err', line.slice(0, 180), 'Model provider');
     }).catch(function (e) {
-      if (out) { out.textContent = e.message; out.className = 'ai-status ai-status-bad'; }
+      if (out) { out.textContent = e.message; out.className = (statusEl ? 'muted ai-prov-status ' : 'ai-status ') + 'ai-status-bad'; }
     }).then(function () {
-      btns.forEach(function (b) { if (b) { b.textContent = b.dataset.was || b.textContent; b.disabled = false; } });
+      btns.forEach(function (b) { b.textContent = b.dataset.was || b.textContent; b.disabled = false; });
     });
   }
-  [$('test-key-btn'), $('test-key-btn-2')].forEach(function (b) { if (b) b.addEventListener('click', testConnection); });
+  [$('test-key-btn'), $('test-key-btn-2')].forEach(function (b) {
+    if (b) b.addEventListener('click', function () { testConnection(null, $('test-status')); });
+  });
+  document.querySelectorAll('[data-test-prov]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var pid = b.getAttribute('data-test-prov');
+      testConnection(pid, document.querySelector('[data-prov-status="' + pid + '"]'));
+    });
+  });
 
   if ($('mod-run-btn')) {
     $('mod-run-btn').addEventListener('click', function () {
@@ -1370,7 +1559,7 @@
   });
   if (!READY) {
     var s = $('chat-head-sub');
-    if (s) s.textContent = 'Groq key required — add one in Settings';
+    if (s) s.textContent = ACTIVE_LABEL + ' key required — add one in Settings';
   }
 })();
 </script>

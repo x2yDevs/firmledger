@@ -10,6 +10,7 @@
 const crypto = require('crypto');
 const { db, getSetting, setSetting } = require('../db');
 const groq = require('./groq');
+const llm = require('./llm');
 const tools = require('./aitools');
 const { TYPES, CATEGORIES, SIZES, COUNTRIES } = require('./taxonomy');
 const catLib = require('./categories');
@@ -308,24 +309,32 @@ function sanitiseHistory(messages) {
 }
 
 function assistantSystemPrompt() {
+  const active = llm.provider(llm.activeId());
   const auto = [...tools.autoSet()];
+  const sensitive = tools.sensitiveTools();
   const autoLine = auto.length
     ? `These write tools are configured to run immediately (no confirm): ${auto.join(', ')}.`
     : 'Every write tool requires operator confirmation before it runs.';
-  return `You are the FirmLedger admin assistant. You operate the live admin console using tools — listings, users, billing, claims, tickets, removals, blog, email, careers, promos, advertising, protection, maintenance, status incidents, and settings.
+  return `You are the FirmLedger admin assistant. You are signed in as the site administrator and you operate the live admin console through tools. You have full authority over the whole product — listings and the directory, members and billing, claims, tickets and removal requests, the blog, member news, careers, promos, plan and advert packages, categories, advertising, email delivery, search indexing, upkeep, the public status page, protection lists and rate limits, the admin inbox, backups and every site setting. If an admin asks for something the console can do, do it with a tool. Never claim you cannot reach part of the console — find the tool that does it.
+
+Start from the real state of the site, not from assumptions. When you are unsure what FirmLedger is, which pages or settings exist, or what an action would touch, call get_site_overview, get_settings, get_listing, get_user, search_admin or get_ai_playground before you answer or act.
 
 Available tools:
 ${tools.capabilityPrompt()}
 
 Rules:
-- Prefer a tool for any admin action or factual lookup. Do not invent ids, emails, slugs or counts.
-- Finish the whole job. If a request needs several actions, call them — one after another is fine, and you may call more than one tool in a single response. You will be given each tool's real result before you answer.
-- Look things up first when you are missing an id or slug (search_listings, search_users, search_admin, the list_* tools), then act on what you found.
+- Prefer a tool for any admin action or factual lookup. Do not invent ids, emails, slugs, counts or settings values.
+- Look things up first when you are missing an id or slug (search_listings, search_users, search_admin, get_listing, get_user, list_content, the list_* tools), then act on what you found.
+- Finish the whole job. If a request needs several actions, call them — one after another is fine, and you may call more than one tool in a single response. You are given each tool's real result before you answer.
 - If a request is ambiguous (which listing / which user?), ask a clarifying question instead of calling a tool.
 - Never claim you already did a write. Report only what the tool results show: if a tool returned an error, say so plainly and do not describe it as done.
 - ${autoLine}
-- Destructive actions (delete user, delete listing, email everyone, maintenance on, fulfill removal) only when the operator is explicit.
-- Be concise.`;
+- Sensitive actions ALWAYS stop for operator confirmation, whatever the auto-run list says: ${sensitive.join(', ')}. Never work around a confirmation by splitting the action into smaller calls.
+- Other destructive or wide-reaching work (deleting records, emailing everyone, maintenance mode, bulk listing actions, removing search-index credentials) only when the operator is explicit about it.
+- Never reveal API keys, SMTP passwords, PayPal secrets or recovery codes — the tools return masked hints only, and you must not ask for the raw value.
+- Be concise. State what changed, with ids or names, and say what still needs doing.
+
+You are currently running on ${active.label} (${active.id}, model ${llm.modelFor(active.id)}).`;
 }
 
 /* How far one turn may go on its own before it must come back to the operator. */
@@ -641,7 +650,7 @@ function isModerationOn() {
    assistant. Falls back to the playground default when unset. */
 function moderationModelId() {
   const m = String(getSetting('ai_moderation_model', '') || '').trim();
-  return groq.isKnownModel(m) ? m : groq.modelId();
+  return (m && llm.isKnownModel(m, llm.activeId())) ? m : llm.modelFor(llm.activeId());
 }
 
 function scheduleModeration(listingId) {
@@ -772,6 +781,11 @@ function notifyAdminUnsure(l, reason) {
   }
 }
 
+/** Does an environment variable already pin this provider's key? */
+function envKeySet(p) {
+  return (p.env || []).some((name) => String(process.env[name] || '').trim());
+}
+
 function settingsSnapshot() {
   const keySet = groq.groqConfigured();
   const src = groq.groqKeySource();
@@ -779,6 +793,11 @@ function settingsSnapshot() {
   let pending = 0;
   try { pending = db.prepare('SELECT COUNT(*) AS c FROM ai_pending_actions').get().c; } catch { pending = 0; }
   return {
+    /* Multi-provider model gateway — Groq stays the default. */
+    provider: llm.activeId(),
+    provider_label: llm.provider(llm.activeId()).label,
+    providers: llm.providersView(),
+    providers_configured: llm.configuredProviders(),
     groq_configured: keySet,
     groq_key_source: src,
     groq_key_set: keySet,
@@ -798,6 +817,7 @@ function settingsSnapshot() {
     tools: tools.catalog(),
     tool_groups: tools.GROUPS,
     auto_tools: [...tools.autoSet()],
+    sensitive_tools: tools.sensitiveTools(),
     pending_actions: pending,
   };
 }
@@ -811,9 +831,37 @@ function logSnapshot(limit = 40) {
 }
 
 function saveSettings(body) {
+  /* ---- Model providers: pick one, paste keys, choose models, set endpoints ---- */
+  if (body.llm_provider !== undefined && String(body.llm_provider || '').trim()) {
+    const pid = String(body.llm_provider).trim();
+    if (!llm.isValidProvider(pid)) {
+      const err = new Error(`“${pid}” is not a model provider this console knows.`);
+      err.status = 422;
+      throw err;
+    }
+    llm.setActiveProvider(pid);
+  }
+  for (const p of llm.PROVIDERS) {
+    const pid = p.id;
+    /* Keys: env always wins, and an empty field must never wipe a saved key. */
+    const keyField = `llm_key_${pid}`;
+    if (body[keyField] !== undefined && !envKeySet(p)) {
+      const k = String(body[keyField] || '').trim();
+      if (k) llm.setApiKey(pid, k);
+      if (String(body[`${keyField}_clear`] || '') === '1') llm.setApiKey(pid, '');
+    }
+    if (body[`llm_model_${pid}`] !== undefined) {
+      const m = String(body[`llm_model_${pid}`] || '').trim();
+      if (m) llm.setModel(pid, m);
+    }
+    if (body[`llm_base_${pid}`] !== undefined) {
+      const b = String(body[`llm_base_${pid}`] || '').trim();
+      if (b || p.allowCustom || p.baseEnv) llm.setBaseUrl(pid, b);
+    }
+  }
   if (body.groq_model !== undefined) {
     const m = String(body.groq_model || '').trim();
-    if (groq.MODELS.some((x) => x.id === m)) setSetting('groq_model', m);
+    if (llm.provider('groq').models.some((x) => x.id === m)) setSetting('groq_model', m);
   }
   if (!process.env.GROQ_API_KEY && body.groq_api_key !== undefined) {
     const k = String(body.groq_api_key || '').trim();
@@ -831,7 +879,7 @@ function saveSettings(body) {
   if (body.ai_moderation_model !== undefined) {
     const m = String(body.ai_moderation_model || '').trim();
     if (!m || m === '__default__') setSetting('ai_moderation_model', '');
-    else if (groq.isKnownModel(m)) setSetting('ai_moderation_model', m);
+    else if (llm.isKnownModel(m, llm.activeId())) setSetting('ai_moderation_model', m);
   }
   if (body.ai_auto_tools_present !== undefined) {
     const raw = body.ai_auto_tools;
@@ -842,7 +890,9 @@ function saveSettings(body) {
     kind: 'settings',
     action: 'save',
     payload: {
-      model: getSetting('groq_model', ''),
+      provider: llm.activeId(),
+      model: llm.modelFor(llm.activeId()),
+      providers_with_keys: llm.configuredProviders(),
       moderation_on: getSetting('ai_moderation_on', '0'),
       moderation_model: getSetting('ai_moderation_model', ''),
       auto_tools: [...tools.autoSet()],
@@ -904,11 +954,11 @@ function recentAudit(limit = 40, offset = 0) {
   return logsPage('audit', { limit, offset }).rows;
 }
 
-/** Resolve a requested model against the known list; fall back to the default. */
+/** Resolve a requested model against the active provider; fall back to its default. */
 function chatModelFor(requested) {
   const cand = String(requested || '').trim();
-  if (groq.isKnownModel(cand)) return cand;
-  return groq.modelId();
+  if (cand && llm.isKnownModel(cand, llm.activeId())) return cand;
+  return llm.modelFor(llm.activeId());
 }
 /** Oldest un-reviewed submissions — feeds the “Review one now” picker. */
 function oldestPending(limit = 30) {
@@ -930,7 +980,7 @@ function deleteModerationLogEntry(id) {
 
 module.exports = {
   DEFAULT_MODERATION_RULES,
-  audit, generateListing, publishListing, applyListingLimits,
+  audit, generateListing, publishListing, applyListingLimits, envKeySet,
   chatTurn, executePending, cancelPending,
   scheduleModeration, moderateListing, isModerationOn, moderationModelId,
   settingsSnapshot, saveSettings, recentModeration, recentAudit, logsPage, logSnapshot, oldestPending,

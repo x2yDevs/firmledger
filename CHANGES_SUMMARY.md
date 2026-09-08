@@ -362,8 +362,9 @@ npm run test:pages  # every admin page renders and its list scrolls
 
 | Suite | What it proves |
 | --- | --- |
-| `tests/ai-tools.test.js` | all 63 assistant tools really change the database |
-| `tests/ai-agent.test.js` | chaining, batched confirmation, cancellation, honest failures (Groq stubbed — no key needed) |
+| `tests/ai-tools.test.js` | all 113 assistant tools really change the database, and sensitive ones can never be auto-run |
+| `tests/ai-agent.test.js` | chaining, batched confirmation, cancellation, honest failures (model stubbed — no key needed) |
+| `tests/ai-providers.test.js` | every provider dialect on the wire (OpenAI, Anthropic, Gemini, Cohere), key resolution, provider switching, fallback, rate limits + the Playground console UI |
 | `tests/backup.test.js` | backup carries users + all listings + configuration, restores into an empty database, and is idempotent |
 | `tests/admin-pages.test.js` | boots the real server and checks every admin page renders with its list in a scroll region |
 | `tests/admin-tech-refresh.test.js` | technology-radar maintenance end to end, offline: one listing, a selection, a filtered view, stale and whole-directory runs, the single-run lock, cancellation, CSRF and the tech filter |

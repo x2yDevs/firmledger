@@ -14,6 +14,7 @@ const { requireAdmin } = require('../lib/session');
 const { TYPES, SIZES, COUNTRIES } = require('../lib/taxonomy');
 const catLib = require('../lib/categories');
 const groq = require('../lib/groq');
+const llm = require('../lib/llm');
 const ai = require('../lib/ai');
 const svc = require('../lib/apilistings');
 
@@ -97,15 +98,21 @@ router.post(`${BASE}/settings`, (req, res) => {
   }
 });
 
-/** Verify the key + refresh which models this key can actually call. */
+/**
+ * Verify a provider: is the key accepted, which models can it call, and does a
+ * tiny completion come back? `provider` defaults to the active one, so the
+ * existing "Check key & sync models" button keeps working unchanged.
+ */
 router.post(`${BASE}/test`, json(async (req, res) => {
-  const model = str(req.body && req.body.model, 100);
-  const result = await groq.testConnection(model);
+  const model = str(req.body && req.body.model, 160);
+  const wanted = str(req.body && req.body.provider, 40);
+  const providerId = wanted && llm.isValidProvider(wanted) ? wanted : llm.activeId();
+  const result = await llm.testConnection(providerId, model);
   try {
     ai.audit({
       kind: 'settings',
       action: 'test',
-      payload: { model: model || groq.modelId() },
+      payload: { provider: providerId, model: model || llm.modelFor(providerId) },
       result: result.ok ? `ok${result.used_model ? ` · ${result.used_model}` : ''}` : result.error,
       ok: result.ok ? 1 : 0,
     });
@@ -113,10 +120,27 @@ router.post(`${BASE}/test`, json(async (req, res) => {
   return res.json({
     ok: true,
     test: result,
+    provider: providerId,
+    providers: llm.providersView(),
     settings: ai.settingsSnapshot(),
   });
 }));
 
+/** Make one provider the one the whole console runs on. */
+router.post(`${BASE}/provider`, json(async (req, res) => {
+  const pid = str(req.body && req.body.provider, 40);
+  if (!llm.isValidProvider(pid)) return jsonError(res, 422, `“${pid}” is not a provider this console knows.`);
+  llm.setActiveProvider(pid);
+  ai.audit({
+    kind: 'settings',
+    action: 'provider',
+    payload: { provider: pid, model: llm.modelFor(pid) },
+    result: `active provider → ${llm.provider(pid).label}`,
+  });
+  return res.json({ ok: true, provider: pid, providers: llm.providersView(), settings: ai.settingsSnapshot() });
+}));
+
+/** The whole provider catalogue — models, key state, live ids — for the console. */
 router.get(`${BASE}/models`, (req, res) => {
   res.json({
     ok: true,
@@ -126,6 +150,8 @@ router.get(`${BASE}/models`, (req, res) => {
     default: groq.DEFAULT_MODEL,
     live_checked_at: groq.liveSnapshot().checked_at,
     live_models: groq.liveSnapshot().ids,
+    provider: llm.activeId(),
+    providers: llm.providersView(),
   });
 });
 
