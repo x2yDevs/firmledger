@@ -113,6 +113,75 @@
       <% if (!l.website) { %><p class="form-note">Add a website to this listing — the scan reads the public homepage.</p><% } %>
     </div>
 
+    <div class="form-card" id="news">
+      <h3 class="form-section">News about this company</h3>
+      <p class="muted" style="font-size:13.5px;margin-bottom:12px">
+        Stories shown on the public profile. Detected stories have to name this company or sit on its own domain;
+        member submissions wait here until someone approves them.
+        <% if (newsCheckedAt) { %><br><small class="muted">Last checked for news: <%= newsCheckedAt %></small><% } else { %><br><small class="muted">Never checked for news.</small><% } %>
+      </p>
+
+      <form method="post" action="/admin3119Musa/news/refresh" class="inline" style="margin-bottom:14px">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <input type="hidden" name="scope" value="selected">
+        <input type="hidden" name="ids" value="<%= l.id %>">
+        <button class="btn btn-primary btn-sm" type="submit" <%= l.name ? '' : 'disabled' %>>Look for stories now</button>
+        <a class="btn btn-ghost btn-sm" href="/admin3119Musa/news">Full news queue →</a>
+      </form>
+
+      <% if (newsItems.length) { %>
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Story</th><th>Origin</th><th>Status</th><th class="ta-right">Moderate</th></tr></thead>
+            <tbody>
+              <% newsItems.forEach(function (n) { %>
+                <tr>
+                  <td style="max-width:380px">
+                    <% if (n.url) { %><a href="<%= n.url %>" target="_blank" rel="noopener nofollow"><strong><%= n.title %></strong></a><% } else { %><strong><%= n.title %></strong><% } %>
+                    <br><small class="muted"><%= n.source || 'no publication' %><% if (n.published_at) { %> · <%= n.published_at %><% } %></small>
+                  </td>
+                  <td><small class="muted"><%= newsOriginLabel(n) %></small></td>
+                  <td><span class="pill pill-<%= n.status %>"><%= n.status %></span></td>
+                  <td class="ta-right actions-cell">
+                    <% if (n.status !== 'approved') { %>
+                    <form method="post" action="/admin3119Musa/news/<%= n.id %>/approve" class="inline">
+                      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                      <button class="btn btn-primary btn-xs" type="submit">Approve</button>
+                    </form>
+                    <% } %>
+                    <% if (n.status !== 'rejected') { %>
+                    <form method="post" action="/admin3119Musa/news/<%= n.id %>/reject" class="inline">
+                      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                      <button class="btn btn-ghost btn-xs" type="submit">Reject</button>
+                    </form>
+                    <% } %>
+                    <form method="post" action="/admin3119Musa/news/<%= n.id %>/delete" class="inline" onsubmit="return confirm('Delete this story permanently?');">
+                      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                      <button class="btn btn-danger btn-xs" type="submit">Delete</button>
+                    </form>
+                  </td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+      <% } else { %><p class="muted">No stories yet.</p><% } %>
+
+      <form method="post" action="/admin3119Musa/news/add" class="form" style="margin-top:16px;border-top:1px solid var(--hair);padding-top:14px">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <input type="hidden" name="listing_id" value="<%= l.id %>">
+        <div class="grid-3">
+          <label><span>Published on</span><input type="date" name="published_at" max="<%= todayIso %>"></label>
+          <label><span>Publication</span><input type="text" name="source" maxlength="80" placeholder="e.g. Business Daily"></label>
+          <label><span>Link</span><input type="url" name="url" maxlength="500" placeholder="https://…"></label>
+        </div>
+        <label style="margin-top:10px"><span>Headline *</span>
+          <input type="text" name="title" required maxlength="220" placeholder="e.g. Raises Sh200m to expand across East Africa">
+        </label>
+        <div class="form-actions" style="margin-top:12px"><button class="btn btn-primary btn-sm" type="submit">Publish story</button></div>
+      </form>
+    </div>
+
     <div class="form-card" id="ownership">
       <h3 class="form-section">Ownership — make anyone the owner, or remove the owner</h3>
       <% if (typeof ok !== 'undefined' && ok) { %><div class="alert alert-ok"><%= ok %></div><% } %>

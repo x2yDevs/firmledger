@@ -28,6 +28,7 @@ const { runCheck } = require('./verify');
 const { finalizeVerifiedClaim } = require('./claimflow');
 const listingEvents = require('./listingevents');
 const techrefresh = require('./techrefresh');
+const news = require('./news');
 
 function findListing(idOrSlug) {
   const raw = String(idOrSlug || '').trim();
@@ -340,6 +341,38 @@ const TOOLS = [
         technologies: r.count, tech: r.tech, changed: r.changed,
         before: r.before, scanned_at: row.tech_checked_at, hiring_url: row.hiring_url || '',
       };
+    },
+  },
+  {
+    name: 'approve_news', group: 'moderation', label: 'Approve news story', mutating: true,
+    description: 'Approve a submitted news story (by id) so it appears on the listing profile. Rejected and already-published stories cannot be approved twice.',
+    parameters: {
+      type: 'object',
+      properties: { id: { type: 'string', description: 'News story id (Admin → News shows it).' } },
+      required: ['id'], additionalProperties: false,
+    },
+    summarize(a) { return `Approve news story #${a.id}.`; },
+    run(args) {
+      const r = news.approve(args.id, 'assistant');
+      if (!r.ok) return { error: r.error };
+      const n = db.prepare('SELECT * FROM listing_news WHERE id=?').get(r.id);
+      return { ok: true, id: n.id, title: n.title, listing_id: n.listing_id, status: n.status };
+    },
+  },
+  {
+    name: 'reject_news', group: 'moderation', label: 'Reject news story', mutating: true,
+    description: 'Reject a submitted news story (by id) — it stays out of the public profile and the submitter is told.',
+    parameters: {
+      type: 'object',
+      properties: { id: { type: 'string', description: 'News story id (Admin → News shows it).' } },
+      required: ['id'], additionalProperties: false,
+    },
+    summarize(a) { return `Reject news story #${a.id}.`; },
+    run(args) {
+      const r = news.reject(args.id, 'assistant');
+      if (!r.ok) return { error: r.error };
+      const n = db.prepare('SELECT * FROM listing_news WHERE id=?').get(r.id);
+      return { ok: true, id: n.id, title: n.title, listing_id: n.listing_id, status: n.status };
     },
   },
   {

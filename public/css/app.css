@@ -741,6 +741,16 @@ img.logo-tile { object-fit: contain; padding: 4px; background: #fff; border: 1px
 .hiring-note a { color: var(--ok); text-decoration: underline; }
 .hiring-note b { font-weight: 700; }
 
+/* News about a company — profile panel, submit page and the admin queue. */
+.news-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.news-item { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  border: 1px solid var(--hair); border-radius: var(--r); background: var(--surface); padding: 12px 14px; }
+.news-item-main { min-width: 0; display: grid; gap: 3px; }
+.news-item-main b { font: 600 13.5px/1.45 var(--fb); color: var(--ink); }
+.news-item-main a:hover b { color: var(--accent2); text-decoration: underline; }
+.news-sum { margin: 2px 0 0; font-size: 13px; color: var(--muted); }
+.news-item .pill { flex: 0 0 auto; }
+
 .faq-list { display: grid; gap: 8px; }
 .faq { border: 1px solid var(--hair); border-radius: var(--r); background: var(--surface); }
 .faq summary { list-style: none; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 13px 16px; cursor: pointer; font: 600 13.5px/1.4 var(--fb); color: var(--ink); }

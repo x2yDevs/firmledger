@@ -1,5 +1,52 @@
 # FirmLedger — change summary
 
+## 2026-09-08 — Listing news: automatic detection, member submissions, moderation
+
+Every profile can now carry what is being published about the company, and the
+ledger keeps it honest in both directions.
+
+**Detection.** A sweep searches a public news index (Google News RSS by default,
+`NEWS_SEARCH_URL` to point it elsewhere) for each company. A story is stored
+only if it clears the accuracy gate in `lib/news.js`: it carries the company's
+**full name as a phrase** (legal suffixes stripped, so "Safari Fintech Ltd" and
+"Safari Fintech Limited" are one company), or it sits on — or cites — the
+company's **own domain** (the `<source url="…">` of wrapped feeds counts). A
+partial name ("Safari" for "Safari Fintech"), a namesake, or unrelated coverage
+is dropped: near-misses are never stored, and a failed scan records nothing
+rather than guessing.
+
+**Member submissions.** Anyone signed in can submit a story from
+`/listing/:slug/news` (headline, link, publication, date, note). It lands in
+`pending`, is invisible on the public profile, and notifies the console and the
+owner. A moderator approves or rejects it in **Admin → News** — the submitter is
+told either way, and the page shows them the status of their own submissions.
+Duplicate links are refused, CSRF and the rate limiter apply, and guests are
+sent to sign in first.
+
+**The console.** Admin → **News** is one queue for all of it: pending
+submissions to moderate, detected stories, stories written by hand (published
+immediately, because a human wrote them), filters by status and origin, and the
+sweep controls — *Check N due listings* / *Check all N listings* — with the same
+background-runner contract as the technology radar (live progress, one run at a
+time, stoppable, last run recorded). Each listing's edit page has its own News
+panel: its stories, **Look for stories now**, and add-one-by-hand. Detected
+stories can be held for moderation instead of publishing (`news_review_auto`).
+The assistant gained `approve_news` / `reject_news` (63 tools).
+
+**Automated upkeep** (the scheduled sweep that was still missing): an hourly
+job, on by default, that refreshes stale technology snapshots and re-checks
+news coverage — capped per hour, per-job switchable, and clamped when saved.
+Admin → Settings → **Automated upkeep** carries the switches, the caps, the
+last run and a **Run upkeep now** button. The console's own buttons are
+unaffected by the schedule.
+
+```
+npm test                          # 12 suites
+node tests/news-upkeep.test.js    # 81 checks, fully offline
+```
+
+---
+
 ## 2026-09-08 — Admin → Listings: refresh the technology radar (one, a selection, or all)
 
 Keeping every profile's technology snapshot honest is now a first-class admin
@@ -287,11 +334,12 @@ npm run test:pages  # every admin page renders and its list scrolls
 
 | Suite | What it proves |
 | --- | --- |
-| `tests/ai-tools.test.js` | all 61 assistant tools really change the database |
+| `tests/ai-tools.test.js` | all 63 assistant tools really change the database |
 | `tests/ai-agent.test.js` | chaining, batched confirmation, cancellation, honest failures (Groq stubbed — no key needed) |
 | `tests/backup.test.js` | backup carries users + all listings + configuration, restores into an empty database, and is idempotent |
 | `tests/admin-pages.test.js` | boots the real server and checks every admin page renders with its list in a scroll region |
 | `tests/admin-tech-refresh.test.js` | technology-radar maintenance end to end, offline: one listing, a selection, a filtered view, stale and whole-directory runs, the single-run lock, cancellation, CSRF and the tech filter |
+| `tests/news-upkeep.test.js` | the news accuracy gate (name, domain, near-miss and wrapped-link cases), detection, member submission → pending → approval, console moderation, background sweeps and the hourly upkeep schedule |
 
 `FIRMLEDGER_DATA_DIR` was added to `src/db.js` so suites run against a temporary
 database and never touch `data/`.

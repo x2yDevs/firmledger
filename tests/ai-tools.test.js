@@ -284,6 +284,27 @@ function seed() {
     return one('SELECT status FROM removal_requests WHERE id=?', f.removal).status === 'removed' ? null : 'request not closed';
   });
 
+  /* News moderation — a member-submitted story, then the assistant's verdict. */
+  const newsLib = require('../src/lib/news.js');
+  const submitted = newsLib.submit({
+    listing: one('SELECT * FROM listings WHERE id=?', f.gamma),
+    user: one('SELECT * FROM users WHERE id=?', f.member),
+    title: 'Gamma Group signs a nationwide distribution deal',
+    url: 'https://newsroom.example/gamma/distribution', source: 'Business Daily',
+    published_at: '2026-05-02',
+  });
+  await tool('approve_news', { id: String(submitted.id) }, () => (
+    one('SELECT status FROM listing_news WHERE id=?', submitted.id).status === 'approved' ? null : 'story not approved in DB'));
+  await tool('approve_news', { id: '999999' }, null, { expectFail: true });
+
+  const submitted2 = newsLib.submit({
+    listing: one('SELECT * FROM listings WHERE id=?', f.gamma),
+    user: one('SELECT * FROM users WHERE id=?', f.member),
+    title: 'Gamma Group rumoured to be raising again', url: 'https://rumour.example/gamma',
+  });
+  await tool('reject_news', { id: String(submitted2.id) }, () => (
+    one('SELECT status FROM listing_news WHERE id=?', submitted2.id).status === 'rejected' ? null : 'story not rejected in DB'));
+
   /* ============================ Content ============================ */
   section('Content');
   await tool('email_users', { audience: 'all', subject: 'Ledger maintenance', message: 'A short scheduled-maintenance note for every member.' },

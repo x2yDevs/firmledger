@@ -375,6 +375,7 @@ router.get('/admin3119Musa/dashboard', (req, res) => {
   stats.techNever = db.prepare(
     "SELECT COUNT(*) c FROM listings WHERE website <> '' AND (tech_checked_at IS NULL OR tech_checked_at = '')"
   ).get().c;
+  stats.newsPending = require('../lib/news').counts().pending;
   const recent = db.prepare("SELECT * FROM listings ORDER BY created_at DESC LIMIT 8").all();
   res.render('admin/dashboard', {
     meta: { title: 'Admin — FirmLedger', description: '', robots: 'noindex,nofollow' },
@@ -687,6 +688,135 @@ router.post('/admin3119Musa/listings/tech-job/cancel', (req, res) => {
     : 'No refresh run is in progress.'));
 });
 
+/* ---------------- Listing news ----------------
+ * Stories about a company: detected from the public news index (auto, and only
+ * when they clear the accuracy gate) or submitted by a member (manual, and
+ * always held for moderation until someone here approves them).
+ */
+const newsLib = require('../lib/news');
+const upkeep = require('../lib/upkeep');
+
+/** Back to the news queue, keeping the active filter. */
+function newsRedirect(body, kind = '', msg = '') {
+  const p = new URLSearchParams();
+  const st = String((body || {}).status || '');
+  if (['pending', 'approved', 'rejected'].includes(st)) p.set('status', st);
+  const q = String((body || {}).q || '').trim().slice(0, 80);
+  if (q) p.set('q', q);
+  if (msg) p.set(kind || 'ok', msg);
+  const qs = p.toString();
+  return '/admin3119Musa/news' + (qs ? `?${qs}` : '');
+}
+
+router.get('/admin3119Musa/news', (req, res) => {
+  const status = ['pending', 'approved', 'rejected'].includes(req.query.status) ? req.query.status : '';
+  const origin = ['auto', 'user', 'admin'].includes(req.query.origin) ? req.query.origin : '';
+  const q = String(req.query.q || '').trim().slice(0, 80);
+  let rows = newsLib.recent(status, 300);
+  if (origin) rows = rows.filter((r) => r.origin === origin);
+  if (q) {
+    const needle = q.toLowerCase();
+    rows = rows.filter((r) => `${r.title} ${r.listing_name} ${r.source}`.toLowerCase().includes(needle));
+  }
+  res.render('admin/news', {
+    meta: { title: 'News — FirmLedger Admin', description: '', robots: 'noindex,nofollow' },
+    rows, section: 'news', status, origin, q,
+    counts: newsLib.counts(),
+    job: newsLib.jobState(),
+    lastRun: newsLib.lastRun(),
+    reviewAuto: newsLib.autoStatus() === 'pending',
+    upkeep: upkeep.settings(),
+    listings: db.prepare("SELECT id, name, slug FROM listings WHERE status='approved' ORDER BY name LIMIT 500").all(),
+    ok: req.query.ok || '', err: req.query.err || '',
+  });
+});
+
+/* Whether detected stories publish straight away or wait for a moderator. */
+router.post('/admin3119Musa/news/settings', (req, res) => {
+  setSetting('news_review_auto', req.body.news_review_auto === '1' ? '1' : '0');
+  return res.redirect(newsRedirect(req.body, 'ok', req.body.news_review_auto === '1'
+    ? 'Detected stories now wait for moderation before they appear.'
+    : 'Detected stories publish as soon as they match.'));
+});
+
+router.post('/admin3119Musa/news/:id/approve', (req, res) => {
+  const r = newsLib.approve(req.params.id, 'admin');
+  return res.redirect(newsRedirect(req.body, r.ok ? 'ok' : 'err',
+    r.ok ? 'Story approved — it now appears on the listing.' : r.error));
+});
+
+router.post('/admin3119Musa/news/:id/reject', (req, res) => {
+  const r = newsLib.reject(req.params.id, 'admin');
+  return res.redirect(newsRedirect(req.body, r.ok ? 'ok' : 'err',
+    r.ok ? 'Story rejected — the submitter has been told.' : r.error));
+});
+
+router.post('/admin3119Musa/news/:id/delete', (req, res) => {
+  const r = newsLib.remove(req.params.id);
+  return res.redirect(newsRedirect(req.body, r.ok ? 'ok' : 'err', r.ok ? 'Story deleted.' : r.error));
+});
+
+/* A story written here is published immediately — it came from a human. */
+router.post('/admin3119Musa/news/add', (req, res) => {
+  const l = db.prepare('SELECT * FROM listings WHERE id=?').get(req.body.listing_id);
+  if (!l) return res.redirect(newsRedirect(req.body, 'err', 'Pick a listing first.'));
+  const r = newsLib.addManual({
+    listing: l,
+    title: req.body.title, url: req.body.url, source: req.body.source,
+    published_at: req.body.published_at, summary: req.body.summary,
+  });
+  return res.redirect(newsRedirect(req.body, r.ok ? 'ok' : 'err',
+    r.ok ? `Story added to ${l.name} and published.` : r.error));
+});
+
+/* Sweep the news index for a selection, everything due, or every listing. */
+router.post('/admin3119Musa/news/refresh', (req, res) => {
+  const scope = ['selected', 'due', 'all'].includes(req.body.scope) ? req.body.scope : 'due';
+  let ids = [];
+  if (scope === 'selected') ids = listingIdsFromBody(req.body);
+  else if (scope === 'due') ids = newsLib.staleListingIds({ limit: 200, maxAgeDays: upkeep.settings().news_max_age_days });
+  else ids = db.prepare("SELECT id FROM listings WHERE status='approved' AND name <> '' ORDER BY id").all().map((r) => r.id);
+
+  if (!ids.length) {
+    return res.redirect(newsRedirect(req.body, 'err', scope === 'selected'
+      ? 'Select at least one listing.'
+      : 'Nothing is due — every listing has been checked recently.'));
+  }
+  const started = newsLib.start(ids, scope);
+  if (!started.ok) return res.redirect(newsRedirect(req.body, 'err', started.error));
+  return res.redirect(newsRedirect(req.body, 'ok',
+    `News sweep started — ${ids.length} listing${ids.length === 1 ? '' : 's'} queued. Progress is shown above.`));
+});
+
+router.get('/admin3119Musa/news/job.json', (req, res) => {
+  res.json({ job: newsLib.jobState(), counts: newsLib.counts(), last: newsLib.lastRun() });
+});
+
+router.post('/admin3119Musa/news/job/cancel', (req, res) => {
+  const stopped = newsLib.cancel();
+  return res.redirect(newsRedirect(req.body, stopped ? 'ok' : 'err', stopped
+    ? 'News sweep will stop once the in-flight requests finish.'
+    : 'No news sweep is running.'));
+});
+
+/* ---------------- Automated upkeep (hourly sweep) ---------------- */
+router.post('/admin3119Musa/settings/upkeep', (req, res) => {
+  upkeep.save(req.body);
+  res.redirect('/admin3119Musa/settings?ok=' + encodeURIComponent('Upkeep schedule saved.'));
+});
+
+router.post('/admin3119Musa/settings/upkeep/run', async (req, res) => {
+  const r = await upkeep.runSweep({ force: true });
+  if (!r.ok) {
+    return res.redirect('/admin3119Musa/settings?err=' + encodeURIComponent(
+      r.skipped === 'already-running' ? 'An upkeep sweep is already running.' : 'Upkeep is switched off.'));
+  }
+  const techN = (r.tech && r.tech.queued) || 0;
+  const newsN = (r.news && r.news.queued) || 0;
+  res.redirect('/admin3119Musa/settings?ok=' + encodeURIComponent(
+    `Upkeep run queued — ${techN} technolog${techN === 1 ? 'y' : 'y'} snapshot${techN === 1 ? '' : 's'} and ${newsN} news check${newsN === 1 ? '' : 's'}.`));
+});
+
 router.post('/admin3119Musa/listings/:id/feature', (req, res) => {
   const l = db.prepare('SELECT * FROM listings WHERE id=?').get(req.params.id);
   if (l) {
@@ -806,6 +936,9 @@ router.get('/admin3119Musa/listings/:id/edit', (req, res) => {
     tech: techrefresh.parseTech(l.tech),
     techCheckedAt: l.tech_checked_at || '',
     techStaleDays: techrefresh.STALE_DAYS,
+    newsItems: require('../lib/news').allFor(l.id),
+    newsCheckedAt: l.news_checked_at || '',
+    newsOriginLabel: require('../lib/news').originLabel,
   });
 });
 
@@ -1251,6 +1384,7 @@ router.get('/admin3119Musa/settings', (req, res) => {
       sponsored_active: ad.allSponsored().length,
       careers_open: db.prepare("SELECT COUNT(*) c FROM careers WHERE status='open'").get().c,
       google_indexing_enabled: getSetting('google_indexing_enabled', '1'),
+      ...require('../lib/upkeep').settings(),
     },
     payments,
     google: googleIndexing.status(),

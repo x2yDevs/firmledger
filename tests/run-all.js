@@ -13,6 +13,10 @@
    tech-refresh admin technology-radar maintenance: one listing, a selection,
                 a filtered view, everything stale or the whole directory —
                 counters, the single-run lock, cancellation and CSRF, offline.
+   news-upkeep  listing news: the accuracy gate (name or domain or nothing),
+                member submissions held for moderation, console moderation and
+                hand-written stories, background sweeps and the hourly
+                upkeep schedule that refreshes tech and news on its own.
    admin-2fa    the admin sign-in chain end to end, nothing stubbed: secret ->
                 emailed OTP (admin@firmledger.co.ke, codes harvested from the
                 real mail outbox) -> authenticator/recovery, QR scanned exactly
@@ -39,6 +43,7 @@ const suites = [
   ['Backup round trip', 'backup.test.js'],
   ['Admin pages', 'admin-pages.test.js'],
   ['Admin technology refresh', 'admin-tech-refresh.test.js'],
+  ['Listing news & upkeep', 'news-upkeep.test.js'],
   ['Admin 2FA chain', 'admin-2fa.test.js'],
   ['API surface & discovery', 'api.test.js'],
   ['Google Indexing + featured rail', 'google-indexing.test.js'],

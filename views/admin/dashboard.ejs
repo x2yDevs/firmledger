@@ -18,6 +18,7 @@
       <div class="stat-card"><span class="stat-num"><%= stats.sponsored || 0 %></span><span class="stat-label">Sponsored spots</span><a href="/admin3119Musa/advertising">Manage →</a></div>
       <div class="stat-card"><span class="stat-num"><%= stats.careersOpen || 0 %></span><span class="stat-label">Open roles</span><a href="/admin3119Musa/careers">Careers →</a></div>
       <div class="stat-card"><span class="stat-num"><%= stats.techStale || 0 %></span><span class="stat-label">Stale tech scans</span><a href="/admin3119Musa/listings?tech=stale">Review →</a></div>
+      <div class="stat-card"><span class="stat-num"><%= stats.newsPending || 0 %></span><span class="stat-label">News to moderate</span><a href="/admin3119Musa/news?status=pending">Moderate →</a></div>
     </div>
 
     <% var tj = typeof techJob !== 'undefined' ? techJob : { running: false }; %>

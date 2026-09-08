@@ -1,0 +1,203 @@
+<%- include('../partials/top') %>
+<%- include('../partials/adminnav') %>
+
+<section class="section-tight">
+  <div class="container">
+    <div class="section-head">
+      <h2>Listing news</h2>
+      <span class="muted"><%= counts.pending %> pending · <%= counts.approved %> published</span>
+      <div class="filter-tabs">
+        <a href="/admin3119Musa/news" class="<%= !status ? 'active' : '' %>">All</a>
+        <a href="/admin3119Musa/news?status=pending" class="<%= status === 'pending' ? 'active' : '' %>">Pending (<%= counts.pending %>)</a>
+        <a href="/admin3119Musa/news?status=approved" class="<%= status === 'approved' ? 'active' : '' %>">Published</a>
+        <a href="/admin3119Musa/news?status=rejected" class="<%= status === 'rejected' ? 'active' : '' %>">Rejected</a>
+      </div>
+    </div>
+
+    <% if (ok) { %><div class="alert alert-ok"><%= ok %></div><% } %>
+    <% if (err) { %><div class="alert alert-err"><%= err %></div><% } %>
+
+    <!-- ================= Detection sweep ================= -->
+    <div class="side-card" id="news-maintenance">
+      <h3>Find stories automatically</h3>
+      <p class="muted" style="margin-bottom:12px">
+        Searches a public news index for each company by name and keeps only what is genuinely about them —
+        the story must carry the company's full name as a phrase, or sit on (or cite) its own domain.
+        Everything else is dropped, so nothing here is guessed.
+        <strong><%= counts.approved %></strong> stor<%= counts.approved === 1 ? 'y' : 'ies' %> published across
+        <strong><%= counts.listingsWithNews %></strong> of <strong><%= counts.listingsTotal %></strong> live listings
+        (<%= counts.auto %> detected, <%= counts.member %> from members).
+      </p>
+      <form method="post" action="/admin3119Musa/news/refresh" class="bulk-bar">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <input type="hidden" name="status" value="<%= status %>">
+        <input type="hidden" name="q" value="<%= q %>">
+        <button class="btn btn-primary btn-sm" type="submit" name="scope" value="due"
+                title="Only listings whose news has not been checked recently">
+          Check <%= counts.listingsUnscanned %> due listing<%= counts.listingsUnscanned === 1 ? '' : 's' %>
+        </button>
+        <button class="btn btn-ghost btn-sm" type="submit" name="scope" value="all"
+                onclick="return confirm('Search the news index for every approved listing? This runs in the background and can take several minutes.');"
+                title="Every approved listing">
+          Check all <%= counts.listingsTotal %> listings
+        </button>
+      </form>
+
+      <div id="newsJob" class="alert alert-ok" style="margin-top:12px<%= job.running ? '' : ';display:none' %>" data-running="<%= job.running ? '1' : '0' %>">
+        <span id="newsJobText"><% if (job.running) { %>Checking <%= job.total %> listing<%= job.total === 1 ? '' : 's' %> — <%= job.done %> done, <%= job.added %> new, <%= job.found %> matched, <%= job.failed %> failed.<% } %></span>
+        <form method="post" action="/admin3119Musa/news/job/cancel" class="inline" style="margin-left:8px">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <input type="hidden" name="status" value="<%= status %>">
+          <button class="btn btn-ghost btn-xs" type="submit">Stop</button>
+        </form>
+      </div>
+
+      <% if (!job.running && lastRun) { %>
+        <p class="muted" style="font-size:13px;margin-top:10px">
+          Last sweep (<%= lastRun.scope === 'due' ? 'due listings' : lastRun.scope === 'all' ? 'whole directory' : lastRun.scope === 'auto' ? 'scheduled upkeep' : 'selection' %><%= lastRun.status === 'cancelled' ? ', stopped' : '' %>):
+          <%= lastRun.attempted || 0 %> checked — <%= lastRun.added || 0 %> new,
+          <%= lastRun.found || 0 %> matched, <%= lastRun.unchanged || 0 %> unchanged,
+          <%= lastRun.failed || 0 %> failed · <code><%= String(lastRun.finished_at || '').slice(0, 16).replace('T', ' ') %></code>
+        </p>
+      <% } %>
+
+      <form method="post" action="/admin3119Musa/news/settings" class="bulk-bar" style="margin-top:12px;border-top:1px solid var(--hair);padding-top:12px">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <input type="hidden" name="status" value="<%= status %>">
+        <label class="muted" style="display:flex;align-items:center;gap:8px;font-size:13.5px">
+          <input type="checkbox" name="news_review_auto" value="1" <%= reviewAuto ? 'checked' : '' %>>
+          Hold detected stories for moderation instead of publishing them
+        </label>
+        <button class="btn btn-ghost btn-sm" type="submit">Save</button>
+      </form>
+      <% if (upkeep.news_on) { %>
+        <p class="form-note">Scheduled upkeep is also checking up to <b><%= upkeep.news_limit %></b> listing<%= upkeep.news_limit === 1 ? '' : 's' %> an hour for stories older than <b><%= upkeep.news_max_age_days %></b> days — see Admin → Settings → Automated upkeep.</p>
+      <% } %>
+    </div>
+
+    <!-- ================= Add one by hand ================= -->
+    <div class="side-card">
+      <h3>Add a story by hand</h3>
+      <p class="muted" style="margin-bottom:12px">Written here, published immediately — it came from a human, not a scan.</p>
+      <form method="post" action="/admin3119Musa/news/add" class="form">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <input type="hidden" name="status" value="<%= status %>">
+        <div class="grid-3">
+          <label><span>Listing</span>
+            <select name="listing_id" required>
+              <option value="">Choose a listing…</option>
+              <% listings.forEach(function (l) { %><option value="<%= l.id %>"><%= l.name %></option><% }) %>
+            </select>
+          </label>
+          <label><span>Published on</span><input type="date" name="published_at" max="<%= todayIso %>"></label>
+          <label><span>Publication</span><input type="text" name="source" maxlength="80" placeholder="e.g. Business Daily"></label>
+        </div>
+        <label style="margin-top:10px"><span>Headline *</span>
+          <input type="text" name="title" required maxlength="220" placeholder="e.g. Raises Sh200m to expand across East Africa">
+        </label>
+        <label style="margin-top:10px"><span>Link</span>
+          <input type="url" name="url" maxlength="500" placeholder="https://…">
+        </label>
+        <label style="margin-top:10px"><span>Summary (optional)</span>
+          <input type="text" name="summary" maxlength="400" placeholder="One line on what the story says">
+        </label>
+        <div class="form-actions" style="margin-top:12px"><button class="btn btn-primary btn-sm" type="submit">Publish story</button></div>
+      </form>
+    </div>
+
+    <!-- ================= The queue ================= -->
+    <form class="filters jf-row" method="get" action="/admin3119Musa/news" style="margin-bottom:14px">
+      <% if (status) { %><input type="hidden" name="status" value="<%= status %>"><% } %>
+      <input type="search" name="q" value="<%= q %>" placeholder="Headline, listing, publication…" maxlength="80">
+      <select name="origin">
+        <option value="">Any source</option>
+        <option value="auto" <%= origin === 'auto' ? 'selected' : '' %>>Detected</option>
+        <option value="user" <%= origin === 'user' ? 'selected' : '' %>>Member submission</option>
+        <option value="admin" <%= origin === 'admin' ? 'selected' : '' %>>Added here</option>
+      </select>
+      <button class="btn btn-primary" type="submit">Filter</button>
+    </form>
+
+    <div class="scroll-table">
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Story</th><th>Listing</th><th>Origin</th><th>Submitted</th><th>Status</th><th class="ta-right">Moderate</th></tr></thead>
+          <tbody>
+            <% rows.forEach(function (n) { %>
+              <tr>
+                <td style="max-width:420px">
+                  <% if (n.url) { %><a href="<%= n.url %>" target="_blank" rel="noopener nofollow"><strong><%= n.title %></strong></a><% } else { %><strong><%= n.title %></strong><% } %>
+                  <br><small class="muted"><%= n.source || 'no publication' %><% if (n.published_at) { %> · <%= n.published_at %><% } %></small>
+                  <% if (n.summary) { %><div class="score-hint"><%= n.summary %></div><% } %>
+                </td>
+                <td><a href="/admin3119Musa/listings/<%= n.listing_id %>/edit"><%= n.listing_name %></a><br><small class="muted"><a href="/listing/<%= n.listing_slug %>" target="_blank">view →</a></small></td>
+                <td>
+                  <span class="pill pill-type"><%= n.origin === 'user' ? 'member' : n.origin === 'admin' ? 'console' : 'detected' %></span>
+                  <br><small class="muted"><%= n.match === 'domain' ? 'matched domain' : n.match === 'name' ? 'matched name' : n.match === 'manual' ? 'written here' : n.match === 'submitted' ? 'submitted' : '' %></small>
+                </td>
+                <td><small class="muted"><%= n.submitter_email || '—' %><br><%= fmtDate(n.created_at) %></small></td>
+                <td><span class="pill pill-<%= n.status %>"><%= n.status %></span></td>
+                <td class="ta-right actions-cell">
+                  <% if (n.status !== 'approved') { %>
+                  <form method="post" action="/admin3119Musa/news/<%= n.id %>/approve" class="inline">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                    <input type="hidden" name="status" value="<%= status %>">
+                    <input type="hidden" name="q" value="<%= q %>">
+                    <button class="btn btn-primary btn-xs" type="submit">Approve</button>
+                  </form>
+                  <% } %>
+                  <% if (n.status !== 'rejected') { %>
+                  <form method="post" action="/admin3119Musa/news/<%= n.id %>/reject" class="inline">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                    <input type="hidden" name="status" value="<%= status %>">
+                    <input type="hidden" name="q" value="<%= q %>">
+                    <button class="btn btn-ghost btn-xs" type="submit">Reject</button>
+                  </form>
+                  <% } %>
+                  <form method="post" action="/admin3119Musa/news/<%= n.id %>/delete" class="inline" onsubmit="return confirm('Delete this story permanently?');">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                    <input type="hidden" name="status" value="<%= status %>">
+                    <input type="hidden" name="q" value="<%= q %>">
+                    <button class="btn btn-danger btn-xs" type="submit">Delete</button>
+                  </form>
+                </td>
+              </tr>
+            <% }) %>
+            <% if (!rows.length) { %><tr><td colspan="6" class="muted" style="text-align:center;padding:2rem">No stories here.</td></tr><% } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <script>
+    /* Live progress for a news sweep — same contract as the technology radar. */
+    (function () {
+      var box = document.getElementById('newsJob');
+      var txt = document.getElementById('newsJobText');
+      if (!box || !txt || box.getAttribute('data-running') !== '1') return;
+      var timer = setInterval(function () {
+        fetch('/admin3119Musa/news/job.json', { credentials: 'same-origin' })
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            if (!d || !d.job) return;
+            if (!d.job.running) {
+              clearInterval(timer);
+              txt.textContent = 'Sweep finished — ' + (d.job.done || 0) + ' checked, '
+                + (d.job.added || 0) + ' new stories, ' + (d.job.found || 0) + ' matched, '
+                + (d.job.failed || 0) + ' failed. Reloading…';
+              setTimeout(function () { window.location.reload(); }, 1200);
+              return;
+            }
+            txt.textContent = 'Checking ' + (d.job.total || 0) + ' listing(s) — '
+              + (d.job.done || 0) + ' done, ' + (d.job.added || 0) + ' new, '
+              + (d.job.found || 0) + ' matched, ' + (d.job.failed || 0) + ' failed.'
+              + (d.job.current ? ' Now: ' + d.job.current : '');
+          })
+          .catch(function () { /* transient — try again on the next tick */ });
+      }, 3000);
+    })();
+    </script>
+  </div>
+</section>
+
+<%- include('../partials/bottom') %>

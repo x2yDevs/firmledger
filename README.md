@@ -653,6 +653,7 @@ top to bottom and FirmLedger is ready for real customers:
 | Task | Where |
 |---|---|
 | Moderate submissions | Admin → Listings (search/filters, approve/reject/edit, bulk pending) |
+| Moderate news about a company | Admin → News (approve / reject / delete, or add one by hand) |
 | Global search | Admin → Search (users, listings, claims, tickets, blog) |
 | In-app notifications | Header bell (user) · Admin → Inbox |
 | Reset a member's password | Admin → Users → Reset password (reuses `/reset/:token`) |
@@ -676,6 +677,9 @@ top to bottom and FirmLedger is ready for real customers:
 | Grant Pro without payment | Admin → Users → Grant 30d / Lifetime (emails the member) |
 | Grant/refund Pro manually | Admin → Listings → Grant Pro (30d) · Lifetime · Revoke Pro |
 | Refresh the technology radar | Admin → Listings → **Technology radar maintenance** — one record (row **↻ Tech** or the edit page panel), a ticked selection (bulk action), **Refresh all N in this view**, **Refresh N stale**, or the whole directory. Runs in the background with live progress, and can be stopped |
+| Moderate company news | Admin → **News** — member submissions wait in *pending* until approved; detected stories, hand-written stories and sweeps live there too |
+| Look for news automatically | Admin → News → **Check N due listings** / **Check all N listings**, or **Look for stories now** on a listing's edit page. A story is only kept when it carries the company's full name or sits on its own domain |
+| Automate the upkeep | Admin → Settings → **Automated upkeep** — an hourly sweep that refreshes stale technology snapshots and re-checks news, capped per hour, switchable per job |
 
 ## 6. Data & files
 
