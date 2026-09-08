@@ -40,6 +40,7 @@ const { spawnSync } = require('child_process');
 const suites = [
   ['AI admin tools', 'ai-tools.test.js'],
   ['AI agent loop', 'ai-agent.test.js'],
+  ['AI providers & console', 'ai-providers.test.js'],
   ['Backup round trip', 'backup.test.js'],
   ['Admin pages', 'admin-pages.test.js'],
   ['Admin technology refresh', 'admin-tech-refresh.test.js'],

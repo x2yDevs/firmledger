@@ -1,15 +1,28 @@
 /**
  * FirmLedger AI Playground — listing generator, admin assistant, auto-moderation.
- * All Groq calls stay on the server. Mutating assistant tools wait for UI
- * confirmation (ai_pending_actions) unless the admin ticked them under Settings
- * → Auto-run. Lookups always run immediately. delete_user always confirms.
  *
- * The assistant is stateless: no chat history is stored. Context comes only
- * from the messages visible in the current browser tab.
+ * Every model call stays on the server and goes through src/lib/llm.js, so the
+ * console works with whichever provider the admin connected (Groq, OpenAI,
+ * Claude, Gemini, DeepSeek, Hugging Face, OpenRouter, Mistral, xAI, Together,
+ * Cerebras, Fireworks, SambaNova, Perplexity, Azure or any OpenAI-compatible
+ * endpoint). No key is ever exposed to the browser.
+ *
+ * Confirmation policy: lookups run immediately; write actions wait for the
+ * operator's confirm (ai_pending_actions) unless they were ticked under
+ * Settings → Auto-run; SENSITIVE actions (deletions, bulk operations, mailing
+ * every member, credentials, security, site-wide switches) always confirm and
+ * can never be auto-run.
+ *
+ * The assistant is stateless: no chat history is stored. Context comes from the
+ * messages visible in the current browser tab plus the live site briefing built
+ * by src/lib/sitecontext.js, so it answers from the real database rather than
+ * from an idea of the site.
  */
 const crypto = require('crypto');
 const { db, getSetting, setSetting } = require('../db');
 const groq = require('./groq');
+const llm = require('./llm');
+const sitecontext = require('./sitecontext');
 const tools = require('./aitools');
 const { TYPES, CATEGORIES, SIZES, COUNTRIES } = require('./taxonomy');
 const catLib = require('./categories');
@@ -272,7 +285,9 @@ function storePending({ steps, convo, ran = [] }) {
   sweepPending();
   const id = 'act_' + crypto.randomBytes(16).toString('hex');
   const expires = new Date(Date.now() + 10 * 60 * 1000).toISOString().replace('T', ' ').slice(0, 19);
-  const label = steps.length === 1 ? steps[0].name : `${steps.length} actions`;
+  const label = steps.length === 1
+    ? `${tools.isSensitive(steps[0].name) ? '⚠ ' : ''}${steps[0].name}`
+    : `${steps.length} actions${steps.some((s) => tools.isSensitive(s.name)) ? ' (sensitive)' : ''}`;
   db.prepare(
     `INSERT INTO ai_pending_actions (id, tool, args, messages, expires_at) VALUES (?,?,?,?,?)`
   ).run(
@@ -309,23 +324,38 @@ function sanitiseHistory(messages) {
 
 function assistantSystemPrompt() {
   const auto = [...tools.autoSet()];
+  const sensitive = tools.catalog().filter((t) => t.sensitive).map((t) => t.name);
+  const stats = tools.stats();
+  const active = llm.activeProviderId();
   const autoLine = auto.length
     ? `These write tools are configured to run immediately (no confirm): ${auto.join(', ')}.`
     : 'Every write tool requires operator confirmation before it runs.';
-  return `You are the FirmLedger admin assistant. You operate the live admin console using tools — listings, users, billing, claims, tickets, removals, blog, email, careers, promos, advertising, protection, maintenance, status incidents, and settings.
+  return `You are the FirmLedger admin assistant, operating the LIVE admin console of this exact installation. You have full administrative reach: ${stats.total} real actions across every console area — ${stats.reads} lookups that run immediately, ${stats.writes} write actions, ${stats.sensitive} of which are sensitive and always stop for the operator's confirmation. Nothing about this site is out of reach; when you do not know something, look it up instead of guessing.
 
-Available tools:
+=== THE SITE YOU OPERATE ===
+${sitecontext.context({ compact: true })}
+
+=== YOUR ACTIONS ===
 ${tools.capabilityPrompt()}
+Each action's exact arguments travel in the tool schemas. Tag meanings: (read) runs immediately, (write) proposes first unless auto-run is on, (WRITE-CONFIRM) always proposes and waits for the operator.
 
-Rules:
-- Prefer a tool for any admin action or factual lookup. Do not invent ids, emails, slugs or counts.
-- Finish the whole job. If a request needs several actions, call them — one after another is fine, and you may call more than one tool in a single response. You will be given each tool's real result before you answer.
-- Look things up first when you are missing an id or slug (search_listings, search_users, search_admin, the list_* tools), then act on what you found.
-- If a request is ambiguous (which listing / which user?), ask a clarifying question instead of calling a tool.
-- Never claim you already did a write. Report only what the tool results show: if a tool returned an error, say so plainly and do not describe it as done.
+=== HOW TO WORK ===
+1. Understand first. For any question about the site itself — how a feature works, what a table holds, which page does what — use site_overview (topics: product, rules, admin, public, data, schema, live, settings, tools), get_site_schema, get_settings or query_database. You are expected to know this site completely.
+2. Look up before you act. Never invent an id, slug, email, ref or count. Resolve records with get_listing, get_user, search_listings, search_users, search_admin, find_duplicate_listings, or the list_* tools, then act on what you actually found. query_database covers any lookup the dedicated tools do not (joins, aggregates, date ranges) — it is strictly read-only.
+3. Finish the whole job. If a request needs several actions, call them — one after another is fine, and you may call several tools in a single response. You will be given each tool's real result before you answer, so keep going until the task is genuinely complete.
+4. Ask when it is ambiguous. Which listing? Which member? What price? Ask one short clarifying question rather than acting on a guess.
+5. Report only what happened. Never claim a write you did not make. If a tool returned an error, say so plainly, quote the reason, and do not describe it as done. If an action is waiting for confirmation, say exactly what will happen and that nothing has changed yet.
+6. Propose sensitive work explicitly. For a sensitive action, restate the blast radius in your proposal — how many records, who gets emailed, what becomes irreversible — so the operator can decide with the facts in front of them.
+7. Never batch a destructive action with unrelated ones just to save a step; group actions that belong to the same job.
+
+=== RULES ===
 - ${autoLine}
-- Destructive actions (delete user, delete listing, email everyone, maintenance on, fulfill removal) only when the operator is explicit.
-- Be concise.`;
+- Sensitive actions ALWAYS require the operator's confirmation and can never be auto-run: ${sensitive.join(', ')}.
+- Irreversible or wide-reaching work (delete a listing or account, bulk actions, mailing every member, turning on maintenance, fulfilling a removal request, clearing logs, changing credentials or security settings) only when the operator explicitly asks for it. If the request is implied rather than explicit, confirm what they want first.
+- API keys, passwords, OTPs, recovery codes, password hashes and the hidden console path are never repeated back, even partially. Refer to them as "stored on the server".
+- Money and access: never invent a payment. Pro grants, plan changes, promo codes and sponsorships change what a member can see and are recorded in the audit log — state the reason in the note argument when there is one.
+- Prefer the narrowest action that does the job (one listing rather than a filter; one member rather than an audience).
+- Be concise. Lead with what changed or what you found, then the detail the operator needs.`;
 }
 
 /* How far one turn may go on its own before it must come back to the operator. */
@@ -440,6 +470,8 @@ async function runAgent({ convo, model, ran = [], budgetSteps = MAX_MODEL_STEPS 
       continue;
     }
 
+    /* Anything not explicitly allowed to auto-run stops here for the operator:
+       every write, and always every sensitive action. */
     const needsConfirm = calls.filter((c) => !tools.isAuto(c.name));
     if (needsConfirm.length) {
       convo.push(assistantMessage);
@@ -452,6 +484,7 @@ async function runAgent({ convo, model, ran = [], budgetSteps = MAX_MODEL_STEPS 
       });
       const labels = calls.map((c) => tools.describeCall(c.name, c.args));
       const label = labels.length === 1 ? labels[0] : `${labels.length} actions — ${labels.join(' · ')}`;
+      const sensitive = calls.some((c) => tools.isSensitive(c.name));
       const content = text || (labels.length === 1
         ? `I can ${labels[0]} Confirm to run it.`
         : `I can run these ${labels.length} actions in order:\n${labels.map((l, i) => `${i + 1}. ${l}`).join('\n')}\nConfirm to run them.`);
@@ -462,13 +495,23 @@ async function runAgent({ convo, model, ran = [], budgetSteps = MAX_MODEL_STEPS 
         model: usedModel,
         usage,
         expires_in_sec: 600,
+        sensitive,
         tool: {
           name: calls.length === 1 ? calls[0].name : calls.map((c) => c.name).join(' + '),
           label,
           mutating: calls.some((c) => Boolean((tools.getTool(c.name) || {}).mutating)),
+          sensitive,
           auto: false,
           args: calls.length === 1 ? calls[0].args : calls.map((c) => ({ action: c.name, arguments: c.args })),
-          steps: calls.map((c) => ({ name: c.name, label: tools.describeCall(c.name, c.args), args: c.args })),
+          /* One row per step, with everything the confirm dialog needs to show
+             the operator exactly what is about to happen. */
+          steps: calls.map((c) => ({
+            name: c.name,
+            label: tools.describeCall(c.name, c.args),
+            args: c.args,
+            sensitive: tools.isSensitive(c.name),
+            group: (tools.getTool(c.name) || {}).group || 'ops',
+          })),
         },
         done: ran.map((r) => ({ tool: r.tool, ok: r.ok })),
       };
@@ -494,7 +537,8 @@ async function runAgent({ convo, model, ran = [], budgetSteps = MAX_MODEL_STEPS 
   let content = receipt(ran);
   try {
     const data = await groq.chat({
-      ...(model && groq.isKnownModel(model) ? { model } : {}),
+      /* `model` already came from chatModelFor(), so it is provider-aware. */
+      ...(model ? { model } : {}),
       temperature: 0.2,
       max_tokens: 500,
       messages: [...convo, { role: 'user', content: 'Summarise, in two sentences, exactly what was done and what is still outstanding. Do not claim anything the tool results do not show.' }],
@@ -637,11 +681,33 @@ function isModerationOn() {
   return getSetting('ai_moderation_on', '0') === '1';
 }
 
-/* Auto-moderation can run a different (cheaper, safety-tuned) model than the
-   assistant. Falls back to the playground default when unset. */
+/* Auto-moderation can run on a different model — even a different provider —
+   than the assistant: "gemini:gemini-2.5-flash-lite" or a bare id. Falls back
+   to the active provider's model when unset. */
 function moderationModelId() {
   const m = String(getSetting('ai_moderation_model', '') || '').trim();
-  return groq.isKnownModel(m) ? m : groq.modelId();
+  if (!m) return llm.activeModel();
+  const ref = llm.splitModelRef(m);
+  if (ref.provider && llm.configured(ref.provider)) return m;
+  if (llm.isKnownModel(ref.model)) return ref.model;
+  return llm.activeModel();
+}
+
+/** Moderation model options for the settings UI, across every connected provider. */
+function moderationModelChoices() {
+  const out = [];
+  for (const p of llm.providerSnapshot()) {
+    if (!p.configured) continue;
+    for (const m of p.models) {
+      if (!m.json) continue;
+      out.push({
+        id: p.id === llm.activeProviderId() ? m.id : `${p.id}:${m.id}`,
+        label: `${m.label} · ${p.label}`,
+        provider: p.id,
+      });
+    }
+  }
+  return out.slice(0, 200);
 }
 
 function scheduleModeration(listingId) {
@@ -656,7 +722,7 @@ function scheduleModeration(listingId) {
         db.prepare(
           `INSERT INTO ai_moderation_log (listing_id, listing_name, decision, reason, model)
            VALUES (?,?,?,?,?)`
-        ).run(id, '', 'error', String(e.message || 'unknown').slice(0, 500), groq.modelId());
+        ).run(id, '', 'error', String(e.message || 'unknown').slice(0, 500), moderationModelId());
       } catch { /* ignore */ }
     });
   });
@@ -666,8 +732,8 @@ async function moderateListing(listingId) {
   const l = db.prepare('SELECT * FROM listings WHERE id=?').get(listingId);
   if (!l) return { skipped: true, reason: 'missing' };
   if (l.status !== 'pending') return { skipped: true, reason: 'not_pending' };
-  if (!groq.groqConfigured()) {
-    audit({ kind: 'moderate', action: 'skipped_no_key', listingId: l.id, result: 'no groq key', ok: 0 });
+  if (!llm.configured(llm.activeProviderId())) {
+    audit({ kind: 'moderate', action: 'skipped_no_key', listingId: l.id, result: 'no provider key', ok: 0 });
     return { skipped: true, reason: 'no_key' };
   }
 
@@ -772,33 +838,74 @@ function notifyAdminUnsure(l, reason) {
   }
 }
 
-function settingsSnapshot() {
-  const keySet = groq.groqConfigured();
-  const src = groq.groqKeySource();
-  const live = groq.liveSnapshot();
-  let pending = 0;
-  try { pending = db.prepare('SELECT COUNT(*) AS c FROM ai_pending_actions').get().c; } catch { pending = 0; }
+/** Every connected provider, ready for the Providers panel in the console. */
+function providerSnapshot() {
+  const active = llm.activeProviderId();
   return {
-    groq_configured: keySet,
-    groq_key_source: src,
-    groq_key_set: keySet,
-    groq_env: src === 'env',
-    groq_key_hint: groq.maskKey(groq.groqKey()),
-    groq_base_url: groq.baseUrl(),
-    groq_model: groq.modelId(),
-    groq_default_model: groq.DEFAULT_MODEL,
-    models: groq.usableModels(),
+    active,
+    active_label: (llm.provider(active) || {}).label || active,
+    model: llm.savedModel(active),
+    failover: llm.failoverEnabled(),
+    rate_limit_per_min: llm.rateLimitPerMinute(),
+    order: llm.providerOrder(),
+    providers: llm.providerSnapshot(),
+  };
+}
+
+function settingsSnapshot() {
+  const active = llm.activeProviderId();
+  const providers = providerSnapshot();
+  const keySet = llm.configured(active);
+  const live = llm.liveSnapshot(active);
+  let pending = 0;
+  try { pending = db.prepare('SELECT COUNT(*) c FROM ai_pending_actions').get().c; } catch { pending = 0; }
+  return {
+    /* ---- provider-neutral surface the playground UI is built on ---- */
+    configured: keySet,
+    provider: active,
+    provider_label: providers.active_label,
+    providers,
+    provider_list: providers.providers,
+    model: llm.savedModel(active),
+    models: llm.usableModels(active),
+    key_source: llm.keySource(active),
+    key_set: keySet,
+    key_hint: llm.maskKey(llm.apiKey(active)),
+    base_url: llm.baseUrl(active),
+    failover: llm.failoverEnabled(),
+    rate_limit_per_min: llm.rateLimitPerMinute(),
     live_models: live.ids,
     live_checked_at: live.checked_at,
+
+    /* ---- legacy names, still consumed by the view and older bookmarks ---- */
+    groq_configured: keySet,
+    groq_key_source: llm.keySource(active),
+    groq_key_set: keySet,
+    groq_env: llm.keySource(active) === 'env',
+    groq_key_hint: llm.maskKey(llm.apiKey(active)),
+    groq_base_url: llm.baseUrl(active),
+    groq_model: llm.savedModel(active),
+    groq_default_model: (llm.provider(active) || {}).defaultModel || groq.DEFAULT_MODEL,
+    groq_provider: active,
+
+    /* ---- moderation ---- */
     moderation_on: isModerationOn(),
     moderation_model: moderationModelId(),
+    moderation_model_choices: moderationModelChoices(),
     moderation_rules: getSetting('ai_moderation_rules', '') || DEFAULT_MODERATION_RULES,
     moderation_email: getSetting('ai_moderation_email', '1') === '1',
     default_rules: DEFAULT_MODERATION_RULES,
+
+    /* ---- assistant policy ---- */
     tools: tools.catalog(),
     tool_groups: tools.GROUPS,
+    enabled_groups: tools.enabledGroups(),
     auto_tools: [...tools.autoSet()],
+    tool_stats: tools.stats(),
     pending_actions: pending,
+
+    /* ---- what the assistant is told about the site ---- */
+    site_briefing_chars: sitecontext.context({ compact: true }).length,
   };
 }
 
@@ -810,44 +917,175 @@ function logSnapshot(limit = 40) {
   };
 }
 
+/**
+ * Persist the Playground settings form.
+ *
+ * Provider keys are only written when the POST actually carries them, and an
+ * environment variable always wins over the stored value — a deployment that
+ * pins a key in .env cannot have it overwritten from the browser. Unchecked
+ * boxes never arrive in a POST body, so "present" markers decide the booleans.
+ */
 function saveSettings(body) {
-  if (body.groq_model !== undefined) {
-    const m = String(body.groq_model || '').trim();
-    if (groq.MODELS.some((x) => x.id === m)) setSetting('groq_model', m);
+  const b = body || {};
+
+  /* ---- active provider + failover + rate cap ---- */
+  if (b.ai_provider !== undefined) {
+    const pid = String(b.ai_provider || '').trim().toLowerCase();
+    if (llm.isProviderId(pid)) setSetting('ai_provider', pid);
   }
-  if (!process.env.GROQ_API_KEY && body.groq_api_key !== undefined) {
-    const k = String(body.groq_api_key || '').trim();
-    if (k) setSetting('groq_api_key', k.slice(0, 200));
-    if (String(body.groq_api_key_clear || '') === '1') setSetting('groq_api_key', '');
+  if (b.ai_failover !== undefined || b.ai_failover_present !== undefined) {
+    setSetting('ai_failover', b.ai_failover === '1' || b.ai_failover === true || b.ai_failover === 'on' ? '1' : '0');
   }
-  // Unchecked boxes are omitted from the POST — treat missing as off on a settings save.
-  if (body.groq_model !== undefined || body.ai_moderation_on !== undefined || body.ai_moderation_rules !== undefined) {
-    setSetting('ai_moderation_on', body.ai_moderation_on === '1' || body.ai_moderation_on === true || body.ai_moderation_on === 'on' ? '1' : '0');
-    setSetting('ai_moderation_email', body.ai_moderation_email === '1' || body.ai_moderation_email === true || body.ai_moderation_email === 'on' ? '1' : '0');
+  if (b.ai_rate_limit_per_min !== undefined) {
+    const n = Math.round(Number(b.ai_rate_limit_per_min));
+    if (n >= 1 && n <= 600) setSetting('ai_rate_limit_per_min', String(n));
   }
-  if (body.ai_moderation_rules !== undefined) {
-    setSetting('ai_moderation_rules', String(body.ai_moderation_rules || '').slice(0, 8000));
+  if (b.ai_provider_order !== undefined) {
+    const raw = b.ai_provider_order;
+    let list = Array.isArray(raw) ? raw : String(raw || '').split(',');
+    llm.saveProviderOrder(list.map((x) => String(x).trim()));
   }
-  if (body.ai_moderation_model !== undefined) {
-    const m = String(body.ai_moderation_model || '').trim();
+
+  /* ---- per-provider keys, models, base URLs, hand-typed model ids ---- */
+  for (const p of llm.PROVIDERS) {
+    const envLocked = (p.envKeys || []).some((k) => String(process.env[k] || '').trim());
+
+    const keyField = b[`${p.id}_api_key`];
+    if (!envLocked && keyField !== undefined) {
+      const k = String(keyField || '').trim();
+      if (k) setSetting(p.keySetting, k.slice(0, 300));
+    }
+    if (!envLocked && String(b[`${p.id}_api_key_clear`] || '') === '1') setSetting(p.keySetting, '');
+
+    const modelField = b[`${p.id}_model`];
+    if (modelField !== undefined) {
+      const m = String(modelField || '').trim().slice(0, 160);
+      if (m) {
+        if (!llm.knownModelIds(p.id).includes(m)) llm.addCustomModelId(p.id, m);
+        llm.setSavedModel(p.id, m);
+      }
+    }
+
+    if (b[`${p.id}_base_url`] !== undefined) {
+      const url = String(b[`${p.id}_base_url`] || '').trim().replace(/\/+$/, '').slice(0, 300);
+      if (url && !/^https?:\/\//i.test(url)) {
+        const err = new Error(`${p.label}: the base URL must start with http:// or https://.`);
+        err.status = 422;
+        throw err;
+      }
+      setSetting(`ai_base_url_${p.id}`, url);
+    }
+
+    const extraField = b[`${p.id}_extra_models`];
+    if (extraField !== undefined) {
+      const ids = String(extraField).split(/[\n,]+/).map((x) => x.trim()).filter(Boolean).slice(0, 40);
+      setSetting(`ai_custom_models_${p.id}`, JSON.stringify([...new Set(ids)]));
+    }
+  }
+  if (b.ai_custom_auth_header !== undefined) {
+    const h = String(b.ai_custom_auth_header || '').trim().toLowerCase();
+    setSetting('ai_custom_auth_header', h === 'api-key' ? 'api-key' : 'bearer');
+  }
+
+  /* ---- legacy Groq field names (older bookmarks / scripts) ---- */
+  if (b.groq_model !== undefined && !b.groq_model.startsWith('groq:')) {
+    const m = String(b.groq_model || '').trim();
+    if (m) llm.setSavedModel('groq', m);
+  }
+  if (!process.env.GROQ_API_KEY && b.groq_api_key !== undefined && b.groq_provider === undefined) {
+    const k = String(b.groq_api_key || '').trim();
+    if (k) setSetting('groq_api_key', k.slice(0, 300));
+    if (String(b.groq_api_key_clear || '') === '1') setSetting('groq_api_key', '');
+  }
+
+  /* ---- auto-moderation ---- */
+  if (b.groq_model !== undefined || b.ai_moderation_on !== undefined || b.ai_moderation_rules !== undefined
+    || b.ai_provider !== undefined) {
+    setSetting('ai_moderation_on', b.ai_moderation_on === '1' || b.ai_moderation_on === true || b.ai_moderation_on === 'on' ? '1' : '0');
+    setSetting('ai_moderation_email', b.ai_moderation_email === '1' || b.ai_moderation_email === true || b.ai_moderation_email === 'on' ? '1' : '0');
+  }
+  if (b.ai_moderation_rules !== undefined) {
+    setSetting('ai_moderation_rules', String(b.ai_moderation_rules || '').slice(0, 8000));
+  }
+  if (b.ai_moderation_model !== undefined) {
+    const m = String(b.ai_moderation_model || '').trim();
     if (!m || m === '__default__') setSetting('ai_moderation_model', '');
-    else if (groq.isKnownModel(m)) setSetting('ai_moderation_model', m);
+    else setSetting('ai_moderation_model', m.slice(0, 160));
   }
-  if (body.ai_auto_tools_present !== undefined) {
-    const raw = body.ai_auto_tools;
+
+  /* ---- assistant policy: auto-run + which tool groups are in reach ---- */
+  if (b.ai_auto_tools_present !== undefined) {
+    const raw = b.ai_auto_tools;
     const names = Array.isArray(raw) ? raw : (raw ? [raw] : []);
     tools.saveAutoTools(names);
   }
+  if (b.ai_tool_groups_present !== undefined) {
+    const raw = b.ai_tool_groups;
+    const groups = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+    tools.saveEnabledGroups(groups);
+  }
+
   audit({
     kind: 'settings',
     action: 'save',
     payload: {
-      model: getSetting('groq_model', ''),
+      provider: llm.activeProviderId(),
+      model: llm.savedModel(llm.activeProviderId()),
+      failover: llm.failoverEnabled(),
       moderation_on: getSetting('ai_moderation_on', '0'),
       moderation_model: getSetting('ai_moderation_model', ''),
       auto_tools: [...tools.autoSet()],
+      tool_groups: tools.enabledGroups(),
     },
   });
+}
+
+/** "Use this provider" from the console — switches the live backend at once. */
+function useProvider(providerId, model) {
+  const pid = String(providerId || '').trim().toLowerCase();
+  if (!llm.isProviderId(pid)) {
+    const err = new Error(`“${String(providerId || '').slice(0, 40)}” is not a supported provider.`);
+    err.status = 422;
+    throw err;
+  }
+  if (!llm.configured(pid)) {
+    const p = llm.provider(pid);
+    const err = new Error(`${p.label} has no API key yet. Paste one and save before switching to it${p.envKeys && p.envKeys[0] ? ` (or set ${p.envKeys[0]} in .env)` : ''}.`);
+    err.status = 422;
+    throw err;
+  }
+  if (!llm.baseUrl(pid)) {
+    const err = new Error(`${llm.provider(pid).label} needs a base URL before it can be used.`);
+    err.status = 422;
+    throw err;
+  }
+  llm.setActiveProvider(pid);
+  const m = String(model || '').trim();
+  if (m) {
+    if (!llm.knownModelIds(pid).includes(m)) llm.addCustomModelId(pid, m);
+    llm.setSavedModel(pid, m);
+  }
+  audit({ kind: 'settings', action: 'use_provider', payload: { provider: pid, model: llm.savedModel(pid) } });
+  return { provider: pid, label: llm.provider(pid).label, model: llm.savedModel(pid) };
+}
+
+/** Verify one provider end to end: key, live model list, one tiny completion. */
+async function testProvider(providerId, model) {
+  const pid = String(providerId || '').trim().toLowerCase() || llm.activeProviderId();
+  if (!llm.isProviderId(pid)) {
+    const err = new Error(`“${String(providerId || '').slice(0, 40)}” is not a supported provider.`);
+    err.status = 422;
+    throw err;
+  }
+  const result = await llm.testConnection(pid, model);
+  audit({
+    kind: 'settings',
+    action: 'test',
+    payload: { provider: pid, model: model || llm.savedModel(pid) },
+    result: result.ok ? `ok${result.used_model ? ` · ${result.used_model}` : ''}` : (result.error || 'failed'),
+    ok: result.ok ? 1 : 0,
+  });
+  return result;
 }
 
 /* ---------------- Logs (audit + moderation tables, with paging) ---------------- */
@@ -904,11 +1142,23 @@ function recentAudit(limit = 40, offset = 0) {
   return logsPage('audit', { limit, offset }).rows;
 }
 
-/** Resolve a requested model against the known list; fall back to the default. */
+/**
+ * Resolve the model the console should use for a call.
+ * Accepts "model-id" (active provider) or "provider:model-id" (an explicit
+ * backend — auto-moderation can run on a different vendor than the assistant),
+ * plus any id the provider's live list or the admin's typed list contains.
+ * Falls back to the active provider's saved model.
+ */
 function chatModelFor(requested) {
   const cand = String(requested || '').trim();
-  if (groq.isKnownModel(cand)) return cand;
-  return groq.modelId();
+  if (!cand) return llm.activeModel();
+  const ref = llm.splitModelRef(cand);
+  if (ref.provider) return cand;                 // keep the explicit provider
+  if (llm.isKnownModel(ref.model)) return ref.model;
+  /* Unknown id: still pass it through when it looks like a real model name —
+     vendors ship models faster than the catalogue, and llm.chat falls back. */
+  if (ref.model && ref.model.length <= 160 && /[a-z0-9]/i.test(ref.model)) return ref.model;
+  return llm.activeModel();
 }
 /** Oldest un-reviewed submissions — feeds the “Review one now” picker. */
 function oldestPending(limit = 30) {
@@ -931,8 +1181,9 @@ function deleteModerationLogEntry(id) {
 module.exports = {
   DEFAULT_MODERATION_RULES,
   audit, generateListing, publishListing, applyListingLimits,
-  chatTurn, executePending, cancelPending,
-  scheduleModeration, moderateListing, isModerationOn, moderationModelId,
-  settingsSnapshot, saveSettings, recentModeration, recentAudit, logsPage, logSnapshot, oldestPending,
-  deleteAuditLogEntry, deleteModerationLogEntry,
+  chatTurn, executePending, cancelPending, assistantSystemPrompt,
+  scheduleModeration, moderateListing, isModerationOn, moderationModelId, moderationModelChoices,
+  settingsSnapshot, saveSettings, providerSnapshot, useProvider, testProvider,
+  recentModeration, recentAudit, logsPage, logSnapshot, oldestPending,
+  deleteAuditLogEntry, deleteModerationLogEntry, chatModelFor,
 };

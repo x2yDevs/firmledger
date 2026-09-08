@@ -31,6 +31,7 @@ Stack: Node.js + Express · EJS server-rendered views · SQLite (WAL) · no fron
 | Payments | PayPal REST Orders — credentials in Admin → Settings → Payments (or `PAYPAL_CLIENT_ID`/`PAYPAL_CLIENT_SECRET`/`PAYPAL_MODE` env, which wins). Sandbox charges nothing. Server-side `/billing/callback` capture + verification (order id, exact amount, currency, reference) grants purchased time to the ACCOUNT, stacks on remaining time, emails a receipt, and writes to the `payments` ledger (dashboard + admin) |
 | Plan offers | Admin-managed in **Admin console → Plan offers**: monthly, yearly, or any custom named offer, with price, duration in days, sort order, show/hide, and safe delete (deactivates when payments are attached). /pricing and /dashboard/upgrade render whatever is active |
 | Pro grants | Admin can grant 30-day or lifetime Pro to any user, or revoke it, from **Admin → Users** (the grant emails the member). Admins can also boost a single listing record from Admin → Listings |
+| **AI Playground** | Admin → **AI Playground** (`/admin3119Musa/ai`). Three tools in one: a **listing generator** (brief → API-shaped draft → saved as `pending`), an **admin assistant** that can perform *any* console action through 160+ real server-side tools, and **auto-moderation** of new submissions. Works with **any provider** — Groq, OpenAI, Anthropic (Claude), Google Gemini, DeepSeek, Hugging Face, OpenRouter, Mistral, xAI, Together, Cerebras, Fireworks, SambaNova, Perplexity, Azure OpenAI, or any OpenAI-compatible endpoint (Ollama, vLLM, LiteLLM). Keys live on the server, never in the browser. Reads run at once; writes propose first; **sensitive** actions (deletions, bulk work, mailing every member, credentials, security, site-wide switches) *always* wait for the operator's confirm and can never be auto-run |
 | Admin console | Hidden URL `/admin3119Musa` + secret code **+ emailed OTP + TOTP two-factor** (QR enrolled once, on the account) — global search, in-app inbox, listings search/filters + bulk approve/reject, full listing editor, add listing, categories, claims re-check (emails both claimant and previous submitter), removals, users (view/suspend/unsuspend/delete with email first, admin-initiated password reset), searchable email picker, blog CMS, settings, ticket auto-close, **Protection** (IP/domain lists + rate limits + maintenance mode), **Health** (disk, DB, memory, uptime, last backup), **Promos** |
 | Promo codes | Admin generates codes such as `LAUNCH20` (percent off, usage cap, expiry, optional plan lock). Members apply them on Dashboard → Upgrade; PayPal is charged the discounted amount. Notify members by email and/or in-app when a code is created |
 | Maintenance mode | Admin → Protection. Visitors see a branded “we’ll be back soon” page (HTTP 503); a signed-in admin keeps working. Optional email blast to account holders when turning it on |
@@ -653,6 +654,81 @@ top to bottom and FirmLedger is ready for real customers:
 7. **Backups** — nightly `sqlite3 data/firmledger.db ".backup ..."` + `data/uploads` (Step 11 above).
 8. **Smoke test end-to-end** — register → submit listing → approve in admin (branded approval mail arrives) → claim flow → upgrade with a real card → refund path. Every step above sends the matching branded email when SMTP is live.
 
+## 4c. AI Playground — one assistant, any model provider
+
+`/admin3119Musa/ai` is the console's AI surface. Everything it does is a real
+server-side operation against this database — there is no mock mode and no
+"the AI said it did it" gap.
+
+**Connect a provider.** Settings → *Model providers* lists 16 backends. For each
+one you can paste an API key, choose a model (the picker fills itself from the
+provider's own `/models` endpoint when you press **Test & sync models**),
+override the base URL for a proxy or gateway, and hand-type model ids the
+built-in catalogue does not know yet. **Use this provider** switches the whole
+console to it; the others stay connected as instant failover.
+
+| Provider | Env key | Notes |
+|---|---|---|
+| Groq | `GROQ_API_KEY` | Default. Fast open models (GPT-OSS, Llama, Qwen), free developer tier |
+| OpenAI | `OPENAI_API_KEY` | GPT-5 / o-series; reasoning models are handled (no `temperature`, `max_completion_tokens`) |
+| Anthropic (Claude) | `ANTHROPIC_API_KEY` | Native `/messages` protocol, `tool_use` blocks translated automatically |
+| Google Gemini | `GEMINI_API_KEY` | Native `generateContent`; schemas are cleaned of keywords Gemini rejects |
+| DeepSeek | `DEEPSEEK_API_KEY` | Chat + Reasoner |
+| Hugging Face | `HF_TOKEN` | Inference Providers (Qwen, DeepSeek, Llama, Mistral…) |
+| OpenRouter | `OPENROUTER_API_KEY` | One key, hundreds of models, attribution headers sent |
+| Mistral · xAI · Together · Cerebras · Fireworks · SambaNova · Perplexity | `MISTRAL_API_KEY` · `XAI_API_KEY` · `TOGETHER_API_KEY` · `CEREBRAS_API_KEY` · `FIREWORKS_API_KEY` · `SAMBANOVA_API_KEY` · `PERPLEXITY_API_KEY` | OpenAI-compatible |
+| Azure OpenAI | `AZURE_OPENAI_API_KEY` | Needs your deployment base URL (`api-key` auth) |
+| Custom / self-hosted | `CUSTOM_LLM_API_KEY` + `CUSTOM_LLM_BASE_URL` | Ollama, vLLM, LM Studio, LiteLLM, llama.cpp, an internal gateway |
+
+Rules that always hold:
+
+- An **environment variable wins** over a key saved in the console, and a key
+  pinned in `.env` cannot be rotated (or read) from the browser.
+- Keys are **write-only**: the console shows a mask (`gsk_…cdef`) and never
+  returns the value.
+- If a call errors or is rate-limited, the request retries other usable models
+  on the same provider, then other connected providers (switchable). A
+  server-wide per-minute cap stops a runaway loop.
+
+**What the assistant can do.** Every console action is a tool — 163 at the last count — covering every area: site
+understanding (live briefing, full schema, settings inventory, read-only SQL),
+lookups, listings (full editor, admin add, bulk actions, timeline, relationship
+graph, technology radar, listing news), users & billing, claims/tickets/removals,
+content (blog, email, careers, promos, advertising, newsletter) and operations
+(protection, indexing, status page, upkeep, backups, PayPal/SMTP credentials,
+console security, AI settings itself).
+
+Three confirmation levels, all visible in Settings:
+
+| Level | Behaviour |
+|---|---|
+| **read** | Runs immediately, never asks |
+| **write** | Proposes first; runs at once only if you ticked it under *Assistant auto-run* |
+| **sensitive** | **Always** proposes, cannot be auto-run: deletions, bulk operations, emailing every member, credentials, security and site-wide switches |
+
+A proposal is parked in `ai_pending_actions` for 10 minutes and shows the exact
+arguments (and, for a multi-step job, every step in order) before anything runs.
+You can also switch a whole console area off — then the model does not even see
+those tools.
+
+**Grounded, not imaginative.** Every turn starts from a live briefing built by
+`src/lib/sitecontext.js`: what the product is, the business rules, the admin
+routes, the public pages, the real table list with row counts, current settings
+and feature flags. The assistant can re-read any of it on demand
+(`site_overview`, `get_site_schema`, `get_settings`, `query_database`), so it
+answers from your installation rather than from an idea of it.
+
+**Auto-moderation.** When enabled, every new pending listing (dashboard, API,
+admin add, generator) is evaluated in the background: approve, reject with a
+reason, or leave pending when unsure — plus an in-console notification and,
+optionally, an email. It can run on a different model or even a different
+provider than the assistant (e.g. `gemini:gemini-2.5-flash-lite`). A failure
+never blocks a submission; the record simply stays pending. The rules are
+editable text, and *Review one now* re-runs the pass on a single listing.
+
+**Privacy.** The assistant is stateless: no chat history is stored, listed or
+restored. Context is only what is visible in the current tab.
+
 ## 5. Day-to-day operations
 
 | Task | Where |
@@ -684,6 +760,11 @@ top to bottom and FirmLedger is ready for real customers:
 | Refresh the technology radar | Admin → Listings → **Technology radar maintenance** — one record (row **↻ Tech** or the edit page panel), a ticked selection (bulk action), **Refresh all N in this view**, **Refresh N stale**, or the whole directory. Runs in the background with live progress, and can be stopped |
 | Moderate company news | Admin → **News** — member submissions wait in *pending* until approved; detected stories, hand-written stories and sweeps live there too |
 | Look for news automatically | Admin → News → **Check N due listings** / **Check all N listings**, or **Look for stories now** on a listing's edit page. A story is only kept when it carries the company's full name or sits on its own domain |
+| Ask the AI to do it | Admin → **AI Playground → Assistant** — “approve the 6 pending fintech listings”, “who signed up this week?”, “suspend the account spamming claims and tell them why”. Every answer comes from real tool results, never from a guess |
+| Connect or switch an AI provider | Admin → AI Playground → **Settings → Model providers** — paste a key, pick a model, press **Test & sync models**, then **Use this provider**. Or set `GROQ_API_KEY` / `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / … in `.env` (env always wins) |
+| Limit what the assistant may touch | Admin → AI Playground → Settings → **What the assistant can do** — switch console areas off, and tick which write actions may run without a confirm |
+| Pre-screen new submissions with AI | Admin → AI Playground → Settings → **AI auto-moderation** — on/off, its own model (can be a different provider), editable rules, admin email when unsure |
+
 | Automate the upkeep | Admin → Settings → **Automated upkeep** — an hourly sweep that refreshes stale technology snapshots and re-checks news, capped per hour, switchable per job |
 
 ## 6. Data & files
