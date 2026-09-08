@@ -741,14 +741,24 @@ img.logo-tile { object-fit: contain; padding: 4px; background: #fff; border: 1px
 .hiring-note a { color: var(--ok); text-decoration: underline; }
 .hiring-note b { font-weight: 700; }
 
-/* News about a company — profile panel, submit page and the admin queue. */
-.news-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+/* News about a company — profile panel, submit page and the admin queue.
+   Cards must fit the listing column: long Google News wrapper URLs / leftover
+   markup can never push the profile sideways. */
+.news-panel { min-width: 0; overflow: hidden; }
+.news-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; min-width: 0; }
 .news-item { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
-  border: 1px solid var(--hair); border-radius: var(--r); background: var(--surface); padding: 12px 14px; }
-.news-item-main { min-width: 0; display: grid; gap: 3px; }
-.news-item-main b { font: 600 13.5px/1.45 var(--fb); color: var(--ink); }
+  border: 1px solid var(--hair); border-radius: var(--r); background: var(--surface);
+  padding: 12px 14px; min-width: 0; overflow: hidden; }
+.news-item-main { min-width: 0; display: grid; gap: 3px; overflow: hidden; }
+.news-item-main a { min-width: 0; display: block; overflow-wrap: anywhere; word-break: break-word; }
+.news-item-main b { font: 600 13.5px/1.45 var(--fb); color: var(--ink); overflow-wrap: anywhere; word-break: break-word; }
 .news-item-main a:hover b { color: var(--accent2); text-decoration: underline; }
-.news-sum { margin: 2px 0 0; font-size: 13px; color: var(--muted); }
+.news-item .src-d { overflow-wrap: anywhere; word-break: break-word; }
+.news-sum {
+  margin: 2px 0 0; font-size: 13px; line-height: 1.5; color: var(--muted);
+  overflow-wrap: anywhere; word-break: break-word;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
 .news-item .pill { flex: 0 0 auto; }
 
 .faq-list { display: grid; gap: 8px; }
@@ -800,7 +810,7 @@ img.logo-tile { object-fit: contain; padding: 4px; background: #fff; border: 1px
 .score-chip.hi { color: var(--ok); background: var(--ok-soft); }
 .score-chip.mid { color: var(--warn); background: var(--warn-soft); }
 .score-chip.lo { color: var(--bad); background: var(--bad-soft); }
-.score-hint { font: 500 10.5px/1.3 var(--fm); color: var(--muted); margin-top: 4px; }
+.score-hint { font: 500 10.5px/1.3 var(--fm); color: var(--muted); margin-top: 4px; overflow-wrap: anywhere; word-break: break-word; }
 
 .dup-claim { display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap; border: 1px solid var(--accent); border-radius: var(--r); background: var(--accent-soft, #F8F5EE); padding: 16px 18px; margin-bottom: 18px; }
 .dc-t b { display: block; font: 600 14px/1.3 var(--fb); color: var(--ink); }
@@ -1563,7 +1573,8 @@ h2.h-display { font-size: clamp(1.9rem, 3.4vw, 2.7rem); }
    of pushing the page wider — a hard guarantee against horizontal scroll. */
 .l-name, .prof-name, .prof-tagline, .l-meta, .rw-t b, .src-n, .pos-title, .job-title,
 .facts td, .ticket-subject, .chat-body, .wa-text, .news-copy p, .eco-row a,
-.badge-note, .form-note, .fine-print, .env-code, .env-link, .env-note {
+.badge-note, .form-note, .fine-print, .env-code, .env-link, .env-note,
+.news-sum, .news-item-main b, .news-item-main a, .news-item .src-d {
   overflow-wrap: anywhere;
 }
 

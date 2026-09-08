@@ -79,13 +79,16 @@ function newsFeed(query) {
     { title: 'Kenya shilling firms against the dollar', link: 'https://finance.example/markets/shilling',
       source: 'Finance Weekly', desc: 'Currency markets steadied on improved inflows.' },
   ];
+  /* Mirror Google News RSS: the description is entity-encoded HTML wrapping a
+     long rss/articles URL. Profiles must never dump that markup as copy. */
+  const gNews = 'https://news.google.com/rss/articles/CBMitgFBVV95cUxORWwyb2VYS01UaXdLZWdVWl9ZTGx4TmZaNWpxRjMxSTYzUDVEbjV5Y2huY3k2bGVNV3lUMUJpVDZtZU9NMHdLV0VKZzRkR1pxU';
   const xml = items.map((it) => `    <item>
       <title>${it.title}</title>
       <link>${it.link}</link>
       <guid isPermaLink="false">${it.link}</guid>
       <pubDate>Mon, 03 Aug 2026 06:00:00 GMT</pubDate>
       <source url="https://${it.source.toLowerCase().replace(/\s+/g, '')}.example">${it.source}</source>
-      <description>${it.desc}</description>
+      <description>&lt;a href="${gNews}" target="_blank"&gt;${it.desc}&lt;/a&gt;&nbsp;&nbsp;&lt;font color="#6f6f6f"&gt;${it.source}&lt;/font&gt;</description>
     </item>`).join('\n');
   return `<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel>
     <title>${name} — news search</title>

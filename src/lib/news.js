@@ -50,7 +50,57 @@ function decodeEntities(s) {
 }
 
 function stripTags(s) {
-  return decodeEntities(String(s || '').replace(/<[^>]*>/g, ' ')).replace(/\s+/g, ' ').trim();
+  /* Decode first, then strip. Google News (and many other feeds) entity-encode
+     the HTML inside <description>, so stripping tags *before* decoding leaves
+     the markup — and the enormous rss/articles URLs — as visible copy. */
+  let t = String(s || '');
+  for (let i = 0; i < 4; i++) {
+    t = decodeEntities(t).replace(/<[^>]*>/g, ' ');
+  }
+  return t.replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Profile-safe one-liner. Drops leftover markup, wrapper URLs (especially
+ * Google News rss/articles IDs) and copy that just repeats the headline or
+ * the publisher — so the news panel never spills a raw <a href="…">.
+ */
+function cleanSummary(raw, { title = '', source = '' } = {}) {
+  let t = stripTags(raw);
+  t = t
+    .replace(/https?:\/\/[^\s<>"']+/gi, ' ')
+    .replace(/\bwww\.[^\s<>"']+/gi, ' ')
+    .replace(/\bhref\s*=\s*("([^"]*)"|'([^']*)'|[^\s>]+)/gi, ' ')
+    .replace(/\[(https?:\/\/[^\]]+)\]\([^)]*\)/gi, ' ')
+    .replace(/news\.google\.com\/rss\/articles\/\S+/gi, ' ')
+    .replace(/[<>[\]{}]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const cutEnd = (s, extra) => {
+    const e = String(extra || '').trim();
+    if (!e || !s) return s;
+    const re = new RegExp(`(?:\\s*[\\-–—·|]\\s*)?${e.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')}\\s*$`, 'i');
+    return s.replace(re, '').trim();
+  };
+  t = cutEnd(t, source);
+  t = cutEnd(t, title);
+
+  const nTitle = norm(title);
+  const nSum = norm(t);
+  if (!nSum) return '';
+  if (nTitle && (nSum === nTitle || nTitle.startsWith(nSum) || nSum.startsWith(nTitle))) return '';
+  if (source && nSum === norm(source)) return '';
+  if (/^(target|_blank|rel|noopener|nofollow|href)$/i.test(nSum)) return '';
+  return t.slice(0, 400);
+}
+
+/** Public-facing shape of a story — already-stored junk is cleaned on read. */
+function present(n) {
+  if (!n) return n;
+  const title = stripTags(n.title).slice(0, 220);
+  const source = stripTags(n.source).slice(0, 80);
+  return { ...n, title, source, summary: cleanSummary(n.summary, { title, source }) };
 }
 
 function pick(block, tag) {
@@ -89,13 +139,14 @@ function parseRss(xml) {
       || (block.match(/<guid\b[^>]*>(https?:\/\/[^\s<]+)<\/guid>/i) || [])[1]
       || '';
     if (!/^https?:\/\//i.test(url)) continue;
+    const publisher = (source || hostOf(sourceUrl) || hostOf(url)).slice(0, 80);
     out.push({
       title: title.slice(0, 220),
       url: url.trim(),
-      source: (source || hostOf(sourceUrl) || hostOf(url)).slice(0, 80),
+      source: publisher,
       source_url: sourceUrl.slice(0, 500),
       published_at: isoDay(pick(block, 'pubDate')),
-      summary: pick(block, 'description').slice(0, 400),
+      summary: cleanSummary(pick(block, 'description'), { title, source: publisher }),
     });
   }
   return out;
@@ -171,7 +222,7 @@ const SELECT_APPROVED = `SELECT * FROM listing_news
   ORDER BY CASE WHEN published_at <> '' THEN published_at ELSE date(created_at) END DESC, id DESC`;
 
 function approvedFor(listingId, limit = 8) {
-  return db.prepare(`${SELECT_APPROVED} LIMIT ?`).all(listingId, limit);
+  return db.prepare(`${SELECT_APPROVED} LIMIT ?`).all(listingId, limit).map(present);
 }
 
 function allFor(listingId) {
@@ -179,7 +230,7 @@ function allFor(listingId) {
     `SELECT * FROM listing_news WHERE listing_id = ?
      ORDER BY CASE status WHEN 'pending' THEN 0 ELSE 1 END,
               CASE WHEN published_at <> '' THEN published_at ELSE date(created_at) END DESC, id DESC`
-  ).all(listingId);
+  ).all(listingId).map(present);
 }
 
 function pendingQueue(limit = 200) {
@@ -190,7 +241,7 @@ function pendingQueue(limit = 200) {
      LEFT JOIN users u ON u.id = n.submitted_by
      WHERE n.status = 'pending'
      ORDER BY n.created_at DESC LIMIT ?`
-  ).all(limit);
+  ).all(limit).map(present);
 }
 
 function recent(status = '', limit = 200) {
@@ -199,13 +250,13 @@ function recent(status = '', limit = 200) {
       `SELECT n.*, l.name AS listing_name, l.slug AS listing_slug
        FROM listing_news n JOIN listings l ON l.id = n.listing_id
        WHERE n.status = ? ORDER BY n.created_at DESC LIMIT ?`
-    ).all(status, limit);
+    ).all(status, limit).map(present);
   }
   return db.prepare(
     `SELECT n.*, l.name AS listing_name, l.slug AS listing_slug
      FROM listing_news n JOIN listings l ON l.id = n.listing_id
      ORDER BY n.created_at DESC LIMIT ?`
-  ).all(limit);
+  ).all(limit).map(present);
 }
 
 function counts() {
@@ -249,7 +300,7 @@ function insertRow(listing, item, { origin, status, match, user, note }) {
     url,
     String(item.source || '').trim().slice(0, 80),
     isoDay(item.published_at),
-    String(item.summary || '').trim().slice(0, 400),
+    cleanSummary(item.summary, { title: item.title, source: item.source }),
     origin, status, match || '',
     user ? user.id : null,
     user ? String(user.email || '').slice(0, 200) : String(item.submitter_email || '').slice(0, 200),
@@ -556,7 +607,7 @@ function originLabel(n) {
 
 module.exports = {
   SEARCH_URL, PER_LISTING_CAP,
-  parseRss, matchItem, coreName, norm, hostOf, isoDay,
+  parseRss, matchItem, coreName, norm, hostOf, isoDay, stripTags, cleanSummary, present,
   approvedFor, allFor, pendingQueue, recent, counts,
   fetchFor, submit, approve, reject, remove, addManual, byId,
   staleListingIds, start, cancel, jobState, lastRun, trimListing,

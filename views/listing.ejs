@@ -246,7 +246,7 @@
       <% } %>
 
       <% if (typeof news !== 'undefined' && news && news.length) { %>
-      <div class="panel rv">
+      <div class="panel rv news-panel">
         <div class="panel-h-t"><h3>News</h3><span class="src-d"><%= news.length %> published</span></div>
         <ul class="news-list">
           <% news.forEach(function (n) { %>
@@ -254,7 +254,7 @@
             <div class="news-item-main">
               <a href="<%= n.url %>" target="_blank" rel="noopener nofollow"><b><%= n.title %></b></a>
               <span class="src-d"><%= n.source || 'source link' %><% if (n.published_at) { %> · <%= fmtDate(n.published_at) %><% } %></span>
-              <% if (n.summary) { %><p class="news-sum"><%= truncate(n.summary, 160) %></p><% } %>
+              <% if (n.summary && !/<\s*a\s|news\.google\.com\/rss\/articles/i.test(n.summary)) { %><p class="news-sum"><%= truncate(n.summary, 160) %></p><% } %>
             </div>
           </li>
           <% }) %>

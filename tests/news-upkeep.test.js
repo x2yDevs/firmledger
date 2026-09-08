@@ -94,6 +94,40 @@ const stories = (l) => db.prepare('SELECT * FROM listing_news WHERE listing_id=?
   check('every item carries a usable link', items.every((i) => /^https:\/\//.test(i.url)));
   check('publication dates are normalised', items[0].published_at === '2026-08-03', items[0].published_at);
   check('the publication is read from the feed', items[0].source === 'Business Daily', items[0].source);
+  check('encoded google-news html is stripped from the summary',
+    /closed a Sh200m/.test(items[0].summary || '') && !/<a href/i.test(items[0].summary || '')
+    && !/news\.google\.com/.test(items[0].summary || '') && !/CBMitgFBVV95cUx/.test(items[0].summary || ''),
+    items[0].summary);
+
+  const googleXml = `<?xml version="1.0"?><rss version="2.0"><channel>
+    <item>
+      <title>Safari Fintech raises Sh200m - Business Daily</title>
+      <link>https://news.google.com/rss/articles/CBMitgFBVV95cUxORWwyb2VYS01UaXdLZWdVWl9ZTGx4TmZaNWpxRjMxSTYzUDVEbjV5Y2huY3k2bGVNV3lUMUJpVDZtZU9NMHdLV0VKZzRkR1pxU</link>
+      <pubDate>Mon, 03 Aug 2026 06:00:00 GMT</pubDate>
+      <source url="https://www.businessdailyafrica.com">Business Daily</source>
+      <description>&lt;a href="https://news.google.com/rss/articles/CBMitgFBVV95cUxORWwyb2VYS01UaXdLZWdVWl9ZTGx4TmZaNWpxRjMxSTYzUDVEbjV5Y2huY3k2bGVNV3lUMUJpVDZtZU9NMHdLV0VKZzRkR1pxU" target="_blank"&gt;Safari Fintech raises Sh200m&lt;/a&gt;&nbsp;&nbsp;&lt;font color="#6f6f6f"&gt;Business Daily&lt;/font&gt;</description>
+    </item>
+    <item>
+      <title>Coast expansion confirmed - Nation</title>
+      <link>https://news.google.com/rss/articles/CBMiotherlongid</link>
+      <pubDate>Tue, 04 Aug 2026 06:00:00 GMT</pubDate>
+      <source url="https://nation.africa">Nation</source>
+      <description><![CDATA[<a href="https://news.google.com/rss/articles/CBMiotherlongid">Safari Fintech has closed a Sh200m round led by regional investors.</a>&nbsp;&nbsp;<font color="#6f6f6f">Nation</font>]]></description>
+    </item>
+  </channel></rss>`;
+  const gItems = news.parseRss(googleXml);
+  check('a google-news feed still parses', gItems.length === 2, `parsed ${gItems.length}`);
+  check('the headline is kept, not the wrapper markup',
+    /Safari Fintech raises Sh200m/.test(gItems[0].title) && !/<a href/i.test(gItems[0].title),
+    gItems[0].title);
+  check('a description that is only the headline+publisher is dropped', !gItems[0].summary, gItems[0].summary);
+  check('cdata html keeps the real sentence and drops the wrapper url',
+    /closed a Sh200m/.test(gItems[1].summary || '') && !/news\.google\.com/.test(gItems[1].summary || '')
+    && !/<a href/i.test(gItems[1].summary || ''),
+    gItems[1].summary);
+  check('cleanSummary never returns raw href markup',
+    !/<a href/i.test(news.cleanSummary('&lt;a href="https://news.google.com/rss/articles/CBMitgFBVV95cUx"&gt;Hello&lt;/a&gt;'))
+    && !/news\.google\.com/.test(news.cleanSummary('<a href="https://news.google.com/rss/articles/CBMitgFBVV95cUx">Hello</a>')));
 
   /* ---- the accuracy gate ---- */
   const safari = row(safariId);
@@ -120,6 +154,22 @@ const stories = (l) => db.prepare('SELECT * FROM listing_news WHERE listing_id=?
   check('the listing is stamped as checked', row(safariId).news_checked_at === new Date().toISOString().slice(0, 10));
   check('detected stories publish immediately', stories(safariId).every((n) => n.status === 'approved'));
   check('they are visible on the public profile', news.approvedFor(safariId).length === 2);
+  check('detected summaries never carry google-news wrapper urls',
+    news.approvedFor(safariId).every((n) => !/news\.google\.com/.test(n.summary || '') && !/<a href/i.test(n.summary || '')));
+
+  const junkId = Number(db.prepare(
+    `INSERT INTO listing_news (listing_id, title, url, source, published_at, summary, origin, status, match)
+     VALUES (?,?,?,?,?,?,?,?,?)`
+  ).run(
+    temboId, 'Stored junk headline', 'https://newsroom.example/tembo/x', 'Daily', '2026-08-01',
+    '<a href="https://news.google.com/rss/articles/CBMitgFBVV95cUxORWwyb2VYS01UaXdLZWdVWl9ZTGx4TmZaNWpxRjMxSTYzUDVEbjV5Y2huY3k2bGVNV3lUMUJpVDZtZU9NMHdLV0VKZzRkR1pxU">Stored junk headline</a>',
+    'auto', 'approved', 'name',
+  ).lastInsertRowid);
+  const shownJunk = news.approvedFor(temboId).find((n) => n.id === junkId);
+  check('already-stored html summaries are cleaned when read for a profile',
+    Boolean(shownJunk) && !shownJunk.summary && !/news\.google\.com/.test(JSON.stringify(shownJunk)),
+    shownJunk && shownJunk.summary);
+  db.prepare('DELETE FROM listing_news WHERE id=?').run(junkId);
 
   const run2 = await news.fetchFor(row(safariId));
   check('a second sweep adds nothing — stories are never duplicated',
