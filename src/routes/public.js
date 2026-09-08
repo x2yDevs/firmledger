@@ -16,6 +16,8 @@ const ad = require('../lib/advertising');
 const careers = require('../lib/careers');
 
 const spam = require('../lib/spam');
+const newsLib = require('../lib/news');
+const { requireUser } = require('../lib/session');
 
 const router = express.Router();
 const PER_PAGE = 12;
@@ -402,7 +404,50 @@ router.get('/listing/:slug', (req, res, next) => {
     score, people, eco, faqs, competitors, tech,
     hiringUrl: l.hiring_url || '',
     techCheckedAt: l.tech_checked_at || '',
+    news: newsLib.approvedFor(l.id, 6),
   });
+});
+
+/* ---------------- Listing news ----------------
+ * Anyone signed in can hand us a story about a company. It never appears
+ * straight away — it waits in the moderation queue until the console
+ * approves it, which is what keeps this panel trustworthy.
+ */
+router.get('/listing/:slug/news', requireUser, (req, res, next) => {
+  const l = db.prepare('SELECT * FROM listings WHERE slug = ?').get(req.params.slug);
+  if (!l) return next();
+  const isOwner = req.user && l.owner_user_id === req.user.id;
+  if (l.status !== 'approved' && !isOwner && !req.admin) return next();
+  const items = newsLib.allFor(l.id);
+  res.render('news-submit', {
+    meta: {
+      title: `Submit news — ${l.name} | FirmLedger`,
+      description: `Submit a news story about ${l.name} for review by the FirmLedger moderation team.`,
+      canonical: siteUrl(`/listing/${l.slug}/news`),
+      robots: 'noindex,nofollow',
+    },
+    l,
+    published: items.filter((n) => n.status === 'approved').slice(0, 8),
+    mine: items.filter((n) => n.submitted_by === req.user.id),
+    today: new Date().toISOString().slice(0, 10),
+    ok: req.query.ok || '', err: req.query.err || '',
+  });
+});
+
+router.post('/listing/:slug/news', spam.gate('listing'), (req, res, next) => {
+  const l = db.prepare('SELECT * FROM listings WHERE slug = ?').get(req.params.slug);
+  if (!l) return next();
+  if (!req.user) {
+    return res.redirect('/login?next=' + encodeURIComponent(`/listing/${l.slug}/news`));
+  }
+  const r = newsLib.submit({
+    listing: l, user: req.user,
+    title: req.body.title, url: req.body.url, source: req.body.source,
+    published_at: req.body.published_at, summary: req.body.summary, note: req.body.note,
+  });
+  if (!r.ok) return res.redirect(`/listing/${l.slug}/news?err=` + encodeURIComponent(r.error));
+  res.redirect(`/listing/${l.slug}/news?ok=` + encodeURIComponent(
+    'Thank you — the story is queued for moderation and appears on the profile once it is approved.'));
 });
 
 /* ---------------- Verification badge (dynamic SVG) ---------------- */

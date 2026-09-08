@@ -431,6 +431,50 @@
       })();
     </script>
 
+    <div class="form-card form" id="upkeep">
+      <h3 class="form-section">Automated upkeep — keep records fresh on its own</h3>
+      <p class="muted">An hourly sweep that refreshes what goes stale without anyone clicking: technology snapshots and news coverage. Both jobs are capped, run in the background, and never stack. Turning something off here only stops the schedule — the buttons in Admin → Listings and Admin → News still work.</p>
+      <form method="post" action="/admin3119Musa/settings/upkeep">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <div class="check-row" style="margin-top:14px">
+          <label class="check"><input type="checkbox" name="upkeep_on" value="1" <%= settings.on ? 'checked' : '' %>><span>Hourly upkeep</span></label>
+          <label class="check"><input type="checkbox" name="upkeep_tech_on" value="1" <%= settings.tech_on ? 'checked' : '' %>><span>Refresh stale technology snapshots</span></label>
+          <label class="check"><input type="checkbox" name="upkeep_news_on" value="1" <%= settings.news_on ? 'checked' : '' %>><span>Look for fresh news coverage</span></label>
+        </div>
+        <div class="grid-3" style="margin-top:14px">
+          <label><span>Tech snapshots per hour</span>
+            <input type="number" name="upkeep_tech_limit" min="1" max="500" value="<%= settings.tech_limit %>">
+          </label>
+          <label><span>News checks per hour</span>
+            <input type="number" name="upkeep_news_limit" min="1" max="500" value="<%= settings.news_limit %>">
+          </label>
+          <label><span>Re-check news after (days)</span>
+            <input type="number" name="upkeep_news_max_age_days" min="1" max="365" value="<%= settings.news_max_age_days %>">
+          </label>
+        </div>
+        <div class="form-actions" style="margin-top:14px">
+          <button class="btn btn-primary btn-sm" type="submit">Save schedule</button>
+        </div>
+      </form>
+      <div class="stats-strip" style="margin-top:16px">
+        <div class="stat-cell"><div class="stat-n"><%= settings.on ? 'On' : 'Off' %></div><div class="stat-l">Hourly upkeep</div></div>
+        <div class="stat-cell"><div class="stat-n"><%= settings.tech_limit %></div><div class="stat-l">Tech/hour</div></div>
+        <div class="stat-cell"><div class="stat-n"><%= settings.news_limit %></div><div class="stat-l">News/hour</div></div>
+        <div class="stat-cell"><div class="stat-n"><%= settings.news_max_age_days %></div><div class="stat-l">News re-check (days)</div></div>
+        <div class="stat-cell"><div class="stat-n" style="font-size:1rem;line-height:2;padding-top:4px"><%= settings.last_run ? String(settings.last_run.finished_at || '').slice(0, 16).replace('T', ' ') : '—' %></div><div class="stat-l">Last upkeep run</div></div>
+      </div>
+      <% if (settings.last_run) { %>
+        <p class="form-note" style="margin-top:10px">Last run queued
+          <b><%= (settings.last_run.tech && settings.last_run.tech.queued) || 0 %></b> technology scan(s) and
+          <b><%= (settings.last_run.news && settings.last_run.news.queued) || 0 %></b> news check(s).</p>
+      <% } %>
+      <form method="post" action="/admin3119Musa/settings/upkeep/run" style="margin-top:12px">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <button class="btn btn-ghost btn-sm" type="submit">Run upkeep now</button>
+        <span class="form-note">Queues this hour's work immediately, whatever the schedule says.</span>
+      </form>
+    </div>
+
     <div class="form-card">
       <h3 class="form-section">Environment</h3>
       <p class="muted">Runtime configuration of this installation — what it's called on the internet, how mail behaves, and where search engines pick it up.</p>

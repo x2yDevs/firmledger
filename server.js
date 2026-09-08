@@ -209,6 +209,9 @@ const newsletter = require('./src/lib/newsletter');
 const supportLib = require('./src/lib/support');
 const notificationsLib = require('./src/lib/notifications');
 function hourlyJobs() {
+  /* Automated upkeep — refreshes stale technology snapshots and looks for fresh
+     news coverage, capped per hour and switched in Admin → Settings. */
+  require('./src/lib/upkeep').runSweep().catch((e) => console.error('[upkeep] sweep failed:', e && e.message));
   newsletter.sendWeeklyDigest().catch(() => {});
   try { supportLib.autoCloseStale(); } catch (e) { console.error('[auto-close]', e.message); }
   try {

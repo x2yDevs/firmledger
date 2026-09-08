@@ -157,6 +157,19 @@ function seed() {
   await tool('accept_all_pending_listings', {}, () => (
     count("SELECT COUNT(*) c FROM listings WHERE status='pending'") === 0 ? null : 'pending listings remain'));
 
+  /* Technology radar refresh — canned homepages, no network, fetch restored after. */
+  const savedFetch = globalThis.fetch;
+  require('./helpers/fetch-stub.js');
+  const scannedToday = new Date().toISOString().slice(0, 10);
+  await tool('refresh_listing_tech', { id_or_slug: 'gamma-group' }, () => (
+    one('SELECT tech_checked_at FROM listings WHERE id=?', f.gamma).tech_checked_at === scannedToday
+      ? null : 'technology scan date not stamped in DB'));
+  await tool('refresh_listing_tech', { id_or_slug: 'no-such-listing' }, null, { expectFail: true });
+  db.prepare("UPDATE listings SET website='' WHERE id=?").run(f.zeta);
+  await tool('refresh_listing_tech', { id_or_slug: 'zeta-holdings' }, null, { expectFail: true });
+  db.prepare('UPDATE listings SET website=? WHERE id=?').run('https://zeta-holdings.example.com', f.zeta);
+  globalThis.fetch = savedFetch;
+
   await tool('feature_listing', { id_or_slug: 'gamma-group', featured: true }, () => (
     one('SELECT featured FROM listings WHERE id=?', f.gamma).featured === 1 ? null : 'featured flag not set'));
   await tool('feature_listing', { id_or_slug: 'gamma-group' }, () => (
@@ -270,6 +283,27 @@ function seed() {
     if (one('SELECT id FROM listings WHERE id=?', f.zeta)) return 'listing was not deleted';
     return one('SELECT status FROM removal_requests WHERE id=?', f.removal).status === 'removed' ? null : 'request not closed';
   });
+
+  /* News moderation — a member-submitted story, then the assistant's verdict. */
+  const newsLib = require('../src/lib/news.js');
+  const submitted = newsLib.submit({
+    listing: one('SELECT * FROM listings WHERE id=?', f.gamma),
+    user: one('SELECT * FROM users WHERE id=?', f.member),
+    title: 'Gamma Group signs a nationwide distribution deal',
+    url: 'https://newsroom.example/gamma/distribution', source: 'Business Daily',
+    published_at: '2026-05-02',
+  });
+  await tool('approve_news', { id: String(submitted.id) }, () => (
+    one('SELECT status FROM listing_news WHERE id=?', submitted.id).status === 'approved' ? null : 'story not approved in DB'));
+  await tool('approve_news', { id: '999999' }, null, { expectFail: true });
+
+  const submitted2 = newsLib.submit({
+    listing: one('SELECT * FROM listings WHERE id=?', f.gamma),
+    user: one('SELECT * FROM users WHERE id=?', f.member),
+    title: 'Gamma Group rumoured to be raising again', url: 'https://rumour.example/gamma',
+  });
+  await tool('reject_news', { id: String(submitted2.id) }, () => (
+    one('SELECT status FROM listing_news WHERE id=?', submitted2.id).status === 'rejected' ? null : 'story not rejected in DB'));
 
   /* ============================ Content ============================ */
   section('Content');

@@ -29,6 +29,7 @@ const ad = require('../lib/advertising');
 const careers = require('../lib/careers');
 const mon = require('../lib/statusMonitor');
 const listingEvents = require('../lib/listingevents');
+const techrefresh = require('../lib/techrefresh');
 
 const router = express.Router();
 const adminmail2fa = require('../lib/adminmail2fa');
@@ -369,21 +370,37 @@ router.get('/admin3119Musa/dashboard', (req, res) => {
   stats.openTickets = db.prepare("SELECT COUNT(*) c FROM tickets WHERE status='open'").get().c;
   stats.sponsored = ad.allSponsored().length;
   stats.careersOpen = db.prepare("SELECT COUNT(*) c FROM careers WHERE status='open'").get().c;
+  /* Technology radar freshness — surfaced as a maintenance shortcut. */
+  stats.techStale = techrefresh.staleCount();
+  stats.techNever = db.prepare(
+    "SELECT COUNT(*) c FROM listings WHERE website <> '' AND (tech_checked_at IS NULL OR tech_checked_at = '')"
+  ).get().c;
+  stats.newsPending = require('../lib/news').counts().pending;
   const recent = db.prepare("SELECT * FROM listings ORDER BY created_at DESC LIMIT 8").all();
   res.render('admin/dashboard', {
     meta: { title: 'Admin — FirmLedger', description: '', robots: 'noindex,nofollow' },
     stats, recent, section: 'dashboard',
+    techJob: techrefresh.jobState(),
+    techStaleDays: techrefresh.STALE_DAYS,
   });
 });
 
 /* ---------------- Listings management ---------------- */
-router.get('/admin3119Musa/listings', (req, res) => {
-  const status = ['pending', 'approved', 'rejected'].includes(req.query.status) ? req.query.status : '';
-  const q = String(req.query.q || '').trim().slice(0, 80);
-  const type = String(req.query.type || '').trim();
-  const category = String(req.query.category || '').trim();
-  const claimed = String(req.query.claimed || '').trim();
-  const planF = String(req.query.plan || '').trim();
+
+/**
+ * One filter definition, shared by the listings page and every bulk route, so
+ * "refresh everything in this view" can never drift from the rows the admin is
+ * actually looking at. `src` is either req.query or a POST body carrying the
+ * same fields as hidden inputs.
+ */
+function listingFilters(src = {}) {
+  const status = ['pending', 'approved', 'rejected'].includes(src.status) ? src.status : '';
+  const q = String(src.q || '').trim().slice(0, 80);
+  const type = String(src.type || '').trim();
+  const category = String(src.category || '').trim();
+  const claimed = String(src.claimed || '').trim();
+  const plan = String(src.plan || '').trim();
+  const tech = ['never', 'stale', 'fresh'].includes(src.tech) ? src.tech : '';
   const clauses = [];
   const params = [];
   if (status) { clauses.push('l.status = ?'); params.push(status); }
@@ -396,16 +413,78 @@ router.get('/admin3119Musa/listings', (req, res) => {
   if (category) { clauses.push('l.category = ?'); params.push(category); }
   if (claimed === '1') clauses.push('l.claimed = 1');
   if (claimed === '0') clauses.push('l.claimed = 0');
-  if (planF === 'pro') clauses.push("(l.plan='pro' OR u.plan='pro')");
-  if (planF === 'free') clauses.push("(l.plan<>'pro' AND (u.plan IS NULL OR u.plan<>'pro'))");
-  const where = clauses.length ? 'WHERE ' + clauses.join(' AND ') : '';
+  if (plan === 'pro') clauses.push("(l.plan='pro' OR u.plan='pro')");
+  if (plan === 'free') clauses.push("(l.plan<>'pro' AND (u.plan IS NULL OR u.plan<>'pro'))");
+  if (tech === 'never') {
+    // Matches the maintenance panel's "never scanned" count: only records that
+    // could be scanned (they have a website) but never have been.
+    clauses.push("l.website <> '' AND (l.tech_checked_at IS NULL OR l.tech_checked_at = '')");
+  } else if (tech === 'stale' || tech === 'fresh') {
+    const cutoff = new Date(Date.now() - techrefresh.STALE_DAYS * 86400000).toISOString().slice(0, 10);
+    clauses.push(tech === 'stale' ? "l.tech_checked_at <> '' AND l.tech_checked_at < ?" : 'l.tech_checked_at >= ?');
+    params.push(cutoff);
+  }
+  return {
+    where: clauses.length ? 'WHERE ' + clauses.join(' AND ') : '',
+    params,
+    filters: { q, type, category, claimed, plan, status, tech },
+  };
+}
+
+/* Pending first, newest second — the moderation order of the queue. */
+const LISTINGS_ORDER = "ORDER BY CASE l.status WHEN 'pending' THEN 0 ELSE 1 END, l.created_at DESC";
+const LISTINGS_LIMIT = 400;
+
+/**
+ * Forms post a compact `f` field (the page's query string) instead of seven
+ * hidden inputs, so every row button can return the admin to the same view.
+ */
+function mergeFilterBody(body = {}) {
+  const out = { ...body };
+  const qs = String(out.f || '');
+  if (qs) {
+    try {
+      for (const [k, v] of new URLSearchParams(qs)) {
+        if (out[k] === undefined || String(out[k]).trim() === '') out[k] = v;
+      }
+    } catch { /* malformed — fall back to the unfiltered queue */ }
+  }
+  return out;
+}
+
+/** The exact id set the current filter renders — used by "refresh this view". */
+function filteredListingIds(src) {
+  const f = listingFilters(mergeFilterBody(src));
+  return db.prepare(
+    `SELECT l.id FROM listings l
+     LEFT JOIN users u ON u.id = l.owner_user_id
+     ${f.where} ${LISTINGS_ORDER} LIMIT ${LISTINGS_LIMIT}`
+  ).all(...f.params).map((r) => r.id);
+}
+
+/** Back to the listings page, keeping the filter the admin was working in. */
+function listingsRedirect(body, kind = '', msg = '') {
+  const src = mergeFilterBody(body);
+  const keep = ['status', 'q', 'type', 'category', 'claimed', 'plan', 'tech'];
+  const p = new URLSearchParams();
+  for (const k of keep) {
+    const v = String(src[k] || '').trim();
+    if (v) p.set(k, v);
+  }
+  if (msg) p.set(kind || 'ok', msg);
+  const qs = p.toString();
+  return '/admin3119Musa/listings' + (qs ? `?${qs}` : '');
+}
+
+router.get('/admin3119Musa/listings', (req, res) => {
+  const f = listingFilters(req.query);
   const listings = db.prepare(
     `SELECT l.*, u.email AS owner_email,
             u.plan AS owner_plan, u.plan_expires_at AS owner_plan_expires
      FROM listings l
      LEFT JOIN users u ON u.id = l.owner_user_id
-     ${where} ORDER BY CASE l.status WHEN 'pending' THEN 0 ELSE 1 END, l.created_at DESC LIMIT 400`
-  ).all(...params);
+     ${f.where} ${LISTINGS_ORDER} LIMIT ${LISTINGS_LIMIT}`
+  ).all(...f.params);
   const transferReqs = db.prepare(
     `SELECT r.*, u.email AS user_email, u.name AS user_name,
             a.name AS from_name, a.slug AS from_slug, a.plan_expires_at AS from_expires,
@@ -416,12 +495,28 @@ router.get('/admin3119Musa/listings', (req, res) => {
      JOIN listings b ON b.id = r.to_listing_id
      WHERE r.status='pending' ORDER BY r.created_at DESC LIMIT 50`
   ).all();
+  const techCounts = techrefresh.counts();
+  /* Compact query string every form on the page posts back, so bulk actions and
+     tech refreshes land the admin in the same filtered view they started from. */
+  const fq = new URLSearchParams();
+  for (const [k, v] of Object.entries(f.filters)) if (v) fq.set(k, v);
+  const tabQ = new URLSearchParams();
+  for (const [k, v] of Object.entries(f.filters)) if (v && k !== 'status') tabQ.set(k, v);
   res.render('admin/listings', {
     meta: { title: 'Listings — FirmLedger Admin', description: '', robots: 'noindex,nofollow' },
-    listings, status, section: 'listings',
-    filters: { q, type, category, claimed, plan: planF, status },
+    listings, status: f.filters.status, section: 'listings',
+    filters: f.filters,
     TYPES, allCats: catLib.all(),
     transferReqs,
+    // Technology radar maintenance — counts, live job state, last run.
+    techJob: techrefresh.jobState(),
+    techCounts,
+    techLast: techrefresh.lastRun(),
+    techStaleDays: techrefresh.STALE_DAYS,
+    techCount: (raw) => techrefresh.parseTech(raw).length,
+    inViewCount: listings.length,
+    fqs: fq.toString(),
+    tabQs: tabQ.toString(),
     // Record-level Pro override (admin boost) for the Plan column; perks also
     // derive from the owner's account plan — shown via owner_plan on the view.
     planOf: (l) =>
@@ -481,9 +576,16 @@ function listingIdsFromBody(body) {
 router.post('/admin3119Musa/listings/bulk', (req, res) => {
   const ids = listingIdsFromBody(req.body);
   const act = String(req.body.bulk_action || '');
-  if (!ids.length) return res.redirect('/admin3119Musa/listings?err=' + encodeURIComponent('Select at least one listing.'));
+  if (!ids.length) return res.redirect(listingsRedirect(req.body, 'err', 'Select at least one listing.'));
+  if (act === 'refresh_tech') {
+    // Technology radar maintenance over the selection — runs in the background.
+    const started = techrefresh.start(ids, 'selected');
+    if (!started.ok) return res.redirect(listingsRedirect(req.body, 'err', started.error));
+    return res.redirect(listingsRedirect(req.body, 'ok',
+      `Technology radar refresh started for ${ids.length} listing${ids.length === 1 ? '' : 's'} — progress is shown in the maintenance panel.`));
+  }
   if (act !== 'approve' && act !== 'reject') {
-    return res.redirect('/admin3119Musa/listings?err=' + encodeURIComponent('Choose Approve or Reject.'));
+    return res.redirect(listingsRedirect(req.body, 'err', 'Choose Approve or Reject.'));
   }
   let n = 0;
   for (const id of ids) {
@@ -516,9 +618,203 @@ router.post('/admin3119Musa/listings/bulk', (req, res) => {
     }
     n += 1;
   }
-  res.redirect('/admin3119Musa/listings?ok=' + encodeURIComponent(
+  res.redirect(listingsRedirect(req.body, 'ok',
     n ? `${n} listing${n === 1 ? '' : 's'} ${act === 'approve' ? 'approved' : 'rejected'}.` : 'No pending listings in that selection.'
   ));
+});
+
+/* ---------------- Technology radar maintenance ----------------
+ * Re-detect the technology stack for one listing, a selection, everything in
+ * the filtered view, everything stale (or never scanned), or the whole
+ * directory. Big runs happen in the background — the listings page polls
+ * /admin3119Musa/listings/tech-job.json for progress.
+ */
+router.post('/admin3119Musa/listings/:id/refresh-tech', async (req, res) => {
+  const l = db.prepare('SELECT * FROM listings WHERE id=?').get(req.params.id);
+  if (!l) return res.redirect(listingsRedirect(req.body, 'err', 'That listing no longer exists.'));
+  let r;
+  try {
+    r = await techrefresh.refreshOne(l.id);
+  } catch (e) {
+    console.error('[tech-refresh] single refresh failed:', e && e.message);
+    return res.redirect(listingsRedirect(req.body, 'err', 'The homepage could not be scanned. Try again in a moment.'));
+  }
+  // The edit page posts back to itself so the admin stays on the record.
+  const back = String(req.body.back || '') === 'edit'
+    ? `/admin3119Musa/listings/${l.id}/edit#tech`
+    : listingsRedirect(req.body);
+  const join = back.includes('?') ? '&' : '?';
+  if (!r.ok) {
+    return res.redirect(back + join + 'err=' + encodeURIComponent(
+      r.skipped === 'no-website'
+        ? `${l.name} has no website — add one before refreshing the technology radar.`
+        : 'That listing no longer exists.'
+    ));
+  }
+  const msg = r.count
+    ? `Technology radar refreshed — ${r.count} technolog${r.count === 1 ? 'y' : 'ies'} detected${r.changed ? ` (was ${r.before})` : ', no change'}.`
+    : `Website scanned — no recognisable technologies detected${r.before ? ` (was ${r.before})` : ''}.`;
+  return res.redirect(back + join + 'ok=' + encodeURIComponent(msg));
+});
+
+router.post('/admin3119Musa/listings/refresh-tech', (req, res) => {
+  const scope = ['selected', 'view', 'stale', 'all'].includes(req.body.scope) ? req.body.scope : 'view';
+  let ids = [];
+  if (scope === 'selected') ids = listingIdsFromBody(req.body);
+  else if (scope === 'view') ids = filteredListingIds(req.body);
+  else if (scope === 'stale') ids = techrefresh.staleIds();
+  else ids = techrefresh.allIds();
+
+  if (!ids.length) {
+    return res.redirect(listingsRedirect(req.body, 'err', scope === 'selected'
+      ? 'Select at least one listing to refresh.'
+      : 'Nothing to refresh — no listings match that scope.'));
+  }
+  const started = techrefresh.start(ids, scope);
+  if (!started.ok) return res.redirect(listingsRedirect(req.body, 'err', started.error));
+  return res.redirect(listingsRedirect(req.body, 'ok',
+    `Technology radar refresh started — ${ids.length} listing${ids.length === 1 ? '' : 's'} queued. Progress is shown in the maintenance panel.`));
+});
+
+/* Live progress for a background refresh (polled by the listings page). */
+router.get('/admin3119Musa/listings/tech-job.json', (req, res) => {
+  res.json({ job: techrefresh.jobState(), counts: techrefresh.counts(), last: techrefresh.lastRun() });
+});
+
+router.post('/admin3119Musa/listings/tech-job/cancel', (req, res) => {
+  const stopped = techrefresh.cancel();
+  return res.redirect(listingsRedirect(req.body, stopped ? 'ok' : 'err', stopped
+    ? 'Refresh run will stop once the in-flight scans finish.'
+    : 'No refresh run is in progress.'));
+});
+
+/* ---------------- Listing news ----------------
+ * Stories about a company: detected from the public news index (auto, and only
+ * when they clear the accuracy gate) or submitted by a member (manual, and
+ * always held for moderation until someone here approves them).
+ */
+const newsLib = require('../lib/news');
+const upkeep = require('../lib/upkeep');
+
+/** Back to the news queue, keeping the active filter. */
+function newsRedirect(body, kind = '', msg = '') {
+  const p = new URLSearchParams();
+  const st = String((body || {}).status || '');
+  if (['pending', 'approved', 'rejected'].includes(st)) p.set('status', st);
+  const q = String((body || {}).q || '').trim().slice(0, 80);
+  if (q) p.set('q', q);
+  if (msg) p.set(kind || 'ok', msg);
+  const qs = p.toString();
+  return '/admin3119Musa/news' + (qs ? `?${qs}` : '');
+}
+
+router.get('/admin3119Musa/news', (req, res) => {
+  const status = ['pending', 'approved', 'rejected'].includes(req.query.status) ? req.query.status : '';
+  const origin = ['auto', 'user', 'admin'].includes(req.query.origin) ? req.query.origin : '';
+  const q = String(req.query.q || '').trim().slice(0, 80);
+  let rows = newsLib.recent(status, 300);
+  if (origin) rows = rows.filter((r) => r.origin === origin);
+  if (q) {
+    const needle = q.toLowerCase();
+    rows = rows.filter((r) => `${r.title} ${r.listing_name} ${r.source}`.toLowerCase().includes(needle));
+  }
+  res.render('admin/news', {
+    meta: { title: 'News — FirmLedger Admin', description: '', robots: 'noindex,nofollow' },
+    rows, section: 'news', status, origin, q,
+    counts: newsLib.counts(),
+    job: newsLib.jobState(),
+    lastRun: newsLib.lastRun(),
+    reviewAuto: newsLib.autoStatus() === 'pending',
+    upkeep: upkeep.settings(),
+    listings: db.prepare("SELECT id, name, slug FROM listings WHERE status='approved' ORDER BY name LIMIT 500").all(),
+    ok: req.query.ok || '', err: req.query.err || '',
+  });
+});
+
+/* Whether detected stories publish straight away or wait for a moderator. */
+router.post('/admin3119Musa/news/settings', (req, res) => {
+  setSetting('news_review_auto', req.body.news_review_auto === '1' ? '1' : '0');
+  return res.redirect(newsRedirect(req.body, 'ok', req.body.news_review_auto === '1'
+    ? 'Detected stories now wait for moderation before they appear.'
+    : 'Detected stories publish as soon as they match.'));
+});
+
+router.post('/admin3119Musa/news/:id/approve', (req, res) => {
+  const r = newsLib.approve(req.params.id, 'admin');
+  return res.redirect(newsRedirect(req.body, r.ok ? 'ok' : 'err',
+    r.ok ? 'Story approved — it now appears on the listing.' : r.error));
+});
+
+router.post('/admin3119Musa/news/:id/reject', (req, res) => {
+  const r = newsLib.reject(req.params.id, 'admin');
+  return res.redirect(newsRedirect(req.body, r.ok ? 'ok' : 'err',
+    r.ok ? 'Story rejected — the submitter has been told.' : r.error));
+});
+
+router.post('/admin3119Musa/news/:id/delete', (req, res) => {
+  const r = newsLib.remove(req.params.id);
+  return res.redirect(newsRedirect(req.body, r.ok ? 'ok' : 'err', r.ok ? 'Story deleted.' : r.error));
+});
+
+/* A story written here is published immediately — it came from a human. */
+router.post('/admin3119Musa/news/add', (req, res) => {
+  const l = db.prepare('SELECT * FROM listings WHERE id=?').get(req.body.listing_id);
+  if (!l) return res.redirect(newsRedirect(req.body, 'err', 'Pick a listing first.'));
+  const r = newsLib.addManual({
+    listing: l,
+    title: req.body.title, url: req.body.url, source: req.body.source,
+    published_at: req.body.published_at, summary: req.body.summary,
+  });
+  return res.redirect(newsRedirect(req.body, r.ok ? 'ok' : 'err',
+    r.ok ? `Story added to ${l.name} and published.` : r.error));
+});
+
+/* Sweep the news index for a selection, everything due, or every listing. */
+router.post('/admin3119Musa/news/refresh', (req, res) => {
+  const scope = ['selected', 'due', 'all'].includes(req.body.scope) ? req.body.scope : 'due';
+  let ids = [];
+  if (scope === 'selected') ids = listingIdsFromBody(req.body);
+  else if (scope === 'due') ids = newsLib.staleListingIds({ limit: 200, maxAgeDays: upkeep.settings().news_max_age_days });
+  else ids = db.prepare("SELECT id FROM listings WHERE status='approved' AND name <> '' ORDER BY id").all().map((r) => r.id);
+
+  if (!ids.length) {
+    return res.redirect(newsRedirect(req.body, 'err', scope === 'selected'
+      ? 'Select at least one listing.'
+      : 'Nothing is due — every listing has been checked recently.'));
+  }
+  const started = newsLib.start(ids, scope);
+  if (!started.ok) return res.redirect(newsRedirect(req.body, 'err', started.error));
+  return res.redirect(newsRedirect(req.body, 'ok',
+    `News sweep started — ${ids.length} listing${ids.length === 1 ? '' : 's'} queued. Progress is shown above.`));
+});
+
+router.get('/admin3119Musa/news/job.json', (req, res) => {
+  res.json({ job: newsLib.jobState(), counts: newsLib.counts(), last: newsLib.lastRun() });
+});
+
+router.post('/admin3119Musa/news/job/cancel', (req, res) => {
+  const stopped = newsLib.cancel();
+  return res.redirect(newsRedirect(req.body, stopped ? 'ok' : 'err', stopped
+    ? 'News sweep will stop once the in-flight requests finish.'
+    : 'No news sweep is running.'));
+});
+
+/* ---------------- Automated upkeep (hourly sweep) ---------------- */
+router.post('/admin3119Musa/settings/upkeep', (req, res) => {
+  upkeep.save(req.body);
+  res.redirect('/admin3119Musa/settings?ok=' + encodeURIComponent('Upkeep schedule saved.'));
+});
+
+router.post('/admin3119Musa/settings/upkeep/run', async (req, res) => {
+  const r = await upkeep.runSweep({ force: true });
+  if (!r.ok) {
+    return res.redirect('/admin3119Musa/settings?err=' + encodeURIComponent(
+      r.skipped === 'already-running' ? 'An upkeep sweep is already running.' : 'Upkeep is switched off.'));
+  }
+  const techN = (r.tech && r.tech.queued) || 0;
+  const newsN = (r.news && r.news.queued) || 0;
+  res.redirect('/admin3119Musa/settings?ok=' + encodeURIComponent(
+    `Upkeep run queued — ${techN} technolog${techN === 1 ? 'y' : 'y'} snapshot${techN === 1 ? '' : 's'} and ${newsN} news check${newsN === 1 ? '' : 's'}.`));
 });
 
 router.post('/admin3119Musa/listings/:id/feature', (req, res) => {
@@ -637,6 +933,12 @@ router.get('/admin3119Musa/listings/:id/edit', (req, res) => {
     relations: graphLib.buildGraph(l).items,
     REL_TYPES: graphLib.REL_TYPES,
     ownerOptions, ok: req.query.ok || '', err: req.query.err || '',
+    tech: techrefresh.parseTech(l.tech),
+    techCheckedAt: l.tech_checked_at || '',
+    techStaleDays: techrefresh.STALE_DAYS,
+    newsItems: require('../lib/news').allFor(l.id),
+    newsCheckedAt: l.news_checked_at || '',
+    newsOriginLabel: require('../lib/news').originLabel,
   });
 });
 
@@ -1082,6 +1384,7 @@ router.get('/admin3119Musa/settings', (req, res) => {
       sponsored_active: ad.allSponsored().length,
       careers_open: db.prepare("SELECT COUNT(*) c FROM careers WHERE status='open'").get().c,
       google_indexing_enabled: getSetting('google_indexing_enabled', '1'),
+      ...require('../lib/upkeep').settings(),
     },
     payments,
     google: googleIndexing.status(),

@@ -174,6 +174,46 @@ curl "https://firmledger.co.ke/api/v1/listings?category=Fintech&amp;country=Keny
 <h2>Production readiness</h2>
 <p><code>v1</code> is the stable public contract. Response shapes, field names and error codes are frozen; breaking changes ship only as <code>/api/v2</code> and <code>v1</code> keeps working. If your plan lapses, keys reply <code>403 pro_required</code> with an <code>upgrade_url</code> so your integration can point customers somewhere useful — and the same key works again the moment Pro is active. The <em>web</em> stays fully public, so your users can browse <a href="/directory">the directory</a> or read any profile even while your key is parked. If you just want to read about companies, the browser is already enough; if you want to build on the ledger, the key is your door.</p>`,
   },
+  {
+    slug: 'news-on-firmledger-what-a-profile-is-allowed-to-say-about-the-news',
+    title: 'News on FirmLedger: what a profile is allowed to say about the news',
+    excerpt: 'Every company profile can now carry published coverage of the business. Here is where those stories come from, the test each one has to pass before we store it, and why a story submitted by a member waits for a human.',
+    body: `<p class="lead">A directory record answers one question well: <em>who is this company?</em> It answers a second question badly: <em>what is happening to them?</em> Registered details, a verified owner and a source trail tell you a business exists and is real — not whether it raised money last month, opened a branch, or was in the headlines at all. That second question is what the news layer on every profile is for.</p>
+<h2>What counts as a news story here</h2>
+<p>One row of news on FirmLedger is deliberately small: a <b>headline</b>, the <b>publication</b> that carried it, the <b>date</b> it was published, and a <b>link</b> to the story itself. That is the whole shape. We do not rewrite headlines, we do not write summaries in our own words, and we do not generate a paragraph of context around a story we found. If we cannot point at the published article, we have nothing to show, so we show nothing.</p>
+<p>That constraint is the same one that governs the rest of the ledger. Company descriptions come from cited sources; ownership comes from a live domain check; technology comes from the company's own homepage. News follows the same rule: a claim is only ours to display if we can show where it came from.</p>
+<h2>Three doors, one standard</h2>
+<p>Stories reach a profile in three ways, and each one is labelled internally so we can always tell them apart.</p>
+<ul>
+  <li><b>Detected.</b> A sweep searches a public news index for the company and keeps what is genuinely about it.</li>
+  <li><b>Submitted.</b> A signed-in member sends us a story from the profile's submit page. It is held for moderation.</li>
+  <li><b>Written here.</b> A moderator adds a story by hand from the console. A human chose it, so it publishes immediately.</li>
+</ul>
+<p>Only the middle one waits. Automatic detection is held to a mechanical test before it is ever stored, and a moderator's own entry is a human decision by definition — but anything arriving from a member goes into a queue, because trust on a public record should not be granted by a form submission.</p>
+<h2>The accuracy gate</h2>
+<p>Detection is the part that has to earn its keep. A search for a company name returns a mixture: stories about the company, stories about a namesake, stories that mention one word of the name, and stories that merely appeared in the same results. Storing all of it would be easy and useless, so a story is kept only when one of two things is true.</p>
+<p><b>It carries the company's full name as a phrase.</b> Not a fragment of it. For a company called <em>Safari Fintech</em>, a headline about <em>Safari Fintech raising a round</em> matches. A headline about <em>Safari launching long-distance buses</em> does not — one word of a two-word name is not that company. Legal suffixes are stripped before the comparison, so <em>Safari Fintech Limited</em> and <em>Safari Fintech Ltd</em> are understood to be the same business, and neither is confused with a different company that happens to share a word.</p>
+<p><b>Or it sits on the company's own domain.</b> A story hosted on the company's website — or a feed whose publisher link points at it — is about the company by construction, even when the headline never repeats the name. Coverage from a company's own newsroom often reads <em>Expansion plan revealed</em> with no company name anywhere in it; the domain is the evidence.</p>
+<p>Everything else is dropped. Not flagged, not demoted, not shown with a disclaimer — dropped. A near-miss is never "close enough", because a confident wrong story on a business record is worse than an empty panel. When a scan finds nothing that clears the bar, the profile simply has no news, and the check is recorded as having happened. Zero is an honest answer; a guess is not.</p>
+<h2>Why submissions wait for a person</h2>
+<p>Anyone signed in can send us a story from a profile: headline, link, publication, date, and an optional note for the moderator. It is rate limited and CSRF-protected like every other form on the site, duplicate links are refused outright, and guests are sent to sign in first so every submission has an account behind it.</p>
+<p>Once submitted, the story is <b>pending</b>: invisible on the public profile, visible to the console, and the company's owner is told it is waiting. A moderator approves or rejects it, and the submitter is notified either way — and can see the status of their own submissions on the same page they submitted from. Approved stories appear on the profile with their publication and date; rejected ones stay out, and the reason is the one that matters: a story needs a link a stranger can open and check.</p>
+<p>This is slower than publishing everything and sorting it out later. It is also the only version of this feature we were willing to ship on a site whose entire premise is that its records can be audited.</p>
+<h2>Keeping it current, with or without you</h2>
+<p>News goes stale faster than a company's registered address, so freshness is a scheduled job rather than a good intention. An hourly sweep re-checks a capped number of listings for new coverage, oldest first, alongside the same sweep that refreshes stale technology snapshots. Both are switchable, both are capped per hour, and both run in the background — the console shows live progress and can stop a run mid-flight, and the whole schedule can be turned off from Settings without losing the buttons.</p>
+<p>On top of the schedule, a moderator can sweep everything that is due, sweep the entire directory, or press <b>Look for stories now</b> on a single listing's edit page. Each profile keeps its freshest stories — currently twelve — so a busy company's panel turns over instead of growing without limit.</p>
+<h2>What we deliberately do not do</h2>
+<ul>
+  <li><b>No machine-written summaries.</b> The words on a profile about a news story are the publication's words, not a model's paraphrase of them.</li>
+  <li><b>No paid placement.</b> News is not an advertising slot. Sponsorship is a separate, clearly labelled product; it never buys a story in this panel.</li>
+  <li><b>No stories without a citable link.</b> A press release that only exists in an inbox, or a claim with nothing behind it, does not go on a profile.</li>
+  <li><b>No silent edits.</b> Every story records where it came from — detected, submitted or written here — and who approved it.</li>
+  <li><b>No scraping of the company's own site as news.</b> Blog posts on a company domain are marketing, not coverage; they are only matched when a real publication is carrying the story.</li>
+</ul>
+<h2>The short version</h2>
+<p>FirmLedger now tells you what is being published about a company, not just what the company says about itself — and it does it under the same rule the rest of the ledger lives by. Detected stories have to prove they are about the business. Submitted stories wait for a human. Nothing appears without a link you can open yourself.</p>
+<p>Browse <a href="/directory">the directory</a> to see it on a live profile, or read <a href="/blog/how-firmledger-builds-a-trustworthy-record">how a record is built</a> for the pipeline underneath it.</p>`,
+  },
 ];
 
 function seedBlog(db) {

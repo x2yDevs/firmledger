@@ -1,5 +1,122 @@
 # FirmLedger — change summary
 
+## 2026-09-08 — Blog: how listing news works, plus a complete site overview README
+
+**Blog post.** A new post ships in the seed (`src/lib/blogseed.js`), so every
+install gets it at the top of `/blog`, in `/feed.xml` and in the sitemap:
+*News on FirmLedger: what a profile is allowed to say about the news*. It follows
+the existing post layout — `<p class="lead">` opener, `<h2>` sections, `<code>`
+and lists — and explains the feature in the same voice as the rest of the blog:
+what counts as a story here, the three doors it can arrive through, the accuracy
+gate (full name as a phrase, or the company's own domain — everything else is
+dropped), why member submissions wait for a moderator, the hourly upkeep that
+keeps stories from going stale, and the list of things we deliberately don't do
+(no machine-written summaries, no paid placement, no story without a citable link).
+
+**New README.** `README_OVERVIEW.md` documents the whole site in one place: what
+FirmLedger is, the eight-stage pipeline (ingest → normalize → resolve → score →
+verify → moderate → enrich → publish), the anatomy of a listing profile with a
+field-by-field provenance table, what visitors / members / owners / moderators can
+each do, the three verification methods, what Pro unlocks and what stays free, a
+map of every console area, the news layer and automated upkeep, the public API,
+trust and safety, the indexing stack, email and notifications, the project layout,
+the stack, how to run and test it, the six principles underneath, and a glossary.
+`README.md` now points at it from the top instead of leaving a new reader to guess.
+
+**Tests.** The news suite grew post-content checks (88 checks, up from 81) and the
+API suite's blog ordering check now asserts the invariant that actually matters —
+the production API guide sits above the announcement it supersedes — rather than
+assuming it will forever be the newest post. All 12 suites pass.
+
+## 2026-09-08 — Listing news: automatic detection, member submissions, moderation
+
+Every profile can now carry what is being published about the company, and the
+ledger keeps it honest in both directions.
+
+**Detection.** A sweep searches a public news index (Google News RSS by default,
+`NEWS_SEARCH_URL` to point it elsewhere) for each company. A story is stored
+only if it clears the accuracy gate in `lib/news.js`: it carries the company's
+**full name as a phrase** (legal suffixes stripped, so "Safari Fintech Ltd" and
+"Safari Fintech Limited" are one company), or it sits on — or cites — the
+company's **own domain** (the `<source url="…">` of wrapped feeds counts). A
+partial name ("Safari" for "Safari Fintech"), a namesake, or unrelated coverage
+is dropped: near-misses are never stored, and a failed scan records nothing
+rather than guessing.
+
+**Member submissions.** Anyone signed in can submit a story from
+`/listing/:slug/news` (headline, link, publication, date, note). It lands in
+`pending`, is invisible on the public profile, and notifies the console and the
+owner. A moderator approves or rejects it in **Admin → News** — the submitter is
+told either way, and the page shows them the status of their own submissions.
+Duplicate links are refused, CSRF and the rate limiter apply, and guests are
+sent to sign in first.
+
+**The console.** Admin → **News** is one queue for all of it: pending
+submissions to moderate, detected stories, stories written by hand (published
+immediately, because a human wrote them), filters by status and origin, and the
+sweep controls — *Check N due listings* / *Check all N listings* — with the same
+background-runner contract as the technology radar (live progress, one run at a
+time, stoppable, last run recorded). Each listing's edit page has its own News
+panel: its stories, **Look for stories now**, and add-one-by-hand. Detected
+stories can be held for moderation instead of publishing (`news_review_auto`).
+The assistant gained `approve_news` / `reject_news` (63 tools).
+
+**Automated upkeep** (the scheduled sweep that was still missing): an hourly
+job, on by default, that refreshes stale technology snapshots and re-checks
+news coverage — capped per hour, per-job switchable, and clamped when saved.
+Admin → Settings → **Automated upkeep** carries the switches, the caps, the
+last run and a **Run upkeep now** button. The console's own buttons are
+unaffected by the schedule.
+
+```
+npm test                          # 12 suites
+node tests/news-upkeep.test.js    # 81 checks, fully offline
+```
+
+---
+
+## 2026-09-08 — Admin → Listings: refresh the technology radar (one, a selection, or all)
+
+Keeping every profile's technology snapshot honest is now a first-class admin
+maintenance job instead of something that only happens when a record is created
+or an owner clicks refresh on their own listing.
+
+**One place, five ways to run it** — every path lands on the same engine in
+`src/lib/techrefresh.js`, which calls the existing detector in `lib/enrich.js`:
+
+| Where | Action |
+| --- | --- |
+| Admin → Listings, row button **↻ Tech** | re-scans that one company |
+| Admin → Listings → edit → **Technology radar** panel | shows the current chips + scan date, refreshes in place |
+| Bulk action **Refresh technology radar** | any ticked rows — every row is tickable now, not only pending ones |
+| **Refresh all N in this view** | exactly the rows the current filter renders |
+| **Refresh N stale** / **Refresh entire directory (N)** | never-scanned or older than 90 days, or every listing with a website |
+
+**It runs in the background.** A run takes a pool of four homepages at a time
+(8s timeout each), never stacks a second run on top of a live one, can be
+**Stop**ped mid-flight, and reports `done / changed / unchanged / without a
+website / failed` live on `/admin3119Musa/listings/tech-job.json` — the page
+polls it and reloads when the run lands. The last run's summary is kept on the
+page, and the console gets an in-app notification when a run finishes.
+
+**Nothing is invented.** A page that answers nothing gets `0 technologies`
+recorded with today's scan date, a listing with no website is reported as
+skipped (never "scanned successfully"), and a real change to a stack still
+notifies the listing's watchers exactly as an owner-triggered refresh does.
+The new **Tech** column and the **Any tech scan / Never scanned / Stale / Fresh**
+filter make the backlog visible, and the admin dashboard carries the stale
+count with a one-click shortcut.
+
+The assistant can do it too: `refresh_listing_tech` (61 tools now) re-scans a
+listing by id or slug from the AI Playground.
+
+```
+npm test                            # 11 suites
+node tests/admin-tech-refresh.test.js   # 66 checks, fully offline
+```
+
+---
+
 ## 2026-09-07 — Admin sign-in chain: secret → emailed OTP → authenticator
 
 The admin gate is now a strict three-step chain, everything else untouched:
@@ -245,10 +362,12 @@ npm run test:pages  # every admin page renders and its list scrolls
 
 | Suite | What it proves |
 | --- | --- |
-| `tests/ai-tools.test.js` | all 60 assistant tools really change the database |
+| `tests/ai-tools.test.js` | all 63 assistant tools really change the database |
 | `tests/ai-agent.test.js` | chaining, batched confirmation, cancellation, honest failures (Groq stubbed — no key needed) |
 | `tests/backup.test.js` | backup carries users + all listings + configuration, restores into an empty database, and is idempotent |
 | `tests/admin-pages.test.js` | boots the real server and checks every admin page renders with its list in a scroll region |
+| `tests/admin-tech-refresh.test.js` | technology-radar maintenance end to end, offline: one listing, a selection, a filtered view, stale and whole-directory runs, the single-run lock, cancellation, CSRF and the tech filter |
+| `tests/news-upkeep.test.js` | the news accuracy gate (name, domain, near-miss and wrapped-link cases), detection, member submission → pending → approval, console moderation, background sweeps and the hourly upkeep schedule |
 
 `FIRMLEDGER_DATA_DIR` was added to `src/db.js` so suites run against a temporary
 database and never touch `data/`.

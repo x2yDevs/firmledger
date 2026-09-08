@@ -245,6 +245,26 @@
       </div>
       <% } %>
 
+      <% if (typeof news !== 'undefined' && news && news.length) { %>
+      <div class="panel rv">
+        <div class="panel-h-t"><h3>News</h3><span class="src-d"><%= news.length %> published</span></div>
+        <ul class="news-list">
+          <% news.forEach(function (n) { %>
+          <li class="news-item">
+            <div class="news-item-main">
+              <a href="<%= n.url %>" target="_blank" rel="noopener nofollow"><b><%= n.title %></b></a>
+              <span class="src-d"><%= n.source || 'source link' %><% if (n.published_at) { %> · <%= fmtDate(n.published_at) %><% } %></span>
+              <% if (n.summary) { %><p class="news-sum"><%= truncate(n.summary, 160) %></p><% } %>
+            </div>
+          </li>
+          <% }) %>
+        </ul>
+        <p class="form-note" style="margin-top:10px">Sourced from public news coverage and matched to this company by name and website.
+          <% if (user) { %><a href="/listing/<%= l.slug %>/news">Submit a story</a> — every submission is reviewed before it appears.
+          <% } else { %><a href="/login?next=<%= encodeURIComponent('/listing/' + l.slug + '/news') %>">Log in to submit a story</a>.<% } %></p>
+      </div>
+      <% } %>
+
       <% if (faqs.length) { %>
       <div class="panel rv">
         <h3>Frequently asked questions</h3>
@@ -293,7 +313,7 @@
       </div>
       <% } %>
 
-      <p class="removal-link rv">Something wrong with this record? <a href="/removal/<%= l.slug %>">Request its removal</a> — every request is reviewed by our moderation team. Or <a href="/claim/<%= l.slug %>">claim it</a> if it is yours.</p>
+      <p class="removal-link rv">Something wrong with this record? <a href="/removal/<%= l.slug %>">Request its removal</a> — every request is reviewed by our moderation team. Or <a href="/claim/<%= l.slug %>">claim it</a> if it is yours. Know something published about them? <a href="/listing/<%= l.slug %>/news">Submit news</a>.</p>
     </div>
 
     <div>

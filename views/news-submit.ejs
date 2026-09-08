@@ -1,0 +1,100 @@
+<%- include('partials/top') %>
+<link rel="canonical" href="<%= meta.canonical %>">
+
+<section class="page-head">
+  <div class="container container-narrow" style="text-align:center">
+    <nav class="crumb" aria-label="Breadcrumb" style="justify-content:center">
+      <a href="/">Home</a><span class="sep">/</span><a href="/listing/<%= l.slug %>"><%= l.name %></a><span class="sep">/</span><span>Submit news</span>
+    </nav>
+    <p class="kicker kicker-center">Moderation</p>
+    <div class="logo-tile" aria-hidden="true" style="margin:0 auto 14px">
+      <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h13a3 3 0 0 1 3 3v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M8 8h8"/><path d="M8 12h8"/><path d="M8 16h5"/></svg>
+    </div>
+    <h1>Submit news about <%= l.name %></h1>
+    <p class="lede center-col">Know something published about <b><%= l.name %></b>? Send the story and a link. Every submission is checked by a moderator before it appears on the profile — nothing is published on trust alone.</p>
+  </div>
+</section>
+
+<section class="section-tight">
+  <div class="container container-narrow">
+    <% if (ok) { %><div class="alert alert-ok"><%= ok %></div><% } %>
+    <% if (err) { %><div class="alert alert-err"><%= err %></div><% } %>
+
+    <div class="panel" style="padding:clamp(20px,3vw,30px)">
+      <div class="section-head" style="margin-bottom:18px">
+        <h2 style="font-size:1.15rem">Story details</h2>
+        <span class="muted" style="font-size:12.5px">Headline and link required</span>
+      </div>
+      <form method="post" action="/listing/<%= l.slug %>/news" class="form" novalidate>
+        <% if (typeof csrfToken !== 'undefined' && csrfToken) { %><input type="hidden" name="_csrf" value="<%= csrfToken %>"><% } %>
+        <label class="fl"><span>Headline *</span>
+          <input class="input" type="text" name="title" required maxlength="220" placeholder="e.g. <%= l.name %> raises Sh200m to expand across East Africa" autocomplete="off">
+        </label>
+        <div class="form-two">
+          <label class="fl"><span>Link to the story *</span>
+            <input class="input" type="url" name="url" required maxlength="500" placeholder="https://nation.africa/…" autocomplete="off">
+          </label>
+          <label class="fl"><span>Publication</span>
+            <input class="input" type="text" name="source" maxlength="80" placeholder="e.g. Business Daily" autocomplete="off">
+          </label>
+        </div>
+        <div class="form-two">
+          <label class="fl"><span>Published on</span>
+            <input class="input" type="date" name="published_at" max="<%= today %>">
+          </label>
+          <label class="fl"><span>One-line summary</span>
+            <input class="input" type="text" name="summary" maxlength="400" placeholder="Optional — what the story says, in your words">
+          </label>
+        </div>
+        <label class="fl"><span>Anything the moderator should know?</span>
+          <textarea class="input" name="note" rows="3" maxlength="500" placeholder="Optional — e.g. “I work here; the press release is on our site.”"></textarea>
+        </label>
+        <p class="form-note">Stories must be published somewhere we can check — a news site, a company newsroom, or an official filing. Submissions without a working link are declined.</p>
+        <div class="form-actions">
+          <button class="btn btn-primary btn-lg" type="submit">Submit for review</button>
+          <a class="btn btn-ghost btn-lg" href="/listing/<%= l.slug %>">Cancel</a>
+        </div>
+      </form>
+    </div>
+
+    <% if (mine.length) { %>
+    <div class="panel" style="padding:clamp(20px,3vw,30px);margin-top:18px">
+      <div class="section-head" style="margin-bottom:14px">
+        <h2 style="font-size:1.05rem">Your submissions for this company</h2>
+        <span class="muted" style="font-size:12.5px"><%= mine.length %> total</span>
+      </div>
+      <ul class="news-list">
+        <% mine.forEach(function (n) { %>
+          <li class="news-item">
+            <div class="news-item-main">
+              <b><%= n.title %></b>
+              <span class="src-d"><%= n.source || 'link only' %><%= n.published_at ? ' · ' + fmtDate(n.published_at) : '' %></span>
+            </div>
+            <span class="pill pill-<%= n.status === 'approved' ? 'approved' : n.status === 'rejected' ? 'rejected' : 'pending' %>"><%= n.status %></span>
+          </li>
+        <% }) %>
+      </ul>
+    </div>
+    <% } %>
+
+    <% if (published.length) { %>
+    <div class="panel" style="padding:clamp(20px,3vw,30px);margin-top:18px">
+      <div class="section-head" style="margin-bottom:14px">
+        <h2 style="font-size:1.05rem">Already published on this profile</h2>
+      </div>
+      <ul class="news-list">
+        <% published.forEach(function (n) { %>
+          <li class="news-item">
+            <div class="news-item-main">
+              <a href="<%= n.url %>" target="_blank" rel="noopener nofollow"><b><%= n.title %></b></a>
+              <span class="src-d"><%= n.source || 'link only' %><%= n.published_at ? ' · ' + fmtDate(n.published_at) : '' %></span>
+            </div>
+          </li>
+        <% }) %>
+      </ul>
+    </div>
+    <% } %>
+  </div>
+</section>
+
+<%- include('partials/bottom') %>

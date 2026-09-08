@@ -17,7 +17,34 @@
       <div class="stat-card"><span class="stat-num"><%= stats.pendingDeletions || 0 %></span><span class="stat-label">Deletion requests</span><a href="/admin3119Musa/users">Review →</a></div>
       <div class="stat-card"><span class="stat-num"><%= stats.sponsored || 0 %></span><span class="stat-label">Sponsored spots</span><a href="/admin3119Musa/advertising">Manage →</a></div>
       <div class="stat-card"><span class="stat-num"><%= stats.careersOpen || 0 %></span><span class="stat-label">Open roles</span><a href="/admin3119Musa/careers">Careers →</a></div>
+      <div class="stat-card"><span class="stat-num"><%= stats.techStale || 0 %></span><span class="stat-label">Stale tech scans</span><a href="/admin3119Musa/listings?tech=stale">Review →</a></div>
+      <div class="stat-card"><span class="stat-num"><%= stats.newsPending || 0 %></span><span class="stat-label">News to moderate</span><a href="/admin3119Musa/news?status=pending">Moderate →</a></div>
     </div>
+
+    <% var tj = typeof techJob !== 'undefined' ? techJob : { running: false }; %>
+    <% if ((stats.techStale || 0) > 0 || tj.running) { %>
+      <div class="side-card" id="tech-maintenance" style="margin-top:18px">
+        <h3>Technology radar maintenance</h3>
+        <p class="muted" style="margin-bottom:12px">
+          <% if (tj.running) { %>
+            A refresh run is in progress — <%= tj.done %> of <%= tj.total %> scanned, <%= tj.changed %> changed.
+          <% } else { %>
+            <strong><%= stats.techStale %></strong> listing<%= stats.techStale === 1 ? '' : 's' %> with a website
+            <%= stats.techStale === 1 ? 'has' : 'have' %> a technology snapshot that is missing or older than
+            <%= techStaleDays %> days (<%= stats.techNever || 0 %> never scanned).
+          <% } %>
+        </p>
+        <form method="post" action="/admin3119Musa/listings/refresh-tech" class="bulk-bar">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <% if (tj.running) { %>
+            <a class="btn btn-ghost btn-sm" href="/admin3119Musa/listings#tech-maintenance">Watch progress →</a>
+          <% } else { %>
+            <button class="btn btn-primary btn-sm" type="submit" name="scope" value="stale">Refresh <%= stats.techStale %> stale</button>
+            <a class="btn btn-ghost btn-sm" href="/admin3119Musa/listings#tech-maintenance">All options →</a>
+          <% } %>
+        </form>
+      </div>
+    <% } %>
 
     <div class="section-head" style="margin-top:2.5rem"><h2>Recent submissions</h2></div>
     <div class="table-wrap">

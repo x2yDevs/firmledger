@@ -255,6 +255,7 @@ try { db.exec("ALTER TABLE listings ADD COLUMN region TEXT NOT NULL DEFAULT ''")
 try { db.exec("ALTER TABLE listings ADD COLUMN tech TEXT NOT NULL DEFAULT '[]'"); } catch { /* column exists */ }
 try { db.exec("ALTER TABLE listings ADD COLUMN tech_checked_at TEXT NOT NULL DEFAULT ''"); } catch { /* column exists */ }
 try { db.exec("ALTER TABLE listings ADD COLUMN hiring_url TEXT NOT NULL DEFAULT ''"); } catch { /* column exists */ }
+try { db.exec("ALTER TABLE listings ADD COLUMN news_checked_at TEXT NOT NULL DEFAULT ''"); } catch { /* column exists */ }
 try { db.exec("ALTER TABLE users ADD COLUMN suspended INTEGER NOT NULL DEFAULT 0"); } catch { /* column exists */ }
 /* Registration OTPs (15-minute expiry) — users only exist after the emailed
    code is confirmed, stopping account creation with someone else's email. */
@@ -477,7 +478,38 @@ CREATE TABLE IF NOT EXISTS jobs (
 CREATE INDEX IF NOT EXISTS idx_fav_user ON favorites(user_id);
 CREATE INDEX IF NOT EXISTS idx_jobs_listing ON jobs(listing_id);
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
+
+/* News about a listing. "auto" rows are detected from a public news search and
+   only survive the accuracy gate in lib/news.js; "user" rows are submitted by
+   members and wait in "pending" until a moderator approves them; "admin" rows
+   are written straight into "approved" by the console. */
+CREATE TABLE IF NOT EXISTS listing_news (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  listing_id INTEGER NOT NULL REFERENCES listings(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  url TEXT NOT NULL DEFAULT '',
+  source TEXT NOT NULL DEFAULT '',
+  published_at TEXT NOT NULL DEFAULT '',
+  summary TEXT NOT NULL DEFAULT '',
+  origin TEXT NOT NULL DEFAULT 'auto',
+  status TEXT NOT NULL DEFAULT 'pending',
+  match TEXT NOT NULL DEFAULT '',
+  submitted_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  submitter_email TEXT NOT NULL DEFAULT '',
+  submitter_note TEXT NOT NULL DEFAULT '',
+  reviewed_by TEXT NOT NULL DEFAULT '',
+  reviewed_at TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_news_listing ON listing_news(listing_id);
+CREATE INDEX IF NOT EXISTS idx_news_status ON listing_news(status);
+CREATE INDEX IF NOT EXISTS idx_news_created ON listing_news(created_at DESC);
 `);
+/* One row per (listing, link) — a story can never be listed twice. */
+try {
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_news_dupe ON listing_news(listing_id, url) WHERE url <> \'\'');
+} catch { /* older SQLite without partial indexes — dedupe is also done in code */ }
 try { db.exec("ALTER TABLE reg_otps ADD COLUMN newsletter INTEGER NOT NULL DEFAULT 0"); } catch { /* column exists */ }
 
 /* Original submitter is preserved when a listing is claimed — owner_user_id

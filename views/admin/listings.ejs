@@ -7,14 +7,16 @@
       <h2>Listings</h2>
       <a class="btn btn-primary btn-sm" href="/admin3119Musa/listings/new">+ Add listing</a>
       <div class="filter-tabs">
-        <a href="/admin3119Musa/listings<%= typeof filters !== 'undefined' && filters.q ? '?q=' + encodeURIComponent(filters.q) : '' %>" class="<%= !status ? 'active' : '' %>">All</a>
-        <a href="/admin3119Musa/listings?status=pending<%= typeof filters !== 'undefined' && filters.q ? '&q=' + encodeURIComponent(filters.q) : '' %>" class="<%= status === 'pending' ? 'active' : '' %>">Pending</a>
-        <a href="/admin3119Musa/listings?status=approved<%= typeof filters !== 'undefined' && filters.q ? '&q=' + encodeURIComponent(filters.q) : '' %>" class="<%= status === 'approved' ? 'active' : '' %>">Approved</a>
-        <a href="/admin3119Musa/listings?status=rejected<%= typeof filters !== 'undefined' && filters.q ? '&q=' + encodeURIComponent(filters.q) : '' %>" class="<%= status === 'rejected' ? 'active' : '' %>">Rejected</a>
+        <a href="/admin3119Musa/listings<%= tabQs ? '?' + tabQs : '' %>" class="<%= !status ? 'active' : '' %>">All</a>
+        <a href="/admin3119Musa/listings?status=pending<%= tabQs ? '&' + tabQs : '' %>" class="<%= status === 'pending' ? 'active' : '' %>">Pending</a>
+        <a href="/admin3119Musa/listings?status=approved<%= tabQs ? '&' + tabQs : '' %>" class="<%= status === 'approved' ? 'active' : '' %>">Approved</a>
+        <a href="/admin3119Musa/listings?status=rejected<%= tabQs ? '&' + tabQs : '' %>" class="<%= status === 'rejected' ? 'active' : '' %>">Rejected</a>
       </div>
     </div>
 
-    <% var f = typeof filters !== 'undefined' && filters ? filters : { q:'', type:'', category:'', claimed:'', plan:'', status: status || '' }; %>
+    <% var f = typeof filters !== 'undefined' && filters ? filters : { q:'', type:'', category:'', claimed:'', plan:'', status: status || '', tech: '' }; %>
+    <% var fqs = typeof fqs !== 'undefined' ? fqs : ''; %>
+    <% var tabQs = typeof tabQs !== 'undefined' ? tabQs : ''; %>
     <form class="filters jf-row admin-list-filters" method="get" action="/admin3119Musa/listings" style="margin-bottom:18px">
       <% if (f.status) { %><input type="hidden" name="status" value="<%= f.status %>"><% } %>
       <input type="search" name="q" value="<%= f.q || '' %>" placeholder="Name, website, owner…" maxlength="80">
@@ -40,8 +42,66 @@
         <option value="pro" <%= f.plan === 'pro' ? 'selected' : '' %>>Pro</option>
         <option value="free" <%= f.plan === 'free' ? 'selected' : '' %>>Free</option>
       </select>
+      <select name="tech" title="Freshness of the detected technology snapshot">
+        <option value="">Any tech scan</option>
+        <option value="never" <%= f.tech === 'never' ? 'selected' : '' %>>Never scanned</option>
+        <option value="stale" <%= f.tech === 'stale' ? 'selected' : '' %>>Stale (<%= techStaleDays %>+ days)</option>
+        <option value="fresh" <%= f.tech === 'fresh' ? 'selected' : '' %>>Fresh</option>
+      </select>
       <button class="btn btn-primary" type="submit">Filter</button>
     </form>
+
+    <!-- ================= Technology radar maintenance ================= -->
+    <% var tj = typeof techJob !== 'undefined' ? techJob : { running: false }; %>
+    <% var tc = typeof techCounts !== 'undefined' ? techCounts : { total: 0, withWebsite: 0, checked: 0, never: 0, stale: 0 }; %>
+    <div class="side-card" id="tech-maintenance">
+      <h3>Technology radar maintenance</h3>
+      <p class="muted" style="margin-bottom:12px">
+        Re-detect each company's stack from its own public homepage — the same scan owners trigger
+        from their dashboard, runnable here for one record, a selection, this filtered view,
+        everything stale, or the whole directory at once.
+        <strong><%= tc.checked %></strong> of <strong><%= tc.withWebsite %></strong> listings with a website carry a snapshot;
+        <strong><%= tc.stale %></strong> <%= tc.stale === 1 ? 'is' : 'are' %> stale (<%= techStaleDays %>+ days old or never scanned).
+      </p>
+
+      <form method="post" action="/admin3119Musa/listings/refresh-tech" class="bulk-bar">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <input type="hidden" name="f" value="<%= fqs %>">
+        <button class="btn btn-primary btn-sm" type="submit" name="scope" value="view"
+                title="Re-scan exactly the listings rendered by the current filter">
+          Refresh all <%= inViewCount %> in this view
+        </button>
+        <button class="btn btn-ghost btn-sm" type="submit" name="scope" value="stale"
+                <%= tc.stale ? '' : 'disabled' %>
+                title="Only listings never scanned or last scanned more than <%= techStaleDays %> days ago">
+          Refresh <%= tc.stale %> stale
+        </button>
+        <button class="btn btn-ghost btn-sm" type="submit" name="scope" value="all"
+                <%= tc.withWebsite ? '' : 'disabled' %>
+                onclick="return confirm('Re-scan the technology stack of every listing with a website (<%= tc.withWebsite %>)? This runs in the background and can take several minutes.');"
+                title="Every listing in the directory that has a website">
+          Refresh entire directory (<%= tc.withWebsite %>)
+        </button>
+      </form>
+
+      <div id="techJob" class="alert alert-ok" style="margin-top:12px<%= tj.running ? '' : ';display:none' %>" data-running="<%= tj.running ? '1' : '0' %>">
+        <span id="techJobText"><% if (tj.running) { %>Refreshing <%= tj.total %> listing<%= tj.total === 1 ? '' : 's' %> — <%= tj.done %> done, <%= tj.changed %> changed, <%= tj.skipped %> without a website, <%= tj.failed %> failed.<% } %></span>
+        <form method="post" action="/admin3119Musa/listings/tech-job/cancel" class="inline" style="margin-left:8px">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <input type="hidden" name="f" value="<%= fqs %>">
+          <button class="btn btn-ghost btn-xs" type="submit">Stop</button>
+        </form>
+      </div>
+
+      <% if (!tj.running && typeof techLast !== 'undefined' && techLast) { %>
+        <p class="muted" style="font-size:13px;margin-top:10px">
+          Last run (<%= techLast.scope === 'view' ? 'this view' : techLast.scope === 'all' ? 'whole directory' : techLast.scope === 'stale' ? 'stale only' : 'selection' %><%= techLast.status === 'cancelled' ? ', stopped' : '' %>):
+          <%= techLast.attempted || 0 %> scanned — <%= techLast.changed || 0 %> changed,
+          <%= techLast.unchanged || 0 %> unchanged, <%= techLast.skipped || 0 %> without a website,
+          <%= techLast.failed || 0 %> failed · <code><%= String(techLast.finished_at || '').slice(0, 16).replace('T', ' ') %></code>
+        </p>
+      <% } %>
+    </div>
 
     <% if (typeof transferReqs !== 'undefined' && transferReqs && transferReqs.length) { %>
       <div class="side-card">
@@ -76,12 +136,14 @@
 
     <form method="post" action="/admin3119Musa/listings/bulk" id="bulkForm">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <input type="hidden" name="f" value="<%= fqs %>">
       <div class="bulk-bar">
-        <span class="muted">Pending in this view can be approved or rejected together.</span>
+        <span class="muted">Tick any rows — approve/reject only touch pending ones; the technology radar can be re-scanned for any listing.</span>
         <select name="bulk_action">
           <option value="">Bulk action…</option>
           <option value="approve">Approve selected pending</option>
           <option value="reject">Reject selected pending</option>
+          <option value="refresh_tech">Refresh technology radar</option>
         </select>
         <button class="btn btn-primary btn-sm" type="submit">Apply</button>
       </div>
@@ -89,11 +151,12 @@
       <div class="scroll-table">
         <div class="table-wrap">
           <table class="table">
-            <thead><tr><th><input type="checkbox" id="bulkAll" aria-label="Select all"></th><th>Listing</th><th>Type / Category</th><th>Owner</th><th>Plan</th><th>Status</th><th>Conf.</th><th class="ta-right">Actions</th></tr></thead>
+            <thead><tr><th><input type="checkbox" id="bulkAll" aria-label="Select all"></th><th>Listing</th><th>Type / Category</th><th>Owner</th><th>Plan</th><th>Status</th><th>Tech</th><th>Conf.</th><th class="ta-right">Actions</th></tr></thead>
             <tbody>
               <% listings.forEach(function (l) { %>
+                <% var tCount = techCount(l.tech); %>
                 <tr>
-                  <td><% if (l.status === 'pending') { %><input type="checkbox" name="ids" value="<%= l.id %>" form="bulkForm"><% } %></td>
+                  <td><input type="checkbox" name="ids" value="<%= l.id %>" form="bulkForm" aria-label="Select <%= l.name %>"></td>
                   <td>
                     <span class="logo-tile logo-tile-sm"><%= l.name.slice(0, 1) %></span>
                     <strong><%= l.name %></strong>
@@ -104,9 +167,25 @@
                   <td><small class="muted"><%= l.owner_email || '—' %></small></td>
                   <td><% if (planOf(l) !== 'free') { %><span class="pill pill-pro">PRO</span><br><small class="muted"><%= planOf(l).replace(/^pro · /, '') %></small><% } else { %><span class="pill pill-free">Free</span><% } %></td>
                   <td><span class="pill pill-<%= l.status %>"><%= l.status %></span><% if (l.featured) { %><span class="pill pill-featured">Featured</span><% } %></td>
+                  <td>
+                    <% if (!l.website) { %>
+                      <small class="muted">no website</small>
+                    <% } else if (!l.tech_checked_at) { %>
+                      <span class="pill pill-pending" title="Never scanned">never</span>
+                    <% } else { %>
+                      <span class="conf-num"><%= tCount %></span> <small class="muted"><%= l.tech_checked_at %></small>
+                    <% } %>
+                  </td>
                   <td><span class="conf-num"><%= l.confidence %></span></td>
                   <td class="ta-right actions-cell">
                     <a class="btn btn-ghost btn-xs" href="/admin3119Musa/listings/<%= l.id %>/edit">Edit</a>
+                    <% if (l.website) { %>
+                    <form method="post" action="/admin3119Musa/listings/<%= l.id %>/refresh-tech" class="inline">
+                      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                      <input type="hidden" name="f" value="<%= fqs %>">
+                      <button class="btn btn-ghost btn-xs" type="submit" title="Re-detect this company's technology stack from its website">↻ Tech</button>
+                    </form>
+                    <% } %>
                     <% if (l.status === 'approved') { %>
                       <a class="btn btn-ghost btn-xs" href="/listing/<%= l.slug %>" target="_blank">View</a>
                       <form method="post" action="/admin3119Musa/listings/<%= l.id %>/reject" class="inline">
@@ -148,12 +227,11 @@
                   </td>
                 </tr>
               <% }) %>
-              <% if (!listings.length) { %><tr><td colspan="8" class="muted" style="text-align:center;padding:2rem">No listings in this queue.</td></tr><% } %>
+              <% if (!listings.length) { %><tr><td colspan="9" class="muted" style="text-align:center;padding:2rem">No listings in this queue.</td></tr><% } %>
             </tbody>
           </table>
         </div>
       </div>
-    </form>
     <script>
     (function () {
       var all = document.getElementById('bulkAll');
@@ -161,6 +239,35 @@
       all.addEventListener('change', function () {
         document.querySelectorAll('#bulkForm input[name="ids"]').forEach(function (c) { c.checked = all.checked; });
       });
+    })();
+
+    /* Live progress for a technology radar refresh. The run happens on the
+       server; this mirrors its counters and reloads once it lands so the Tech
+       column and the last-run line are up to date. */
+    (function () {
+      var box = document.getElementById('techJob');
+      var txt = document.getElementById('techJobText');
+      if (!box || !txt || box.getAttribute('data-running') !== '1') return;
+      var timer = setInterval(function () {
+        fetch('/admin3119Musa/listings/tech-job.json', { credentials: 'same-origin' })
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            if (!d || !d.job) return;
+            if (!d.job.running) {
+              clearInterval(timer);
+              txt.textContent = 'Refresh finished — ' + (d.job.done || 0) + ' scanned, '
+                + (d.job.changed || 0) + ' changed, ' + (d.job.unchanged || 0) + ' unchanged, '
+                + (d.job.skipped || 0) + ' without a website, ' + (d.job.failed || 0) + ' failed. Reloading…';
+              setTimeout(function () { window.location.reload(); }, 1200);
+              return;
+            }
+            txt.textContent = 'Refreshing ' + (d.job.total || 0) + ' listing(s) — '
+              + (d.job.done || 0) + ' done, ' + (d.job.changed || 0) + ' changed, '
+              + (d.job.skipped || 0) + ' without a website, ' + (d.job.failed || 0) + ' failed.'
+              + (d.job.current ? ' Now: ' + d.job.current : '');
+          })
+          .catch(function () { /* transient — try again on the next tick */ });
+      }, 3000);
     })();
     </script>
   </div>
