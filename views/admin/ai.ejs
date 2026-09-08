@@ -232,56 +232,60 @@
           <h3 class="form-section">Model providers</h3>
           <p class="muted ai-card-note">Choose the service that runs the admin assistant, the listing generator and auto-moderation — and paste keys for as many providers as you like. Providers without a key stay dormant. An environment variable (<code>GROQ_API_KEY</code>, <code>OPENAI_API_KEY</code>, <code>ANTHROPIC_API_KEY</code>, …) always wins over a saved key. Only a masked hint is ever shown; a key is never sent back to the browser.</p>
 
-          <div class="ai-prov-grid" id="prov-grid">
-            <% settings.providers.forEach(function (p) { %>
-              <div class="ai-prov-card<%= p.active ? ' is-active' : '' %><%= p.configured ? ' is-ready' : '' %>" data-prov="<%= p.id %>">
-                <label class="ai-prov-pick">
-                  <input type="radio" name="llm_provider" value="<%= p.id %>" <%= p.active ? 'checked' : '' %>>
-                  <span class="ai-prov-name"><%= p.label %></span>
-                  <% if (p.active) { %><em class="ai-prov-badge on">in use</em><% } %>
-                  <% if (p.key_source === 'env') { %><em class="ai-prov-badge env">.env</em>
-                  <% } else if (p.key_set) { %><em class="ai-prov-badge saved">key saved</em>
-                  <% } else if (!p.needs_key) { %><em class="ai-prov-badge saved">no key needed</em>
-                  <% } else { %><em class="ai-prov-badge off">no key</em><% } %>
-                </label>
-                <p class="ai-prov-blurb"><%= p.blurb %></p>
+          <% var ap = settings.providers.filter(function (p) { return p.active; })[0] || settings.providers[0]; %>
+          <div class="ai-prov-picker">
+            <label class="ai-prov-select-field"><span>Provider</span>
+              <select id="prov-select" aria-controls="prov-config">
+                <% settings.providers.forEach(function (p) { %>
+                  <option value="<%= p.id %>" <%= p.active ? 'selected' : '' %>><%= p.label %><%
+                    if (p.active) { %> — in use<%
+                    } else if (p.key_source === 'env') { %> — .env key<%
+                    } else if (p.key_set) { %> — key saved<%
+                    } else if (!p.needs_key) { %> — no key needed<%
+                    } else { %> — no key<% } %></option>
+                <% }) %>
+              </select>
+              <small class="muted ai-field-note">Pick a provider to configure it below. Saving switches the whole console to the chosen provider.</small>
+            </label>
+            <input type="hidden" name="llm_provider" id="llm-provider-input" value="<%= ap.id %>">
+          </div>
 
-                <label class="ai-prov-field"><span>API key</span>
-                  <input type="password" name="llm_key_<%= p.id %>" autocomplete="new-password" spellcheck="false"
-                         placeholder="<%= p.key_placeholder %>" data-prov-key="<%= p.id %>"
-                         <%= p.key_source === 'env' ? 'disabled' : '' %>>
-                  <small class="muted ai-field-note" data-prov-hint="<%= p.id %>">
-                    <% if (p.key_source === 'env') { %>✓ from <code><%= p.env[0] %></code> — rotate it there
-                    <% } else if (p.key_set) { %>✓ saved (<%= p.key_hint %>) — paste a new one to rotate
-                    <% } else { %>not saved yet<% } %>
-                  </small>
-                </label>
+          <div class="ai-prov-card ai-prov-config is-active<%= ap.configured ? ' is-ready' : '' %>" id="prov-config" data-prov="<%= ap.id %>">
+            <div class="ai-prov-config-head">
+              <span class="ai-prov-name" id="prov-cfg-name"><%= ap.label %></span>
+              <em class="ai-prov-badge on" id="prov-cfg-active"<%= ap.active ? '' : ' hidden' %>>in use</em>
+              <em class="ai-prov-badge env" id="prov-cfg-pending" hidden>selected — save to switch</em>
+              <% if (ap.key_source === 'env') { %><em class="ai-prov-badge env" id="prov-cfg-badge">.env</em>
+              <% } else if (ap.key_set) { %><em class="ai-prov-badge saved" id="prov-cfg-badge">key saved</em>
+              <% } else if (!ap.needs_key) { %><em class="ai-prov-badge saved" id="prov-cfg-badge">no key needed</em>
+              <% } else { %><em class="ai-prov-badge off" id="prov-cfg-badge">no key</em><% } %>
+            </div>
+            <p class="ai-prov-blurb" id="prov-cfg-blurb"><%= ap.blurb %></p>
 
-                <% if (p.key_set && p.key_source !== 'env' && p.needs_key) { %>
-                  <label class="check ai-clear-key"><input type="checkbox" name="llm_key_<%= p.id %>_clear" value="1"><span>Clear this saved key (rotate it at the provider first)</span></label>
-                <% } %>
+            <label class="ai-prov-field"><span>API key</span>
+              <input type="password" name="llm_key_<%= ap.id %>" id="prov-cfg-key" autocomplete="new-password" spellcheck="false"
+                     placeholder="<%= ap.key_placeholder %>" data-prov-key="<%= ap.id %>"
+                     <%= ap.key_source === 'env' ? 'disabled' : '' %>>
+              <small class="muted ai-field-note" id="prov-cfg-hint" data-prov-hint="<%= ap.id %>">
+                <% if (ap.key_source === 'env') { %>✓ from <code><%= ap.env[0] %></code> — rotate it there
+                <% } else if (ap.key_set) { %>✓ saved (<%= ap.key_hint %>) — paste a new one to rotate
+                <% } else { %>not saved yet<% } %>
+              </small>
+            </label>
 
-                <% if (!p.active) { %>
-                  <label class="ai-prov-field"><span>Model</span>
-                    <input type="text" name="llm_model_<%= p.id %>" list="models-<%= p.id %>" value="<%= p.model %>" spellcheck="false" autocomplete="off" placeholder="<%= p.default_model || 'model id' %>">
-                    <datalist id="models-<%= p.id %>">
-                      <% p.models.forEach(function (m) { %><option value="<%= m.id %>"><% }) %>
-                    </datalist>
-                    <small class="muted ai-field-note"><%= p.models.length %> known ids<%= p.allow_custom ? ' · any other id this endpoint serves also works' : '' %></small>
-                  </label>
-                <% } %>
+            <label class="check ai-clear-key" id="prov-cfg-clear-wrap"<%= (ap.key_set && ap.key_source !== 'env' && ap.needs_key) ? '' : ' hidden' %>>
+              <input type="checkbox" name="llm_key_<%= ap.id %>_clear" id="prov-cfg-clear" value="1"><span>Clear this saved key (rotate it at the provider first)</span>
+            </label>
 
-                <label class="ai-prov-field ai-prov-adv"><span>Endpoint <small class="muted">optional override</small></span>
-                  <input type="text" name="llm_base_<%= p.id %>" value="<%= p.base_url %>" placeholder="<%= p.default_base %>" spellcheck="false" autocomplete="off">
-                </label>
+            <label class="ai-prov-field ai-prov-adv"><span>Endpoint <small class="muted">optional override</small></span>
+              <input type="text" name="llm_base_<%= ap.id %>" id="prov-cfg-base" value="<%= ap.base_url %>" placeholder="<%= ap.default_base %>" spellcheck="false" autocomplete="off">
+            </label>
 
-                <div class="ai-prov-foot">
-                  <button class="btn btn-xs btn-ghost" type="button" data-test-prov="<%= p.id %>">Test &amp; sync</button>
-                  <% if (p.keys_url) { %><a class="ai-prov-link" href="<%= p.keys_url %>" target="_blank" rel="noopener">Get a key ↗</a><% } %>
-                  <span class="muted ai-prov-status" data-prov-status="<%= p.id %>" role="status"><%= p.live_models.length ? p.live_models.length + ' ids seen' : '' %></span>
-                </div>
-              </div>
-            <% }) %>
+            <div class="ai-prov-foot">
+              <button class="btn btn-xs btn-ghost" type="button" id="prov-cfg-test" data-test-prov="<%= ap.id %>">Test &amp; sync</button>
+              <a class="ai-prov-link" id="prov-cfg-getkey" href="<%= ap.keys_url || '#' %>" target="_blank" rel="noopener"<%= ap.keys_url ? '' : ' hidden' %>>Get a key ↗</a>
+              <span class="muted ai-prov-status" id="prov-cfg-status" data-prov-status="<%= ap.id %>" role="status"><%= ap.live_models.length ? ap.live_models.length + ' ids seen' : '' %></span>
+            </div>
           </div>
           <p class="fine-print">Testing uses the key that is already saved (or the one in <code>.env</code>) — press <b>Save settings</b> after pasting a new key, then <b>Test &amp; sync</b>.</p>
 
@@ -532,6 +536,8 @@
       key_source: p.key_source || '', key_set: !!p.key_set, key_hint: p.key_hint || '',
       base_url: p.base_url || '', default_base: p.default_base || '',
       model: p.model || '', default_model: p.default_model || '',
+      blurb: p.blurb || '', env: p.env || [], key_placeholder: p.key_placeholder || '',
+      keys_url: p.keys_url || '', live_models: p.live_models || [],
       models: (p.models || []).map(function (m) {
         return { id: m.id, label: m.label, tier: m.tier, note: m.note || '', tools: !!m.tools, json: !!m.json, available: m.available == null ? null : !!m.available };
       }),
@@ -1199,10 +1205,82 @@
      default-model select and the chip strip at that provider's catalogue. -------- */
 
   function activeProvider() {
-    var checked = document.querySelector('input[name="llm_provider"]:checked');
-    var id = checked ? checked.value : ACTIVE;
+    var picker = $('prov-select');
+    var id = picker ? picker.value : ACTIVE;
     for (var i = 0; i < PROVIDERS.length; i++) if (PROVIDERS[i].id === id) return PROVIDERS[i];
     return PROVIDERS[0];
+  }
+
+  /* Re-render the single provider config panel for the chosen provider — key
+     field, endpoint, hint, badge and the test/get-key controls all re-point. */
+  function renderProviderConfig(p) {
+    var hidden = $('llm-provider-input');
+    if (hidden) hidden.value = p.id;
+    var card = $('prov-config');
+    if (card) {
+      card.setAttribute('data-prov', p.id);
+      card.classList.toggle('is-ready', !!(p.key_set || !p.needs_key));
+    }
+    var name = $('prov-cfg-name');
+    if (name) name.textContent = p.label;
+    var blurb = $('prov-cfg-blurb');
+    if (blurb) blurb.textContent = p.blurb || '';
+    var activeBadge = $('prov-cfg-active');
+    if (activeBadge) activeBadge.hidden = p.id !== ACTIVE;
+    var pendingBadge = $('prov-cfg-pending');
+    if (pendingBadge) pendingBadge.hidden = p.id === ACTIVE;
+
+    var badge = $('prov-cfg-badge');
+    if (badge) {
+      badge.className = 'ai-prov-badge';
+      if (p.key_source === 'env') { badge.classList.add('env'); badge.textContent = '.env'; badge.hidden = false; }
+      else if (p.key_set) { badge.classList.add('saved'); badge.textContent = 'key saved'; badge.hidden = false; }
+      else if (!p.needs_key) { badge.classList.add('saved'); badge.textContent = 'no key needed'; badge.hidden = false; }
+      else { badge.classList.add('off'); badge.textContent = 'no key'; badge.hidden = false; }
+    }
+
+    var key = $('prov-cfg-key');
+    if (key) {
+      key.value = '';
+      key.setAttribute('name', 'llm_key_' + p.id);
+      key.setAttribute('data-prov-key', p.id);
+      key.placeholder = p.key_placeholder || '';
+      key.disabled = p.key_source === 'env';
+    }
+    var hint = $('prov-cfg-hint');
+    if (hint) {
+      hint.setAttribute('data-prov-hint', p.id);
+      if (p.key_source === 'env') hint.innerHTML = '✓ from <code>' + esc((p.env && p.env[0]) || '') + '</code> — rotate it there';
+      else if (p.key_set) hint.textContent = '✓ saved (' + (p.key_hint || '') + ') — paste a new one to rotate';
+      else hint.textContent = 'not saved yet';
+    }
+    var clearWrap = $('prov-cfg-clear-wrap');
+    var clear = $('prov-cfg-clear');
+    if (clearWrap && clear) {
+      var canClear = p.key_set && p.key_source !== 'env' && p.needs_key;
+      clearWrap.hidden = !canClear;
+      clear.checked = false;
+      clear.setAttribute('name', 'llm_key_' + p.id + '_clear');
+    }
+    var base = $('prov-cfg-base');
+    if (base) {
+      base.setAttribute('name', 'llm_base_' + p.id);
+      base.value = p.base_url || '';
+      base.placeholder = p.default_base || '';
+    }
+    var test = $('prov-cfg-test');
+    if (test) test.setAttribute('data-test-prov', p.id);
+    var getkey = $('prov-cfg-getkey');
+    if (getkey) {
+      if (p.keys_url) { getkey.href = p.keys_url; getkey.hidden = false; }
+      else { getkey.href = '#'; getkey.hidden = true; }
+    }
+    var status = $('prov-cfg-status');
+    if (status) {
+      status.setAttribute('data-prov-status', p.id);
+      status.className = 'muted ai-prov-status';
+      status.textContent = (p.live_models && p.live_models.length) ? (p.live_models.length + ' ids seen') : '';
+    }
   }
 
   function setModelNote(id) {
@@ -1303,12 +1381,12 @@
   bindModelChips();
   markModelChips();
 
-  /* Choosing a provider in the grid re-points the model picker straight away;
-     the change itself is stored when the form is saved. */
-  document.querySelectorAll('input[name="llm_provider"]').forEach(function (radio) {
-    radio.addEventListener('change', function () {
-      if (!radio.checked) return;
+  /* Choosing a provider in the dropdown re-points the config panel and the model
+     picker straight away; the change itself is stored when the form is saved. */
+  if ($('prov-select')) {
+    $('prov-select').addEventListener('change', function () {
       var p = activeProvider();
+      renderProviderConfig(p);
       renderProviderModels(p);
       var out = $('test-status');
       if (out) {
@@ -1318,7 +1396,7 @@
         out.className = 'muted ai-status';
       }
     });
-  });
+  }
 
   if ($('rules-defaults')) {
     $('rules-defaults').addEventListener('click', function () {
