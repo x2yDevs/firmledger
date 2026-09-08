@@ -7,7 +7,11 @@
  *   ai-tools     every admin action the AI assistant can take, executed for real
  *                against a throwaway database and verified by DB state.
  *   ai-agent     the assistant's agent loop: chaining, batched confirmation,
- *                cancellation and honest failure reporting (Groq stubbed).
+ *                cancellation and honest failure reporting (model stubbed).
+ *   ai-providers the model gateway: every provider dialect on the wire (OpenAI,
+ *                Anthropic, Gemini, Cohere), key resolution, provider switching,
+ *                fallback and rate limits — plus the AI Playground console UI
+ *                driving provider + key saves against a real server.
  *   backup       .firmledger round trip — users, all listings + configuration.
  *   admin-pages  every admin page renders and its long list scrolls in place.
    tech-refresh admin technology-radar maintenance: one listing, a selection,
@@ -40,6 +44,7 @@ const { spawnSync } = require('child_process');
 const suites = [
   ['AI admin tools', 'ai-tools.test.js'],
   ['AI agent loop', 'ai-agent.test.js'],
+  ['AI model providers', 'ai-providers.test.js'],
   ['Backup round trip', 'backup.test.js'],
   ['Admin pages', 'admin-pages.test.js'],
   ['Admin technology refresh', 'admin-tech-refresh.test.js'],

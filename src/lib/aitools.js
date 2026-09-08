@@ -1,15 +1,20 @@
 /**
- * Admin assistant tool registry.
+ * Admin assistant tool registry — part one (core console actions).
  *
  * Adding a tool: push an entry to TOOLS with { name, group, label, description,
- * parameters, mutating, neverAuto, summarize, run }. Groq schemas are derived
- * automatically. Mutating run() is invoked only after UI confirm — unless the
- * admin ticked the tool in Settings → Auto-run. neverAuto tools always confirm.
+ * parameters, mutating, sensitive, summarize, run }. Model tool schemas are
+ * derived automatically. A mutating run() is invoked only after the operator
+ * confirms — unless the admin ticked the tool in Settings → Auto-run.
+ * `sensitive: true` (or the older `neverAuto: true`) always asks, no matter
+ * what the auto-run list says.
+ *
+ * The rest of the admin surface lives in `aitools-admin.js` and is merged in
+ * below, so TOOLS stays the single authoritative registry.
  */
 const { db, getSetting, setSetting } = require('../db');
-const { sendBranded, mailConfigured } = require('./mailer');
-const { submitForIndexing } = require('./indexing');
-const googleIndexing = require('./googleIndexing');
+const core = require('./aitools-core');
+const { findListing, findUser, approveListingRow, rejectListingRow, queueMail } = core;
+const { sendBranded } = require('./mailer');
 const { deleteLogo } = require('./upload');
 const notify = require('./notify');
 const { siteUrl, escHtml, normalizeUrl, slugify, randomToken } = require('./util');
@@ -30,86 +35,6 @@ const listingEvents = require('./listingevents');
 const techrefresh = require('./techrefresh');
 const news = require('./news');
 
-function findListing(idOrSlug) {
-  const raw = String(idOrSlug || '').trim();
-  if (!raw) return null;
-  if (/^\d+$/.test(raw)) return db.prepare('SELECT * FROM listings WHERE id=?').get(Number(raw));
-  return db.prepare('SELECT * FROM listings WHERE slug=? COLLATE NOCASE OR name=? COLLATE NOCASE').get(raw, raw);
-}
-
-function findUser(q) {
-  const raw = String(q || '').trim();
-  if (!raw) return null;
-  if (/^\d+$/.test(raw)) return db.prepare('SELECT * FROM users WHERE id=?').get(Number(raw));
-  return db.prepare('SELECT * FROM users WHERE email = ? COLLATE NOCASE').get(raw)
-    || db.prepare('SELECT * FROM users WHERE name = ? COLLATE NOCASE').get(raw)
-    || db.prepare('SELECT * FROM users WHERE email LIKE ? OR name LIKE ? ORDER BY id DESC LIMIT 1')
-      .get(`%${raw.replace(/[%_]/g, '')}%`, `%${raw.replace(/[%_]/g, '')}%`);
-}
-
-function approveListingRow(l) {
-  const firstApproval = l.status !== 'approved';
-  db.prepare("UPDATE listings SET status='approved', last_verified_at=?, updated_at=datetime('now') WHERE id=?")
-    .run(new Date().toISOString(), l.id);
-  if (firstApproval) listingEvents.approved(db.prepare('SELECT * FROM listings WHERE id=?').get(l.id), true);
-  if (firstApproval) {
-    const catSlug = (db.prepare('SELECT slug FROM categories WHERE name = ?').get(l.category) || {}).slug;
-    submitForIndexing([`/listing/${l.slug}`, catSlug ? `/directory/c/${catSlug}` : null].filter(Boolean));
-    googleIndexing.pingGoogleNewListingBackground(`/listing/${l.slug}`);
-    if (l.owner_user_id) {
-      notify.notifyUser(l.owner_user_id, {
-        kind: 'listing',
-        title: `${l.name} is live`,
-        body: 'Your listing passed review and is now public in the directory.',
-        url: `/listing/${l.slug}`,
-      });
-    }
-  }
-  return { id: l.id, slug: l.slug, name: l.name, firstApproval };
-}
-
-function rejectListingRow(l) {
-  db.prepare("UPDATE listings SET status='rejected', updated_at=datetime('now') WHERE id=?").run(l.id);
-  if (l.status !== 'rejected') listingEvents.rejected(db.prepare('SELECT * FROM listings WHERE id=?').get(l.id));
-  if (l.owner_user_id) {
-    notify.notifyUser(l.owner_user_id, {
-      kind: 'listing',
-      title: `${l.name} was not approved`,
-      body: 'Update the listing and resubmit — common reasons are incomplete contact details or a duplicate record.',
-      url: `/dashboard/listings/${l.id}/edit`,
-    });
-  }
-  return { id: l.id, slug: l.slug, name: l.name };
-}
-
-function queueMail(recipients, subject, message) {
-  const paragraphs = String(message).split(/\n\s*\n/).map((p) => escHtml(p).replace(/\n/g, '<br>')).filter(Boolean);
-  const ins = db.prepare('INSERT INTO admin_mail_log (to_email, subject, body, delivered) VALUES (?,?,?,?)');
-  setImmediate(async () => {
-    for (const email of recipients) {
-      try {
-        const r = await sendBranded(email, `[FirmLedger] ${subject}`, {
-          kicker: 'Announcement',
-          title: escHtml(subject),
-          preheader: subject,
-          paragraphs,
-          note: 'You received this because you hold a FirmLedger account.',
-        });
-        ins.run(email, subject, message, r.delivered ? 1 : 0);
-      } catch {
-        try { ins.run(email, subject, message, 0); } catch { /* ignore */ }
-      }
-    }
-  });
-  return {
-    queued: recipients.length,
-    smtp_configured: mailConfigured(),
-    note: mailConfigured()
-      ? `Queued branded email to ${recipients.length} recipient${recipients.length === 1 ? '' : 's'}.`
-      : `No SMTP configured — ${recipients.length} message(s) will land in data/outbox.log.`,
-  };
-}
-
 const GROUPS = [
   { id: 'read', label: 'Lookups (always run, no confirm)' },
   { id: 'listings', label: 'Listings' },
@@ -117,9 +42,11 @@ const GROUPS = [
   { id: 'moderation', label: 'Claims, tickets, removals' },
   { id: 'content', label: 'Blog, email, careers, promos' },
   { id: 'ops', label: 'Site operations' },
+  { id: 'mail', label: 'Email delivery' },
+  { id: 'indexing', label: 'Search indexing & upkeep' },
 ];
 
-const TOOLS = [
+const CORE_TOOLS = [
   /* ---------------- Lookups ---------------- */
   {
     name: 'get_listing_stats', group: 'read', label: 'Platform stats', mutating: false,
@@ -306,7 +233,7 @@ const TOOLS = [
     },
   },
   {
-    name: 'accept_all_pending_listings', group: 'listings', label: 'Approve ALL pending', mutating: true,
+    name: 'accept_all_pending_listings', group: 'listings', label: 'Approve ALL pending', mutating: true, sensitive: true,
     description: 'Approve every listing currently in pending review. Use only when the admin explicitly asks to accept all pending.',
     parameters: { type: 'object', properties: {}, additionalProperties: false },
     summarize() { return 'Approve ALL listings currently pending review.'; },
@@ -376,7 +303,7 @@ const TOOLS = [
     },
   },
   {
-    name: 'delete_listing', group: 'listings', label: 'Delete listing', mutating: true,
+    name: 'delete_listing', group: 'listings', label: 'Delete listing', mutating: true, sensitive: true,
     description: 'Permanently delete a listing by id or slug. Cannot be undone.',
     parameters: {
       type: 'object',
@@ -578,7 +505,7 @@ const TOOLS = [
     },
   },
   {
-    name: 'delete_category', group: 'listings', label: 'Delete category', mutating: true,
+    name: 'delete_category', group: 'listings', label: 'Delete category', mutating: true, sensitive: true,
     description: 'Delete a category. Listings move to Other.',
     parameters: {
       type: 'object',
@@ -1028,7 +955,7 @@ const TOOLS = [
     },
   },
   {
-    name: 'fulfill_removal', group: 'moderation', label: 'Remove listing from request', mutating: true,
+    name: 'fulfill_removal', group: 'moderation', label: 'Remove listing from request', mutating: true, sensitive: true,
     description: 'Delete the listing attached to a removal request and mark the request resolved.',
     parameters: {
       type: 'object',
@@ -1089,7 +1016,7 @@ const TOOLS = [
     },
   },
   {
-    name: 'email_all_users', group: 'content', label: 'Email ALL users', mutating: true,
+    name: 'email_all_users', group: 'content', label: 'Email ALL users', mutating: true, sensitive: true,
     description: 'Email every registered user. Prefer email_users with audience=all. Subject and message required.',
     parameters: {
       type: 'object',
@@ -1155,7 +1082,7 @@ const TOOLS = [
     },
   },
   {
-    name: 'delete_blog_post', group: 'content', label: 'Delete blog post', mutating: true,
+    name: 'delete_blog_post', group: 'content', label: 'Delete blog post', mutating: true, sensitive: true,
     description: 'Delete a blog post by id or slug.',
     parameters: {
       type: 'object',
@@ -1257,7 +1184,7 @@ const TOOLS = [
 
   /* ---------------- Ops ---------------- */
   {
-    name: 'set_maintenance_mode', group: 'ops', label: 'Maintenance mode', mutating: true,
+    name: 'set_maintenance_mode', group: 'ops', label: 'Maintenance mode', mutating: true, sensitive: true,
     description: 'Turn the public maintenance holding page on or off. Admins stay signed in.',
     parameters: {
       type: 'object',
@@ -1453,6 +1380,20 @@ const TOOLS = [
   },
 ];
 
+/* Part two: the rest of the admin console (site knowledge, content, indexing,
+   status page, SMTP accounts, protection, inbox, backups). */
+const ADMIN_TOOLS = require('./aitools-admin');
+
+const TOOLS = [...CORE_TOOLS, ...ADMIN_TOOLS];
+
+/* A tool name must be unique — a duplicate would silently shadow the first. */
+const DUPLICATE_NAMES = (() => {
+  const seen = new Set(); const dupes = [];
+  for (const t of TOOLS) { if (seen.has(t.name)) dupes.push(t.name); seen.add(t.name); }
+  return dupes;
+})();
+if (DUPLICATE_NAMES.length) throw new Error(`Duplicate admin tool names: ${DUPLICATE_NAMES.join(', ')}`);
+
 const BY_NAME = Object.fromEntries(TOOLS.map((t) => [t.name, t]));
 
 function groqTools() {
@@ -1480,6 +1421,11 @@ function describeCall(name, args) {
   try { return t.summarize(args || {}); } catch { return t.label || t.name; }
 }
 
+/** Sensitive = the operator is always asked. `neverAuto` is the old spelling. */
+function isSensitive(t) {
+  return Boolean(t && (t.sensitive || t.neverAuto));
+}
+
 function autoSet() {
   let arr = [];
   try { arr = JSON.parse(getSetting('ai_auto_tools', '[]') || '[]'); } catch { arr = []; }
@@ -1490,27 +1436,31 @@ function autoSet() {
 function isAuto(name) {
   const t = getTool(name);
   if (!t) return false;
-  if (t.neverAuto) return false;
+  if (isSensitive(t)) return false;
   if (!t.mutating) return true;
   return autoSet().has(name);
 }
 
 function catalog() {
   const auto = autoSet();
-  return TOOLS.map((t) => ({
-    name: t.name,
-    group: t.group || 'ops',
-    label: t.label || t.name,
-    description: t.description,
-    mutating: Boolean(t.mutating),
-    neverAuto: Boolean(t.neverAuto),
-    auto: !t.mutating || (!t.neverAuto && auto.has(t.name)),
-  }));
+  return TOOLS.map((t) => {
+    const sensitive = isSensitive(t);
+    return {
+      name: t.name,
+      group: t.group || 'ops',
+      label: t.label || t.name,
+      description: t.description,
+      mutating: Boolean(t.mutating),
+      sensitive,
+      neverAuto: sensitive,
+      auto: !t.mutating || (!sensitive && auto.has(t.name)),
+    };
+  });
 }
 
 function saveAutoTools(names) {
   const allowed = new Set(
-    TOOLS.filter((t) => t.mutating && !t.neverAuto).map((t) => t.name)
+    TOOLS.filter((t) => t.mutating && !isSensitive(t)).map((t) => t.name)
   );
   const list = [...new Set((Array.isArray(names) ? names : [names]).map(String).filter((n) => allowed.has(n)))];
   setSetting('ai_auto_tools', JSON.stringify(list));
@@ -1532,14 +1482,38 @@ async function execute(name, args) {
   return { ok: true, result };
 }
 
+/** One line per tool, grouped — this is what the model sees as its inventory. */
 function capabilityPrompt() {
-  const lines = TOOLS.map((t) => `- ${t.name}: ${t.label || t.name}`);
+  const lines = [];
+  for (const g of GROUPS) {
+    const items = TOOLS.filter((t) => (t.group || 'ops') === g.id);
+    if (!items.length) continue;
+    lines.push(`[${g.label}]`);
+    for (const t of items) {
+      const tag = t.mutating ? (isSensitive(t) ? ' (write — always confirms)' : ' (write)') : '';
+      lines.push(`- ${t.name}: ${t.label || t.name}${tag}`);
+    }
+  }
   return lines.join('\n');
 }
 
+/** Every registered action, for the "what can you do" answer. */
+function toolIndex() {
+  return GROUPS.map((g) => ({
+    group: g.id, label: g.label,
+    tools: TOOLS.filter((t) => (t.group || 'ops') === g.id)
+      .map((t) => ({ name: t.name, label: t.label, mutating: Boolean(t.mutating), sensitive: isSensitive(t) })),
+  }));
+}
+
+/** Actions that can never be auto-run. */
+function sensitiveTools() {
+  return TOOLS.filter(isSensitive).map((t) => t.name);
+}
+
 module.exports = {
-  TOOLS, GROUPS, groqTools, getTool, parseArgs, describeCall, execute,
-  findListing, approveListingRow, rejectListingRow,
-  isAuto, catalog, saveAutoTools, autoSet, capabilityPrompt,
+  TOOLS, CORE_TOOLS, ADMIN_TOOLS, GROUPS, groqTools, getTool, parseArgs, describeCall, execute,
+  findListing, findUser, approveListingRow, rejectListingRow, queueMail,
+  isAuto, isSensitive, catalog, saveAutoTools, autoSet, capabilityPrompt, toolIndex, sensitiveTools,
 };
 

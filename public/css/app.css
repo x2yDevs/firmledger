@@ -2271,6 +2271,43 @@ body:has(.admin-bar) #main .scroll-table .table-wrap {
 .ai-model-chip .mc-label { font: 600 12.5px var(--fb); color: var(--ink); }
 .ai-model-chip .mc-meta { font: 500 10px var(--fm); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 .ai-model-chip.on .mc-meta { color: var(--accent2); }
+
+/* Model providers — one card per AI service, the chosen one drives the console */
+.ai-prov-grid { display: grid; gap: 10px; margin: 12px 0 4px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); }
+.ai-prov-card {
+  display: grid; gap: 9px; padding: 12px 13px; border-radius: 12px;
+  border: 1px solid var(--hair); background: var(--paper); transition: border-color .15s, box-shadow .15s;
+}
+.ai-prov-card:hover { border-color: var(--ink2); }
+.ai-prov-card.is-active { border-color: var(--navy); background: var(--surface); box-shadow: 0 0 0 2px rgba(10, 22, 40, .07); }
+.ai-prov-card.is-ready .ai-prov-name { color: var(--ink); }
+.ai-prov-pick { display: flex !important; align-items: center; gap: 8px; margin: 0 !important; cursor: pointer; }
+.ai-prov-pick input { width: 15px; height: 15px; margin: 0; flex: 0 0 auto; accent-color: var(--navy); }
+.ai-prov-name { font: 600 13.5px var(--fb); color: var(--ink); }
+.ai-prov-badge {
+  font: 600 9.5px/1 var(--fm); letter-spacing: .08em; text-transform: uppercase;
+  padding: 3px 6px; border-radius: 999px; border: 1px solid var(--hair2); color: var(--muted); background: var(--surface);
+}
+.ai-prov-badge.on { border-color: var(--navy); color: var(--accent2); background: rgba(10, 22, 40, .05); }
+.ai-prov-badge.saved { border-color: #CDE3D3; color: #1F6B3C; background: #F2F9F4; }
+.ai-prov-badge.env { border-color: #C9D6EC; color: #1E4B8F; background: #F2F6FC; }
+.ai-prov-badge.off { border-color: #F2D2CF; color: #96332C; background: #FDF5F4; }
+.ai-prov-blurb { margin: 0; font-size: 12px; line-height: 1.45; color: var(--muted); }
+.ai-prov-field { display: grid; gap: 4px; margin: 0; }
+.ai-prov-field > span { font: 600 10.5px var(--fm); letter-spacing: .06em; text-transform: uppercase; color: var(--ink2); }
+.ai-prov-field input { width: 100%; font-size: 12.5px; }
+.ai-prov-adv input { font-family: var(--fm); font-size: 11.5px; color: var(--ink2); }
+.ai-prov-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ai-prov-link { font: 500 11.5px var(--fb); color: var(--accent); text-decoration: none; }
+.ai-prov-link:hover { text-decoration: underline; }
+.ai-prov-status { font-size: 11.5px; flex: 1 1 120px; text-align: right; }
+.ai-prov-status.ai-status-ok { color: #1F6B3C; }
+.ai-prov-status.ai-status-bad { color: #96332C; }
+.form-section-sm { font-size: 12.5px; margin-top: 22px; }
+/* Sensitive actions in the auto-run grid */
+.ai-tool-item.is-sensitive { border-color: #E8C9C6; background: #FDF7F6; }
+.ai-tool-tag.sensitive { color: #96332C; }
+
 .ai-quick-card { padding: 12px 14px; border: 1px solid var(--hair); border-radius: 10px; background: var(--paper); align-self: end; }
 .ai-quick-h { font: 600 11px/1 var(--fm); letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin-bottom: 8px; }
 .ai-quick-row { display: flex; gap: 8px; }

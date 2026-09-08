@@ -230,7 +230,7 @@ one-time code → authenticator or recovery code).
 | **Tickets** | Support threads with replies, status and auto-close rules |
 | **Email** | Compose to one member, a segment, or everyone |
 | **Blog** | Write, edit, publish — posts flow to `/blog`, the footer, RSS and the sitemap |
-| **AI Playground** | An assistant that can run real console actions (63 tools) behind confirmations and an auto-run allowlist |
+| **AI Playground** | An assistant that can run real console actions (113 tools — the whole admin surface) behind confirmations, with 20 sensitive actions locked to always-confirm, on any of 18 model providers |
 | **Inbox / Search** | Admin notifications; global search across users, listings, tickets, claims and posts |
 | **Settings** | Moderation and indexing switches, IndexNow key, Google Indexing API, **automated upkeep**, console 2FA, SMTP providers, environment view |
 
@@ -393,8 +393,9 @@ rather than a broken one. Deployment, systemd, Caddy and backup routines live in
 
 | Suite | Proves |
 |---|---|
-| **AI admin tools** | all 63 assistant tools really change the database |
-| **AI agent loop** | chaining, batched confirmation, cancellation, honest failures (Groq stubbed) |
+| **AI admin tools** | all 113 assistant tools really change the database, and sensitive ones can never be auto-run |
+| **AI agent loop** | chaining, batched confirmation, cancellation, honest failures (model stubbed) |
+| **AI model providers** | Groq / OpenAI / Claude / Gemini / DeepSeek / Hugging Face / OpenRouter + 11 more: wire formats, key resolution, switching, fallback, rate limits, console UI |
 | **Backup round trip** | `.firmledger` export and restore into an empty database |
 | **Admin pages** | every console page renders; long lists scroll in place |
 | **Admin technology refresh** | technology radar maintenance end to end |
