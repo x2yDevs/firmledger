@@ -13,6 +13,9 @@
  *                fallback and rate limits — plus the AI Playground console UI
  *                driving provider + key saves against a real server.
  *   backup       .firmledger round trip — users, all listings + configuration.
+ *   mail-providers Emitlo/Maileroo/Mailjet removed from presets and stored
+ *                accounts; Admin → Email pins a bulk send to one provider
+ *                (grouped picker, remembered choice, paused/unknown fallback).
  *   admin-pages  every admin page renders and its long list scrolls in place.
    trial-reminders  free-trial countdown ladder: half-way, 3-day and final-day
                 reminders plus the trial-ended notice — each an email AND an
@@ -49,6 +52,7 @@ const suites = [
   ['AI agent loop', 'ai-agent.test.js'],
   ['AI model providers', 'ai-providers.test.js'],
   ['Backup round trip', 'backup.test.js'],
+  ['Mail providers', 'mail-providers.test.js'],
   ['Admin pages', 'admin-pages.test.js'],
   ['Free trial reminders', 'trial-reminders.test.js'],
   ['Admin technology refresh', 'admin-tech-refresh.test.js'],

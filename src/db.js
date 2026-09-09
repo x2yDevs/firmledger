@@ -698,6 +698,13 @@ CREATE TABLE IF NOT EXISTS promo_redemptions (
   UNIQUE(promo_id, user_id)
 );
 `);
+
+/* ---- Mail providers: Emitlo / Maileroo / Mailjet removed ----
+   The three presets are no longer offered in Admin → Settings; drop any
+   stored credentials so the failover chain stops walking them.
+   Mirrors migrations/2026-09-09-mail-providers-cleanup.sql. */
+try { db.exec("DELETE FROM smtp_accounts WHERE provider IN ('emitlo','maileroo','mailjet')"); } catch { /* ignore */ }
+
 try { db.exec('ALTER TABLE payments ADD COLUMN promo_id INTEGER NOT NULL DEFAULT 0'); } catch { /* column exists */ }
 try { db.exec('ALTER TABLE payments ADD COLUMN discount_cents INTEGER NOT NULL DEFAULT 0'); } catch { /* column exists */ }
 

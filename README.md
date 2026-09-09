@@ -35,7 +35,7 @@ Stack: Node.js + Express · EJS server-rendered views · SQLite (WAL) · no fron
 | Promo codes | Admin generates codes such as `LAUNCH20` (percent off, usage cap, expiry, optional plan lock). Members apply them on Dashboard → Upgrade; PayPal is charged the discounted amount. Notify members by email and/or in-app when a code is created |
 | Maintenance mode | Admin → Protection. Visitors see a branded “we’ll be back soon” page (HTTP 503); a signed-in admin keeps working. Optional email blast to account holders when turning it on |
 | Spam protection | IP allow/block lists, email-domain allow/block (empty allow list = all domains), tunable rate limits on login, register, listings, claims, newsletter, search, scrape, and API RPM |
-| Multi-SMTP failover | Same From address everywhere. Configure in `.env` (`SMTP_URL`, `SMTP2_URL`…) **and** Admin → Settings (Emitlo, Maileroo, Brevo, Mailjet, Mailtrap, SMTP2GO, Resend, AhaSend, SMTPfast, Forward Email, DNSExit, Zoho, custom). If a hop hits a sending limit the next hop is used automatically |
+| Multi-SMTP failover | Same From address everywhere. Configure in `.env` (`SMTP_URL`, `SMTP2_URL`…) **and** Admin → Settings (Zoho, Brevo, Mailtrap, SMTP2GO, Resend, AhaSend, SMTPfast, Forward Email, DNSExit, custom). If a hop hits a sending limit the next hop is used automatically. Bulk sends (Admin → Email) can be pinned to the provider whose terms allow them |
 | Content | Blog (posts flow to footer News, RSS, sitemap), `/docs`, `/privacy`, `/terms`, global `/search` (listings + posts + docs) |
 | Indexing | IndexNow push on approve/claim (+30 min re-ping) · sitemap **index** + 4 sub-sitemaps with `lastmod` · canonical/OG/Twitter/JSON-LD on every page · RSS · **automatic `noindex` + blocked robots.txt whenever `BASE_URL` is not a public origin** (dev/staging can never leak into an index) |
 
@@ -150,7 +150,7 @@ You can run FirmLedger in production, on `https://firmledger.co.ke`, without pay
 | Database | **$0** — SQLite ships inside the app; no database server exists |
 | HTTPS certificate | **$0** — Let's Encrypt via Caddy (VPS path) or automatic on Render |
 | Custom domain DNS | **$0** — your registrar's DNS panel, or Cloudflare free plan |
-| Outgoing email | **$0 to start** — Brevo free tier (300 emails/day), Mailjet free tier, or keep console outbox logging |
+| Outgoing email | **$0 to start** — Brevo free tier (300 emails/day), Mailtrap, or keep console outbox logging |
 | **Domain name itself** | **Not free** — `firmledger.co.ke` is roughly KES 1,000–3,000/yr depending on registrar. This is the only unavoidable cost. |
 
 **Pick your path:**

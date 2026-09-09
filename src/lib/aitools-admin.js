@@ -1238,7 +1238,7 @@ const TOOLS = [
   /* ==================== Email delivery ==================== */
   {
     name: 'set_mail_account', group: 'mail', label: 'SMTP provider account', mutating: true,
-    description: 'Add, enable/disable or delete an SMTP failover account (Admin → Settings → Email). Providers: brevo, maileroo, resend, smtp2go, mailjet, mailtrap, ahasend, smtpfast, forwardemail, dnsexit, emitlo, zoho, zoho_pro, custom.',
+    description: 'Add, enable/disable or delete an SMTP failover account (Admin → Settings → Email). Providers: zoho, zoho_pro, brevo, mailtrap, smtp2go, resend, ahasend, smtpfast, forwardemail, dnsexit, custom.',
     parameters: {
       type: 'object',
       properties: {

@@ -9,7 +9,7 @@ const {
   ADMIN_COOKIE, createSession, destroySession, setSessionCookie, requireAdmin, loadSession,
 } = require('../lib/session');
 const totp = require('../lib/totp');
-const { sendMail, sendBranded, sendTest, mailConfigured } = require('../lib/mailer');
+const { sendMail, sendBranded, sendTest, mailConfigured, hops, saveBulkVia, bulkVia, bulkViaHops } = require('../lib/mailer');
 const { TYPES, CATEGORIES, SIZES, COUNTRIES } = require('../lib/taxonomy');
 const { runCheck } = require('../lib/verify');
 const { submitForIndexing, getIndexNowKey } = require('../lib/indexing');
@@ -1837,6 +1837,9 @@ router.get('/admin3119Musa/email', (req, res) => {
     meta: { title: 'Email — FirmLedger Admin', description: '', robots: 'noindex,nofollow' },
     users, log, counts: emailCounts(), preset: String(req.query.to || ''), smtp: mailConfigured(), section: 'email',
     ai: rephraseAiStatus(),
+    /* Which provider this bulk send goes out on: the remembered pick
+       ('' = automatic failover chain) plus the active hops, grouped. */
+    bulkVia: bulkVia(), mailHops: bulkViaHops(),
   });
 });
 
@@ -1846,6 +1849,13 @@ router.post('/admin3119Musa/email', async (req, res) => {
   const body = String(req.body.body || '').trim().slice(0, 10000);
   const format = req.body.format === 'html' ? 'html' : 'text';
   const externalRaw = String(req.body.external || '');
+  /* Provider this bulk send goes out on first ('' = automatic failover
+     chain). Only an ACTIVE hop counts — paused/unknown picks fall back to
+     automatic, and the choice is remembered for the next send. */
+  const rawVia = String(req.body.via || '').trim().slice(0, 120);
+  const via = hops().some((h) => h.key === rawVia) ? rawVia : '';
+  saveBulkVia(via);
+  const viaHop = via ? hops().find((h) => h.key === via) : null;
   const err = [];
   if (!subject) err.push('A subject is required.');
   if (body.length < 10) err.push('Write a message of at least 10 characters.');
@@ -1891,6 +1901,7 @@ router.post('/admin3119Musa/email', async (req, res) => {
       users, log, counts: emailCounts(), preset: to, smtp: mailConfigured(), section: 'email',
       errors: err, draft: { subject, body, format, external: externalRaw },
       ai: rephraseAiStatus(),
+      bulkVia: via, mailHops: bulkViaHops(),
     });
   }
   for (const e of external) if (!recipients.includes(e)) recipients.push(e);
@@ -1909,9 +1920,9 @@ router.post('/admin3119Musa/email', async (req, res) => {
           title: subject,
           paragraphs: htmlParas,
           note: 'You received this because you\'re part of FirmLedger. Reply to this email to contact the team.',
-        });
+        }, via);
       } else {
-        r = await sendMail(rcpt, `[FirmLedger] ${subject}`, body);
+        r = await sendMail(rcpt, `[FirmLedger] ${subject}`, body, null, via);
       }
       ins.run(rcpt, subject, body, r.delivered ? 1 : 0);
       if (r.delivered) sent++; else logged++;
@@ -1920,11 +1931,12 @@ router.post('/admin3119Musa/email', async (req, res) => {
       failed++;
     }
   }
-  const msg = failed
+  let msg = failed
     ? `Delivered ${sent}, logged to outbox ${logged}, failed ${failed}.`
     : mailConfigured()
       ? `Email delivered to ${sent} recipient${sent === 1 ? '' : 's'}.`
       : `No SMTP configured — ${logged} message${logged === 1 ? '' : 's'} written to data/outbox.log for later delivery.`;
+  if (viaHop) msg += ` Sent out first through ${viaHop.label} (the rest of the failover chain stayed armed behind it).`;
   res.redirect('/admin3119Musa/email?ok=' + encodeURIComponent(msg));
 });
 
