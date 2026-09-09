@@ -322,12 +322,25 @@ Start from the real state of the site, not from assumptions. When you are unsure
 Available tools:
 ${tools.capabilityPrompt()}
 
+Act on intent, not wording — casual phrasings map to real tools:
+- "make it live / publish / accept / pass / clear" a listing → approve_listing
+- "kill / drop / wipe / get rid of" a listing → delete_listing (confirm)
+- "kick / ban / freeze / stop / lock out" a member → suspend_user; "let them back in / unban" → unsuspend_user
+- "spotlight / feature / unfeature" → feature_listing; "boost / give it pro" → grant_listing_pro
+- "give them pro / upgrade / lifetime" a member → grant_user_pro; "take it away" → revoke_user_pro
+- "email everyone / notify all members" → email_all_users (confirm); a segment → email_users
+- "take the site down / go to maintenance / bring it back up" → set_maintenance_mode (confirm)
+- "how many / show me / what's pending / check / who / where" → the matching read tool (get_listing_stats, search_listings, search_users, list_*, get_settings, get_ai_playground)
+- "refresh the tech / rescan" → refresh_listing_tech or run_tech_refresh
+When an id or slug is missing, look it up first (search_listings, search_users, get_listing, get_user) and then act — do not stop at "which one do you mean?" when you can resolve it yourself.
+
 Rules:
 - Prefer a tool for any admin action or factual lookup. Do not invent ids, emails, slugs, counts or settings values.
 - Look things up first when you are missing an id or slug (search_listings, search_users, search_admin, get_listing, get_user, list_content, the list_* tools), then act on what you found.
 - Finish the whole job. If a request needs several actions, call them — one after another is fine, and you may call more than one tool in a single response. You are given each tool's real result before you answer.
 - A reply without a tool call changes nothing. For any lookup or change, call the tool first and answer only from its result; if you could not call a tool, say the action did not run.
-- If a request is ambiguous (which listing / which user?), ask a clarifying question instead of calling a tool.
+- If (and only if) the request is neither a console lookup nor a console action — plain conversation or general knowledge — start the reply with NO_ACTION and then answer. The server strips that marker and uses it to know the request needed no tool.
+- If a request is ambiguous (which listing / which user?) and you cannot resolve it with a search tool, ask a clarifying question instead of calling a tool.
 - Never claim you already did a write. Report only what the tool results show: if a tool returned an error, say so plainly and do not describe it as done.
 - ${autoLine}
 - Sensitive actions ALWAYS stop for operator confirmation, whatever the auto-run list says: ${sensitive.join(', ')}. Never work around a confirmation by splitting the action into smaller calls.
@@ -387,6 +400,33 @@ function swapNote(exec, requested) {
   const active = llm.activeId();
   const from = String(requested || '').trim() || llm.modelFor(active) || 'the selected default model';
   return `_(Ran on ${modelLabelOf(exec.model, exec.provider)} — ${modelLabelOf(from, active)} does not support tool calling, so a tool-capable model executed it.)_`;
+}
+
+function isNoActionReply(text) {
+  return /^\s*NO_ACTION\b/i.test(String(text || ''));
+}
+
+function stripNoAction(text) {
+  return String(text || '').replace(/^\s*NO_ACTION\b[:\-–—\s]*/i, '').trim();
+}
+
+function lastUserText(convo) {
+  for (let i = convo.length - 1; i >= 0; i--) {
+    const m = convo[i];
+    if (m && m.role === 'user') return String(m.content || '').slice(0, 600);
+  }
+  return '';
+}
+
+/**
+ * The one-shot server-side tool enforcement: the model answered an admin
+ * request in plain text without calling a single tool, so the request was
+ * not actually done. Re-ask with forced tool choice (the dialects map it to
+ * their "any" mode; providers that reject the field fall back to auto) and
+ * quote the operator's request verbatim so any phrasing is honoured.
+ */
+function nudgePrompt(request) {
+  return `You just answered without calling a tool, so nothing was looked up and nothing was changed. The operator's request was: “${request || 'the last message'}”. If it maps to any console lookup or action — including casual phrasings such as "make it live", "get rid of it", "kick them", "spotlight it", "give them pro", "take the site down" — call the best-matching tool now. When you lack an id or slug, look it up first (search_listings, search_users, search_admin, get_listing, get_user) and then act. If it truly is neither a console action nor a lookup, reply with exactly: NO_ACTION`;
 }
 
 /** System prompt for the degraded, tools-unavailable turn. */
@@ -453,9 +493,31 @@ async function runSteps(steps, convo, ran, { auto = false } = {}) {
  * model response is parked as ONE pending batch, so “suspend X and email them”
  * is confirmed and then executed as a unit rather than being refused.
  */
+/** Build the final message reply: honest stamping, swap note, marker strip. */
+function finalizeReply({ text, ran, exec, requested, usedModel, usage, nudged = false }) {
+  const declaredNoAction = isNoActionReply(text);
+  const content = stripNoAction(text)
+    || (ran.length ? receipt(ran) : 'I could not verify an action or lookup from that request, so nothing was changed. Please rephrase it or include the listing, user, or record identifier.');
+  const suffixes = [];
+  if (!ran.length && !declaredNoAction) suffixes.push(NO_ACTION_NOTE);
+  if (exec.swapped) suffixes.push(swapNote(exec, requested));
+  return {
+    type: 'message',
+    content: content + (suffixes.length ? '\n\n' + suffixes.join('\n\n') : ''),
+    model: usedModel,
+    usage,
+    executed: ran.some((r) => r.ok),
+    steps: ran.map((r) => ({ tool: r.tool, ok: r.ok, error: r.error })),
+    tool: ran.length ? ran[ran.length - 1].tool : '',
+    no_action: !ran.length,
+    nudged,
+  };
+}
+
 async function runAgent({ convo, model, ran = [], budgetSteps = MAX_MODEL_STEPS }) {
   let usedModel = model;
   let usage = null;
+  let nudged = false;
   const requested = String(model || '').trim();
   const exec = resolveExecutionModel(requested);
 
@@ -517,30 +579,67 @@ async function runAgent({ convo, model, ran = [], budgetSteps = MAX_MODEL_STEPS 
     usedModel = data._model || usedModel;
     usage = groq.usage(data) || usage;
 
-    const text = groq.assistantText(data) || '';
+    let text = groq.assistantText(data) || '';
     const choice = data.choices && data.choices[0];
-    const assistantMessage = (choice && choice.message) || { role: 'assistant', content: text };
+    let assistantMessage = (choice && choice.message) || { role: 'assistant', content: text };
     /* Tools are always offered on this path (the execution model was chosen
        for tool support), so any tool_calls in the reply are always read. */
-    const calls = readCalls(groq.toolCalls(data));
+    let calls = readCalls(groq.toolCalls(data));
 
     if (!calls.length) {
-      audit({ kind: 'chat', action: 'reply', payload: { steps: ran.length }, result: text.slice(0, 400) });
-      const content = text
-        || (ran.length ? receipt(ran) : 'I could not verify an action or lookup from that request, so nothing was changed. Please rephrase it or include the listing, user, or record identifier.');
-      const suffixes = [];
-      if (!ran.length) suffixes.push(NO_ACTION_NOTE);
-      if (exec.swapped) suffixes.push(swapNote(exec, requested));
-      return {
-        type: 'message',
-        content: content + (suffixes.length ? '\n\n' + suffixes.join('\n\n') : ''),
-        model: usedModel,
-        usage,
-        executed: ran.some((r) => r.ok),
-        steps: ran.map((r) => ({ tool: r.tool, ok: r.ok, error: r.error })),
-        tool: ran.length ? ran[ran.length - 1].tool : '',
-        no_action: !ran.length,
-      };
+      /* Server-side tool enforcement: the model dodged the request in plain
+         text, so nothing was looked up and nothing was changed. Re-ask
+         exactly once with forced tool choice, quoting the operator's request
+         verbatim — any phrasing has to resolve to a real tool call. A forced
+         attempt the provider rejects (HTTP 400/422) falls back to auto
+         choice; the nudge never loops. */
+      if (!isNoActionReply(text) && !ran.length && !nudged) {
+        nudged = true;
+        const nudgeMsg = { role: 'user', content: nudgePrompt(lastUserText(convo)) };
+        convo.push(assistantMessage);
+        const base = {
+          provider: exec.provider, model: exec.model, noFallback: true,
+          temperature: 0.2, max_tokens: 900, tools: tools.groqTools(),
+        };
+        let second;
+        try {
+          second = await groq.chat({ ...base, tool_choice: 'required', messages: [...convo, nudgeMsg] });
+        } catch (e) {
+          if (e && (e.status === 400 || e.status === 422)) {
+            second = await groq.chat({ ...base, tool_choice: 'auto', messages: [...convo, nudgeMsg] });
+          } else {
+            throw e;
+          }
+        }
+        convo.push(nudgeMsg);
+        const sChoice = second.choices && second.choices[0];
+        const sMsg = (sChoice && sChoice.message) || { role: 'assistant', content: groq.assistantText(second) || '' };
+        convo.push(sMsg);
+        usedModel = second._model || usedModel;
+        usage = groq.usage(second) || usage;
+        const sCalls = readCalls(groq.toolCalls(second));
+        audit({
+          kind: 'chat',
+          action: 'tool_nudge',
+          payload: { called: sCalls.map((c) => c.name), forced: true },
+          result: sCalls.length ? 'model acted after nudge' : 'still text-only',
+          ok: sCalls.length ? 1 : 0,
+        });
+        if (!sCalls.length) {
+          return finalizeReply({ text: groq.assistantText(second) || '', ran, exec, requested, usedModel, usage, nudged: true });
+        }
+        /* The model called tools after the nudge — fall through to the
+           normal handling (unknown check → confirm → auto-run), so the
+           enforced call goes through exactly the same real execution and
+           confirmation paths as a first-pass call. */
+        assistantMessage = sMsg;
+        text = groq.assistantText(second) || '';
+        calls = sCalls;
+      }
+      if (!calls.length) {
+        audit({ kind: 'chat', action: 'reply', payload: { steps: ran.length, nudged }, result: text.slice(0, 400) });
+        return finalizeReply({ text, ran, exec, requested, usedModel, usage, nudged });
+      }
     }
 
     /* Unknown tool names never fail the turn — tell the model and let it retry. */

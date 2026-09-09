@@ -12,7 +12,12 @@
  *   6. a selected model without tool calling still EXECUTES — the loop
  *      transparently falls back to a tool-capable model and names it;
  *   7. with no tool-capable model configured anywhere, the assistant answers
- *      read-only and stamps the reply: nothing was executed.
+ *      read-only and stamps the reply: nothing was executed;
+ *   8. a casually-phrased request the model dodges with text is re-asked
+ *      once with forced tool choice and really executes;
+ *   9. a declared NO_ACTION (genuine non-action) skips the retry;
+ *  10. a stubborn text-only answer is accepted after exactly one nudge and
+ *      stamped no-action.
  */
 process.env.NODE_ENV = 'test';
 
@@ -141,11 +146,14 @@ const listingId = db.prepare(
   script = [
     reply('', [toolCall('c1', 'make_coffee', { strength: 'strong' })]),
     reply('That is not something I can do in the admin console.'),
+    /* the server-side nudge re-asks; the model insists it is not a console action */
+    reply('That is not something I can do in the admin console — it is not a console action.'),
   ];
   out = await ai.chatTurn([{ role: 'user', content: 'Make me a coffee.' }]);
   check('turn recovers with a message', out.type === 'message' && /admin console/i.test(out.content), out.content);
   check('a no-action reply is stamped so it cannot read as done',
     /No console action ran in this turn/i.test(out.content), out.content);
+  check('the nudge forced tool choice', optsSeen.some((o) => o.tool_choice === 'required'), JSON.stringify(optsSeen.map((o) => o.tool_choice)));
 
   /* 7 — a model without tool calling still EXECUTES: transparent fallback */
   console.log('\nNon-tool model executes via a tool-capable fallback');
@@ -201,6 +209,51 @@ const listingId = db.prepare(
   llmLib.toolFallbackProvider = realFallback;
   llmLib.setActiveProvider('groq');
   llmLib.setApiKey('perplexity', '');
+
+  /* 9 — a casually-phrased request the model dodges: the server re-asks with
+        forced tool choice and the action really runs */
+  console.log('\nServer-side tool enforcement (any phrasing)');
+  setSetting('ai_auto_tools', JSON.stringify(['approve_listing']));
+  db.prepare("UPDATE listings SET status='pending' WHERE id=?").run(listingId);
+  optsSeen.length = 0;
+  script = [
+    reply('Sure thing, Agent Co is approved now.'), // the model dodges with a text claim
+    reply('', [toolCall('c1', 'approve_listing', { id_or_slug: 'agent-co' })]), // acts after the nudge
+    reply('Agent Co is approved and live.'),
+  ];
+  out = await ai.chatTurn([{ role: 'user', content: 'Make agent-co live.' }]);
+  check('the dodged request still executed for real', one('SELECT status FROM listings WHERE id=?', listingId).status === 'approved');
+  check('the server re-asked with forced tool choice, quoting the request',
+    optsSeen.length >= 2 && optsSeen[1].tool_choice === 'required'
+    && String(optsSeen[1].messages[optsSeen[1].messages.length - 1].content || '').includes('Make agent-co live'),
+    JSON.stringify(optsSeen.map((o) => o.tool_choice)));
+  check('the dodging claim was never shown to the operator',
+    out.type === 'message' && out.content.indexOf('Sure thing, Agent Co is approved now.') === -1, JSON.stringify(out.content));
+  check('reported as executed', out.executed === true, JSON.stringify(out.executed));
+
+  /* 10 — a genuine non-action declares NO_ACTION: marker stripped, no wasted retry */
+  console.log('\nNO_ACTION declaration skips the retry');
+  optsSeen.length = 0;
+  script = [reply('NO_ACTION\nPro unlocks full listing details; Free shows the basic profile.')];
+  out = await ai.chatTurn([{ role: 'user', content: 'What is the difference between Pro and Free?' }]);
+  check('the marker is stripped from the reply',
+    out.type === 'message' && !/^NO_ACTION/i.test(out.content) && /^Pro unlocks/.test(out.content), JSON.stringify(out.content));
+  check('no second model call was spent', optsSeen.length === 1, `calls=${optsSeen.length}`);
+  check('nothing executed', out.executed === false);
+
+  /* 11 — a stubborn text-only answer is accepted after exactly one nudge */
+  console.log('\nStubborn text answer is bounded');
+  db.prepare("UPDATE listings SET status='pending' WHERE id=?").run(listingId);
+  optsSeen.length = 0;
+  script = [
+    reply('I cannot do that, sorry.'),
+    reply('I still cannot do that, sorry.'),
+  ];
+  out = await ai.chatTurn([{ role: 'user', content: 'Approve agent-co.' }]);
+  check('exactly one nudge was used', optsSeen.length === 2, `calls=${optsSeen.length}`);
+  check('the final text is stamped no-action', /No console action ran in this turn/i.test(out.content), out.content);
+  check('nothing was executed', out.executed === false);
+  check('the listing is untouched', one('SELECT status FROM listings WHERE id=?', listingId).status === 'pending');
 
   console.log(`\n${'='.repeat(64)}`);
   console.log(`checks passed: ${passed}   failed: ${failures.length}`);

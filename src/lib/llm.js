@@ -971,7 +971,8 @@ function toAnthropicBody(opts, pid, model) {
       description: t.function.description || '',
       input_schema: t.function.parameters || { type: 'object', properties: {} },
     }));
-    if (opts.tool_choice && opts.tool_choice !== 'auto') body.tool_choice = { type: 'auto' };
+    if (opts.tool_choice === 'required') body.tool_choice = { type: 'any' };
+    else if (opts.tool_choice === 'none') body.tool_choice = { type: 'none' };
   }
   return body;
 }
@@ -1030,9 +1031,8 @@ function toGeminiBody(opts, pid, model) {
         parameters: stripSchemaNoise(t.function.parameters || { type: 'object', properties: {} }),
       })),
     }];
-    if (opts.tool_choice && opts.tool_choice !== 'auto') {
-      body.toolConfig = { functionCallingConfig: { mode: 'AUTO' } };
-    }
+    if (opts.tool_choice === 'required') body.toolConfig = { functionCallingConfig: { mode: 'ANY' } };
+    else if (opts.tool_choice === 'none') body.toolConfig = { functionCallingConfig: { mode: 'NONE' } };
   }
   return body;
 }
@@ -1057,6 +1057,9 @@ function toCohereBody(opts, pid, model) {
         parameters: t.function.parameters || { type: 'object', properties: {} },
       },
     }));
+    /* Cohere v2 has no "any" mode — a forced call degrades to auto there;
+       the OpenAI-compatible providers carry the 'required' spelling. */
+    if (opts.tool_choice === 'none') body.tool_choice = { type: 'none' };
   }
   return body;
 }
