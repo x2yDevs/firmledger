@@ -64,13 +64,23 @@ const PROVIDERS = [
         tools: true, json: true, vision: false, context: 131072, maxOutput: 65536, tps: 1000,
       },
       {
-        id: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B (legacy)', tier: 'legacy',
-        note: 'Retired for developer keys on 16 Aug 2026 — enterprise contracts only.',
+        id: 'groq/compound', label: 'Groq Compound', tier: 'production',
+        note: 'Groq hosted agent system with built-in search and code execution.',
+        tools: false, json: true, vision: false, context: 131072, maxOutput: 8192,
+      },
+      {
+        id: 'groq/compound-mini', label: 'Groq Compound Mini', tier: 'production',
+        note: 'Lower-cost Groq hosted agent system.',
+        tools: false, json: true, vision: false, context: 131072, maxOutput: 8192,
+      },
+      {
+        id: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B', tier: 'production',
+        note: 'Current Groq production model.',
         tools: true, json: true, vision: false, context: 131072, maxOutput: 32768, tps: 280,
       },
       {
-        id: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B Instant (legacy)', tier: 'legacy',
-        note: 'Retired for developer keys on 16 Aug 2026 — enterprise contracts only.',
+        id: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B Instant', tier: 'production',
+        note: 'Current Groq production model.',
         tools: true, json: true, vision: false, context: 131072, maxOutput: 131072, tps: 560,
       },
     ],
@@ -81,9 +91,15 @@ const PROVIDERS = [
     blurb: 'GPT-4.1 / GPT-4o / o-series. Strongest general reasoning, paid per token.',
     base: 'https://api.openai.com/v1', env: ['OPENAI_API_KEY'],
     keyPlaceholder: 'sk-…', keysUrl: 'https://platform.openai.com/api-keys',
-    defaultModel: 'gpt-4.1',
-    fallbacks: ['gpt-4.1', 'gpt-4.1-mini', 'gpt-4o-mini'],
+    defaultModel: 'gpt-6-astra',
+    fallbacks: ['gpt-6-astra', 'gpt-5.6-terra', 'gpt-5.4-mini', 'gpt-4.1'],
     models: [
+      { id: 'gpt-6-astra', label: 'GPT-6 Astra', tier: 'production', note: 'Latest OpenAI flagship for agentic and long-horizon work.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 128000 },
+      { id: 'gpt-5.6-sol', label: 'GPT-5.6 Sol', tier: 'production', note: 'Highest-capability current GPT-5.6 variant.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 128000 },
+      { id: 'gpt-5.6-terra', label: 'GPT-5.6 Terra', tier: 'production', note: 'Balanced GPT-5.6 production tier.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 128000 },
+      { id: 'gpt-5.6-luna', label: 'GPT-5.6 Luna', tier: 'production', note: 'Lower-cost GPT-5.6 production tier.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 128000 },
+      { id: 'gpt-5.4-mini', label: 'GPT-5.4 mini', tier: 'production', note: 'Fast, lower-cost reasoning model.', tools: true, json: true, vision: true, context: 400000, maxOutput: 65536 },
+      { id: 'gpt-5.4-nano', label: 'GPT-5.4 nano', tier: 'production', note: 'Lowest-cost current reasoning tier.', tools: true, json: true, vision: true, context: 400000, maxOutput: 65536 },
       { id: 'gpt-4.1', label: 'GPT-4.1', tier: 'production', note: 'Best tool-calling accuracy.', tools: true, json: true, vision: true, context: 1047576, maxOutput: 32768 },
       { id: 'gpt-4.1-mini', label: 'GPT-4.1 mini', tier: 'production', note: 'Cheap and quick; fine for moderation.', tools: true, json: true, vision: true, context: 1047576, maxOutput: 32768 },
       { id: 'gpt-4.1-nano', label: 'GPT-4.1 nano', tier: 'production', note: 'Cheapest tier.', tools: true, json: true, vision: true, context: 1047576, maxOutput: 32768 },
@@ -98,11 +114,19 @@ const PROVIDERS = [
     blurb: 'Claude Sonnet / Opus / Haiku. Excellent at long agent runs and tool use.',
     base: 'https://api.anthropic.com/v1', env: ['ANTHROPIC_API_KEY', 'CLAUDE_API_KEY'],
     keyPlaceholder: 'sk-ant-…', keysUrl: 'https://console.anthropic.com/settings/keys',
-    defaultModel: 'claude-sonnet-4-5',
-    fallbacks: ['claude-sonnet-4-5', 'claude-haiku-4-5', 'claude-3-5-haiku-latest'],
+    defaultModel: 'claude-fable-5-1',
+    fallbacks: ['claude-fable-5-1', 'claude-sonnet-5', 'claude-haiku-4-5-20251001'],
     models: [
+      { id: 'claude-fable-5-1', label: 'Claude Fable 5.1', tier: 'production', note: 'Latest Anthropic model for long-running agents and knowledge work.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 128000 },
+      { id: 'claude-fable-5', label: 'Claude Fable 5', tier: 'production', note: 'Frontier long-context model.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 128000 },
+      { id: 'claude-opus-5', label: 'Claude Opus 5', tier: 'production', note: 'Complex agentic coding and enterprise work.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 128000 },
+      { id: 'claude-opus-4-8', label: 'Claude Opus 4.8', tier: 'production', note: 'Current Opus production model.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 128000 },
+      { id: 'claude-opus-4-7', label: 'Claude Opus 4.7', tier: 'production', note: 'Current Opus production model.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 128000 },
+      { id: 'claude-sonnet-5', label: 'Claude Sonnet 5', tier: 'production', note: 'Current speed/intelligence balance.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 128000 },
+      { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', tier: 'production', note: 'Current Sonnet compatibility model.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 128000 },
+      { id: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5', tier: 'production', note: 'Fastest current Claude tier; good for moderation.', tools: true, json: true, vision: true, context: 200000, maxOutput: 64000 },
       { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5', tier: 'production', note: 'Best balance for the admin assistant.', tools: true, json: true, vision: true, context: 200000, maxOutput: 64000 },
-      { id: 'claude-opus-4-1', label: 'Claude Opus 4.1', tier: 'production', note: 'Deepest reasoning, slowest and priciest.', tools: true, json: true, vision: true, context: 200000, maxOutput: 32000 },
+      { id: 'claude-opus-4-1', label: 'Claude Opus 4.1 (legacy)', tier: 'legacy', note: 'Deepest reasoning, slowest and priciest.', tools: true, json: true, vision: true, context: 200000, maxOutput: 32000 },
       { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5', tier: 'production', note: 'Fast and cheap; good for auto-moderation.', tools: true, json: true, vision: true, context: 200000, maxOutput: 64000 },
       { id: 'claude-3-5-haiku-latest', label: 'Claude 3.5 Haiku', tier: 'legacy', note: 'Previous cheap tier.', tools: true, json: true, vision: false, context: 200000, maxOutput: 8192 },
     ],
@@ -113,9 +137,15 @@ const PROVIDERS = [
     blurb: 'Gemini 2.5 Pro / Flash. Huge context, free tier available with a Google key.',
     base: 'https://generativelanguage.googleapis.com/v1beta', env: ['GEMINI_API_KEY', 'GOOGLE_AI_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY'],
     keyPlaceholder: 'AIza…', keysUrl: 'https://aistudio.google.com/app/apikey',
-    defaultModel: 'gemini-2.5-flash',
-    fallbacks: ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-pro'],
+    defaultModel: 'gemini-3.8-flash',
+    fallbacks: ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-pro-preview'],
     models: [
+      { id: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash', tier: 'production', note: 'Latest stable Flash model; 1M context and tool calling.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 65536 },
+      { id: 'gemini-3.7-flash', label: 'Gemini 3.7 Flash', tier: 'production', note: 'Stable multimodal reasoning and agent model.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 65536 },
+      { id: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash', tier: 'production', note: 'High-throughput current Flash tier.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 65536 },
+      { id: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash', tier: 'production', note: 'Stable multimodal Flash model.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 65536 },
+      { id: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash-Lite', tier: 'production', note: 'Cost-efficient current model for extraction and routing.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 65536 },
+      { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro', tier: 'preview', note: 'Deep reasoning and coding; preview availability.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 65536 },
       { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', tier: 'production', note: 'Fast, tool-capable, 1M context.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 65536 },
       { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash-Lite', tier: 'production', note: 'Cheapest Gemini; fine for bulk drafting.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 65536 },
       { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', tier: 'production', note: 'Strongest Gemini reasoning.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 65536 },
@@ -124,15 +154,18 @@ const PROVIDERS = [
   },
 
   {
-    id: 'deepseek', label: 'DeepSeek', vendor: 'DeepSeek', format: 'openai', listModels: null,
+    id: 'deepseek', label: 'DeepSeek', vendor: 'DeepSeek', format: 'openai', listModels: 'openai',
     blurb: 'Very cheap strong models. deepseek-chat takes tools; the reasoner does not.',
-    base: 'https://api.deepseek.com/v1', env: ['DEEPSEEK_API_KEY'],
+    base: 'https://api.deepseek.com', env: ['DEEPSEEK_API_KEY'],
     keyPlaceholder: 'sk-…', keysUrl: 'https://platform.deepseek.com/api_keys',
-    defaultModel: 'deepseek-chat',
-    fallbacks: ['deepseek-chat'],
+    defaultModel: 'deepseek-v4-flash',
+    fallbacks: ['deepseek-v4-flash', 'deepseek-v4-pro'],
     models: [
-      { id: 'deepseek-chat', label: 'DeepSeek Chat (V3)', tier: 'production', note: 'General model with tool calling.', tools: true, json: true, vision: false, context: 65536, maxOutput: 8192 },
-      { id: 'deepseek-reasoner', label: 'DeepSeek Reasoner (R1)', tier: 'production', note: 'Chain-of-thought — no tool calls, no JSON mode.', tools: false, json: false, vision: false, context: 65536, maxOutput: 65536 },
+      { id: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash', tier: 'production', note: 'Current high-throughput 1M-context model; supports tools and JSON.', tools: true, json: true, vision: false, context: 1048576, maxOutput: 384000 },
+      { id: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro', tier: 'production', note: 'Current flagship for difficult reasoning and coding.', tools: true, json: true, vision: false, context: 1048576, maxOutput: 384000 },
+      { id: 'deepseek-v4-flash-vision-exp', label: 'DeepSeek V4 Flash Vision (experimental)', tier: 'preview', note: 'Text plus image input; validate before production use.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 384000 },
+      { id: 'deepseek-chat', label: 'DeepSeek Chat (V3, legacy)', tier: 'legacy', note: 'General model with tool calling.', tools: true, json: true, vision: false, context: 65536, maxOutput: 8192 },
+      { id: 'deepseek-reasoner', label: 'DeepSeek Reasoner (R1, legacy)', tier: 'legacy', note: 'Chain-of-thought — no tool calls, no JSON mode.', tools: false, json: false, vision: false, context: 65536, maxOutput: 65536 },
     ],
   },
 
@@ -141,9 +174,12 @@ const PROVIDERS = [
     blurb: 'The HF Router: hundreds of open models behind one key, billed per provider.',
     base: 'https://router.huggingface.co/v1', env: ['HUGGINGFACE_API_KEY', 'HF_TOKEN'],
     keyPlaceholder: 'hf_…', keysUrl: 'https://huggingface.co/settings/tokens',
-    allowCustom: true, defaultModel: 'meta-llama/Llama-3.3-70B-Instruct',
-    fallbacks: ['meta-llama/Llama-3.3-70B-Instruct', 'Qwen/Qwen2.5-72B-Instruct'],
+    allowCustom: true, defaultModel: 'deepseek-ai/DeepSeek-V4-Flash-0731',
+    fallbacks: ['deepseek-ai/DeepSeek-V4-Flash-0731', 'openai/gpt-oss-120b', 'Qwen/Qwen3.5-9B'],
     models: [
+      { id: 'deepseek-ai/DeepSeek-V4-Flash-0731', label: 'DeepSeek V4 Flash 0731', tier: 'production', note: 'Current HF Router example with tool calling.', tools: true, json: true, vision: false, context: 1048576, maxOutput: 131072 },
+      { id: 'openai/gpt-oss-120b', label: 'OpenAI GPT-OSS 120B', tier: 'production', note: 'Stable open model with strong tool calling.', tools: true, json: true, vision: false, context: 131072, maxOutput: 40960 },
+      { id: 'Qwen/Qwen3.5-9B', label: 'Qwen 3.5 9B', tier: 'production', note: 'Efficient multimodal router model.', tools: true, json: true, vision: true, context: 262144, maxOutput: 65536 },
       { id: 'meta-llama/Llama-3.3-70B-Instruct', label: 'Llama 3.3 70B Instruct', tier: 'production', note: 'Solid all-round tool caller.', tools: true, json: true, vision: false, context: 131072, maxOutput: 4096 },
       { id: 'Qwen/Qwen2.5-72B-Instruct', label: 'Qwen 2.5 72B Instruct', tier: 'production', note: 'Strong JSON output.', tools: true, json: true, vision: false, context: 131072, maxOutput: 8192 },
       { id: 'Qwen/Qwen3-235B-A22B-Instruct-2507', label: 'Qwen 3 235B Instruct', tier: 'production', note: 'Largest open weights on the router.', tools: true, json: true, vision: false, context: 262144, maxOutput: 32768 },
@@ -156,9 +192,14 @@ const PROVIDERS = [
     blurb: 'One key, 300+ models from every lab. Best fallback coverage.',
     base: 'https://openrouter.ai/api/v1', env: ['OPENROUTER_API_KEY'],
     keyPlaceholder: 'sk-or-…', keysUrl: 'https://openrouter.ai/settings/keys',
-    allowCustom: true, defaultModel: 'openai/gpt-4.1',
-    fallbacks: ['openai/gpt-4.1', 'anthropic/claude-sonnet-4.5', 'google/gemini-2.5-flash'],
+    allowCustom: true, defaultModel: 'openai/gpt-6-astra',
+    fallbacks: ['openai/gpt-6-astra', 'anthropic/claude-fable-5-1', 'google/gemini-3.8-flash', 'deepseek/deepseek-v4-flash-0731'],
     models: [
+      { id: 'openai/gpt-6-astra', label: 'OpenAI GPT-6 Astra', tier: 'production', note: 'Latest OpenRouter flagship.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 128000 },
+      { id: 'openai/gpt-5.6-sol', label: 'OpenAI GPT-5.6 Sol', tier: 'production', note: 'Current high-capability GPT route.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 128000 },
+      { id: 'anthropic/claude-fable-5-1', label: 'Claude Fable 5.1', tier: 'production', note: 'Latest Anthropic route.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 128000 },
+      { id: 'google/gemini-3.8-flash', label: 'Gemini 3.8 Flash', tier: 'production', note: 'Latest Google Flash route.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 65536 },
+      { id: 'deepseek/deepseek-v4-flash-0731', label: 'DeepSeek V4 Flash', tier: 'production', note: 'Cost-efficient current DeepSeek route.', tools: true, json: true, vision: false, context: 1048576, maxOutput: 131072 },
       { id: 'openai/gpt-4.1', label: 'OpenAI GPT-4.1', tier: 'production', note: 'Routed GPT-4.1.', tools: true, json: true, vision: true, context: 1047576, maxOutput: 32768 },
       { id: 'anthropic/claude-sonnet-4.5', label: 'Claude Sonnet 4.5', tier: 'production', note: 'Routed Claude.', tools: true, json: true, vision: true, context: 200000, maxOutput: 64000 },
       { id: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash', tier: 'production', note: 'Routed Gemini.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 65536 },
@@ -173,9 +214,13 @@ const PROVIDERS = [
     blurb: 'La Plateforme — Mistral Large/Small and the open Nemo models.',
     base: 'https://api.mistral.ai/v1', env: ['MISTRAL_API_KEY'],
     keyPlaceholder: '…', keysUrl: 'https://console.mistral.ai/api-keys',
-    defaultModel: 'mistral-large-latest',
-    fallbacks: ['mistral-large-latest', 'mistral-small-latest'],
+    defaultModel: 'mistral-medium-3-5',
+    fallbacks: ['mistral-medium-3-5', 'mistral-small-2603', 'mistral-large-2512'],
     models: [
+      { id: 'mistral-medium-3-5', label: 'Mistral Medium 3.5', tier: 'production', note: 'Current flagship for agents and coding.', tools: true, json: true, vision: true, context: 256000, maxOutput: 32768 },
+      { id: 'mistral-small-2603', label: 'Mistral Small 4', tier: 'production', note: 'Current hybrid instruct/reasoning model.', tools: true, json: true, vision: true, context: 256000, maxOutput: 32768 },
+      { id: 'mistral-large-2512', label: 'Mistral Large 3', tier: 'production', note: 'Current multimodal large model.', tools: true, json: true, vision: true, context: 256000, maxOutput: 32768 },
+      { id: 'codestral-2508', label: 'Codestral', tier: 'production', note: 'Current coding model; use for code-focused prompts.', tools: true, json: true, vision: false, context: 256000, maxOutput: 32768 },
       { id: 'mistral-large-latest', label: 'Mistral Large', tier: 'production', note: 'Flagship with function calling.', tools: true, json: true, vision: false, context: 131072, maxOutput: 8192 },
       { id: 'mistral-small-latest', label: 'Mistral Small', tier: 'production', note: 'Cheap and quick.', tools: true, json: true, vision: false, context: 131072, maxOutput: 8192 },
       { id: 'magistral-medium-latest', label: 'Magistral Medium', tier: 'preview', note: 'Reasoning — no tool calls.', tools: false, json: false, vision: false, context: 40960, maxOutput: 40960 },
@@ -188,9 +233,12 @@ const PROVIDERS = [
     blurb: 'Dedicated open-model inference with serverless pricing.',
     base: 'https://api.together.xyz/v1', env: ['TOGETHER_API_KEY'],
     keyPlaceholder: '…', keysUrl: 'https://api.together.xyz/settings/api-keys',
-    allowCustom: true, defaultModel: 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
-    fallbacks: ['meta-llama/Llama-3.3-70B-Instruct-Turbo', 'Qwen/Qwen2.5-72B-Instruct-Turbo'],
+    allowCustom: true, defaultModel: 'MiniMaxAI/MiniMax-M3',
+    fallbacks: ['MiniMaxAI/MiniMax-M3', 'deepseek-ai/DeepSeek-V4-Flash-0731', 'deepseek-ai/DeepSeek-V4-Pro-0813'],
     models: [
+      { id: 'MiniMaxAI/MiniMax-M3', label: 'MiniMax M3', tier: 'production', note: 'Current 1M-context agentic model with tool calling.', tools: true, json: true, vision: true, context: 524288, maxOutput: 131072 },
+      { id: 'deepseek-ai/DeepSeek-V4-Flash-0731', label: 'DeepSeek V4 Flash 0731', tier: 'production', note: 'Current high-throughput DeepSeek model.', tools: true, json: true, vision: false, context: 1048576, maxOutput: 131072 },
+      { id: 'deepseek-ai/DeepSeek-V4-Pro-0813', label: 'DeepSeek V4 Pro 0813', tier: 'production', note: 'Current flagship reasoning model.', tools: true, json: true, vision: false, context: 1048576, maxOutput: 131072 },
       { id: 'meta-llama/Llama-3.3-70B-Instruct-Turbo', label: 'Llama 3.3 70B Turbo', tier: 'production', note: 'Tool-calling open model.', tools: true, json: true, vision: false, context: 131072, maxOutput: 4096 },
       { id: 'Qwen/Qwen2.5-72B-Instruct-Turbo', label: 'Qwen 2.5 72B Turbo', tier: 'production', note: 'Good JSON adherence.', tools: true, json: true, vision: false, context: 131072, maxOutput: 8192 },
       { id: 'deepseek-ai/DeepSeek-V3', label: 'DeepSeek V3', tier: 'production', note: 'Large MoE.', tools: true, json: true, vision: false, context: 163840, maxOutput: 8192 },
@@ -202,9 +250,11 @@ const PROVIDERS = [
     blurb: 'Grok 4 / Grok 3 with live-search capable tool use.',
     base: 'https://api.x.ai/v1', env: ['XAI_API_KEY'],
     keyPlaceholder: 'xai-…', keysUrl: 'https://console.x.ai/team/default/api-keys',
-    defaultModel: 'grok-4',
-    fallbacks: ['grok-4', 'grok-3', 'grok-3-mini'],
+    defaultModel: 'grok-4.6',
+    fallbacks: ['grok-4.6', 'grok-4.5', 'grok-4'],
     models: [
+      { id: 'grok-4.6', label: 'Grok 4.6', tier: 'production', note: 'Latest xAI flagship with configurable reasoning and tool calling.', tools: true, json: true, vision: true, context: 500000, maxOutput: 131072 },
+      { id: 'grok-4.5', label: 'Grok 4.5', tier: 'production', note: 'Current high-capability Grok route.', tools: true, json: true, vision: true, context: 256000, maxOutput: 65536 },
       { id: 'grok-4', label: 'Grok 4', tier: 'production', note: 'Flagship reasoning + tools.', tools: true, json: true, vision: false, context: 256000, maxOutput: 32768 },
       { id: 'grok-3', label: 'Grok 3', tier: 'production', note: 'Previous flagship.', tools: true, json: true, vision: false, context: 131072, maxOutput: 8192 },
       { id: 'grok-3-mini', label: 'Grok 3 mini', tier: 'production', note: 'Cheap and fast.', tools: true, json: true, vision: false, context: 131072, maxOutput: 8192 },
@@ -216,12 +266,13 @@ const PROVIDERS = [
     blurb: 'Wafer-scale inference — thousands of tokens per second.',
     base: 'https://api.cerebras.ai/v1', env: ['CEREBRAS_API_KEY'],
     keyPlaceholder: 'csk-…', keysUrl: 'https://cloud.cerebras.ai/',
-    allowCustom: true, defaultModel: 'llama-3.3-70b',
-    fallbacks: ['llama-3.3-70b', 'qwen-3-32b'],
+    allowCustom: true, defaultModel: 'gpt-oss-120b',
+    fallbacks: ['gpt-oss-120b', 'qwen-3.8-27b'],
     models: [
+      { id: 'gpt-oss-120b', label: 'GPT-OSS 120B', tier: 'production', note: 'Cerebras public production model with tool calling.', tools: true, json: true, vision: false, context: 131072, maxOutput: 40960 },
+      { id: 'qwen-3.8-27b', label: 'Qwen 3.8 27B', tier: 'preview', note: 'Current public endpoint preview model.', tools: true, json: true, vision: true, context: 262144, maxOutput: 65536 },
       { id: 'llama-3.3-70b', label: 'Llama 3.3 70B', tier: 'production', note: 'Fastest 70B anywhere.', tools: true, json: true, vision: false, context: 64000, maxOutput: 8192 },
       { id: 'qwen-3-32b', label: 'Qwen 3 32B', tier: 'production', note: 'Tool support, very high throughput.', tools: true, json: true, vision: false, context: 64000, maxOutput: 8192 },
-      { id: 'gpt-oss-120b', label: 'GPT-OSS 120B', tier: 'production', note: 'OpenAI open weights.', tools: true, json: true, vision: false, context: 128000, maxOutput: 65536 },
     ],
   },
 
@@ -230,9 +281,13 @@ const PROVIDERS = [
     blurb: 'RDU inference for Llama, Qwen and DeepSeek at very low latency.',
     base: 'https://api.sambanova.ai/v1', env: ['SAMBANOVA_API_KEY'],
     keyPlaceholder: '…', keysUrl: 'https://cloud.sambanova.ai/apis',
-    allowCustom: true, defaultModel: 'Meta-Llama-3.3-70B-Instruct',
-    fallbacks: ['Meta-Llama-3.3-70B-Instruct', 'Qwen3-32B'],
+    allowCustom: true, defaultModel: 'MiniMax-M2.7',
+    fallbacks: ['MiniMax-M2.7', 'DeepSeek-V3.1', 'gpt-oss-120b'],
     models: [
+      { id: 'MiniMax-M2.7', label: 'MiniMax M2.7', tier: 'production', note: 'Current SambaCloud production flagship.', tools: true, json: true, vision: false, context: 196608, maxOutput: 81920 },
+      { id: 'DeepSeek-V3.1', label: 'DeepSeek V3.1', tier: 'production', note: 'Hybrid thinking model; tool calling in non-thinking mode.', tools: true, json: true, vision: false, context: 131072, maxOutput: 32768 },
+      { id: 'gpt-oss-120b', label: 'GPT-OSS 120B', tier: 'production', note: 'OpenAI open weights with tools.', tools: true, json: true, vision: false, context: 131072, maxOutput: 40960 },
+      { id: 'MiniMax-M3', label: 'MiniMax M3', tier: 'preview', note: 'Multimodal preview; availability varies by account.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 131072 },
       { id: 'Meta-Llama-3.3-70B-Instruct', label: 'Llama 3.3 70B', tier: 'production', note: 'Tool-calling.', tools: true, json: true, vision: false, context: 131072, maxOutput: 4096 },
       { id: 'Qwen3-32B', label: 'Qwen 3 32B', tier: 'production', note: 'Fast and cheap.', tools: true, json: true, vision: false, context: 16384, maxOutput: 4096 },
       { id: 'DeepSeek-R1-Distill-Llama-70B', label: 'DeepSeek R1 Distill 70B', tier: 'preview', note: 'Reasoning distill.', tools: false, json: false, vision: false, context: 131072, maxOutput: 8192 },
@@ -244,9 +299,12 @@ const PROVIDERS = [
     blurb: 'Fast serving of open models, compound AI and function calling.',
     base: 'https://api.fireworks.ai/inference/v1', env: ['FIREWORKS_API_KEY'],
     keyPlaceholder: 'fw_…', keysUrl: 'https://fireworks.ai/account/api-keys',
-    allowCustom: true, defaultModel: 'accounts/fireworks/models/llama-v3p3-70b-instruct',
-    fallbacks: ['accounts/fireworks/models/llama-v3p3-70b-instruct', 'accounts/fireworks/models/qwen3-235b-a22b-instruct-2507'],
+    allowCustom: true, defaultModel: 'accounts/fireworks/models/deepseek-v3p1',
+    fallbacks: ['accounts/fireworks/models/deepseek-v3p1', 'accounts/fireworks/models/kimi-k2p5', 'accounts/fireworks/models/qwen3-235b-a22b-instruct-2507'],
     models: [
+      { id: 'accounts/fireworks/models/deepseek-v3p1', label: 'DeepSeek V3.1', tier: 'production', note: 'Current Fireworks documented production model for coding and agents.', tools: true, json: true, vision: false, context: 1048576, maxOutput: 131072 },
+      { id: 'accounts/fireworks/models/deepseek-v4-flash', label: 'DeepSeek V4 Flash (preview)', tier: 'preview', note: 'Preview route; availability varies by Fireworks account.', tools: true, json: true, vision: false, context: 1048576, maxOutput: 131072 },
+      { id: 'accounts/fireworks/models/kimi-k2p5', label: 'Kimi K2.5', tier: 'production', note: 'Current documented multimodal agent model.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 131072 },
       { id: 'accounts/fireworks/models/llama-v3p3-70b-instruct', label: 'Llama 3.3 70B Instruct', tier: 'production', note: 'Tool calling supported.', tools: true, json: true, vision: false, context: 131072, maxOutput: 4096 },
       { id: 'accounts/fireworks/models/qwen3-235b-a22b-instruct-2507', label: 'Qwen 3 235B Instruct', tier: 'production', note: 'Large MoE.', tools: true, json: true, vision: false, context: 262144, maxOutput: 32768 },
       { id: 'accounts/fireworks/models/deepseek-v3', label: 'DeepSeek V3', tier: 'production', note: 'Cheap large model.', tools: true, json: true, vision: false, context: 131072, maxOutput: 8192 },
@@ -258,12 +316,14 @@ const PROVIDERS = [
     blurb: 'Search-grounded answers with citations. No tool calling — lookups only.',
     base: 'https://api.perplexity.ai', env: ['PERPLEXITY_API_KEY'],
     keyPlaceholder: 'pplx-…', keysUrl: 'https://www.perplexity.ai/settings/api',
-    defaultModel: 'sonar',
-    fallbacks: ['sonar', 'sonar-pro'],
+    defaultModel: 'sonar-pro',
+    fallbacks: ['sonar-pro', 'sonar', 'sonar-deep-research'],
     models: [
+      { id: 'sonar-pro', label: 'Sonar Pro', tier: 'production', note: 'Current production search model for complex answers.', tools: false, json: true, vision: false, context: 200000, maxOutput: 8192 },
+      { id: 'sonar-reasoning-pro', label: 'Sonar Reasoning Pro', tier: 'production', note: 'Current reasoning search model.', tools: false, json: true, vision: false, context: 128000, maxOutput: 8192 },
+      { id: 'sonar-deep-research', label: 'Sonar Deep Research', tier: 'production', note: 'Long-form multi-step research.', tools: false, json: true, vision: false, context: 128000, maxOutput: 8192 },
       { id: 'sonar', label: 'Sonar', tier: 'production', note: 'Fast, cited answers.', tools: false, json: true, vision: false, context: 128000, maxOutput: 8192 },
-      { id: 'sonar-pro', label: 'Sonar Pro', tier: 'production', note: 'Deeper research.', tools: false, json: true, vision: false, context: 200000, maxOutput: 8192 },
-      { id: 'sonar-reasoning', label: 'Sonar Reasoning', tier: 'production', note: 'Reasoning with citations.', tools: false, json: true, vision: false, context: 128000, maxOutput: 8192 },
+      { id: 'sonar-reasoning', label: 'Sonar Reasoning (retired)', tier: 'legacy', note: 'Reasoning with citations.', tools: false, json: true, vision: false, context: 128000, maxOutput: 8192 },
     ],
   },
 
@@ -272,9 +332,13 @@ const PROVIDERS = [
     blurb: 'Command R+ / Command A — enterprise RAG and multilingual work.',
     base: 'https://api.cohere.com', env: ['COHERE_API_KEY'],
     keyPlaceholder: '…', keysUrl: 'https://dashboard.cohere.com/api-keys',
-    defaultModel: 'command-a-03-2025',
-    fallbacks: ['command-a-03-2025', 'command-r-plus-08-2024'],
+    defaultModel: 'command-a-plus-05-2026',
+    fallbacks: ['command-a-plus-05-2026', 'command-a-reasoning-08-2025', 'command-a-03-2025'],
     models: [
+      { id: 'command-a-plus-05-2026', label: 'Command A+', tier: 'production', note: 'Latest Cohere model with vision and agentic tool use.', tools: true, json: true, vision: true, context: 131072, maxOutput: 65536 },
+      { id: 'command-a-reasoning-08-2025', label: 'Command A Reasoning', tier: 'production', note: 'Reasoning model with tool use.', tools: true, json: true, vision: false, context: 256000, maxOutput: 32768 },
+      { id: 'command-a-vision-07-2025', label: 'Command A Vision', tier: 'production', note: 'Vision and document understanding.', tools: true, json: true, vision: true, context: 128000, maxOutput: 8192 },
+      { id: 'command-r7b-12-2024', label: 'Command R7B', tier: 'production', note: 'Small current Command model.', tools: true, json: true, vision: false, context: 128000, maxOutput: 4096 },
       { id: 'command-a-03-2025', label: 'Command A', tier: 'production', note: 'Cohere flagship with tools.', tools: true, json: true, vision: false, context: 256000, maxOutput: 8192 },
       { id: 'command-r-plus-08-2024', label: 'Command R+', tier: 'legacy', note: 'Previous flagship.', tools: true, json: true, vision: false, context: 128000, maxOutput: 4096 },
       { id: 'command-r-08-2024', label: 'Command R', tier: 'legacy', note: 'Cheaper tier.', tools: true, json: true, vision: false, context: 128000, maxOutput: 4096 },
@@ -282,8 +346,9 @@ const PROVIDERS = [
   },
 
   {
-    id: 'github', label: 'GitHub Models', vendor: 'GitHub', format: 'openai', listModels: 'openai',
-    blurb: 'Free model playground keys for any GitHub account (rate limited).',
+    id: 'github', label: 'GitHub Models (retired)', vendor: 'GitHub', format: 'openai', listModels: 'openai', status: 'retired',
+    retiredNote: 'GitHub retired the Models playground, catalog and inference API on 30 July 2026. Existing settings are retained for compatibility; migrate to OpenAI, Azure, or another provider.',
+    blurb: 'Retired 30 July 2026 — retained so existing settings can be migrated without data loss.',
     base: 'https://models.inference.ai.azure.com', env: ['GITHUB_TOKEN', 'GITHUB_MODELS_TOKEN'],
     keyPlaceholder: 'github_pat_…', keysUrl: 'https://github.com/settings/tokens',
     allowCustom: true, defaultModel: 'gpt-4.1',
@@ -301,9 +366,14 @@ const PROVIDERS = [
     blurb: 'Your own machine — no API key, nothing leaves the server. Needs the OpenAI-compatible port.',
     base: 'http://127.0.0.1:11434/v1', env: ['OLLAMA_BASE_URL'], baseEnv: 'OLLAMA_BASE_URL',
     keyPlaceholder: 'not required', keysUrl: 'https://ollama.com/download', needsKey: false,
-    allowCustom: true, defaultModel: 'llama3.3',
-    fallbacks: ['llama3.3'],
+    allowCustom: true, defaultModel: 'qwen3.6:27b',
+    fallbacks: ['qwen3.6:27b', 'gpt-oss:20b', 'llama3.3'],
     models: [
+      { id: 'qwen3.6:27b', label: 'Qwen 3.6 27B', tier: 'production', note: 'Current Ollama general and coding model.', tools: true, json: true, vision: true, context: 262144, maxOutput: 65536 },
+      { id: 'gpt-oss:20b', label: 'GPT-OSS 20B', tier: 'production', note: 'Local reasoning and agent model.', tools: true, json: true, vision: false, context: 131072, maxOutput: 65536 },
+      { id: 'gpt-oss:120b', label: 'GPT-OSS 120B', tier: 'production', note: 'Local frontier reasoning model.', tools: true, json: true, vision: false, context: 131072, maxOutput: 65536 },
+      { id: 'gemma4', label: 'Gemma 4', tier: 'production', note: 'Current multimodal local model.', tools: true, json: true, vision: true, context: 262144, maxOutput: 65536 },
+      { id: 'qwen3-coder:30b', label: 'Qwen 3 Coder 30B', tier: 'production', note: 'Agentic coding model.', tools: true, json: true, vision: false, context: 262144, maxOutput: 65536 },
       { id: 'llama3.3', label: 'Llama 3.3', tier: 'production', note: 'Pull with `ollama pull llama3.3`.', tools: true, json: true, vision: false, context: 131072, maxOutput: 4096 },
       { id: 'qwen2.5', label: 'Qwen 2.5', tier: 'production', note: 'Pull with `ollama pull qwen2.5`.', tools: true, json: true, vision: false, context: 131072, maxOutput: 8192 },
       { id: 'gemma3', label: 'Gemma 3', tier: 'production', note: 'Vision-capable local model.', tools: false, json: true, vision: true, context: 131072, maxOutput: 8192 },
@@ -349,6 +419,10 @@ function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
 function isValidProvider(id) {
   return Boolean(BY_ID[String(id || '').trim()]);
+}
+
+function isRetiredProvider(id) {
+  return provider(id).status === 'retired';
 }
 
 function provider(id) {
@@ -409,6 +483,7 @@ function keySource(pid) {
 
 function configured(pid) {
   const p = provider(pid);
+  if (p.status === 'retired') return false;
   if (p.needsKey === false) return true; // Ollama and friends need no secret
   return Boolean(apiKey(pid));
 }
@@ -492,8 +567,15 @@ function isKnownModel(id, pid) {
   const p = provider(pid || activeId());
   const wanted = String(id || '').trim();
   if (!wanted) return false;
+  const snapshot = liveSnapshot(p.id);
+  const live = snapshot.ids;
+  /* Once a provider has returned a catalog, treat it as authoritative (even
+     when the response is an empty list). This is the important stale-selection
+     guard: a model that disappeared from a provider's own catalog must not be
+     sent just because it remains in our compatibility registry. Custom
+     gateways are intentionally different — their operator owns the catalog. */
+  if (snapshot.checked_at) return live.includes(wanted) || (p.allowCustom && looksLikeModelId(wanted));
   if (p.models.some((m) => m.id === wanted)) return true;
-  if (liveModelIds(p.id).includes(wanted)) return true;
   if (p.allowCustom && looksLikeModelId(wanted)) return true;
   return false;
 }
@@ -514,12 +596,30 @@ function supportsJson(id, pid) { return capabilities(id, pid).json; }
 function modelFor(pid) {
   const p = provider(pid);
   const saved = String(getSetting(`llm_model_${p.id}`, '') || '').trim();
-  if (saved) return saved;
-  if (p.legacyModelSetting) {
-    const legacy = String(getSetting(p.legacyModelSetting, '') || '').trim();
-    if (legacy) return legacy;
+  const legacy = p.legacyModelSetting ? String(getSetting(p.legacyModelSetting, '') || '').trim() : '';
+  const savedMeta = saved ? modelMeta(saved, p.id) : null;
+  const legacyMeta = legacy ? modelMeta(legacy, p.id) : null;
+  const liveSnapshotForSelection = liveSnapshot(p.id);
+  const live = liveSnapshotForSelection.ids;
+  /* A saved compatibility row is retained, but a newly resolved request must
+     not keep selecting a model explicitly marked legacy when a current default
+     exists. */
+  const preferredSaved = savedMeta && savedMeta.tier === 'legacy' ? '' : saved;
+  const preferredLegacy = legacyMeta && legacyMeta.tier === 'legacy' ? '' : legacy;
+  const candidates = [preferredSaved, preferredLegacy, p.defaultModel, ...(p.fallbacks || []), ...p.models.filter((m) => m.tier !== 'legacy').map((m) => m.id)];
+  if (liveSnapshotForSelection.checked_at) {
+    const liveSet = new Set(live);
+    const selected = candidates.find((id) => id && liveSet.has(id));
+    if (selected) return selected;
+    /* A provider may expose a model not yet in our curated catalog. Once its
+       own chat catalog is authoritative, use its first chat-capable row rather
+       than failing or sending a stale static default. This is safe for normal
+       providers because the ID came from their authenticated /models response;
+       custom gateways retain their operator-supplied IDs as well. */
+    if (live[0]) return live[0];
+    return '';
   }
-  return p.defaultModel || '';
+  return candidates.find(Boolean) || '';
 }
 
 function setModel(pid, id) {
@@ -563,9 +663,23 @@ function usableModels(pid) {
   const p = provider(pid);
   const { ids, checked_at } = liveSnapshot(p.id);
   const live = new Set(ids);
-  return p.models
-    .map((m) => ({ ...m, provider: p.id, available: ids.length ? live.has(m.id) : null }))
+  const rows = p.models
+    .map((m) => ({ ...m, provider: p.id, available: ids.length || checked_at ? live.has(m.id) : null }))
     .map((m) => ({ ...m, checked_at: checked_at || '' }));
+  /* Surface authenticated provider discoveries in the Admin picker as well as
+     the JSON endpoint. This lets an account use a newly released model before
+     the curated compatibility rows are updated, while the live catalog keeps
+     stale static rows visibly unavailable. */
+  const known = new Set(p.models.map((m) => m.id));
+  for (const id of ids) {
+    if (known.has(id)) continue;
+    rows.push({
+      id, label: id, tier: 'live', note: 'Discovered from this provider’s live chat model catalog.',
+      tools: true, json: true, vision: false, context: 0, maxOutput: 0,
+      provider: p.id, available: true, checked_at: checked_at || '',
+    });
+  }
+  return rows;
 }
 
 /* ---------------------------------------------------------- rate limiting */
@@ -625,7 +739,7 @@ function describeHttpError(res, data, pid) {
   if (res.status === 401 || res.status === 403) {
     return {
       message: `${p.label} rejected the API key. Check the key saved in Admin → AI Playground → Model providers (or the ${p.env.join(' / ')} environment variable).`,
-      code: 'invalid_key', status: 401,
+      code: 'invalid_key', status: res.status,
     };
   }
   if (res.status === 429) {
@@ -635,7 +749,24 @@ function describeHttpError(res, data, pid) {
     return { message: apiMsg || 'That model is not available on this key.', code: 'model_unavailable', status: 502 };
   }
   if (/tool/i.test(String(apiMsg)) && /support|not.*(allow|enable)|unavailable/i.test(String(apiMsg))) {
-    return { message: `${apiMsg} — switch to a model with tool support.`, code: 'tools_unsupported', status: 502 };
+    return { message: `${apiMsg} — switch to a model with tool support.`, code: 'tools_unsupported', status: 422 };
+  }
+  /* A malformed or incompatible request is an operator/model configuration
+     problem, not a gateway outage. Returning 422 keeps the Admin UI from
+     mislabeling provider validation failures as 502 Bad Gateway. */
+  if (res.status === 400 || res.status === 422) {
+    const modelIssue = /model|unsupported|parameter|field|max_tokens|temperature|response.?format|json|tool/i.test(String(apiMsg));
+    return {
+      message: apiMsg || `${p.label} rejected the request.`,
+      code: modelIssue ? 'model_incompatible' : 'provider_request',
+      status: 422,
+    };
+  }
+  if (res.status >= 400 && res.status < 500) {
+    return { message: apiMsg || `${p.label} rejected the request (HTTP ${res.status}).`, code: 'provider_request', status: res.status };
+  }
+  if (res.status >= 500) {
+    return { message: apiMsg || `${p.label} returned HTTP ${res.status}.`, code: 'upstream_error', status: 502 };
   }
   return { message: apiMsg || `${p.label} HTTP ${res.status}`, code: 'llm_http', status: 502 };
 }
@@ -694,7 +825,12 @@ function toAnthropicBody(opts, pid, model) {
     max_tokens: Math.max(256, Math.min(opts.max_tokens || 1024, 64000)),
   };
   if (system) body.system = system;
-  if (opts.temperature != null) body.temperature = Math.max(0, Math.min(1, Number(opts.temperature)));
+  /* Current Claude 5 models require temperature=1 or unset (Fable adaptive
+     thinking is always on). Leaving the app's legacy temperature out avoids a
+     provider 400 while preserving it for older Claude compatibility rows. */
+  if (opts.temperature != null && !/^claude-(?:fable|opus|sonnet)-5/.test(model)) {
+    body.temperature = Math.max(0, Math.min(1, Number(opts.temperature)));
+  }
   if (opts.tools && opts.tools.length) {
     body.tools = opts.tools.map((t) => ({
       name: t.function.name,
@@ -742,7 +878,13 @@ function toGeminiBody(opts, pid, model) {
   const body = { contents };
   if (system) body.system_instruction = { parts: [{ text: system }] };
   const gen = {};
-  if (opts.temperature != null) gen.temperature = Number(opts.temperature);
+  /* Gemini 3.x uses thinking levels and rejects the legacy sampling controls
+     on current stable models. Gemini 2.5 compatibility rows retain the old
+     temperature behavior. */
+  if (opts.temperature != null && !/^gemini-3\./.test(model)) gen.temperature = Number(opts.temperature);
+  /* Gemini 3.6+ exposes thinking levels instead of the 2.5 thinking budget;
+     medium is a safe default for both the agent and listing workloads. */
+  if (/^gemini-3\.[678]-/.test(model)) gen.thinkingConfig = { thinkingLevel: 'medium' };
   if (opts.max_tokens) gen.maxOutputTokens = Number(opts.max_tokens);
   if (opts.response_format && opts.response_format.type === 'json_object') gen.responseMimeType = 'application/json';
   if (Object.keys(gen).length) body.generationConfig = gen;
@@ -798,18 +940,35 @@ function toCohereBody(opts, pid, model) {
 function completionTokenField(model, pid) {
   const id = String(model || '').toLowerCase();
   if (pid === 'groq') return 'max_completion_tokens';
-  if (/^o\d/.test(id) || /gpt-5|gpt-oss|reasoner|magistral/.test(id)) return 'max_completion_tokens';
+  if (/^o\d/.test(id) || /gpt-[56]|gpt-oss|reasoner|magistral/.test(id)) return 'max_completion_tokens';
   return 'max_tokens';
 }
 
 function toOpenAiBody(opts, pid, model) {
   const p = provider(pid);
-  const reasoning = /^o\d/.test(model) || /o3-mini|o4-mini/.test(model);
-  const payload = { model, messages: opts.messages, [completionTokenField(model, p.id)]: opts.max_tokens || 1800 };
-  if (!reasoning && opts.temperature != null) payload.temperature = opts.temperature;
+  const lowerModel = String(model || '').toLowerCase();
+  const reasoning = /^o\d/.test(model) || /o3-mini|o4-mini|gpt-[56]|gpt-oss/.test(lowerModel);
+  const deepseekV4 = p.id === 'deepseek' && /^deepseek-v4-/.test(lowerModel);
+  const messages = (opts.messages || []).map((m) => {
+    /* DeepSeek V4 requires reasoning_content on assistant turns that contain
+       tool calls. Preserve the provider's returned field when present; the
+       empty value keeps a hand-built follow-up valid for gateways that only
+       require the property to exist. */
+    if (deepseekV4 && m && m.role === 'assistant' && Array.isArray(m.tool_calls) && m.tool_calls.length) {
+      return { ...m, reasoning_content: m.reasoning_content == null ? '' : m.reasoning_content };
+    }
+    return m;
+  });
+  const payload = { model, messages, [completionTokenField(model, p.id)]: opts.max_tokens || 1800 };
+  if (!reasoning && !deepseekV4 && opts.temperature != null) payload.temperature = opts.temperature;
+  if (deepseekV4) {
+    payload.thinking = { type: 'enabled' };
+    payload.reasoning_effort = 'high';
+  }
   if (opts.tools && opts.tools.length) payload.tools = opts.tools;
-  if (opts.tools && opts.tools.length && opts.tool_choice) payload.tool_choice = opts.tool_choice;
-  if (opts.response_format && supportsJson(model, p.id) && !reasoning) payload.response_format = opts.response_format;
+  /* DeepSeek V4 supports tool calls but not the OpenAI tool_choice control. */
+  if (opts.tools && opts.tools.length && opts.tool_choice && !deepseekV4) payload.tool_choice = opts.tool_choice;
+  if (opts.response_format && supportsJson(model, p.id)) payload.response_format = opts.response_format;
   /* Groq's Qwen 3.6 / 3.8 models require reasoning_format "hidden" whenever
      tool calling or JSON mode is used — without it the request 400s. GPT-OSS
      does not support the parameter at all, so it is only set for the Qwen
@@ -932,14 +1091,28 @@ async function fetchLiveModels(pid) {
   if (Array.isArray(data.data)) rows = data.data;
   else if (Array.isArray(data.models)) rows = data.models;
   return rows
-    .map((r) => String(typeof r === 'string' ? r : (r && (r.id || r.name)) || '')).filter(Boolean)
-    .map((id) => (p.format === 'gemini' ? id.replace(/^models\//, '') : id));
+    .map((r) => ({
+      raw: r,
+      id: String(typeof r === 'string' ? r : (r && (r.id || r.name)) || '').trim(),
+    }))
+    .map((row) => ({ ...row, id: p.format === 'gemini' ? row.id.replace(/^models\//, '') : row.id }))
+    .filter((row) => row.id && looksLikeModelId(row.id))
+    /* /models endpoints often include embeddings, image, audio and rerank
+       SKUs. They are real models, but not valid inputs to this chat gateway. */
+    .filter((row) => {
+      const id = row.id.toLowerCase();
+      const rawRow = row.raw && typeof row.raw === 'object' ? row.raw : {};
+      const caps = rawRow.capabilities || rawRow.capability || {};
+      if (caps.chat === false || caps.chat_completions === false || caps.text_generation === false) return false;
+      return !/(^|[\/._-])(embedding|embed|rerank|moderation|whisper|transcri|tts|speech|audio|image|video|live|translate|music|lyria|veo|imagen|ocr)([\/._:-]|$)/i.test(id);
+    })
+    .map((row) => row.id);
 }
 
 async function syncModels(pid) {
   const id = pid || activeId();
   const ids = await fetchLiveModels(id);
-  if (ids.length) markLiveModels(id, ids);
+  markLiveModels(id, ids);
   const set = new Set(ids);
   const p = provider(id);
   return {
@@ -993,6 +1166,11 @@ async function postOnce(pid, model, opts) {
 async function chat(opts = {}) {
   const pid = String(opts.provider || '').trim() || activeId();
   const p = provider(pid);
+  if (p.status === 'retired') {
+    throw new LLMError(p.retiredNote || `${p.label} is no longer available.`, {
+      status: 410, code: 'provider_retired', provider: p.id,
+    });
+  }
   const key = apiKey(pid);
   if (p.needsKey !== false && !key) {
     throw new LLMError(
@@ -1021,14 +1199,24 @@ async function chat(opts = {}) {
     });
   }
   const chain = opts.noFallback ? [primary] : [primary, ...(p.fallbacks || []).filter((m) => m !== primary && isKnownModel(m, pid))];
-  const wantsTools = Boolean(opts.tools && opts.tools.length) && supportsTools(primary, pid);
+  const needsTools = Boolean(opts.tools && opts.tools.length);
 
   let lastErr;
   const tried = [];
   for (const model of chain) {
     if (tried.includes(model)) continue;
     tried.push(model);
-    const callOpts = { ...opts, tools: wantsTools ? opts.tools : undefined };
+    /* Do not silently drop tools: that turns an agent request into a plain
+       chat and can produce an apparently successful but functionally broken
+       admin action. Try the next compatible model or return 422. */
+    if (needsTools && !supportsTools(model, pid)) {
+      lastErr = new LLMError(`${p.label} model “${model}” does not support tool calling. Choose a tool-capable model.`, {
+        status: 422, code: 'tools_unsupported', provider: p.id,
+      });
+      if (chain.indexOf(model) < chain.length - 1) continue;
+      throw lastErr;
+    }
+    const callOpts = { ...opts, tools: needsTools ? opts.tools : undefined };
     try {
       const data = await postOnce(pid, model, callOpts);
       data._model = data._model || model;
@@ -1057,7 +1245,7 @@ async function chat(opts = {}) {
           return retried;
         } catch (e2) { lastErr = e2; }
       }
-      const retryable = lastErr.code === 'model_unavailable' || lastErr.code === 'tools_unsupported';
+      const retryable = ['model_unavailable', 'tools_unsupported', 'model_incompatible'].includes(lastErr.code);
       if (retryable && chain.indexOf(model) < chain.length - 1) {
         console.warn(`[llm:${pid}] model unusable, falling back:`, model, lastErr.message);
         continue;
@@ -1099,6 +1287,9 @@ function providerView(pid) {
   const src = keySource(p.id);
   return {
     id: p.id,
+    status: p.status || 'active',
+    retired: p.status === 'retired',
+    retired_note: p.retiredNote || '',
     label: p.label,
     vendor: p.vendor,
     blurb: p.blurb,
@@ -1132,6 +1323,12 @@ async function testConnection(pid, modelOverride) {
   const id = String(pid || '').trim() || activeId();
   const p = provider(id);
   const model = String(modelOverride || '').trim() || modelFor(id);
+  if (p.status === 'retired') {
+    return {
+      ok: false, provider: id, provider_label: p.label, key_source: keySource(id), model,
+      error: p.retiredNote || `${p.label} is no longer available.`, error_code: 'provider_retired',
+    };
+  }
   if (p.needsKey !== false && !apiKey(id)) {
     return {
       ok: false, provider: id, provider_label: p.label, key_source: '', model,
@@ -1145,7 +1342,7 @@ async function testConnection(pid, modelOverride) {
   try {
     if (p.listModels) {
       const ids = await fetchLiveModels(id);
-      if (ids.length) markLiveModels(id, ids);
+      markLiveModels(id, ids);
       out.models = ids;
       out.model_available = ids.length ? ids.includes(model) : null;
     }
@@ -1172,7 +1369,7 @@ async function testConnection(pid, modelOverride) {
 module.exports = {
   PROVIDERS, LLMError, DEFAULT_PROVIDER, RATE_MAX_PER_MIN,
   provider, providerView, providersView, configuredProviders,
-  isValidProvider, activeId, setActiveProvider,
+  isValidProvider, isRetiredProvider, activeId, setActiveProvider,
   apiKey, setApiKey, keySource, configured, maskKey,
   baseUrlFor, setBaseUrl, chatUrl, modelsUrl,
   activeModels, activeDefaultModel, modelFor, setModel, modelMeta,

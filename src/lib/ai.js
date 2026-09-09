@@ -832,6 +832,22 @@ function logSnapshot(limit = 40) {
 }
 
 function saveSettings(body) {
+  /* Validate the complete provider/model portion before changing the active
+     provider or persisting any key. A stale select must fail atomically from
+     the operator's point of view, rather than switching the console and then
+     failing halfway through the form. */
+  for (const p of llm.PROVIDERS) {
+    const field = `llm_model_${p.id}`;
+    if (body[field] !== undefined) {
+      const candidate = String(body[field] || '').trim();
+      if (candidate && !llm.isKnownModel(candidate, p.id)) {
+        const err = new Error(`“${candidate.slice(0, 80)}” is not currently available for ${p.label}. Test & sync models, then choose an available model.`);
+        err.status = 422;
+        err.code = 'bad_model';
+        throw err;
+      }
+    }
+  }
   /* ---- Model providers: pick one, paste keys, choose models, set endpoints ---- */
   if (body.llm_provider !== undefined && String(body.llm_provider || '').trim()) {
     const pid = String(body.llm_provider).trim();
@@ -861,8 +877,10 @@ function saveSettings(body) {
     }
   }
   if (body.groq_model !== undefined) {
+    /* Legacy clients still post groq_model. Keep accepting and round-tripping
+       it, but modelFor() will ignore it when a live catalog says it is stale. */
     const m = String(body.groq_model || '').trim();
-    if (llm.provider('groq').models.some((x) => x.id === m)) setSetting('groq_model', m);
+    if (m && llm.provider('groq').models.some((x) => x.id === m)) setSetting('groq_model', m);
   }
   if (!process.env.GROQ_API_KEY && body.groq_api_key !== undefined) {
     const k = String(body.groq_api_key || '').trim();
