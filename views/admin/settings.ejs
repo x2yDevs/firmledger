@@ -279,7 +279,7 @@
 
     <div class="form-card form">
       <h3 class="form-section">Email — multi-provider SMTP</h3>
-      <p class="muted">Account, money and newsletter mail always uses the same From address. Add as many providers as you like (Emitlo, Maileroo, Brevo, Mailjet, Mailtrap, SMTP2GO, Resend, AhaSend, SMTPfast, Forward Email, DNSExit, Zoho, or custom). If one hop hits a sending limit, the next hop is used automatically. <code>SMTP_URL</code> / <code>SMTP2_URL</code>… in <code>.env</code> are tried first.</p>
+      <p class="muted">Account, money and newsletter mail always uses the same From address. Add as many providers as you like (Zoho, Brevo, Mailtrap, SMTP2GO, Resend, AhaSend, SMTPfast, Forward Email, DNSExit, or custom). If one hop hits a sending limit, the next hop is used automatically. <code>SMTP_URL</code> / <code>SMTP2_URL</code>… in <code>.env</code> are tried first. Bulk sends (Admin → Email) can be pinned to the provider whose terms allow them.</p>
       <table class="facts" style="margin-top:12px">
         <tr><th>Status</th><td><% if (typeof smtp_configured !== 'undefined' ? smtp_configured : settings.smtp_configured) { %><span class="pill pill-approved">Configured ✓</span><% } else { %><span class="pill pill-pending">Outbox only</span><% } %></td></tr>
         <tr><th>From (everywhere)</th><td><code><%= typeof mailFrom !== 'undefined' ? mailFrom : (settings.smtp_from || 'FirmLedger <no-reply@firmledger.co.ke>') %></code></td></tr>
@@ -315,7 +315,9 @@
         <table class="table">
           <thead><tr><th>Provider</th><th>Host</th><th>Daily cap</th><th></th></tr></thead>
           <tbody>
-            <% mailAccounts.forEach(function (a) { %>
+            <% (typeof mailAccountGroups !== 'undefined' ? mailAccountGroups : []).forEach(function (g) { %>
+            <tr><td colspan="4" style="background:#EEF3FA;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#5B6478;padding:7px 10px"><%= g.name %><span style="font-weight:400;text-transform:none;letter-spacing:0"> · <%= g.accounts.length %></span></td></tr>
+            <% g.accounts.forEach(function (a) { %>
             <tr <%= a.active ? '' : 'style="opacity:.55"' %>>
               <td><b><%= a.label || a.provider %></b><div class="score-hint"><%= a.username %></div></td>
               <td class="mono" style="font-size:12px"><%= a.host %>:<%= a.port %></td>
@@ -331,6 +333,7 @@
                 </form>
               </td>
             </tr>
+            <% }) %>
             <% }) %>
           </tbody>
         </table>

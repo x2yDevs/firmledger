@@ -83,6 +83,19 @@
                value="<%= typeof draft !== 'undefined' && draft ? (draft.external || '') : '' %>">
         <small class="muted" style="display:block;margin-top:4px">Comma-separated. They receive this same message alongside the audience you pick above. Leave the audience on “Choose a recipient…” to email external addresses only.</small>
       </label>
+      <label><span>Send through <small>(the provider this bulk send goes out on first)</small></span>
+        <select name="via" id="mailVia">
+          <option value="" <%= (typeof bulkVia !== 'undefined' && bulkVia) ? '' : 'selected' %>>Automatic — full failover chain (default)</option>
+          <% (typeof mailHops !== 'undefined' ? mailHops : []).forEach(function (g) { %>
+          <optgroup label="<%= g.label %>">
+            <% g.hops.forEach(function (h) { %>
+            <option value="<%= h.key %>" <%= (typeof bulkVia !== 'undefined' && bulkVia === h.key) ? 'selected' : '' %>><%= h.label %> — <%= h.host %>:<%= h.port %></option>
+            <% }) %>
+          </optgroup>
+          <% }) %>
+        </select>
+        <small class="muted" style="display:block;margin-top:4px">Some relays do not allow bulk mail (newsletters, announcements) — pin the provider you have bulk permission on and your pick goes out first. If it hits a sending limit, the rest of the failover chain still catches the message. Your choice is remembered for the next send.</small>
+      </label>
       <label><span>Subject (prefixed with “[FirmLedger]”)</span>
         <input type="text" name="subject" maxlength="200" required placeholder="e.g. Claim your listing — verification now takes minutes" value="<%= typeof draft !== 'undefined' && draft ? draft.subject : '' %>">
       </label>
@@ -194,6 +207,21 @@
         <button class="btn btn-primary" type="submit">Send</button>
         <span class="fine-print" id="mailHint"><% if (smtp) { %>Delivered via SMTP (SMTP_URL).<% } else { %>No SMTP_URL configured — messages are written to data/outbox.log instead of being delivered.<% } %></span>
       </div>
+      <script>
+      (function () {
+        var sel = document.getElementById('mailVia');
+        var hint = document.getElementById('mailHint');
+        if (!sel || !hint) return;
+        var def = hint.textContent;
+        function paint() {
+          if (!sel.value) { hint.textContent = def; return; }
+          var o = sel.options[sel.selectedIndex];
+          hint.textContent = 'First hop: ' + (o ? o.textContent : sel.value) + ' — the rest of the failover chain stays armed behind it.';
+        }
+        sel.addEventListener('change', paint);
+        paint();
+      })();
+      </script>
     </form>
 
     <div class="section-head" style="margin-top:2.5rem"><h2>Recent sends</h2><span class="muted"><%= log.length %></span></div>

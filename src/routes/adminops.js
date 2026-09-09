@@ -7,7 +7,8 @@ const { db, getSetting, setSetting } = require('../db');
 const { requireAdmin } = require('../lib/session');
 const { sendBranded, mailConfigured, PROVIDERS, ALIASES, allAccountsRaw, addAccount,
   toggleAccount, deleteAccount, saveGlobalFrom, fromAddress, hops, allHops,
-  hopLastUsed, sendTestVia, keepAliveSweep, keepAliveSettings, saveKeepAliveSettings } = require('../lib/mailer');
+  hopLastUsed, sendTestVia, keepAliveSweep, keepAliveSettings, saveKeepAliveSettings,
+  accountGroups } = require('../lib/mailer');
 const spam = require('../lib/spam');
 const health = require('../lib/health');
 const promos = require('../lib/promos');
@@ -259,6 +260,9 @@ module.exports.mailLocals = function mailLocals() {
     providers: PROVIDERS,
     mailAliases: ALIASES,
     mailAccounts: allAccountsRaw(),
+    /* Same rows grouped by provider preset (Zoho Mail, Brevo, …) so the
+       Saved providers table can show one group per provider. */
+    mailAccountGroups: accountGroups(),
     mailHops: hops(),
     mailAllHops: allHops().map((h) => ({
       key: h.key, label: h.label, host: h.host, port: h.port, source: h.source,

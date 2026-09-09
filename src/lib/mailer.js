@@ -10,6 +10,10 @@
  * When a hop hits a daily cap or a rate/quota/limit error, the next hop is
  * used automatically. Failures still land in data/outbox.log.
  *
+ * A single message may pin a provider to the front of the chain (viaKey on
+ * sendMail/sendBranded) — the Admin → Email bulk-mailer does this when the
+ * admin chooses which provider a mass send goes out on.
+ *
  *   sendMail(to, subject, text)        plain text
  *   sendBranded(to, subject, {...})    FirmLedger-branded HTML + text fallback
  *                                      (pass alias:'billing'|'security'|… to
@@ -27,10 +31,7 @@ const outboxPath = path.join(__dirname, '..', '..', 'data', 'outbox.log');
 const PROVIDERS = [
   { id: 'zoho', name: 'Zoho Mail', host: 'smtp.zoho.com', port: 465, secure: 1 },
   { id: 'zoho_pro', name: 'Zoho Mail (smtppro)', host: 'smtppro.zoho.com', port: 465, secure: 1 },
-  { id: 'emitlo', name: 'Emitlo', host: 'smtp.emitlo.com', port: 587, secure: 0 },
-  { id: 'maileroo', name: 'Maileroo', host: 'smtp.maileroo.com', port: 587, secure: 0 },
   { id: 'brevo', name: 'Brevo', host: 'smtp-relay.brevo.com', port: 587, secure: 0 },
-  { id: 'mailjet', name: 'Mailjet', host: 'in-v3.mailjet.com', port: 587, secure: 0 },
   { id: 'mailtrap', name: 'Mailtrap', host: 'live.smtp.mailtrap.io', port: 587, secure: 0 },
   { id: 'smtp2go', name: 'SMTP2GO', host: 'mail.smtp2go.com', port: 587, secure: 0 },
   { id: 'resend', name: 'Resend', host: 'smtp.resend.com', port: 465, secure: 1 },
@@ -197,6 +198,19 @@ function allHops() {
 
 function hopByKey(key) {
   return allHops().find((h) => h.key === key) || null;
+}
+
+/**
+ * Failover chain for one message. When `viaKey` names an active hop, that
+ * provider goes FIRST (the admin pinned it — e.g. the one relay that allows
+ * bulk mail) and the rest of the chain stays armed behind it as failover.
+ * Unknown/empty keys keep the ordinary chain.
+ */
+function hopsVia(viaKey) {
+  const chain = hops();
+  const i = chain.findIndex((h) => h.key === viaKey);
+  if (!viaKey || i <= 0) return chain;
+  return [chain[i], ...chain.slice(0, i), ...chain.slice(i + 1)];
 }
 
 function fromAddress() {
@@ -403,8 +417,8 @@ async function sendVia(hop, to, msg) {
   await t.sendMail(payload);
 }
 
-async function deliver(to, msg) {
-  const chain = hops();
+async function deliver(to, msg, viaKey) {
+  const chain = hopsVia(viaKey);
   if (!chain.length) {
     logOutbox(to, msg, 'OUTBOX');
     console.log('[mail:outbox]', msg.subject, '→', to);
@@ -441,15 +455,19 @@ async function deliver(to, msg) {
   return { delivered: false, error: joined || 'All SMTP hops failed' };
 }
 
-async function sendMail(to, subject, text, html) {
-  return deliver(to, { subject, text, html });
+/* `viaKey` (optional, on sendMail/sendBranded) pins ONE provider to the front
+   of the failover chain for that message — used by the admin bulk-mailer to
+   keep mass sends on the relay whose terms allow them. Failover still runs:
+   if the pinned hop hits a limit, the rest of the chain catches the mail. */
+async function sendMail(to, subject, text, html, viaKey) {
+  return deliver(to, { subject, text, html }, viaKey);
 }
 
-async function sendBranded(to, subject, opts = {}) {
+async function sendBranded(to, subject, opts = {}, viaKey) {
   // From resolution: explicit `from` wins, then a named alias (billing,
   // security, noreply, …), then the global From address.
   const from = opts.from || (opts.alias ? aliasFrom(opts.alias) : undefined);
-  return deliver(to, { subject, text: opts.text || brandedText(opts), html: brandedHtml(opts), from });
+  return deliver(to, { subject, text: opts.text || brandedText(opts), html: brandedHtml(opts), from }, viaKey);
 }
 
 async function sendTest(to) {
@@ -514,7 +532,7 @@ async function sendTestVia(key, to) {
 }
 
 /* ================= Inactivity keep-alive =================
- * Several SMTP relays (Brevo, Mailtrap, SMTP2GO, Mailjet free tiers…) disable
+ * Several SMTP relays (Brevo, Mailtrap, SMTP2GO free tiers…) disable
  * or delete accounts that go unused for a while. To stop that happening to a
  * configured-but-idle hop, every hop that has not delivered anything for
  * `mail_keepalive_days` (default 14 — roughly twice inside a typical 30-day
@@ -707,10 +725,52 @@ function saveGlobalFrom(from) {
   setSettingSafe('smtp_from', String(from || '').trim().slice(0, 200));
 }
 
+/* ================= Bulk-mail provider preference =================
+ * Some relays do not allow bulk mail (newsletters, announcements), so the
+ * admin can pin the one provider a mass send must go out on first. The
+ * preference is remembered per console, not per click. Empty = automatic
+ * failover chain. */
+function saveBulkVia(key) {
+  setSettingSafe('mail_bulk_via', String(key || '').trim().slice(0, 120));
+}
+/** Currently pinned provider — '' when nothing is pinned or the hop is gone. */
+function bulkVia() {
+  const key = setting('mail_bulk_via');
+  if (!key) return '';
+  return hops().some((h) => h.key === key) ? key : '';
+}
+/** Active hops grouped by source for the "send through" picker (Admin → Email). */
+function bulkViaHops() {
+  const groups = [
+    { source: 'env', label: 'Environment (.env)' },
+    { source: 'settings', label: 'Legacy settings primary' },
+    { source: 'admin', label: 'Saved providers' },
+  ];
+  const all = hops();
+  return groups
+    .map((g) => ({ ...g, hops: all.filter((h) => h.source === g.source) }))
+    .filter((g) => g.hops.length);
+}
+
+/** Saved providers grouped by preset (Zoho Mail, Brevo, …) for Admin → Settings. */
+function accountGroups() {
+  const map = new Map();
+  for (const a of allAccountsRaw()) {
+    const id = a.provider || 'custom';
+    if (!map.has(id)) map.set(id, []);
+    map.get(id).push(a);
+  }
+  const nameOf = (id) => (PROVIDERS.find((p) => p.id === id) || { name: 'Custom SMTP' }).name;
+  return [...map.entries()]
+    .map(([id, accounts]) => ({ provider: id, name: nameOf(id), accounts }))
+    .sort((x, y) => x.name.localeCompare(y.name));
+}
+
 module.exports = {
   sendMail, sendBranded, sendTest, sendTestVia, brandedHtml, mailConfigured,
-  PROVIDERS, ALIASES, aliasFrom, hops, allHops, hopByKey, hopLastUsed,
+  PROVIDERS, ALIASES, aliasFrom, hops, hopsVia, allHops, hopByKey, hopLastUsed,
   fromAddress, accountStatus, allAccountsRaw,
   addAccount, updateAccount, toggleAccount, deleteAccount, saveGlobalFrom,
+  saveBulkVia, bulkVia, bulkViaHops, accountGroups,
   keepAliveSweep, keepAliveSettings, saveKeepAliveSettings,
 };
