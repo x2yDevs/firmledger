@@ -6,7 +6,7 @@
     "start": "node server.js",
     "dev": "node --watch server.js",
     "test": "node tests/run-all.js",
-    "test:ai": "node tests/ai-tools.test.js && node tests/ai-agent.test.js && node tests/ai-providers.test.js",
+    "test:ai": "node tests/ai-tools.test.js && node tests/ai-agent.test.js && node tests/ai-providers.test.js && node tests/ai-playground.test.js",
     "test:providers": "node tests/ai-providers.test.js",
     "test:backup": "node tests/backup.test.js",
     "test:mail": "node tests/mail-providers.test.js",

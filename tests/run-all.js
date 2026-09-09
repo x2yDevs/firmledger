@@ -8,6 +8,9 @@
  *                against a throwaway database and verified by DB state.
  *   ai-agent     the assistant's agent loop: chaining, batched confirmation,
  *                cancellation and honest failure reporting (model stubbed).
+ *   ai-playground  the playground's real-execution side: the generator draft,
+ *                publishing it, and auto-moderation actually moving listing
+ *                state (model stubbed at the fetch layer).
  *   ai-providers the model gateway: every provider dialect on the wire (OpenAI,
  *                Anthropic, Gemini, Cohere), key resolution, provider switching,
  *                fallback and rate limits — plus the AI Playground console UI
@@ -51,6 +54,7 @@ const suites = [
   ['AI admin tools', 'ai-tools.test.js'],
   ['AI agent loop', 'ai-agent.test.js'],
   ['AI model providers', 'ai-providers.test.js'],
+  ['AI playground end-to-end', 'ai-playground.test.js'],
   ['Backup round trip', 'backup.test.js'],
   ['Mail providers', 'mail-providers.test.js'],
   ['Admin pages', 'admin-pages.test.js'],

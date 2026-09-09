@@ -8,7 +8,11 @@
  *   2. multi-action turns are batched into ONE confirmation instead of refused;
  *   3. confirming a batch really executes every step, in order;
  *   4. cancelling executes nothing;
- *   5. a failing tool is reported as failed — never as done.
+ *   5. a failing tool is reported as failed — never as done;
+ *   6. a selected model without tool calling still EXECUTES — the loop
+ *      transparently falls back to a tool-capable model and names it;
+ *   7. with no tool-capable model configured anywhere, the assistant answers
+ *      read-only and stamps the reply: nothing was executed.
  */
 process.env.NODE_ENV = 'test';
 
@@ -28,6 +32,7 @@ const ai = require('../src/lib/ai');
 /* ------------------------------------------------------------ Groq stub */
 let script = [];      // queue of canned model responses
 const seen = [];      // every message array the "model" was handed
+const optsSeen = [];  // the full options object of every chat call
 
 function toolCall(id, name, args) {
   return { id, type: 'function', function: { name, arguments: JSON.stringify(args) } };
@@ -41,6 +46,7 @@ function reply(content, calls) {
 }
 groq.chat = async (opts) => {
   seen.push(opts.messages);
+  optsSeen.push(opts);
   if (!script.length) return reply('Nothing further.');
   return script.shift();
 };
@@ -138,6 +144,63 @@ const listingId = db.prepare(
   ];
   out = await ai.chatTurn([{ role: 'user', content: 'Make me a coffee.' }]);
   check('turn recovers with a message', out.type === 'message' && /admin console/i.test(out.content), out.content);
+  check('a no-action reply is stamped so it cannot read as done',
+    /No console action ran in this turn/i.test(out.content), out.content);
+
+  /* 7 — a model without tool calling still EXECUTES: transparent fallback */
+  console.log('\nNon-tool model executes via a tool-capable fallback');
+  const llmLib = require('../src/lib/llm');
+  setSetting('ai_auto_tools', JSON.stringify(['approve_listing']));
+  db.prepare("UPDATE listings SET status='pending' WHERE id=?").run(listingId);
+  llmLib.setApiKey('perplexity', 'pplx-test-key');
+  llmLib.setActiveProvider('perplexity');
+  llmLib.setModel('perplexity', 'sonar-pro');
+  check('Perplexity offers no tool-capable model of its own', llmLib.toolCapableModel('perplexity') === '');
+  check('a tool-capable fallback provider is discovered', (llmLib.toolFallbackProvider('perplexity') || {}).provider === 'groq',
+    JSON.stringify(llmLib.toolFallbackProvider('perplexity')));
+  optsSeen.length = 0;
+  script = [
+    reply('', [toolCall('c1', 'approve_listing', { id_or_slug: 'agent-co' })]),
+    reply('Agent Co is approved and live.'),
+  ];
+  out = await ai.chatTurn([{ role: 'user', content: 'Approve agent-co.' }]);
+  check('the action still really ran', one('SELECT status FROM listings WHERE id=?', listingId).status === 'approved');
+  check('the loop called tools on a tool-capable model',
+    optsSeen.length >= 1 && Array.isArray(optsSeen[0].tools) && optsSeen[0].tools.length > 0
+    && optsSeen[0].provider === 'groq' && optsSeen[0].model === 'openai/gpt-oss-120b',
+    JSON.stringify(optsSeen[0] && { provider: optsSeen[0].provider, model: optsSeen[0].model, tools: optsSeen[0].tools && optsSeen[0].tools.length }));
+  check('the reply names the model that ran',
+    out.model === 'openai/gpt-oss-120b' && /does not support tool calling/i.test(out.content),
+    JSON.stringify({ model: out.model, content: out.content }));
+  check('reported as executed', out.executed === true, JSON.stringify(out.executed));
+  llmLib.setActiveProvider('groq');
+  llmLib.setApiKey('perplexity', '');
+
+  /* 8 — no tool-capable model anywhere: honest read-only answer, nothing runs */
+  console.log('\nNo tool-capable model configured at all');
+  const realFallback = llmLib.toolFallbackProvider;
+  llmLib.toolFallbackProvider = () => null; // simulate a deployment with none
+  db.prepare("UPDATE listings SET status='pending' WHERE id=?").run(listingId);
+  llmLib.setApiKey('perplexity', 'pplx-test-key');
+  llmLib.setActiveProvider('perplexity');
+  llmLib.setModel('perplexity', 'sonar-pro');
+  optsSeen.length = 0;
+  const seenBefore = seen.length;
+  script = [reply('I can answer questions, but I cannot run console actions right now.')];
+  out = await ai.chatTurn([{ role: 'user', content: 'Approve agent-co.' }]);
+  check('degraded turn answers as a message', out.type === 'message', out.type);
+  check('nothing was executed', out.executed === false, JSON.stringify(out.executed));
+  check('the reply is stamped with the no-action guarantee',
+    /No console action ran in this turn/i.test(out.content), out.content);
+  check('the listing was not touched', one('SELECT status FROM listings WHERE id=?', listingId).status === 'pending');
+  check('no tools were offered to the model',
+    optsSeen.length === 1 && !optsSeen[0].tools && seen.length === seenBefore + 1,
+    `opts=${optsSeen.length} seen=${seen.length - seenBefore}`);
+  check('the degraded prompt replaced the full one',
+    !seen[seen.length - 1].some((m) => m.role === 'system' && /full authority/i.test(String(m.content || ''))));
+  llmLib.toolFallbackProvider = realFallback;
+  llmLib.setActiveProvider('groq');
+  llmLib.setApiKey('perplexity', '');
 
   console.log(`\n${'='.repeat(64)}`);
   console.log(`checks passed: ${passed}   failed: ${failures.length}`);
