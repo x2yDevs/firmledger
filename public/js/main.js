@@ -315,6 +315,44 @@
   });
 })();
 
+// ---- Filterable pickers (admin console)
+// An <input type="search" data-filter-for="#someSelect"> live-filters that
+// select's options by visible text, so long member / listing lists stay
+// searchable in the console. The first option (the "choose…" placeholder) is
+// always kept. Everything still works without JS — the select is just
+// unfiltered.
+(function () {
+  'use strict';
+
+  document.querySelectorAll('input[data-filter-for]').forEach(function (input) {
+    var sel = document.querySelector(input.getAttribute('data-filter-for'));
+    if (!sel || sel.tagName !== 'SELECT') return;
+    var note = null;
+    if (input.hasAttribute('data-filter-note')) {
+      note = document.getElementById(input.getAttribute('data-filter-note'));
+    }
+    var opts = Array.prototype.slice.call(sel.querySelectorAll('option'));
+    var total = 0;
+    opts.forEach(function (o, i) { if (i > 0) total += 1; });
+
+    function paint() {
+      var q = input.value.trim().toLowerCase();
+      var shown = 0;
+      opts.forEach(function (o, i) {
+        if (i === 0) { o.hidden = false; return; }
+        var hit = !q || o.textContent.toLowerCase().indexOf(q) !== -1;
+        o.hidden = !hit;
+        if (hit) shown += 1;
+      });
+      if (note) note.textContent = q
+        ? shown + ' of ' + total + ' match' + (shown === 1 ? '' : 'es')
+        : '';
+    }
+    input.addEventListener('input', paint);
+    paint();
+  });
+})();
+
 // ---- Auto-scrolling rails (Sponsored Content + Featured records): pause / play
 // Both strips auto-scroll on CSS alone, so this is pure progressive enhancement —
 // it only freezes the same animation for anyone who wants to read a card in place.

@@ -84,10 +84,14 @@
         <input type="hidden" name="status" value="<%= status %>">
         <div class="grid-3">
           <label><span>Listing</span>
-            <select name="listing_id" required>
+            <input type="search" data-filter-for="#newsListingSelect" data-filter-note="newsListingNote"
+                   placeholder="Filter listings by name…" aria-label="Filter the listing list" maxlength="80"
+                   style="margin-bottom:8px">
+            <select name="listing_id" id="newsListingSelect" required>
               <option value="">Choose a listing…</option>
               <% listings.forEach(function (l) { %><option value="<%= l.id %>"><%= l.name %></option><% }) %>
             </select>
+            <small class="muted" id="newsListingNote" style="display:block;margin-top:4px"></small>
           </label>
           <label><span>Published on</span><input type="date" name="published_at" max="<%= todayIso %>"></label>
           <label><span>Publication</span><input type="text" name="source" maxlength="80" placeholder="e.g. Business Daily"></label>
@@ -108,7 +112,7 @@
     <!-- ================= The queue ================= -->
     <form class="filters jf-row" method="get" action="/admin3119Musa/news" style="margin-bottom:14px">
       <% if (status) { %><input type="hidden" name="status" value="<%= status %>"><% } %>
-      <input type="search" name="q" value="<%= q %>" placeholder="Headline, listing, publication…" maxlength="80">
+      <input type="search" name="q" value="<%= q %>" placeholder="Headline, listing, publication, submitter…" maxlength="80">
       <select name="origin">
         <option value="">Any source</option>
         <option value="auto" <%= origin === 'auto' ? 'selected' : '' %>>Detected</option>

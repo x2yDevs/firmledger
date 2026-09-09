@@ -14,7 +14,7 @@
     <form method="post" action="/admin3119Musa/email" class="form form-card" id="mailForm">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>">
       <label><span>To</span>
-        <select name="to" id="mailTo" required>
+        <select name="to" id="mailTo">
           <option value="">Choose a recipient…</option>
           <optgroup label="Audience groups">
             <option value="all" <%= preset === 'all' ? 'selected' : '' %>>All users (<%= counts.all %>)</option>
@@ -78,6 +78,11 @@
         q.addEventListener('blur', function () { setTimeout(function () { list.hidden = true; }, 180); });
       })();
       </script>
+      <label><span>External recipients <small>(optional — anyone, even without a FirmLedger account)</small></span>
+        <input type="text" name="external" id="mailExternal" maxlength="600" placeholder="partner@example.com, vendor@company.co.ke"
+               value="<%= typeof draft !== 'undefined' && draft ? (draft.external || '') : '' %>">
+        <small class="muted" style="display:block;margin-top:4px">Comma-separated. They receive this same message alongside the audience you pick above. Leave the audience on “Choose a recipient…” to email external addresses only.</small>
+      </label>
       <label><span>Subject (prefixed with “[FirmLedger]”)</span>
         <input type="text" name="subject" maxlength="200" required placeholder="e.g. Claim your listing — verification now takes minutes" value="<%= typeof draft !== 'undefined' && draft ? draft.subject : '' %>">
       </label>
@@ -87,9 +92,13 @@
           <option value="html" <%= (typeof draft !== 'undefined' && draft && draft.format === 'html') ? 'selected' : '' %>>Branded HTML — FirmLedger design, with logo header</option>
         </select>
       </label>
-      <label><span>Message</span>
+      <label><span style="display:flex;align-items:center;gap:10px">Message
+        <button type="button" class="btn btn-ghost btn-sm" id="rephraseBtn"
+                title="Rewrite this message with the model configured in Admin → AI Playground">Rephrase with AI</button>
+      </span>
         <textarea name="body" id="mailBody" rows="12" required placeholder="Hello — a quick note from the FirmLedger moderation team…"><%= typeof draft !== 'undefined' && draft ? draft.body : '' %></textarea>
       </label>
+      <p class="fine-print" id="rephraseNote" hidden></p>
       <p class="fine-print" id="fmtHint" style="margin-top:-6px">Plain text is sent exactly as written (newlines preserved).</p>
       <script>
       (function () {
@@ -102,6 +111,55 @@
             h.textContent = 'Plain text is sent exactly as written (newlines preserved).';
             ta.placeholder = 'Hello — a quick note from the FirmLedger moderation team…';
           }
+        });
+      })();
+      </script>
+      <script>
+      /* Rephrase the draft with the model configured in Admin → AI Playground.
+         Plain text in → plain text out; HTML in → HTML out. The result lands
+         back in the box for review — nothing is sent until the admin clicks
+         Send. */
+      (function () {
+        var CSRF = <%- JSON.stringify(csrfToken || '') %>;
+        var btn = document.getElementById('rephraseBtn');
+        var ta = document.getElementById('mailBody');
+        var note = document.getElementById('rephraseNote');
+        var fmt = document.getElementById('mailFormat');
+        if (!btn || !ta || !note) return;
+        function say(msg, isError) {
+          note.hidden = !msg;
+          note.textContent = msg || '';
+          note.style.color = isError ? 'var(--bad, #b3261e)' : '';
+        }
+        btn.addEventListener('click', function () {
+          var text = ta.value.trim();
+          if (text.length < 10) { say('Write at least a sentence first, then I can rephrase it.', true); return; }
+          var format = fmt && fmt.value === 'html' ? 'html' : 'text';
+          btn.disabled = true;
+          var old = btn.textContent;
+          btn.textContent = 'Rephrasing…';
+          say('Rephrasing with ' + (fmt && fmt.value === 'html' ? 'the AI (HTML)' : 'the AI (plain text)') + ' — the model set in Admin → AI Playground…', false);
+          fetch('/admin3119Musa/email/rephrase', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-Token': CSRF },
+            body: JSON.stringify({ text: text, format: format }),
+          }).then(function (res) {
+            return res.text().then(function (raw) {
+              var data = {};
+              try { data = raw ? JSON.parse(raw) : {}; } catch (e) { data = { error: raw.slice(0, 200) }; }
+              return { res: res, data: data };
+            });
+          }).then(function (out) {
+            if (!out.res.ok || out.data.ok === false) throw new Error(out.data.error || ('Rephrase failed (' + out.res.status + ')'));
+            ta.value = out.data.text;
+            say('Rephrased with ' + (out.data.model || 'AI') + ' — review the message before sending.', false);
+          }).catch(function (e) {
+            say((e && e.message) || 'Rephrase failed.', true);
+          }).finally(function () {
+            btn.disabled = false;
+            btn.textContent = old;
+          });
         });
       })();
       </script>

@@ -785,14 +785,40 @@ function toCohereBody(opts, pid, model) {
   return body;
 }
 
+/**
+ * Which output-limit field an OpenAI-compatible wire accepts for this model.
+ *
+ * `max_tokens` is the legacy spelling. Groq deprecated it in favour of
+ * `max_completion_tokens` (their current API reference uses the new name for
+ * every model), and OpenAI's reasoning families — the o-series, GPT-5.x and
+ * GPT-OSS — reject `max_tokens` outright with a 400. That 400 is what the
+ * console was surfacing as a wall of 502s in the AI Playground: every call
+ * to the default model carried a field the provider refuses.
+ */
+function completionTokenField(model, pid) {
+  const id = String(model || '').toLowerCase();
+  if (pid === 'groq') return 'max_completion_tokens';
+  if (/^o\d/.test(id) || /gpt-5|gpt-oss|reasoner|magistral/.test(id)) return 'max_completion_tokens';
+  return 'max_tokens';
+}
+
 function toOpenAiBody(opts, pid, model) {
   const p = provider(pid);
   const reasoning = /^o\d/.test(model) || /o3-mini|o4-mini/.test(model);
-  const payload = { model, messages: opts.messages, max_tokens: opts.max_tokens || 1800 };
+  const payload = { model, messages: opts.messages, [completionTokenField(model, p.id)]: opts.max_tokens || 1800 };
   if (!reasoning && opts.temperature != null) payload.temperature = opts.temperature;
   if (opts.tools && opts.tools.length) payload.tools = opts.tools;
   if (opts.tools && opts.tools.length && opts.tool_choice) payload.tool_choice = opts.tool_choice;
   if (opts.response_format && supportsJson(model, p.id) && !reasoning) payload.response_format = opts.response_format;
+  /* Groq's Qwen 3.6 / 3.8 models require reasoning_format "hidden" whenever
+     tool calling or JSON mode is used — without it the request 400s. GPT-OSS
+     does not support the parameter at all, so it is only set for the Qwen
+     ids. */
+  if (p.id === 'groq' && /^qwen\/qwen3\.[68]-27b$/.test(model)
+    && ((opts.tools && opts.tools.length)
+      || (opts.response_format && opts.response_format.type === 'json_object'))) {
+    payload.reasoning_format = 'hidden';
+  }
   return payload;
 }
 
@@ -1019,12 +1045,24 @@ async function chat(opts = {}) {
           return data;
         } catch (e2) { lastErr = e2; }
       }
-      const retryable = e.code === 'model_unavailable' || e.code === 'tools_unsupported';
+      /* A transient provider outage (5xx from the upstream) usually clears in
+         seconds — retry the same model once before surfacing the error, so a
+         single blip does not reach the console as a 502. */
+      if (lastErr.httpStatus >= 500 && lastErr.httpStatus <= 599) {
+        await sleep(1200);
+        try {
+          const retried = await postOnce(pid, model, callOpts);
+          retried._model = retried._model || model;
+          retried._provider = pid;
+          return retried;
+        } catch (e2) { lastErr = e2; }
+      }
+      const retryable = lastErr.code === 'model_unavailable' || lastErr.code === 'tools_unsupported';
       if (retryable && chain.indexOf(model) < chain.length - 1) {
-        console.warn(`[llm:${pid}] model unusable, falling back:`, model, e.message);
+        console.warn(`[llm:${pid}] model unusable, falling back:`, model, lastErr.message);
         continue;
       }
-      throw e;
+      throw lastErr;
     }
   }
   throw lastErr || new LLMError('Model request failed.', { provider: pid });
@@ -1145,6 +1183,6 @@ module.exports = {
   /* internals exposed for tests */
   _internal: {
     toOpenAiBody, toAnthropicBody, toGeminiBody, toCohereBody,
-    normalizeResponse, splitSystem, stripSchemaNoise,
+    normalizeResponse, splitSystem, stripSchemaNoise, completionTokenField,
   },
 };

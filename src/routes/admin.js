@@ -15,7 +15,8 @@ const { runCheck } = require('../lib/verify');
 const { submitForIndexing, getIndexNowKey } = require('../lib/indexing');
 const googleIndexing = require('../lib/googleIndexing');
 const indexlog = require('../lib/indexlog');
-const { parseLines, normalizeUrl, slugify, domainOf, siteUrl, escHtml, randomToken } = require('../lib/util');
+const { parseLines, normalizeUrl, slugify, domainOf, siteUrl, escHtml, randomToken, isEmail } = require('../lib/util');
+const groq = require('../lib/groq');
 const catLib = require('../lib/categories');
 const graphLib = require('../lib/graph');
 const { deleteLogo } = require('../lib/upload');
@@ -716,7 +717,7 @@ router.get('/admin3119Musa/news', (req, res) => {
   if (origin) rows = rows.filter((r) => r.origin === origin);
   if (q) {
     const needle = q.toLowerCase();
-    rows = rows.filter((r) => `${r.title} ${r.listing_name} ${r.source}`.toLowerCase().includes(needle));
+    rows = rows.filter((r) => `${r.title} ${r.listing_name} ${r.source} ${r.submitter_email || ''}`.toLowerCase().includes(needle));
   }
   res.render('admin/news', {
     meta: { title: 'News — FirmLedger Admin', description: '', robots: 'noindex,nofollow' },
@@ -1821,9 +1822,19 @@ router.post('/admin3119Musa/email', async (req, res) => {
   const subject = String(req.body.subject || '').trim().slice(0, 200);
   const body = String(req.body.body || '').trim().slice(0, 10000);
   const format = req.body.format === 'html' ? 'html' : 'text';
+  const externalRaw = String(req.body.external || '');
   const err = [];
   if (!subject) err.push('A subject is required.');
   if (body.length < 10) err.push('Write a message of at least 10 characters.');
+  /* External addresses: anyone, even without a FirmLedger account. Split on
+     commas, semicolons and whitespace so pasted lists work as-is. */
+  const external = [];
+  for (const piece of externalRaw.split(/[,\s;]+/)) {
+    const e = piece.trim().toLowerCase();
+    if (!e) continue;
+    if (!isEmail(e)) { err.push(`“${e.slice(0, 60)}” is not a valid email address.`); continue; }
+    if (!external.includes(e)) external.push(e);
+  }
   const today = new Date().toISOString().slice(0, 10);
   const proSql = "(plan='pro' AND (plan_expires_at IS NULL OR plan_expires_at='' OR plan_expires_at >= ?))";
   let recipients = [];
@@ -1846,8 +1857,8 @@ router.post('/admin3119Musa/email', async (req, res) => {
     const n = u ? null : db.prepare('SELECT email FROM newsletter_subscribers WHERE email = ? AND active=1').get(to);
     if (!u && !n) err.push('Select a recipient — or one of the audience groups.');
     else recipients = [(u || n).email];
-  } else {
-    err.push('Select a recipient — or one of the audience groups.');
+  } else if (!external.length) {
+    err.push('Select a recipient — an audience group, a member, or an external address below.');
   }
   if (err.length) {
     const users = db.prepare('SELECT id, name, email FROM users ORDER BY name LIMIT 1000').all();
@@ -1855,16 +1866,16 @@ router.post('/admin3119Musa/email', async (req, res) => {
     return res.status(422).render('admin/email', {
       meta: { title: 'Email — FirmLedger Admin', description: '', robots: 'noindex,nofollow' },
       users, log, counts: emailCounts(), preset: to, smtp: mailConfigured(), section: 'email',
-      errors: err, draft: { subject, body, format },
+      errors: err, draft: { subject, body, format, external: externalRaw },
     });
   }
+  for (const e of external) if (!recipients.includes(e)) recipients.push(e);
   let sent = 0, logged = 0, failed = 0;
   const ins = db.prepare('INSERT INTO admin_mail_log (to_email, subject, body, delivered) VALUES (?,?,?,?)');
   // Blank-line separated paragraphs; the body can carry <b>, <a>, <em>, lists etc.
   const htmlParas = format === 'html'
     ? body.split(/\n\s*\n/).map((p) => p.replace(/\n/g, '<br>').trim()).filter(Boolean)
     : null;
-  const { isEmail: _ie } = require('../lib/util');
   for (const rcpt of recipients) {
     try {
       let r;
@@ -1890,6 +1901,41 @@ router.post('/admin3119Musa/email', async (req, res) => {
       ? `Email delivered to ${sent} recipient${sent === 1 ? '' : 's'}.`
       : `No SMTP configured — ${logged} message${logged === 1 ? '' : 's'} written to data/outbox.log for later delivery.`;
   res.redirect('/admin3119Musa/email?ok=' + encodeURIComponent(msg));
+});
+
+/* Rephrase a draft with the model configured in Admin → AI Playground.
+   Works for both plain-text and HTML drafts. The operator reviews the result
+   in the message box before anything is sent — this endpoint never delivers
+   mail. */
+router.post('/admin3119Musa/email/rephrase', async (req, res) => {
+  const text = String((req.body && req.body.text) || '').trim().slice(0, 10000);
+  const format = req.body && req.body.format === 'html' ? 'html' : 'text';
+  if (text.length < 10) {
+    return res.status(422).json({ ok: false, error: 'Write at least a sentence to rephrase.' });
+  }
+  const system = format === 'html'
+    ? 'You are the writing assistant in the FirmLedger admin console. The operator pasted the HTML body of a branded member email. Rephrase it so it reads more naturally, clearly and professionally while keeping the same meaning. Keep the HTML tags and structure (you may edit the text inside tags), keep every link, and keep any {{name}} placeholder exactly as written. Do not add or remove paragraphs. Output ONLY the rephrased HTML body — no markdown fences, no <html> or <body> wrappers, no explanation.'
+    : 'You are the writing assistant in the FirmLedger admin console. The operator pasted the plain-text body of a member email. Rephrase it so it reads more naturally, clearly and professionally while keeping the same meaning. Keep every fact, link and date, keep any {{name}} placeholder exactly as written, and keep the plain-text formatting (one blank line between paragraphs). Output ONLY the rephrased email text — no markdown, no quotes, no explanation.';
+  try {
+    const data = await groq.chat({
+      temperature: 0.8,
+      max_tokens: 2400,
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: text },
+      ],
+    });
+    let out = groq.assistantText(data).trim();
+    /* Models sometimes wrap the result in a code fence — strip it. */
+    out = out.replace(/^```[a-zA-Z0-9]*\s*/m, '').replace(/```\s*$/m, '').trim();
+    if (!out) {
+      return res.status(502).json({ ok: false, error: 'The model returned an empty rephrase. Try again.' });
+    }
+    return res.json({ ok: true, text: out.slice(0, 10000), model: data._model || '' });
+  } catch (e) {
+    const status = (e && e.status) || 502;
+    return res.status(status).json({ ok: false, error: (e && e.message) || 'The rephrase call failed.' });
+  }
 });
 
 /* ---------------- Admin: add a listing ---------------- */

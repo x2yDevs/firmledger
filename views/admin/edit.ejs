@@ -189,8 +189,11 @@
       <p class="muted" style="font-size:13.5px;margin-bottom:12px">Transfer this listing to any account, or clear the owner to return it to unclaimed. Removing the owner also clears the verified flag.</p>
       <form method="post" action="/admin3119Musa/listings/<%= l.id %>/owner">
         <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <input class="input" type="search" data-filter-for="#ownerPicker" data-filter-note="ownerPickerNote"
+               placeholder="Filter members by name or email…" aria-label="Filter the member list" maxlength="80"
+               style="margin-bottom:8px">
         <div class="jf-row">
-          <select name="owner_user_id">
+          <select name="owner_user_id" id="ownerPicker">
             <option value="0">— No owner (unclaimed) —</option>
             <% ownerOptions.forEach(function (u) { %>
             <option value="<%= u.id %>" <%= l.owner_user_id === u.id ? 'selected' : '' %>><%= (u.name || u.email) %> — <%= u.email %></option>
@@ -198,6 +201,7 @@
           </select>
           <button class="btn btn-primary" type="submit">Set owner</button>
         </div>
+        <small class="muted" id="ownerPickerNote" style="display:block;margin-top:4px"></small>
       </form>
     </div>
 
