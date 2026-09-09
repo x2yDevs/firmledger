@@ -104,8 +104,20 @@ async function partA() {
   check('posts to /chat/completions', r.url === 'https://api.groq.com/openai/v1/chat/completions', r.url);
   check('sends the bearer key from the environment', r.headers.authorization === 'Bearer gsk-test-key-from-env');
   check('passes the model and messages through', r.body.model === 'openai/gpt-oss-120b' && r.body.messages[0].content === 'Say ok');
+  check('Groq gets max_completion_tokens (max_tokens is deprecated there)', r.body.max_completion_tokens === 20 && r.body.max_tokens === undefined, JSON.stringify(Object.keys(r.body)));
+  check('GPT-OSS omits reasoning_format (unsupported on that model)', r.body.reasoning_format === undefined);
   check('normalised reply text', llm.assistantText(data) === 'ok');
   check('normalised usage', llm.usage(data).total_tokens === 4);
+
+  /* Groq's Qwen 3.6 / 3.8 models require reasoning_format "hidden" for
+     tool calling and JSON mode. */
+  responder = () => ({ status: 200, body: { choices: [{ message: { content: '{"ok":true}' } }] } });
+  await llm.chat({ provider: 'groq', model: 'qwen/qwen3.8-27b', max_tokens: 100, response_format: { type: 'json_object' }, messages: userMsg });
+  r = last();
+  check('Groq Qwen 3.8 JSON mode sets reasoning_format hidden', r.body.reasoning_format === 'hidden' && r.body.max_completion_tokens === 100, JSON.stringify(r.body));
+  await llm.chat({ provider: 'groq', model: 'qwen/qwen3.6-27b', max_tokens: 100, tools: oneTool, tool_choice: 'auto', messages: userMsg });
+  r = last();
+  check('Groq Qwen 3.6 tool calls set reasoning_format hidden', r.body.reasoning_format === 'hidden');
 
   responder = () => ({
     status: 200,
@@ -119,6 +131,40 @@ async function partA() {
   check('tools are forwarded to the model', Array.isArray(r.body.tools) && r.body.tools[0].function.name === 'approve_listing');
   check('tool_choice is forwarded', r.body.tool_choice === 'auto');
   check('tool calls are read back', llm.toolCalls(data)[0].function.name === 'approve_listing');
+
+  /* ----------------------------- token field + retry behaviour (the 502 fix) */
+  section('Token field selection and transient 5xx retry (playground 502 fix)');
+  responder = () => ({ status: 200, body: { choices: [{ message: { content: 'ok' } }] } });
+  llm.setApiKey('openai', 'sk-test-openai');
+  await llm.chat({ provider: 'openai', model: 'o3-mini', temperature: 0.5, max_tokens: 100, messages: userMsg });
+  r = last();
+  check('OpenAI o-series gets max_completion_tokens, no temperature', r.body.max_completion_tokens === 100 && r.body.max_tokens === undefined && r.body.temperature === undefined, JSON.stringify(Object.keys(r.body)));
+  llm.markLiveModels('openai', llm.liveModelIds('openai').concat(['gpt-5']));
+  await llm.chat({ provider: 'openai', model: 'gpt-5', max_tokens: 100, messages: userMsg });
+  r = last();
+  check('GPT-5.x gets max_completion_tokens', r.body.max_completion_tokens === 100 && r.body.max_tokens === undefined);
+  await llm.chat({ provider: 'openai', model: 'gpt-4.1', max_tokens: 100, messages: userMsg });
+  r = last();
+  check('standard OpenAI models keep max_tokens', r.body.max_tokens === 100 && r.body.max_completion_tokens === undefined);
+  await llm.chat({ provider: 'deepseek', model: 'deepseek-chat', max_tokens: 50, messages: userMsg });
+  r = last();
+  check('non-reasoning OpenAI-compatible models keep max_tokens', r.body.max_tokens === 50 && r.body.max_completion_tokens === undefined);
+
+  let hits = 0;
+  responder = () => {
+    hits += 1;
+    return hits === 1
+      ? { status: 502, body: { error: { message: 'upstream blip' } } }
+      : { status: 200, body: { choices: [{ message: { content: 'recovered' } }], model: 'openai/gpt-oss-120b' } };
+  };
+  data = await llm.chat({ provider: 'groq', model: 'openai/gpt-oss-120b', messages: userMsg });
+  check('a transient upstream 5xx is retried once and recovers', llm.assistantText(data) === 'recovered' && hits === 2, `hits=${hits}`);
+
+  hits = 0;
+  responder = () => { hits += 1; return { status: 503, body: { error: { message: 'still down' } } }; };
+  let surfaced = false;
+  try { await llm.chat({ provider: 'groq', model: 'openai/gpt-oss-120b', messages: userMsg }); } catch (e) { surfaced = e.status === 502 && e.httpStatus === 503; }
+  check('a persistent upstream 5xx still surfaces (after one retry)', surfaced && hits === 2, `hits=${hits}`);
 
   /* ------------------------------------------------------------- Anthropic */
   section('Anthropic dialect (Claude)');
@@ -362,15 +408,15 @@ async function partB() {
 
   const cookie = { cookie: `fl_admin=${token}` };
   const page = await (await fetch(`${BASE}/admin3119Musa/ai`, { headers: cookie })).text();
-  check('playground renders the provider grid', /id="prov-grid"/.test(page));
-  const cards = (page.match(/class="ai-prov-card/g) || []).length;
-  check('every provider has a card', cards >= 18, `${cards} cards`);
+  check('playground renders the provider picker + config card', /id="prov-select"/.test(page) && /id="prov-config"/.test(page));
+  const provOptions = (page.match(/<option value="[a-z]+"[^>]*>[^<]*— (?:in use|\.env key|key saved|no key needed|no key)<\/option>/g) || []).length;
+  check('every provider is offered in the picker', provOptions >= 18, `${provOptions} providers`);
   ['Groq', 'Google Gemini', 'DeepSeek', 'Anthropic Claude', 'Hugging Face', 'OpenRouter'].forEach((label) => {
-    check(`card for ${label}`, page.indexOf(label) > -1);
+    check(`picker offers ${label}`, page.indexOf(label) > -1);
   });
-  check('provider radios are posted as llm_provider', /name="llm_provider" value="anthropic"/.test(page));
-  check('per-provider key fields exist', /name="llm_key_deepseek"/.test(page) && /name="llm_key_gemini"/.test(page));
-  check('per-provider model fields exist', /name="llm_model_openrouter"/.test(page));
+  check('the active provider is posted as llm_provider', /name="llm_provider" id="llm-provider-input"/.test(page));
+  check('the config card carries the active provider key + endpoint fields', /name="llm_key_groq"/.test(page) && /name="llm_base_groq"/.test(page));
+  check('the model field is named for the active provider', /name="llm_model_groq"/.test(page));
   check('the saved key is only shown masked', page.indexOf('gsk-saved-in-the-settings-table') === -1 && /gsk-sa…able/.test(page), (page.match(/gsk-sa[^<]{0,12}/) || [''])[0]);
   check('the active provider is marked in use', /data-prov="groq"[\s\S]{0,400}?ai-prov-badge on">in use/.test(page.replace(/\n/g, ' ')) || /is-active/.test(page));
   check('sensitive actions are labelled in the auto-run grid', /sensitive · always confirms/.test(page));

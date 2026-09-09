@@ -1,5 +1,43 @@
 # FirmLedger — change summary
 
+## 2026-09-09 — Admin: searchable pickers, AI Playground 502 fix, external email + AI rephrase
+
+**Searchable pickers in the console.** Long `<select>` lists the admin has to
+pick from now filter live: a small search box above the picker hides
+non-matching options and shows "n of N matches". Implemented once in
+`public/js/main.js` (`data-filter-for`) and used where it hurts most — the
+**news "Add a story by hand"** listing picker (500 options) and the **listing
+editor's ownership picker** (500 users). The news queue's filter box also
+searches the submitter's email now, so a story can be found by who filed it.
+No JS = no filtering, everything still works.
+
+**AI Playground 502 errors fixed.** Every OpenAI-format call sent the legacy
+`max_tokens` field. Groq deprecated that field in favour of
+`max_completion_tokens` (their current API reference uses the new name for
+every model), and OpenAI's reasoning families (o-series, GPT-5.x, GPT-OSS)
+refuse `max_tokens` outright — so the default provider + model combination
+400'd upstream, and the console surfaced it as a wall of 502s. The gateway
+(`src/lib/llm.js`) now picks the token field per provider/model:
+`max_completion_tokens` for Groq and for reasoning model ids, `max_tokens`
+elsewhere. Groq's Qwen 3.6/3.8 additionally get `reasoning_format: hidden`
+when tool calling or JSON mode is used (required by Groq for those models —
+without it the request 400s). A transient upstream 5xx is retried once after
+a short backoff before it reaches the console, so a provider blip no longer
+surfaces as a hard error. New wire-format and retry assertions landed in
+`tests/ai-providers.test.js`, and five stale Part-B assertions (the provider
+grid became a picker + config card) were updated to match the current view.
+
+**Email members: external recipients + AI rephrase.** Admin → Email now
+accepts **external addresses** (comma-separated, anyone — no FirmLedger
+account needed) on top of the existing audience groups and member search;
+addresses are validated, de-duplicated and merged with the picked audience,
+and the "To" picker is no longer the only way to send. The message box gained
+a **Rephrase with AI** button that rewrites the draft — plain text in → plain
+text out, HTML in → HTML out, `{{name}}` placeholders and links preserved —
+using whatever provider/model is configured in the AI Playground
+(`POST /admin3119Musa/email/rephrase`). The result lands back in the box for
+review; the endpoint never sends mail.
+
 ## 2026-09-08 — Blog: how listing news works, plus a complete site overview README
 
 **Blog post.** A new post ships in the seed (`src/lib/blogseed.js`), so every
