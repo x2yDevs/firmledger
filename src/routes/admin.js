@@ -17,6 +17,7 @@ const googleIndexing = require('../lib/googleIndexing');
 const indexlog = require('../lib/indexlog');
 const { parseLines, normalizeUrl, slugify, domainOf, siteUrl, escHtml, randomToken, isEmail } = require('../lib/util');
 const groq = require('../lib/groq');
+const llm = require('../lib/llm');
 const catLib = require('../lib/categories');
 const graphLib = require('../lib/graph');
 const { deleteLogo } = require('../lib/upload');
@@ -1808,12 +1809,26 @@ router.get('/admin3119Musa/email/users.json', (req, res) => {
   res.json({ users });
 });
 
+/** Which AI Playground provider/model the Rephrase button will use. */
+function rephraseAiStatus() {
+  const pid = llm.activeId();
+  const prov = llm.provider(pid);
+  const model = llm.modelFor(pid) || prov.defaultModel || '';
+  return {
+    provider: pid,
+    provider_label: prov.label,
+    model,
+    configured: llm.configured(pid) && Boolean(model),
+  };
+}
+
 router.get('/admin3119Musa/email', (req, res) => {
   const users = db.prepare('SELECT id, name, email FROM users ORDER BY name LIMIT 1000').all();
   const log = db.prepare('SELECT * FROM admin_mail_log ORDER BY created_at DESC LIMIT 25').all();
   res.render('admin/email', {
     meta: { title: 'Email — FirmLedger Admin', description: '', robots: 'noindex,nofollow' },
     users, log, counts: emailCounts(), preset: String(req.query.to || ''), smtp: mailConfigured(), section: 'email',
+    ai: rephraseAiStatus(),
   });
 });
 
@@ -1867,6 +1882,7 @@ router.post('/admin3119Musa/email', async (req, res) => {
       meta: { title: 'Email — FirmLedger Admin', description: '', robots: 'noindex,nofollow' },
       users, log, counts: emailCounts(), preset: to, smtp: mailConfigured(), section: 'email',
       errors: err, draft: { subject, body, format, external: externalRaw },
+      ai: rephraseAiStatus(),
     });
   }
   for (const e of external) if (!recipients.includes(e)) recipients.push(e);
@@ -1906,18 +1922,37 @@ router.post('/admin3119Musa/email', async (req, res) => {
 /* Rephrase a draft with the model configured in Admin → AI Playground.
    Works for both plain-text and HTML drafts. The operator reviews the result
    in the message box before anything is sent — this endpoint never delivers
-   mail. */
+   mail.
+
+   The provider, key and model are resolved exactly like the rest of the AI
+   Playground (src/lib/llm.js — Admin → AI Playground → Settings → Model
+   providers): whichever provider is active there powers this button, its key
+   is read from the same place, and the model falls back to that provider's
+   default if the saved choice is no longer known. Errors are returned as a
+   JSON envelope { ok:false, error, code } so the page can show the operator a
+   real reason (missing key, invalid key, model unavailable) instead of a bare
+   gateway error. */
 router.post('/admin3119Musa/email/rephrase', async (req, res) => {
   const text = String((req.body && req.body.text) || '').trim().slice(0, 10000);
   const format = req.body && req.body.format === 'html' ? 'html' : 'text';
   if (text.length < 10) {
     return res.status(422).json({ ok: false, error: 'Write at least a sentence to rephrase.' });
   }
+  /* Same resolution the Playground uses for its own calls — the active
+     provider, with the saved model when it is still known. */
+  const providerId = llm.activeId();
+  const prov = llm.provider(providerId);
+  const savedModel = llm.modelFor(providerId);
+  const model = savedModel && llm.isKnownModel(savedModel, providerId)
+    ? savedModel
+    : (prov.defaultModel || savedModel || '');
   const system = format === 'html'
     ? 'You are the writing assistant in the FirmLedger admin console. The operator pasted the HTML body of a branded member email. Rephrase it so it reads more naturally, clearly and professionally while keeping the same meaning. Keep the HTML tags and structure (you may edit the text inside tags), keep every link, and keep any {{name}} placeholder exactly as written. Do not add or remove paragraphs. Output ONLY the rephrased HTML body — no markdown fences, no <html> or <body> wrappers, no explanation.'
     : 'You are the writing assistant in the FirmLedger admin console. The operator pasted the plain-text body of a member email. Rephrase it so it reads more naturally, clearly and professionally while keeping the same meaning. Keep every fact, link and date, keep any {{name}} placeholder exactly as written, and keep the plain-text formatting (one blank line between paragraphs). Output ONLY the rephrased email text — no markdown, no quotes, no explanation.';
   try {
     const data = await groq.chat({
+      provider: providerId,
+      model: model || undefined,
       temperature: 0.8,
       max_tokens: 2400,
       messages: [
@@ -1929,12 +1964,26 @@ router.post('/admin3119Musa/email/rephrase', async (req, res) => {
     /* Models sometimes wrap the result in a code fence — strip it. */
     out = out.replace(/^```[a-zA-Z0-9]*\s*/m, '').replace(/```\s*$/m, '').trim();
     if (!out) {
-      return res.status(502).json({ ok: false, error: 'The model returned an empty rephrase. Try again.' });
+      console.error('[email-rephrase] empty reply from', providerId, model || '(default)');
+      return res.status(502).json({
+        ok: false,
+        error: `${prov.label} returned an empty rephrase. Try again — if it keeps happening pick another model in Admin → AI Playground → Settings.`,
+        code: 'empty_reply',
+      });
     }
-    return res.json({ ok: true, text: out.slice(0, 10000), model: data._model || '' });
+    return res.json({
+      ok: true,
+      text: out.slice(0, 10000),
+      model: data._model || model,
+      provider: providerId,
+      provider_label: prov.label,
+    });
   } catch (e) {
     const status = (e && e.status) || 502;
-    return res.status(status).json({ ok: false, error: (e && e.message) || 'The rephrase call failed.' });
+    const code = (e && e.code) || 'llm_error';
+    console.error('[email-rephrase] failed:', code, (e && e.message) || e);
+    const message = (e && e.message) || `${prov.label} did not return a usable reply. Try again.`;
+    return res.status(status).json({ ok: false, error: message, code });
   }
 });
 

@@ -583,6 +583,10 @@ try { db.exec('ALTER TABLE users ADD COLUMN trial_days INTEGER'); } catch { /* c
 try { db.exec('ALTER TABLE users ADD COLUMN subscription_status TEXT'); } catch { /* column exists */ }
 db.exec('CREATE INDEX IF NOT EXISTS idx_users_trial ON users(trial_expires_at)');
 
+/* ---- Trial reminder milestones already delivered (JSON array of keys).
+   Mirrors migrations/2026-09-09-trial-reminders.sql. */
+try { db.exec("ALTER TABLE users ADD COLUMN trial_reminders_sent TEXT NOT NULL DEFAULT ''"); } catch { /* column exists */ }
+
 /* ---- OAuth identities (Google / LinkedIn) ----
    Mirrors migrations/2026-09-01-oauth-providers.sql. */
 try { db.exec('ALTER TABLE users ADD COLUMN provider TEXT'); } catch { /* column exists */ }

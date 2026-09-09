@@ -14,6 +14,9 @@
  *                driving provider + key saves against a real server.
  *   backup       .firmledger round trip — users, all listings + configuration.
  *   admin-pages  every admin page renders and its long list scrolls in place.
+   trial-reminders  free-trial countdown ladder: half-way, 3-day and final-day
+                reminders plus the trial-ended notice — each an email AND an
+                in-app notification, once per trial, no double sends.
    tech-refresh admin technology-radar maintenance: one listing, a selection,
                 a filtered view, everything stale or the whole directory —
                 counters, the single-run lock, cancellation and CSRF, offline.
@@ -47,6 +50,7 @@ const suites = [
   ['AI model providers', 'ai-providers.test.js'],
   ['Backup round trip', 'backup.test.js'],
   ['Admin pages', 'admin-pages.test.js'],
+  ['Free trial reminders', 'trial-reminders.test.js'],
   ['Admin technology refresh', 'admin-tech-refresh.test.js'],
   ['Listing news & upkeep', 'news-upkeep.test.js'],
   ['Admin 2FA chain', 'admin-2fa.test.js'],

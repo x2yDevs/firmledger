@@ -218,7 +218,9 @@ function hourlyJobs() {
     const purged = notificationsLib.purgeExpired();
     if (purged) console.log(`[notifications] purged ${purged} expired archived notification(s)`);
   } catch (e) { console.error('[notif-purge]', e.message); }
-  try { require('./src/lib/plans').expireTrials(); } catch (e) { console.error('[trials]', e.message); }
+  /* Free trials: expire finished ones AND send the reminder ladder (halfway,
+     a few days left, final day, trial-ended) by email + in-app notification. */
+  try { require('./src/lib/trialreminders').sweep().catch(() => {}); } catch (e) { console.error('[trials]', e.message); }
   try { require('./src/lib/statusMonitor').sendWeeklyStatusDigest().catch(() => {}); } catch (e) { console.error('[status-digest]', e.message); }
 }
 setInterval(hourlyJobs, 3600e3);

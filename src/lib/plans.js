@@ -152,7 +152,8 @@ function startTrial(userId, days = TRIAL_DEFAULT_DAYS, opts = {}) {
         SET trial_started_at = datetime('now'),
             trial_expires_at = datetime('now', '+' || ? || ' days'),
             trial_days = ?,
-            subscription_status = 'trialing'
+            subscription_status = 'trialing',
+            trial_reminders_sent = ''
       WHERE id = ?`
   ).run(d, d, u.id);
   const row = db.prepare('SELECT trial_expires_at FROM users WHERE id=?').get(u.id);
@@ -166,6 +167,7 @@ function revokeTrial(userId) {
   db.prepare(
     `UPDATE users
         SET trial_started_at = NULL, trial_expires_at = NULL, trial_days = NULL,
+            trial_reminders_sent = '',
             subscription_status = ?
       WHERE id = ?`
   ).run(isProUser(u) ? 'active' : 'free', u.id);
