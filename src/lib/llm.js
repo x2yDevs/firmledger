@@ -700,6 +700,48 @@ function setModel(pid, id) {
   return v;
 }
 
+/* ---------------------- tool-capability fallback resolution ---------------- */
+
+/**
+ * The model a provider can actually run console actions with, or '' when the
+ * provider is retired, unconfigured, or none of its reachable models supports
+ * tool calling (Perplexity Sonar, Groq Compound, reasoning-only ids…).
+ * Preference order: the operator's saved pick, the provider default, the
+ * curated fallbacks, the rest of the catalogue, then live discoveries.
+ */
+function toolCapableModel(pid) {
+  const p = provider(pid);
+  if (p.status === 'retired' || !configured(pid)) return '';
+  const { ids: live } = liveSnapshot(p.id);
+  const saved = String(getSetting(`llm_model_${p.id}`, '') || '').trim();
+  const order = [saved, p.defaultModel, ...(p.fallbacks || []), ...p.models.map((m) => m.id), ...live];
+  for (const id of order) {
+    if (id && isKnownModel(id, p.id) && supportsTools(id, p.id)) return id;
+  }
+  return '';
+}
+
+/**
+ * Another configured provider with a tool-capable model — the target when the
+ * active provider cannot run tool calls, so the assistant keeps doing real
+ * work instead of only talking. Keyed providers (in registry order) win;
+ * keyless local gateways (Ollama) only come in when no keyed provider is
+ * configured. null when nothing can execute.
+ */
+function toolFallbackProvider(pid) {
+  const skip = String(pid || '').trim();
+  const withKey = [];
+  const keyless = [];
+  for (const p of PROVIDERS) {
+    if (p.id === skip || p.status === 'retired') continue;
+    if (!configured(p.id)) continue;
+    const model = toolCapableModel(p.id);
+    if (!model) continue;
+    (p.needsKey === false ? keyless : withKey).push({ provider: p.id, model });
+  }
+  return withKey[0] || keyless[0] || null;
+}
+
 /* ------------------------------------------------ live availability cache */
 
 function liveSnapshot(pid) {
@@ -929,7 +971,8 @@ function toAnthropicBody(opts, pid, model) {
       description: t.function.description || '',
       input_schema: t.function.parameters || { type: 'object', properties: {} },
     }));
-    if (opts.tool_choice && opts.tool_choice !== 'auto') body.tool_choice = { type: 'auto' };
+    if (opts.tool_choice === 'required') body.tool_choice = { type: 'any' };
+    else if (opts.tool_choice === 'none') body.tool_choice = { type: 'none' };
   }
   return body;
 }
@@ -988,9 +1031,8 @@ function toGeminiBody(opts, pid, model) {
         parameters: stripSchemaNoise(t.function.parameters || { type: 'object', properties: {} }),
       })),
     }];
-    if (opts.tool_choice && opts.tool_choice !== 'auto') {
-      body.toolConfig = { functionCallingConfig: { mode: 'AUTO' } };
-    }
+    if (opts.tool_choice === 'required') body.toolConfig = { functionCallingConfig: { mode: 'ANY' } };
+    else if (opts.tool_choice === 'none') body.toolConfig = { functionCallingConfig: { mode: 'NONE' } };
   }
   return body;
 }
@@ -1015,6 +1057,9 @@ function toCohereBody(opts, pid, model) {
         parameters: t.function.parameters || { type: 'object', properties: {} },
       },
     }));
+    /* Cohere v2 has no "any" mode — a forced call degrades to auto there;
+       the OpenAI-compatible providers carry the 'required' spelling. */
+    if (opts.tool_choice === 'none') body.tool_choice = { type: 'none' };
   }
   return body;
 }
@@ -1506,6 +1551,7 @@ module.exports = {
   baseUrlFor, setBaseUrl, chatUrl, modelsUrl,
   activeModels, activeDefaultModel, modelFor, setModel, modelMeta,
   isKnownModel, isRetiredModel, capabilities, supportsTools, supportsJson, looksLikeModelId,
+  toolCapableModel, toolFallbackProvider,
   usableModels, liveModelIds, liveSnapshot, liveAgeMs, markLiveModels,
   fetchLiveModels, syncModels, syncAllProviders, maybeSyncModels, LIVE_TTL_MS,
   chat, assistantText, toolCalls, usage, testConnection,

@@ -210,6 +210,7 @@
             </div>
 
             <div class="chat-status-line" id="chat-status" role="status"></div>
+            <p class="composer-hint" id="chat-model-note" hidden><b>No tool calling on this model</b> — console actions will still run for real on a tool-capable model instead; each reply names the model that ran.</p>
 
             <form class="chat-composer" id="chat-form">
               <div class="composer-box">
@@ -303,7 +304,7 @@
             </label>
             <div class="ai-quick-card">
               <h4 class="ai-quick-h">Why the choice matters</h4>
-              <p class="muted ai-card-note">The admin assistant needs <b>tool calling</b> — models without it (DeepSeek Reasoner, Perplexity Sonar) can still draft listings and answer questions but cannot run console actions. JSON mode speeds up the listing generator and auto-moderation.</p>
+              <p class="muted ai-card-note">The assistant <b>executes console actions for real</b> on every model you pick. If the selected model has no tool calling (DeepSeek Reasoner, Perplexity Sonar, Groq Compound…), the action transparently runs on a tool-capable model — same provider first, then another configured one — and the reply names the model that ran. Only if <i>no</i> configured model can call tools does the assistant answer questions and say plainly that it cannot act. JSON mode speeds up the listing generator and auto-moderation.</p>
             </div>
           </div>
           <div class="ai-model-tools">
@@ -533,6 +534,8 @@
       <li><b>Writes are confirmed.</b> A proposal card appears with the exact arguments; nothing executes until you press Run — unless you allow that action under Settings → Assistant auto-run.</li>
       <li><b>Sensitive actions always ask.</b> Deletions, bulk listing actions, emailing everyone, maintenance mode, credentials and search-index resets are confirmed every time and can never be switched to auto-run.</li>
       <li><b>Any provider.</b> Settings → Model providers lets you paste keys for Groq, OpenAI, Claude, Gemini, DeepSeek, Hugging Face, OpenRouter and more, and pick which one runs the console.</li>
+      <li><b>Any model executes for real.</b> Pick any model from any provider — every admin query is handled. If that model has no tool calling, the action transparently runs on a tool-capable model instead (same provider first, then another configured one) and the reply names the model that ran. A reply that executed nothing is stamped “No console action ran in this turn”.</li>
+      <li><b>Any phrasing.</b> “Make acme live”, “kill that spam listing”, “kick that user”, “spotlight it”, “give them pro” — casual wording resolves to the real console tool (lookups included). If a model answers your request in plain text without acting, the server re-asks it once with tool calling forced, quoting your exact request — a dodge can never turn into a fake “done”.</li>
       <li><b>Multi-step jobs finish.</b> Ask for a look-up plus an action and the assistant chains them in one turn. Several write actions arrive as a single numbered confirmation and run in order once you approve.</li>
       <li><b>Only real results are reported.</b> Every claim in a reply comes from the tool's actual return value — a failed action is reported as failed, never as done.</li>
       <li><b>No saved history.</b> The assistant can use messages visible in this tab for context, but conversations are not stored or restored after reload.</li>
@@ -670,6 +673,17 @@
     return id || 'unknown';
   }
 
+  /* Show the "no tool calling" hint whenever the picked assistant model
+     cannot run console actions itself — actions then fall back to a
+     tool-capable model server-side, and the reply names it. */
+  function refreshChatModelNote() {
+    var note = $('chat-model-note');
+    if (!note || !chatModel) return;
+    var m = null;
+    for (var i = 0; i < MODELS.length; i++) if (MODELS[i].id === chatModel.value) { m = MODELS[i]; break; }
+    note.hidden = !(m && !m.tools);
+  }
+
   /* ---------------- tabs ---------------- */
 
   var tabs = Array.prototype.slice.call(document.querySelectorAll('.ai-tab'));
@@ -724,6 +738,7 @@
   if (genModel) genModel.value = state.model;
   var chatModel = $('chat-model');
   if (chatModel) chatModel.value = state.model;
+  refreshChatModelNote();
 
   /* ---------------- char counters ---------------- */
 
@@ -1089,6 +1104,7 @@
       state.model = chatModel.value;
       toast('ok', 'Assistant now uses ' + modelLabel(chatModel.value) + ' for this tab.', 'Model switched');
       refreshHeadTitle();
+      refreshChatModelNote();
     });
   }
   function syncUrl() {
@@ -1388,6 +1404,7 @@
     fillModelSelect(genModel, p);
     if (chatModel) chatModel.value = (sel && sel.value) || chatModel.value;
     if (genModel) genModel.value = (sel && sel.value) || genModel.value;
+    refreshChatModelNote();
     var owner = $('prov-model-owner');
     if (owner) owner.textContent = p.label;
     var ep = $('prov-endpoint');
