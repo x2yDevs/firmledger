@@ -841,9 +841,24 @@ function saveSettings(body) {
     if (body[field] !== undefined) {
       const candidate = String(body[field] || '').trim();
       if (candidate && !llm.isKnownModel(candidate, p.id)) {
-        const err = new Error(`“${candidate.slice(0, 80)}” is not currently available for ${p.label}. Test & sync models, then choose an available model.`);
+        const retired = llm.isRetiredModel(candidate, p.id);
+        const err = new Error(retired
+          ? `“${candidate.slice(0, 80)}” was retired by ${p.label} and can no longer be called. Choose a current model instead.`
+          : `“${candidate.slice(0, 80)}” is not currently available for ${p.label}. Test & sync models, then choose an available model.`);
         err.status = 422;
         err.code = 'bad_model';
+        throw err;
+      }
+    }
+    /* A malformed endpoint override would turn every call into a network 502 —
+       reject it at save time with the exact field named. */
+    const baseField = `llm_base_${p.id}`;
+    if (body[baseField] !== undefined) {
+      const candidate = String(body[baseField] || '').trim();
+      if (candidate && !/^https?:\/\/[^/\s]+(\/\S*)?$/.test(candidate)) {
+        const err = new Error(`The endpoint override for ${p.label} must be a full http(s) URL (e.g. https://llm.internal.example/v1) — “${candidate.slice(0, 80)}” would break every call.`);
+        err.status = 422;
+        err.code = 'bad_base_url';
         throw err;
       }
     }
