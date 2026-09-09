@@ -540,6 +540,7 @@ const CORE_TOOLS = [
       db.prepare('UPDATE users SET suspended=1 WHERE id=?').run(u.id);
       db.prepare('DELETE FROM sessions WHERE user_id=?').run(u.id);
       sendBranded(u.email, 'Your FirmLedger account has been suspended', {
+        alias: 'support',
         kicker: 'Account notice', title: 'Your account is suspended',
         preheader: 'Your FirmLedger account has been suspended.',
         alert: 'Your FirmLedger account has been suspended. Active sessions were signed out.',
@@ -563,6 +564,7 @@ const CORE_TOOLS = [
       if (!u) return { error: 'No user matches that email or id.' };
       db.prepare('UPDATE users SET suspended=0 WHERE id=?').run(u.id);
       sendBranded(u.email, 'Your FirmLedger account has been reinstated', {
+        alias: 'support',
         kicker: 'Account notice', title: 'Welcome back',
         preheader: 'Your FirmLedger account suspension has been lifted.',
         alert: 'Your account suspension has been lifted.',
@@ -586,6 +588,7 @@ const CORE_TOOLS = [
       const u = findUser(args.user);
       if (!u) return { error: 'No user matches that email or id.' };
       sendBranded(u.email, 'Your FirmLedger account has been deleted', {
+        alias: 'privacy',
         kicker: 'Account deleted', title: 'Your account has been deleted',
         preheader: 'Your FirmLedger account was permanently removed.',
         alert: 'Your FirmLedger account has been permanently deleted.',
@@ -616,6 +619,7 @@ const CORE_TOOLS = [
       const r = plans.grantUserPro(u.id, args.lifetime ? null : (Number(args.days) || 30));
       const expiry = r && r.expiry ? r.expiry.toISOString().slice(0, 10) : null;
       sendBranded(u.email, "You've been upgraded to FirmLedger Pro", {
+        alias: 'billing',
         kicker: 'Pro activated', title: 'Welcome to FirmLedger Pro',
         preheader: 'FirmLedger Pro is now active on your account.',
         alert: expiry ? `Pro is active until <b>${expiry}</b>.` : '<b>Lifetime</b> Pro is active.',
@@ -640,6 +644,7 @@ const CORE_TOOLS = [
       if (!u) return { error: 'No user matches that email or id.' };
       plans.revokeUserPro(u.id);
       sendBranded(u.email, 'Your FirmLedger Pro access has ended', {
+        alias: 'billing',
         kicker: 'Plan update', title: 'Your Pro access has ended',
         preheader: 'FirmLedger Pro access on your account has ended.',
         alert: 'Your account is back on the Free plan.',
@@ -710,6 +715,7 @@ const CORE_TOOLS = [
       db.prepare('INSERT INTO resets (email, token, expires_at) VALUES (?,?,?)').run(u.email, token, expires);
       const url = siteUrl('/reset/' + token);
       sendBranded(u.email, 'Reset your FirmLedger password', {
+        alias: 'security',
         kicker: 'Password reset', title: 'Reset your password',
         preheader: 'An administrator started a password reset.',
         alert: 'A FirmLedger administrator started a password reset. The link is valid for 1 hour.',
@@ -857,6 +863,7 @@ const CORE_TOOLS = [
       const l = db.prepare('SELECT name FROM listings WHERE id=?').get(c.listing_id);
       if (u) {
         sendBranded(u.email, `Ownership claim update — ${l ? l.name : 'your listing'}`, {
+          alias: 'support',
           kicker: 'Claim review', title: 'Your ownership claim was not verified',
           preheader: 'Your ownership claim could not be verified.',
           alert: `Your ownership claim for <b>${l ? escHtml(l.name) : 'the listing'}</b> could not be verified.`,

@@ -35,6 +35,7 @@ function subscribe(email, source = 'footer') {
 async function sendSubscribeWelcome(email, token) {
   const unsubUrl = siteUrl(`/newsletter/unsubscribe?token=${token}`);
   await sendBranded(email, 'Welcome to the FirmLedger weekly digest', {
+    alias: 'hello',
     kicker: 'Subscription confirmed',
     title: 'You are subscribed ✓',
     preheader: 'A short email every week — new verified companies and the freshest additions.',
@@ -132,6 +133,7 @@ async function sendWeeklyDigest(force = false) {
     if (verified.length) textParts.push(`${verified.length} new verified ${verified.length === 1 ? 'company' : 'companies'} ${cadence.whenLabel}:\n${verified.map(rowLine).join('\n')}`);
     if (fresh.length) textParts.push(`Recently added to the ledger:\n${fresh.map(rowLine).join('\n')}`);
     await sendBranded(s.email, `${verified.length ? `${verified.length} new verified companies` : `${fresh.length} new companies`} ${cadence.whenLabel} — FirmLedger digest`, {
+      alias: 'hello',
       kicker: cadence.display + ' digest',
       title: 'New on the ledger ' + cadence.whenLabel,
       preheader: 'Freshly verified companies and the latest additions to FirmLedger.',

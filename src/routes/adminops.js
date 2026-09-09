@@ -5,8 +5,9 @@
 const express = require('express');
 const { db, getSetting, setSetting } = require('../db');
 const { requireAdmin } = require('../lib/session');
-const { sendBranded, mailConfigured, PROVIDERS, allAccountsRaw, addAccount,
-  toggleAccount, deleteAccount, saveGlobalFrom, fromAddress, hops } = require('../lib/mailer');
+const { sendBranded, mailConfigured, PROVIDERS, ALIASES, allAccountsRaw, addAccount,
+  toggleAccount, deleteAccount, saveGlobalFrom, fromAddress, hops, allHops,
+  hopLastUsed, sendTestVia, keepAliveSweep, keepAliveSettings, saveKeepAliveSettings } = require('../lib/mailer');
 const spam = require('../lib/spam');
 const health = require('../lib/health');
 const promos = require('../lib/promos');
@@ -103,6 +104,7 @@ router.post('/admin3119Musa/protection/maintenance', (req, res) => {
     const etaLine = eta ? ` Expected return: <b>${escHtml(eta)}</b>.` : '';
     for (const u of users) {
       sendBranded(u.email, 'FirmLedger is briefly offline for an update', {
+        alias: 'status',
         kicker: 'Status',
         title: escHtml(title),
         preheader: 'FirmLedger is down for a short update. Your data is safe.',
@@ -154,6 +156,7 @@ router.post('/admin3119Musa/promos', (req, res) => {
     if (channel === 'email' || channel === 'both') {
       for (const u of users) {
         sendBranded(u.email, `${r.code} — ${pct}% off FirmLedger Pro`, {
+          alias: 'hello',
           kicker: 'Offer',
           title: `${pct}% off FirmLedger Pro`,
           preheader: `Use code ${r.code} at checkout for ${pct}% off Pro.`,
@@ -216,13 +219,53 @@ router.post('/admin3119Musa/mail/accounts/:id/delete', (req, res) => {
   return back(res, '/admin3119Musa/settings', 'ok', 'Mail provider removed.');
 });
 
+/* Test ONE provider directly (no failover) — admin picks the hop and a
+   recipient; success proves that exact provider is authenticated and live. */
+router.post('/admin3119Musa/mail/test-provider', async (req, res) => {
+  const key = String(req.body.hop_key || '').trim().slice(0, 120);
+  const to = String(req.body.test_to || '').trim().toLowerCase().slice(0, 200);
+  if (!key) return back(res, '/admin3119Musa/settings', 'err', 'Pick a provider to test.');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(to)) {
+    return back(res, '/admin3119Musa/settings', 'err', 'Enter a valid address for the provider test.');
+  }
+  const r = await sendTestVia(key, to);
+  if (r.ok) return back(res, '/admin3119Musa/settings', 'ok', `Provider test sent via ${r.label} (${r.via}) to ${to} — check inbox and spam.`);
+  return back(res, '/admin3119Musa/settings', 'err', `Provider test failed — ${r.error}`);
+});
+
+/* Keep-alive settings: window, recipient, on/off. */
+router.post('/admin3119Musa/mail/keepalive', (req, res) => {
+  saveKeepAliveSettings(req.body);
+  const cfg = keepAliveSettings();
+  return back(res, '/admin3119Musa/settings', 'ok',
+    cfg.on
+      ? `Keep-alive saved — idle providers ping ${cfg.to} after ${cfg.days} day(s) without a send.`
+      : 'Keep-alive saved — automatic inactivity pings are OFF.');
+});
+
+/* Run the keep-alive sweep immediately (force = ping every provider now). */
+router.post('/admin3119Musa/mail/keepalive/run', async (req, res) => {
+  const force = req.body.force === '1';
+  const r = await keepAliveSweep(force).catch((e) => ({ error: e.message }));
+  if (r.error) return back(res, '/admin3119Musa/settings', 'err', `Keep-alive sweep failed — ${r.error}`);
+  if (r.skipped === 'off') return back(res, '/admin3119Musa/settings', 'err', 'Keep-alive is switched off — enable it first or use “Ping all now”.');
+  return back(res, '/admin3119Musa/settings', 'ok',
+    `Keep-alive sweep finished — ${r.checked} provider(s) checked, ${r.sent} ping(s) sent to ${keepAliveSettings().to}.`);
+});
+
 module.exports = router;
 module.exports.mailLocals = function mailLocals() {
   return {
     providers: PROVIDERS,
+    mailAliases: ALIASES,
     mailAccounts: allAccountsRaw(),
     mailHops: hops(),
+    mailAllHops: allHops().map((h) => ({
+      key: h.key, label: h.label, host: h.host, port: h.port, source: h.source,
+      active: h.active !== false, last_used: hopLastUsed(h), last_error: h.last_error || '',
+    })),
     mailFrom: fromAddress(),
+    mailKeepAlive: keepAliveSettings(),
     smtp_configured: mailConfigured(),
   };
 };

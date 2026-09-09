@@ -766,6 +766,7 @@ function notifyAdminUnsure(l, reason) {
   });
   if (getSetting('ai_moderation_email', '1') === '1') {
     sendBranded(adminNotifyEmail(), `AI moderation needs you — ${l.name}`, {
+      alias: 'admin',
       kicker: 'AI auto-moderation',
       title: `“${escHtml(l.name)}” is still pending`,
       preheader: 'The AI was not confident enough to approve or reject this listing.',

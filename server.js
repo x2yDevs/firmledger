@@ -222,6 +222,10 @@ function hourlyJobs() {
      a few days left, final day, trial-ended) by email + in-app notification. */
   try { require('./src/lib/trialreminders').sweep().catch(() => {}); } catch (e) { console.error('[trials]', e.message); }
   try { require('./src/lib/statusMonitor').sendWeeklyStatusDigest().catch(() => {}); } catch (e) { console.error('[status-digest]', e.message); }
+  /* Mail provider keep-alive — any configured SMTP hop (env, legacy, preset or
+     custom) that has been idle past the window pings admin@firmledger.co.ke
+     automatically, so vendors never close the account for inactivity. */
+  try { require('./src/lib/mailer').keepAliveSweep().catch((e) => console.error('[mail-keepalive]', e && e.message)); } catch (e) { console.error('[mail-keepalive]', e.message); }
 }
 setInterval(hourlyJobs, 3600e3);
 setTimeout(hourlyJobs, 90e3);
