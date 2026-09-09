@@ -4,7 +4,7 @@
 <%
   const ready = Boolean(settings.groq_configured);
   const offAttr = ready ? '' : ' disabled';
-  const tierLabel = { production: 'Production', preview: 'Preview', legacy: 'Legacy' };
+  const tierLabel = { production: 'Production', preview: 'Preview', legacy: 'Legacy', live: 'Live' };
   const chatTitle = 'Admin assistant';
 %>
 
@@ -47,7 +47,10 @@
       </span>
     </div>
 
-    <% if (!ready) { %>
+    <% var activeProviderView = (settings.providers || []).find(function (p) { return p.active; }); %>
+    <% if (activeProviderView && activeProviderView.retired) { %>
+      <div class="alert alert-warn"><%= activeProviderView.retired_note || settings.provider_label + ' is retired.' %> Choose another provider under <b>Settings → Model providers</b>; existing keys and settings are retained for migration.</div>
+    <% } else if (!ready) { %>
       <div class="alert alert-warn"><%= settings.provider_label %> has no key. Open <b>Settings → Model providers</b> below, paste a key for <%= settings.provider_label %> (or pick another provider you already have a key for), press <b>Save settings</b>, then <b>Test &amp; sync</b>. Environment variables such as <code>GROQ_API_KEY</code>, <code>OPENAI_API_KEY</code>, <code>ANTHROPIC_API_KEY</code> or <code>GEMINI_API_KEY</code> work too and always win.</div>
     <% } %>
     <% if (ok) { %><div class="alert alert-ok" role="status"><%= ok %></div><% } %>
@@ -237,7 +240,7 @@
             <label class="ai-prov-select-field"><span>Provider</span>
               <select id="prov-select" aria-controls="prov-config">
                 <% settings.providers.forEach(function (p) { %>
-                  <option value="<%= p.id %>" <%= p.active ? 'selected' : '' %>><%= p.label %><%
+                  <option value="<%= p.id %>" <%= p.active ? 'selected' : '' %>><%= p.label %><%= p.retired ? ' · retired' : '' %><%
                     if (p.active) { %> — in use<%
                     } else if (p.key_source === 'env') { %> — .env key<%
                     } else if (p.key_set) { %> — key saved<%
@@ -261,6 +264,7 @@
               <% } else { %><em class="ai-prov-badge off" id="prov-cfg-badge">no key</em><% } %>
             </div>
             <p class="ai-prov-blurb" id="prov-cfg-blurb"><%= ap.blurb %></p>
+            <div class="alert alert-warn" id="prov-cfg-retired"<%= ap.retired ? '' : ' hidden' %>><%= ap.retired_note || '' %></div>
 
             <label class="ai-prov-field"><span>API key</span>
               <input type="password" name="llm_key_<%= ap.id %>" id="prov-cfg-key" autocomplete="new-password" spellcheck="false"
@@ -293,7 +297,7 @@
           <div class="grid-2">
             <label><span>Model used by the assistant, generator and moderation</span>
               <select name="llm_model_<%= settings.provider %>" id="set-model">
-                <% settings.models.forEach(function (m) { %><option value="<%= m.id %>" <%= settings.groq_model === m.id ? 'selected' : '' %>><%= m.label %></option><% }) %>
+                <% settings.models.forEach(function (m) { %><option value="<%= m.id %>" <%= settings.groq_model === m.id ? 'selected' : '' %> <%= m.available === false ? 'disabled' : '' %>><%= m.label %></option><% }) %>
               </select>
               <small class="muted ai-field-note" id="set-model-note">Selected model: <span class="mono"><%= settings.groq_model %></span></small>
             </label>
@@ -532,7 +536,7 @@
   /* Every provider the console can talk to: id, label, models, endpoint, key state. */
   var PROVIDERS = <%- JSON.stringify((settings.providers || []).map(function (p) {
     return {
-      id: p.id, label: p.label, active: !!p.active, needs_key: !!p.needs_key,
+      id: p.id, label: p.label, active: !!p.active, retired: !!p.retired, retired_note: p.retired_note || '', needs_key: !!p.needs_key,
       key_source: p.key_source || '', key_set: !!p.key_set, key_hint: p.key_hint || '',
       base_url: p.base_url || '', default_base: p.default_base || '',
       model: p.model || '', default_model: p.default_model || '',
@@ -1225,6 +1229,11 @@
     if (name) name.textContent = p.label;
     var blurb = $('prov-cfg-blurb');
     if (blurb) blurb.textContent = p.blurb || '';
+    var retired = $('prov-cfg-retired');
+    if (retired) {
+      retired.hidden = !p.retired;
+      retired.textContent = p.retired_note || 'This provider has been retired. Choose another provider.';
+    }
     var activeBadge = $('prov-cfg-active');
     if (activeBadge) activeBadge.hidden = p.id !== ACTIVE;
     var pendingBadge = $('prov-cfg-pending');
@@ -1245,7 +1254,7 @@
       key.setAttribute('name', 'llm_key_' + p.id);
       key.setAttribute('data-prov-key', p.id);
       key.placeholder = p.key_placeholder || '';
-      key.disabled = p.key_source === 'env';
+      key.disabled = p.key_source === 'env' || p.retired;
     }
     var hint = $('prov-cfg-hint');
     if (hint) {
@@ -1269,7 +1278,7 @@
       base.placeholder = p.default_base || '';
     }
     var test = $('prov-cfg-test');
-    if (test) test.setAttribute('data-test-prov', p.id);
+    if (test) { test.setAttribute('data-test-prov', p.id); test.disabled = !!p.retired; }
     var getkey = $('prov-cfg-getkey');
     if (getkey) {
       if (p.keys_url) { getkey.href = p.keys_url; getkey.hidden = false; }
@@ -1299,6 +1308,7 @@
     p.models.forEach(function (m) {
       var o = document.createElement('option');
       o.value = m.id;
+      o.disabled = m.available === false;
       o.textContent = m.label + (m.available === false ? ' · not on this key' : '');
       node.appendChild(o);
     });
@@ -1310,9 +1320,11 @@
     if (sel) {
       sel.innerHTML = '';
       sel.setAttribute('name', 'llm_model_' + p.id);
+      sel.disabled = !!p.retired;
       p.models.forEach(function (m) {
         var o = document.createElement('option');
         o.value = m.id;
+        o.disabled = m.available === false;
         o.textContent = m.label + (m.available === false ? ' · not on this key' : '');
         o.title = (m.note || '') + ' · ' + (m.tools ? 'tools ' : 'no tools ') + (m.json ? '+ JSON mode' : 'no JSON mode');
         if (m.id === p.model) o.selected = true;
@@ -1328,6 +1340,7 @@
       p.models.forEach(function (m) {
         var b = el('button', 'ai-model-chip' + (sel && m.id === sel.value ? ' on' : ''));
         b.type = 'button';
+        b.disabled = m.available === false;
         b.setAttribute('data-model', m.id);
         b.title = (m.note || '') + ' · ' + (m.tools ? 'tools ' : 'no tools ') + (m.json ? '+ JSON mode' : 'no JSON mode');
         b.appendChild(el('span', 'mc-label', m.label));

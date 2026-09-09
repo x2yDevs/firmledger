@@ -149,6 +149,10 @@ async function partA() {
   await llm.chat({ provider: 'deepseek', model: 'deepseek-chat', max_tokens: 50, messages: userMsg });
   r = last();
   check('non-reasoning OpenAI-compatible models keep max_tokens', r.body.max_tokens === 50 && r.body.max_completion_tokens === undefined);
+  await llm.chat({ provider: 'deepseek', model: 'deepseek-v4-flash', max_tokens: 50, tools: oneTool, tool_choice: 'auto', messages: userMsg });
+  r = last();
+  check('DeepSeek V4 enables thinking and keeps its max_tokens wire field', r.body.thinking.type === 'enabled' && r.body.reasoning_effort === 'high' && r.body.max_tokens === 50 && r.body.max_completion_tokens === undefined);
+  check('DeepSeek V4 omits unsupported tool_choice', r.body.tool_choice === undefined);
 
   let hits = 0;
   responder = () => {
@@ -295,6 +299,9 @@ async function partA() {
   const synced = await llm.syncModels('groq');
   check('live model list is fetched and stored', synced.count === 2 && llm.liveModelIds('groq').includes('moonshotai/kimi-k2'));
   check('a live id becomes usable even if it is not in the static list', llm.isKnownModel('moonshotai/kimi-k2', 'groq'));
+  llm.setModel('groq', 'openai/gpt-oss-20b');
+  check('a stale saved model is not selected after live sync', !llm.isKnownModel('openai/gpt-oss-20b', 'groq') && llm.modelFor('groq') === 'openai/gpt-oss-120b');
+  check('retired GitHub provider is visible but cannot make outbound calls', llm.isRetiredProvider('github') && (await llm.testConnection('github')).error_code === 'provider_retired');
 
   responder = (rec) => (/\/models/.test(rec.url)
     ? { status: 200, body: { models: [{ name: 'models/gemini-2.5-flash' }, { name: 'models/gemini-2.5-pro' }] } }
@@ -355,6 +362,9 @@ async function partA() {
   let badProvider = false;
   try { ai.saveSettings({ llm_provider: 'not-a-real-lab' }); } catch (e) { badProvider = e.status === 422; }
   check('an unknown provider is refused on save', badProvider);
+  let staleSave = false;
+  try { ai.saveSettings({ llm_provider: 'gemini', llm_model_gemini: 'gemini-3.8-flash' }); } catch (e) { staleSave = e.status === 422 && e.code === 'bad_model'; }
+  check('a stale synced model is refused on save', staleSave && getSetting('llm_provider') === 'gemini');
   llm.setActiveProvider('groq');
 }
 
