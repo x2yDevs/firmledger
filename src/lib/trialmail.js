@@ -47,4 +47,86 @@ function sendTrialActivated(user, { days, expiresAt }) {
   });
 }
 
-module.exports = { sendTrialInvite, sendTrialActivated };
+function pluralDay(n) { return `${n} day${n === 1 ? '' : 's'}`; }
+
+/**
+ * One scheduled trial reminder. `slot` is the milestone that fired:
+ *   'half' — roughly halfway through the trial (long trials only)
+ *   '3d'   — a few days left (fires when 2–3 whole days remain)
+ *   '1d'   — the final day
+ * The subject and copy always use the REAL remaining days and expiry date, so
+ * a reminder that lands a day late (sweep downtime) is still accurate.
+ */
+function sendTrialReminder(user, { slot, remaining }) {
+  if (!user || !user.email || !(remaining > 0)) return Promise.resolve();
+  const till = String(user.trial_expires_at || '').slice(0, 10);
+  const who = user.name ? `, ${esc(user.name)}` : '';
+  const days = pluralDay(remaining);
+  let subject; let kicker; let title; let preheader; let alert; let paragraphs; let note;
+  if (slot === 'half') {
+    subject = 'Halfway through your FirmLedger Pro trial';
+    kicker = 'Trial check-in';
+    title = `You're halfway through${who}`;
+    preheader = `${days} of FirmLedger Pro left on your free trial.`;
+    alert = `<b>${days} of Pro remaining</b> &nbsp;·&nbsp; full access until <b>${till}</b>`;
+    paragraphs = [
+      `Your free trial is past its midpoint — <b>${remaining} ${remaining === 1 ? 'day' : 'days'}</b> of full FirmLedger Pro remain. You can keep viewing every listing's complete details, and any listings you own carry the verified tick, Featured placement and gold badge.`,
+      `When the trial ends on <b>${till}</b> your account returns to the Free plan automatically — nothing is deleted, nothing is charged. If Pro is earning its keep, upgrade before then and nothing changes.`,
+    ];
+    note = `You are receiving this because your ${user.trial_days || ''}-day free trial is running. Questions? <a href="mailto:support@firmledger.co.ke" style="color:#1D4ED8;">support@firmledger.co.ke</a>`;
+  } else if (slot === '1d') {
+    subject = 'Last day of your FirmLedger Pro trial';
+    kicker = 'Trial ending';
+    title = `Your free trial ends in a day${who}`;
+    preheader = `Today is the final stretch — Pro access until ${till}.`;
+    alert = `<b>1 day left</b> &nbsp;·&nbsp; full Pro access ends <b>${till}</b>`;
+    paragraphs = [
+      `Your FirmLedger Pro trial ends <b>${till}</b> — under 24 hours of full access remain. After that your account returns to the Free plan: listings stay, nothing is deleted, no card is charged.`,
+      `Keep the unlocked details, the verified tick, Featured placement and the developer API by upgrading now — it takes about a minute.`,
+    ];
+    note = 'This is the final countdown email for your free trial. When it ends your account simply returns to Free.';
+  } else {
+    subject = `Your FirmLedger Pro trial ends in ${days}`;
+    kicker = 'Trial ending soon';
+    title = `${days} left on your free trial${who}`;
+    preheader = `Your FirmLedger Pro trial ends on ${till} — a few days of full access remain.`;
+    alert = `<b>${days} remaining</b> &nbsp;·&nbsp; full Pro access until <b>${till}</b>`;
+    paragraphs = [
+      `Your free trial of FirmLedger Pro is almost over — <b>${remaining} ${remaining === 1 ? 'day' : 'days'}</b> of full access remain, ending on <b>${till}</b>.`,
+      `After the trial your account goes back to the Free plan automatically. To keep viewing every listing's full details — and keep the blue verified tick, homepage Featured placement and the gold badge on listings you own — upgrade to Pro before the countdown hits zero.`,
+    ];
+    note = `You are receiving this because your ${user.trial_days || ''}-day free trial is running out. No action needed if you're happy on Free.`;
+  }
+  return sendBranded(user.email, subject, {
+    kicker,
+    title,
+    preheader,
+    alert,
+    alertTone: 'warn',
+    paragraphs,
+    cta: { label: 'Upgrade to FirmLedger Pro', url: util.siteUrl('/dashboard/upgrade') },
+    note,
+  });
+}
+
+/** Sent once the trial has genuinely ended and the account is back on Free. */
+function sendTrialEnded(user) {
+  if (!user || !user.email) return Promise.resolve();
+  const ended = String(user.trial_expires_at || '').slice(0, 10) || 'recently';
+  const who = user.name ? `, ${esc(user.name)}` : '';
+  return sendBranded(user.email, 'Your FirmLedger Pro trial has ended', {
+    kicker: 'Plan update',
+    title: `Your free trial has ended${who}`,
+    preheader: `Your FirmLedger Pro trial ended on ${ended} — the account is back on the Free plan.`,
+    alert: `Your <b>${user.trial_days || ''}-day free trial ended on ${ended}</b> and your account is back on the <b>Free plan</b>.`,
+    alertTone: 'info',
+    paragraphs: [
+      'Nothing was deleted and nothing was charged. Your account, your listings and their public data are all exactly where you left them — only the Pro extras (full listing details, verified tick, Featured placement, gold badge, developer API) are paused.',
+      'Upgrade to FirmLedger Pro any time to switch those extras back on for as long as you need them.',
+    ],
+    cta: { label: 'Upgrade to FirmLedger Pro', url: util.siteUrl('/dashboard/upgrade') },
+    note: 'If you believe this is an error, reply to this email and our support team will take a look.',
+  });
+}
+
+module.exports = { sendTrialInvite, sendTrialActivated, sendTrialReminder, sendTrialEnded };

@@ -14,7 +14,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
-const { spawn } = require('child_process');
+const { spawn, execFileSync } = require('child_process');
 
 const ROOT = path.join(__dirname, '..');
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'firmledger-pages-'));
@@ -98,11 +98,23 @@ function check(name, cond, detail) {
 }
 
 /* page → how many scroll regions its long lists must sit in */
+/* Seed ids — resolved right after seeding so record pages can be asserted too. */
+const idsRow = JSON.parse(execFileSync(process.execPath, ['-e', `
+process.env.FIRMLEDGER_DATA_DIR = ${JSON.stringify(dataDir)};
+const { db } = require(${JSON.stringify(path.join(ROOT, 'src/db.js'))});
+console.log(JSON.stringify({
+  uid: (db.prepare("SELECT id FROM users WHERE email='smoke@example.com'").get() || {}).id,
+  lid: (db.prepare("SELECT id FROM listings WHERE slug='smoke-co'").get() || {}).id,
+  tid: (db.prepare("SELECT id FROM tickets WHERE ref='FL-SMOKE'").get() || {}).id
+}));
+`], { cwd: ROOT, env, encoding: 'utf8' }));
+
 const PAGES = [
   ['/admin3119Musa/dashboard', 0, 'Dashboard'],
   ['/admin3119Musa/listings', 1, 'Listings'],
   ['/admin3119Musa/claims', 1, 'Ownership claims'],
   ['/admin3119Musa/users', 1, 'Users'],
+  ['/admin3119Musa/users/' + idsRow.uid, 4, 'User detail — their records'],
   ['/admin3119Musa/categories', 1, 'Categories'],
   ['/admin3119Musa/pricing', 1, 'Pricing — free trials'],
   ['/admin3119Musa/advertising', 2, 'Advertising — sponsored'],

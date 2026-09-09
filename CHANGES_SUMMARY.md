@@ -1,5 +1,48 @@
 # FirmLedger — change summary
 
+## 2026-09-09 — Trial countdown emails + in-app reminders, console scroll audit, email AI rephrase hardening
+
+**Free-trial reminder ladder — every member gets told, in email AND in-app,
+before and when their trial ends.** A new hourly sweep (`src/lib/trialreminders.js`,
+running on the same server tick that expires finished trials) walks every active
+trial and fires a milestone the moment it becomes due, each exactly once per
+trial (`users.trial_reminders_sent` tracks the ladder, and a brand-new trial
+clears it):
+
+- **roughly halfway** (long trials only — 14 days → 7 to go, etc.),
+- **a few days left** (fires when 2–3 whole days remain; subject carries the
+  real count, so a sweep that misses a day is still accurate),
+- **the final day**, and
+- **trial ended** — sent once the account has genuinely dropped back to Free
+  (within ~26h of expiry, so trials that ended before this feature existed are
+  never re-mailed). Users who kept paid Pro are skipped, and the "ended" mail
+  points at `/dashboard/upgrade`.
+
+Each milestone is a real branded email through the normal mailer (outbox when
+no SMTP is configured) **and** a bell notification on the member's dashboard.
+The end-of-trial status flip already happened; now the member hears about it
+too. Covered by a new suite (`tests/trial-reminders.test.js`, wired into
+`npm test`) that places accounts at every stage — halfway, a few days left,
+final day, just-expired Free, just-expired-but-paid — and asserts the exact
+email subject, the in-app row, the one-time marker, and that a second sweep is
+silent.
+
+**Console scroll audit.** Every long surface in the admin area is contained, so
+records piling up never stretch the page. The user detail page (their listings,
+claims, tickets, paid invoices) now uses the console's standard `.scroll-table`
+surfaces alongside the already-contained queues, and the admin page smoke suite
+asserts the user detail page scrolls in place too.
+
+**Email → Rephrase with AI hardened.** The button always resolves the exact
+provider/key/model configured in **Admin → AI Playground → Settings → Model
+providers** (with a fallback to that provider's default model when the saved
+choice is no longer known), so it can never drift from what works in the
+playground. The page now shows which provider/model will do the rewriting (or a
+clear "no AI provider configured" hint), and failures come back as actionable
+JSON (`ok:false, error, code`) — missing key, rejected key and empty-reply
+cases each tell the operator exactly where to fix it instead of surfacing a
+bare gateway error.
+
 ## 2026-09-09 — Admin: searchable pickers, AI Playground 502 fix, external email + AI rephrase
 
 **Searchable pickers in the console.** Long `<select>` lists the admin has to
