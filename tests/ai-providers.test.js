@@ -72,8 +72,9 @@ const oneTool = [{
   },
 }];
 
-/* Keep the background "refresh live models" timer out of the assertions. */
-llm.PROVIDERS.forEach((p) => { if (p.listModels) llm.markLiveModels(p.id, p.models.map((m) => m.id)); });
+/* Keep the background "refresh live models" timer out of the assertions.
+   (Seeded without retired ids — vendors don't list shutdown models.) */
+llm.PROVIDERS.forEach((p) => { if (p.listModels) llm.markLiveModels(p.id, p.models.filter((m) => m.tier !== 'retired').map((m) => m.id)); });
 
 /* Saved (not env) keys for the vendors under test — Groq's comes from the env. */
 ['anthropic', 'gemini', 'cohere', 'cerebras', 'mistral'].forEach((id) => llm.setApiKey(id, `saved-${id}-key`));
@@ -146,7 +147,7 @@ async function partA() {
   await llm.chat({ provider: 'openai', model: 'gpt-4.1', max_tokens: 100, messages: userMsg });
   r = last();
   check('standard OpenAI models keep max_tokens', r.body.max_tokens === 100 && r.body.max_completion_tokens === undefined);
-  await llm.chat({ provider: 'deepseek', model: 'deepseek-chat', max_tokens: 50, messages: userMsg });
+  await llm.chat({ provider: 'mistral', model: 'mistral-large-latest', max_tokens: 50, messages: userMsg });
   r = last();
   check('non-reasoning OpenAI-compatible models keep max_tokens', r.body.max_tokens === 50 && r.body.max_completion_tokens === undefined);
   await llm.chat({ provider: 'deepseek', model: 'deepseek-v4-flash', max_tokens: 50, tools: oneTool, tool_choice: 'auto', messages: userMsg });
@@ -310,9 +311,60 @@ async function partA() {
   check('Gemini model ids lose the models/ prefix', gem.count === 2 && llm.liveModelIds('gemini').includes('gemini-2.5-pro'), JSON.stringify(llm.liveModelIds('gemini')));
 
   responder = () => ({ status: 401, body: { error: { message: 'invalid api key' } } });
-  const failed = await llm.testConnection('deepseek', 'deepseek-chat');
+  const failed = await llm.testConnection('deepseek', 'deepseek-v4-flash');
   check('a rejected key is reported, not swallowed', failed.ok === false && /rejected the API key/i.test(failed.error), failed.error);
   check('the failed test still names the provider', failed.provider === 'deepseek' && failed.provider_label === 'DeepSeek');
+
+  /* --------------------------------- retired models, 402 billing, empty-safe sync */
+  section('Retired models, 402 billing and empty-safe catalog sync');
+  check('a vendor-retired Groq id is flagged retired', llm.isRetiredModel('llama-3.3-70b-versatile', 'groq') === true);
+  check('a retired id is rejected before any outbound call', llm.isKnownModel('llama-3.3-70b-versatile', 'groq') === false);
+  check('retired DeepSeek aliases are rejected', llm.isKnownModel('deepseek-chat', 'deepseek') === false && llm.isKnownModel('deepseek-reasoner', 'deepseek') === false);
+  check('retired rows are hidden from the picker (auto-removal)',
+    !llm.usableModels('groq').some((m) => m.id === 'llama-3.3-70b-versatile')
+    && !llm.usableModels('deepseek').some((m) => m.id === 'deepseek-chat'));
+  check('model selection never resolves to a retired id',
+    llm.modelFor('groq') === 'openai/gpt-oss-120b' && llm.modelFor('deepseek') === 'deepseek-v4-flash',
+    `${llm.modelFor('groq')} / ${llm.modelFor('deepseek')}`);
+
+  let hits402 = 0;
+  responder = () => { hits402 += 1; return { status: 402, body: { error: { message: 'Insufficient credits' } } }; };
+  let paid = null;
+  try { await llm.chat({ provider: 'groq', model: 'openai/gpt-oss-120b', messages: userMsg, noFallback: true }); } catch (e) { paid = e; }
+  check('HTTP 402 surfaces as payment_required (not a 502)', paid && paid.code === 'payment_required' && paid.status === 402, paid && `${paid.code}/${paid.status}`);
+  check('an out-of-credits call is never retried', hits402 === 1, `hits=${hits402}`);
+
+  llm.markLiveModels('mistral', []);
+  check('an empty live list is not authoritative — static ids still known',
+    llm.isKnownModel('mistral-small-latest', 'mistral') === true);
+  check('an empty live list keeps selection working',
+    llm.modelFor('mistral') === 'mistral-medium-3-5', llm.modelFor('mistral'));
+  check('unknown availability renders as unknown, not unavailable',
+    llm.usableModels('mistral').every((m) => m.available === null));
+  llm.markLiveModels('mistral', llm.provider('mistral').models.map((m) => m.id));
+
+  const noList = await llm.syncModels('perplexity');
+  check('a provider without a list endpoint skips sync without marking',
+    noList.skipped === 'no_list_endpoint' && llm.liveSnapshot('perplexity').checked_at === '');
+  check('Perplexity static models stay usable with no catalog',
+    llm.isKnownModel('sonar-pro', 'perplexity') && llm.modelFor('perplexity') === 'sonar-pro');
+
+  responder = (rec) => (/\/models/.test(rec.url)
+    ? { status: 200, body: { data: [] } }
+    : { status: 200, body: { choices: [{ message: { content: 'ok' } }] } });
+  const bulk = await llm.syncAllProviders({ onlyStale: false });
+  const bulkGroq = bulk.find((x) => x.provider === 'groq') || {};
+  check('bulk sync covers every configured provider', bulk.length >= 5 && bulk.every((x) => x.provider), `${bulk.length} providers`);
+  check('an empty bulk response keeps the previous snapshot',
+    bulkGroq.empty === true && llm.liveModelIds('groq').includes('openai/gpt-oss-120b') && llm.liveModelIds('groq').includes('moonshotai/kimi-k2'),
+    JSON.stringify(llm.liveModelIds('groq')));
+
+  let badBase = false;
+  try { ai.saveSettings({ llm_base_groq: 'not-a-url' }); } catch (e) { badBase = e.status === 422 && e.code === 'bad_base_url'; }
+  check('a malformed endpoint override is rejected at save time', badBase);
+  let retiredSave = false;
+  try { ai.saveSettings({ llm_provider: 'groq', llm_model_groq: 'llama-3.3-70b-versatile' }); } catch (e) { retiredSave = e.status === 422 && e.code === 'bad_model'; }
+  check('saving a retired model id is refused with guidance', retiredSave);
 
   /* ---------------------------------------------------------- rate limiter */
   section('Per-provider rate limiter');
@@ -476,7 +528,7 @@ async function partB() {
 
   const tested = await (await fetch(`${BASE}/admin3119Musa/ai/test`, {
     method: 'POST', headers: { ...cookie, accept: 'application/json', 'content-type': 'application/json', 'X-CSRF-Token': csrf },
-    body: JSON.stringify({ provider: 'deepseek', model: 'deepseek-chat' }),
+    body: JSON.stringify({ provider: 'deepseek', model: 'deepseek-v4-flash' }),
   })).json();
   check('test endpoint answers for a specific provider', tested.ok === true && tested.test.provider === 'deepseek', JSON.stringify(tested.test && tested.test.provider));
   check('an unreachable provider reports the failure, not silence',
@@ -488,6 +540,15 @@ async function partB() {
   })).json();
   check('a provider with no key says so instead of calling out',
     keyless.test.ok === false && /no .* key configured|not configured/i.test(keyless.test.error || ''), keyless.test.error);
+
+  const bulk = await (await fetch(`${BASE}/admin3119Musa/ai/sync-all`, {
+    method: 'POST', headers: { ...cookie, accept: 'application/json', 'content-type': 'application/json', 'X-CSRF-Token': csrf },
+    body: JSON.stringify({}),
+  })).json();
+  check('sync-all refreshes every catalog and returns the picker state',
+    bulk.ok === true && Array.isArray(bulk.results) && bulk.providers.length >= 18, JSON.stringify({ ok: bulk.ok, n: bulk.results && bulk.results.length }));
+  check('the picker ships the scroll/filter toolbar, not a wall of chips',
+    /id="model-filter"/.test(after) && /id="model-strip"/.test(after) && /Sync all catalogs/.test(after));
 
   server.kill('SIGKILL');
 }

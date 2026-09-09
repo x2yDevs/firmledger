@@ -126,6 +126,35 @@ router.post(`${BASE}/test`, json(async (req, res) => {
   });
 }));
 
+/**
+ * Refresh every configured provider's catalog in one go — new models appear
+ * automatically and removed ones drop to unavailable. The hourly upkeep tick
+ * does the same for stale catalogs, so this is the manual "sync now".
+ */
+router.post(`${BASE}/sync-all`, json(async (req, res) => {
+  const fresh = String((req.body && req.body.fresh) || '') === '1';
+  const results = await llm.syncAllProviders({ onlyStale: !fresh });
+  const synced = results.filter((r) => !r.skipped && !r.error).length;
+  const added = results.reduce((n, r) => n + ((r.added && r.added.length) || 0), 0);
+  try {
+    ai.audit({
+      kind: 'settings',
+      action: 'sync-all',
+      payload: { results: results.map((r) => ({ provider: r.provider, count: r.count, skipped: r.skipped, error: r.error })) },
+      result: `${synced} catalog(s) synced · ${added} new model(s) discovered`,
+      ok: 1,
+    });
+  } catch { /* audit is best-effort */ }
+  return res.json({
+    ok: true,
+    results,
+    synced,
+    added,
+    providers: llm.providersView(),
+    settings: ai.settingsSnapshot(),
+  });
+}));
+
 /** Make one provider the one the whole console runs on. */
 router.post(`${BASE}/provider`, json(async (req, res) => {
   const pid = str(req.body && req.body.provider, 40);

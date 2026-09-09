@@ -35,6 +35,7 @@ module.exports = {
   modelId: () => llm.modelFor(active()),
   modelMeta: (id) => llm.modelMeta(id, active()),
   isKnownModel: (id) => llm.isKnownModel(id, active()),
+  isRetiredModel: (id) => llm.isRetiredModel(id, active()),
   supportsTools: (id) => llm.supportsTools(id, active()),
   supportsJson: (id) => llm.supportsJson(id, active()),
   usableModels: () => llm.usableModels(active()),
@@ -43,6 +44,7 @@ module.exports = {
   markLiveModels: (ids) => llm.markLiveModels(active(), ids),
   fetchLiveModels: () => llm.fetchLiveModels(active()),
   syncModels: () => llm.syncModels(active()),
+  syncAllProviders: (opts) => llm.syncAllProviders(opts),
   maybeSyncModels: () => llm.maybeSyncModels(active()),
 
   /* Calls */

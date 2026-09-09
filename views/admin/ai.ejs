@@ -4,7 +4,7 @@
 <%
   const ready = Boolean(settings.groq_configured);
   const offAttr = ready ? '' : ' disabled';
-  const tierLabel = { production: 'Production', preview: 'Preview', legacy: 'Legacy', live: 'Live' };
+  const tierLabel = { production: 'Production', preview: 'Preview', legacy: 'Legacy', live: 'Live', retired: 'Retired' };
   const chatTitle = 'Admin assistant';
 %>
 
@@ -306,17 +306,35 @@
               <p class="muted ai-card-note">The admin assistant needs <b>tool calling</b> — models without it (DeepSeek Reasoner, Perplexity Sonar) can still draft listings and answer questions but cannot run console actions. JSON mode speeds up the listing generator and auto-moderation.</p>
             </div>
           </div>
-          <div class="ai-model-strip" id="model-strip">
+          <div class="ai-model-tools">
+            <label class="ai-inline-search ai-model-filter"><span class="sr-only">Filter models</span>
+              <input type="search" id="model-filter" placeholder="Filter models…" maxlength="60" autocomplete="off">
+            </label>
+            <label class="ai-model-tier"><span class="sr-only">Tier</span>
+              <select id="model-tier">
+                <option value="">All tiers</option>
+                <option value="production">Production</option>
+                <option value="preview">Preview</option>
+                <option value="legacy">Legacy</option>
+                <option value="live">Live</option>
+              </select>
+            </label>
+            <label class="ai-model-hide"><input type="checkbox" id="model-hide-off" checked><span>Hide unavailable</span></label>
+            <span class="muted ai-model-count" id="model-count" role="status"></span>
+          </div>
+          <div class="ai-model-strip" id="model-strip" tabindex="0" aria-label="Models for the selected provider">
             <% settings.models.forEach(function (m) { %>
-              <button type="button" class="ai-model-chip <%= m.id === settings.groq_model ? 'on' : '' %>" data-model="<%= m.id %>" title="<%= m.note || '' %> · <%= (m.tools ? 'tools ' : 'no tools ') + (m.json ? '+ JSON mode' : 'no JSON mode') %>">
+              <button type="button" class="ai-model-chip <%= m.id === settings.groq_model ? 'on' : '' %>" data-model="<%= m.id %>" data-tier="<%= m.tier %>" data-avail="<%= m.available === false ? '0' : '1' %>" data-label="<%= (m.label + ' ' + m.id).toLowerCase() %>" title="<%= m.note || '' %> · <%= (m.tools ? 'tools ' : 'no tools ') + (m.json ? '+ JSON mode' : 'no JSON mode') %>">
                 <span class="mc-label"><%= m.label %></span>
                 <span class="mc-meta"><%= tierLabel[m.tier] || m.tier %><%= m.available === false ? ' · unavailable' : '' %></span>
               </button>
             <% }) %>
           </div>
+          <p class="fine-print" id="model-sync-note">Catalogs refresh automatically (hourly when stale, plus every Test &amp; sync) — new models appear on their own and removed ones disappear. <span id="model-sync-when"></span></p>
           <div class="form-actions form-actions-tight">
             <button class="btn btn-primary" type="submit">Save settings</button>
             <button class="btn btn-ghost" type="button" id="test-key-btn-2">Test &amp; sync models</button>
+            <button class="btn btn-ghost" type="button" id="sync-all-btn" title="Refresh every configured provider's model catalog">Sync all catalogs</button>
             <span class="muted ai-status" id="test-status" role="status"></span>
           </div>
           <p class="fine-print" id="prov-endpoint">Endpoint: <span class="mono"><%= settings.groq_base_url %></span><% if (settings.groq_env) { %> · key source: <span class="mono">.env</span><% } else { %> · key source: settings table<% } %></p>
@@ -542,6 +560,8 @@
       model: p.model || '', default_model: p.default_model || '',
       blurb: p.blurb || '', env: p.env || [], key_placeholder: p.key_placeholder || '',
       keys_url: p.keys_url || '', live_models: p.live_models || [],
+      live_checked_at: p.live_checked_at || '', live_stale: !!p.live_stale,
+      sync_supported: p.sync_supported !== false, retired_hidden: p.retired_hidden || 0,
       models: (p.models || []).map(function (m) {
         return { id: m.id, label: m.label, tier: m.tier, note: m.note || '', tools: !!m.tools, json: !!m.json, available: m.available == null ? null : !!m.available };
       }),
@@ -1336,18 +1356,33 @@
     }
     var strip = $('model-strip');
     if (strip) {
+      var TIERS = { production: 'Production', preview: 'Preview', legacy: 'Legacy', live: 'Live', retired: 'Retired' };
       strip.textContent = '';
       p.models.forEach(function (m) {
         var b = el('button', 'ai-model-chip' + (sel && m.id === sel.value ? ' on' : ''));
         b.type = 'button';
         b.disabled = m.available === false;
         b.setAttribute('data-model', m.id);
+        b.setAttribute('data-tier', m.tier || '');
+        b.setAttribute('data-avail', m.available === false ? '0' : '1');
+        b.setAttribute('data-label', ((m.label || '') + ' ' + (m.id || '')).toLowerCase());
         b.title = (m.note || '') + ' · ' + (m.tools ? 'tools ' : 'no tools ') + (m.json ? '+ JSON mode' : 'no JSON mode');
         b.appendChild(el('span', 'mc-label', m.label));
-        b.appendChild(el('span', 'mc-meta', (m.tier || '') + (m.available === false ? ' · unavailable' : '')));
+        b.appendChild(el('span', 'mc-meta', (TIERS[m.tier] || m.tier || '') + (m.available === false ? ' · unavailable' : '')));
         strip.appendChild(b);
       });
       bindModelChips();
+      applyModelFilter();
+    }
+    MODELS = p.models.slice();
+    var when = $('model-sync-when');
+    if (when) {
+      var bits = [];
+      if (p.live_checked_at) bits.push('Last checked ' + String(p.live_checked_at).slice(0, 16) + ' UTC');
+      else if (p.sync_supported) bits.push('Not checked yet — press Test & sync');
+      else bits.push('No live catalog for this provider — curated list');
+      if (p.retired_hidden) bits.push(p.retired_hidden + ' retired hidden');
+      when.textContent = bits.join(' · ') + '.';
     }
     fillModelSelect(chatModel, p);
     fillModelSelect(genModel, p);
@@ -1374,6 +1409,29 @@
       c.classList.toggle('on', c.getAttribute('data-model') === (chatModel ? chatModel.value : ''));
     });
   }
+  /* Narrow the (scrollable) chip strip by text, tier and availability so a
+     provider with dozens of live models never makes the page extra long. */
+  function applyModelFilter() {
+    var q = ($('model-filter') && $('model-filter').value || '').trim().toLowerCase();
+    var tier = $('model-tier') ? $('model-tier').value : '';
+    var hideOff = $('model-hide-off') ? $('model-hide-off').checked : false;
+    var shown = 0, total = 0;
+    document.querySelectorAll('.ai-model-chip').forEach(function (c) {
+      total += 1;
+      var ok = true;
+      if (tier && c.getAttribute('data-tier') !== tier) ok = false;
+      if (hideOff && c.getAttribute('data-avail') === '0') ok = false;
+      if (q && (c.getAttribute('data-label') || '').indexOf(q) === -1) ok = false;
+      c.style.display = ok ? '' : 'none';
+      if (ok) shown += 1;
+    });
+    var count = $('model-count');
+    if (count) count.textContent = total ? ('Showing ' + shown + ' of ' + total) : 'No models';
+  }
+  ['model-filter', 'model-tier', 'model-hide-off'].forEach(function (id) {
+    var node = $(id);
+    if (node) node.addEventListener(id === 'model-filter' ? 'input' : 'change', applyModelFilter);
+  });
   function pickModel(id) {
     if (chatModel) chatModel.value = id;
     if (genModel) genModel.value = id;
@@ -1443,6 +1501,24 @@
     return null;
   }
 
+  /* Slim a full providerView (from /test or /sync-all) into the shape the
+     picker was booted with, so refreshed catalogs re-render losslessly. */
+  function slimProvider(p) {
+    return {
+      id: p.id, label: p.label, active: !!p.active, retired: !!p.retired, retired_note: p.retired_note || '', needs_key: !!p.needs_key,
+      key_source: p.key_source || '', key_set: !!p.key_set, key_hint: p.key_hint || '',
+      base_url: p.base_url || '', default_base: p.default_base || '',
+      model: p.model || '', default_model: p.default_model || '',
+      blurb: p.blurb || '', env: p.env || [], key_placeholder: p.key_placeholder || '',
+      keys_url: p.keys_url || '', live_models: p.live_models || [],
+      live_checked_at: p.live_checked_at || '', live_stale: !!p.live_stale,
+      sync_supported: p.sync_supported !== false, retired_hidden: p.retired_hidden || 0,
+      models: (p.models || []).map(function (m) {
+        return { id: m.id, label: m.label, tier: m.tier, note: m.note || '', tools: !!m.tools, json: !!m.json, available: m.available == null ? null : !!m.available };
+      }),
+    };
+  }
+
   function markLiveModels(pid, ids) {
     var p = providerById(pid);
     if (!p) return;
@@ -1474,8 +1550,16 @@
         out.textContent = line;
         out.className = (statusEl ? 'muted ai-prov-status ' : 'ai-status ') + (t.ok ? 'ai-status-ok' : 'ai-status-bad');
       }
-      if (t.models && t.models.length) markLiveModels(pid, t.models);
-      if (pid === activeProvider().id) renderProviderModels(providerById(pid));
+      /* The response carries the full refreshed catalog — adopt it so newly
+         discovered models appear (and removed ones drop) without a reload. */
+      if (data.providers) {
+        PROVIDERS = data.providers.map(slimProvider);
+        var refreshed = providerById(pid);
+        if (refreshed) MODELS = refreshed.models;
+      } else if (t.models && t.models.length) {
+        markLiveModels(pid, t.models);
+      }
+      if (pid === activeProvider().id) renderProviderModels(activeProvider());
       toast(t.ok ? 'ok' : 'err', line.slice(0, 180), 'Model provider');
     }).catch(function (e) {
       if (out) { out.textContent = e.message; out.className = (statusEl ? 'muted ai-prov-status ' : 'ai-status ') + 'ai-status-bad'; }
@@ -1492,6 +1576,34 @@
       testConnection(pid, document.querySelector('[data-prov-status="' + pid + '"]'));
     });
   });
+
+  /* Refresh every configured provider's catalog at once — the hourly upkeep
+     tick does the same for stale catalogs in the background. */
+  function syncAllCatalogs() {
+    var btn = $('sync-all-btn');
+    var out = $('test-status');
+    if (btn) { btn.dataset.was = btn.textContent.trim(); btn.textContent = 'Syncing…'; btn.disabled = true; }
+    if (out) { out.textContent = 'Refreshing every configured catalog…'; out.className = 'ai-status'; }
+    api('/sync-all', { method: 'POST', body: {} }).then(function (data) {
+      if (data.providers) PROVIDERS = data.providers.map(slimProvider);
+      var p = activeProvider();
+      renderProviderConfig(p);
+      renderProviderModels(p);
+      var line = 'Synced ' + (data.synced || 0) + ' catalog(s)' + (data.added ? ' · ' + data.added + ' new model(s) discovered' : '') + '.';
+      var errs = (data.results || []).filter(function (r) { return r.error; });
+      if (errs.length) line += ' ' + errs.length + ' failed: ' + errs.map(function (r) { return r.provider; }).join(', ') + '.';
+      if (out) {
+        out.textContent = line;
+        out.className = 'ai-status ' + (errs.length ? 'ai-status-bad' : 'ai-status-ok');
+      }
+      toast(errs.length ? 'err' : 'ok', line.slice(0, 200), 'Model catalogs');
+    }).catch(function (e) {
+      if (out) { out.textContent = e.message; out.className = 'ai-status ai-status-bad'; }
+    }).then(function () {
+      if (btn) { btn.textContent = btn.dataset.was || 'Sync all catalogs'; btn.disabled = false; }
+    });
+  }
+  if ($('sync-all-btn')) $('sync-all-btn').addEventListener('click', syncAllCatalogs);
 
   if ($('mod-run-btn')) {
     $('mod-run-btn').addEventListener('click', function () {
@@ -1636,6 +1748,9 @@
 
   /* ---------------- boot ---------------- */
 
+  /* Normalise the model picker on boot: filter controls, the sync note and the
+     chip strip all derive from the booted provider catalog. */
+  try { renderProviderModels(activeProvider()); } catch (e) { applyModelFilter(); }
   var wantTab = START_TAB || store('fl-ai-tab') || 'gen';
   if (window.location.hash === '#ai-settings') wantTab = 'set';
   showTab(wantTab, false);

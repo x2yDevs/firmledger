@@ -19,6 +19,15 @@
  * Key resolution per provider: environment variable first (deployment wins),
  * then the key saved in the settings table. Keys are never returned to the
  * browser — only a masked hint.
+ *
+ * Model tiers:
+ *   production  current, supported, safe to default to
+ *   preview     served but pre-GA — may change or disappear; selectable
+ *   legacy      superseded but still served — selectable, never auto-picked
+ *   live        discovered from the provider's own /models catalog at runtime
+ *   retired     shut down by the vendor (see Groq/DeepSeek/Fireworks notes) —
+ *               hidden from the picker and rejected before any outbound call,
+ *               unless the provider's live catalog still lists the id.
  */
 const { getSetting, setSetting } = require('../db');
 const { siteUrl } = require('./util');
@@ -74,13 +83,18 @@ const PROVIDERS = [
         tools: false, json: true, vision: false, context: 131072, maxOutput: 8192,
       },
       {
-        id: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B', tier: 'production',
-        note: 'Current Groq production model.',
+        id: 'minimaxai/minimax-m2.7', label: 'MiniMax M2.7', tier: 'preview',
+        note: 'Preview — MiniMax reasoning model served on Groq with tool calling.',
+        tools: true, json: true, vision: false, context: 131072, maxOutput: 16384, tps: 400,
+      },
+      {
+        id: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B (retired)', tier: 'retired',
+        note: 'Retired by Groq on 16 Aug 2026 — migrated to GPT-OSS 120B.',
         tools: true, json: true, vision: false, context: 131072, maxOutput: 32768, tps: 280,
       },
       {
-        id: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B Instant', tier: 'production',
-        note: 'Current Groq production model.',
+        id: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B Instant (retired)', tier: 'retired',
+        note: 'Retired by Groq on 16 Aug 2026 — migrated to GPT-OSS 20B.',
         tools: true, json: true, vision: false, context: 131072, maxOutput: 131072, tps: 560,
       },
     ],
@@ -92,12 +106,15 @@ const PROVIDERS = [
     base: 'https://api.openai.com/v1', env: ['OPENAI_API_KEY'],
     keyPlaceholder: 'sk-…', keysUrl: 'https://platform.openai.com/api-keys',
     defaultModel: 'gpt-6-astra',
-    fallbacks: ['gpt-6-astra', 'gpt-5.6-terra', 'gpt-5.4-mini', 'gpt-4.1'],
+    fallbacks: ['gpt-6-astra', 'gpt-5.6-terra', 'gpt-5.5', 'gpt-5.4-mini', 'gpt-4.1'],
     models: [
       { id: 'gpt-6-astra', label: 'GPT-6 Astra', tier: 'production', note: 'Latest OpenAI flagship for agentic and long-horizon work.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 128000 },
       { id: 'gpt-5.6-sol', label: 'GPT-5.6 Sol', tier: 'production', note: 'Highest-capability current GPT-5.6 variant.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 128000 },
       { id: 'gpt-5.6-terra', label: 'GPT-5.6 Terra', tier: 'production', note: 'Balanced GPT-5.6 production tier.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 128000 },
       { id: 'gpt-5.6-luna', label: 'GPT-5.6 Luna', tier: 'production', note: 'Lower-cost GPT-5.6 production tier.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 128000 },
+      { id: 'gpt-5.5', label: 'GPT-5.5', tier: 'production', note: 'Current ChatGPT default; strong reasoning and tool use.', tools: true, json: true, vision: true, context: 400000, maxOutput: 65536 },
+      { id: 'gpt-5.4', label: 'GPT-5.4', tier: 'production', note: 'Reasoning + coding flagship of the 5.4 family.', tools: true, json: true, vision: true, context: 400000, maxOutput: 65536 },
+      { id: 'gpt-5', label: 'GPT-5', tier: 'production', note: 'Unified knowledge + reasoning; long docs and agent workflows.', tools: true, json: true, vision: true, context: 400000, maxOutput: 65536 },
       { id: 'gpt-5.4-mini', label: 'GPT-5.4 mini', tier: 'production', note: 'Fast, lower-cost reasoning model.', tools: true, json: true, vision: true, context: 400000, maxOutput: 65536 },
       { id: 'gpt-5.4-nano', label: 'GPT-5.4 nano', tier: 'production', note: 'Lowest-cost current reasoning tier.', tools: true, json: true, vision: true, context: 400000, maxOutput: 65536 },
       { id: 'gpt-4.1', label: 'GPT-4.1', tier: 'production', note: 'Best tool-calling accuracy.', tools: true, json: true, vision: true, context: 1047576, maxOutput: 32768 },
@@ -122,13 +139,14 @@ const PROVIDERS = [
       { id: 'claude-opus-5', label: 'Claude Opus 5', tier: 'production', note: 'Complex agentic coding and enterprise work.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 128000 },
       { id: 'claude-opus-4-8', label: 'Claude Opus 4.8', tier: 'production', note: 'Current Opus production model.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 128000 },
       { id: 'claude-opus-4-7', label: 'Claude Opus 4.7', tier: 'production', note: 'Current Opus production model.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 128000 },
+      { id: 'claude-opus-4-6', label: 'Claude Opus 4.6', tier: 'production', note: 'Current 1M-context Opus tier.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 128000 },
       { id: 'claude-sonnet-5', label: 'Claude Sonnet 5', tier: 'production', note: 'Current speed/intelligence balance.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 128000 },
       { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', tier: 'production', note: 'Current Sonnet compatibility model.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 128000 },
       { id: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5', tier: 'production', note: 'Fastest current Claude tier; good for moderation.', tools: true, json: true, vision: true, context: 200000, maxOutput: 64000 },
       { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5', tier: 'production', note: 'Best balance for the admin assistant.', tools: true, json: true, vision: true, context: 200000, maxOutput: 64000 },
       { id: 'claude-opus-4-1', label: 'Claude Opus 4.1 (legacy)', tier: 'legacy', note: 'Deepest reasoning, slowest and priciest.', tools: true, json: true, vision: true, context: 200000, maxOutput: 32000 },
       { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5', tier: 'production', note: 'Fast and cheap; good for auto-moderation.', tools: true, json: true, vision: true, context: 200000, maxOutput: 64000 },
-      { id: 'claude-3-5-haiku-latest', label: 'Claude 3.5 Haiku', tier: 'legacy', note: 'Previous cheap tier.', tools: true, json: true, vision: false, context: 200000, maxOutput: 8192 },
+      { id: 'claude-3-5-haiku-latest', label: 'Claude 3.5 Haiku (retired)', tier: 'retired', note: 'Retired by Anthropic on 19 Feb 2026 — migrated to Haiku 4.5.', tools: true, json: true, vision: false, context: 200000, maxOutput: 8192 },
     ],
   },
 
@@ -145,7 +163,9 @@ const PROVIDERS = [
       { id: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash', tier: 'production', note: 'High-throughput current Flash tier.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 65536 },
       { id: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash', tier: 'production', note: 'Stable multimodal Flash model.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 65536 },
       { id: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash-Lite', tier: 'production', note: 'Cost-efficient current model for extraction and routing.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 65536 },
+      { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash (preview)', tier: 'preview', note: 'Current preview Flash tier; 1M context.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 65536 },
       { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro', tier: 'preview', note: 'Deep reasoning and coding; preview availability.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 65536 },
+      { id: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash-Lite', tier: 'production', note: 'Lowest-cost current 1M-context tier.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 65536 },
       { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', tier: 'production', note: 'Fast, tool-capable, 1M context.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 65536 },
       { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash-Lite', tier: 'production', note: 'Cheapest Gemini; fine for bulk drafting.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 65536 },
       { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', tier: 'production', note: 'Strongest Gemini reasoning.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 65536 },
@@ -155,7 +175,7 @@ const PROVIDERS = [
 
   {
     id: 'deepseek', label: 'DeepSeek', vendor: 'DeepSeek', format: 'openai', listModels: 'openai',
-    blurb: 'Very cheap strong models. deepseek-chat takes tools; the reasoner does not.',
+    blurb: 'Very cheap strong models — V4 Flash and V4 Pro with 1M context, thinking modes and tool calling.',
     base: 'https://api.deepseek.com', env: ['DEEPSEEK_API_KEY'],
     keyPlaceholder: 'sk-…', keysUrl: 'https://platform.deepseek.com/api_keys',
     defaultModel: 'deepseek-v4-flash',
@@ -164,8 +184,8 @@ const PROVIDERS = [
       { id: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash', tier: 'production', note: 'Current high-throughput 1M-context model; supports tools and JSON.', tools: true, json: true, vision: false, context: 1048576, maxOutput: 384000 },
       { id: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro', tier: 'production', note: 'Current flagship for difficult reasoning and coding.', tools: true, json: true, vision: false, context: 1048576, maxOutput: 384000 },
       { id: 'deepseek-v4-flash-vision-exp', label: 'DeepSeek V4 Flash Vision (experimental)', tier: 'preview', note: 'Text plus image input; validate before production use.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 384000 },
-      { id: 'deepseek-chat', label: 'DeepSeek Chat (V3, legacy)', tier: 'legacy', note: 'General model with tool calling.', tools: true, json: true, vision: false, context: 65536, maxOutput: 8192 },
-      { id: 'deepseek-reasoner', label: 'DeepSeek Reasoner (R1, legacy)', tier: 'legacy', note: 'Chain-of-thought — no tool calls, no JSON mode.', tools: false, json: false, vision: false, context: 65536, maxOutput: 65536 },
+      { id: 'deepseek-chat', label: 'DeepSeek Chat (retired)', tier: 'retired', note: 'Retired by DeepSeek on 24 Jul 2026 — migrated to V4 Flash.', tools: true, json: true, vision: false, context: 65536, maxOutput: 8192 },
+      { id: 'deepseek-reasoner', label: 'DeepSeek Reasoner (retired)', tier: 'retired', note: 'Retired by DeepSeek on 24 Jul 2026 — migrated to V4 Pro with thinking.', tools: false, json: false, vision: false, context: 65536, maxOutput: 65536 },
     ],
   },
 
@@ -174,11 +194,11 @@ const PROVIDERS = [
     blurb: 'The HF Router: hundreds of open models behind one key, billed per provider.',
     base: 'https://router.huggingface.co/v1', env: ['HUGGINGFACE_API_KEY', 'HF_TOKEN'],
     keyPlaceholder: 'hf_…', keysUrl: 'https://huggingface.co/settings/tokens',
-    allowCustom: true, defaultModel: 'deepseek-ai/DeepSeek-V4-Flash-0731',
-    fallbacks: ['deepseek-ai/DeepSeek-V4-Flash-0731', 'openai/gpt-oss-120b', 'Qwen/Qwen3.5-9B'],
+    allowCustom: true, defaultModel: 'openai/gpt-oss-120b',
+    fallbacks: ['openai/gpt-oss-120b', 'meta-llama/Llama-3.3-70B-Instruct', 'Qwen/Qwen2.5-72B-Instruct'],
     models: [
-      { id: 'deepseek-ai/DeepSeek-V4-Flash-0731', label: 'DeepSeek V4 Flash 0731', tier: 'production', note: 'Current HF Router example with tool calling.', tools: true, json: true, vision: false, context: 1048576, maxOutput: 131072 },
       { id: 'openai/gpt-oss-120b', label: 'OpenAI GPT-OSS 120B', tier: 'production', note: 'Stable open model with strong tool calling.', tools: true, json: true, vision: false, context: 131072, maxOutput: 40960 },
+      { id: 'deepseek-ai/DeepSeek-V4-Flash-0731', label: 'DeepSeek V4 Flash 0731', tier: 'production', note: 'Current HF Router example with tool calling.', tools: true, json: true, vision: false, context: 1048576, maxOutput: 131072 },
       { id: 'Qwen/Qwen3.5-9B', label: 'Qwen 3.5 9B', tier: 'production', note: 'Efficient multimodal router model.', tools: true, json: true, vision: true, context: 262144, maxOutput: 65536 },
       { id: 'meta-llama/Llama-3.3-70B-Instruct', label: 'Llama 3.3 70B Instruct', tier: 'production', note: 'Solid all-round tool caller.', tools: true, json: true, vision: false, context: 131072, maxOutput: 4096 },
       { id: 'Qwen/Qwen2.5-72B-Instruct', label: 'Qwen 2.5 72B Instruct', tier: 'production', note: 'Strong JSON output.', tools: true, json: true, vision: false, context: 131072, maxOutput: 8192 },
@@ -192,11 +212,13 @@ const PROVIDERS = [
     blurb: 'One key, 300+ models from every lab. Best fallback coverage.',
     base: 'https://openrouter.ai/api/v1', env: ['OPENROUTER_API_KEY'],
     keyPlaceholder: 'sk-or-…', keysUrl: 'https://openrouter.ai/settings/keys',
-    allowCustom: true, defaultModel: 'openai/gpt-6-astra',
-    fallbacks: ['openai/gpt-6-astra', 'anthropic/claude-fable-5-1', 'google/gemini-3.8-flash', 'deepseek/deepseek-v4-flash-0731'],
+    allowCustom: true, defaultModel: 'anthropic/claude-sonnet-4.5',
+    fallbacks: ['anthropic/claude-sonnet-4.5', 'openai/gpt-4.1', 'google/gemini-2.5-flash', 'openai/gpt-6-astra'],
     models: [
       { id: 'openai/gpt-6-astra', label: 'OpenAI GPT-6 Astra', tier: 'production', note: 'Latest OpenRouter flagship.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 128000 },
       { id: 'openai/gpt-5.6-sol', label: 'OpenAI GPT-5.6 Sol', tier: 'production', note: 'Current high-capability GPT route.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 128000 },
+      { id: 'openai/gpt-5.5', label: 'OpenAI GPT-5.5', tier: 'production', note: 'Current ChatGPT default, routed.', tools: true, json: true, vision: true, context: 400000, maxOutput: 65536 },
+      { id: 'anthropic/claude-opus-5', label: 'Claude Opus 5', tier: 'production', note: 'Routed Opus flagship.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 128000 },
       { id: 'anthropic/claude-fable-5-1', label: 'Claude Fable 5.1', tier: 'production', note: 'Latest Anthropic route.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 128000 },
       { id: 'google/gemini-3.8-flash', label: 'Gemini 3.8 Flash', tier: 'production', note: 'Latest Google Flash route.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 65536 },
       { id: 'deepseek/deepseek-v4-flash-0731', label: 'DeepSeek V4 Flash', tier: 'production', note: 'Cost-efficient current DeepSeek route.', tools: true, json: true, vision: false, context: 1048576, maxOutput: 131072 },
@@ -221,9 +243,11 @@ const PROVIDERS = [
       { id: 'mistral-small-2603', label: 'Mistral Small 4', tier: 'production', note: 'Current hybrid instruct/reasoning model.', tools: true, json: true, vision: true, context: 256000, maxOutput: 32768 },
       { id: 'mistral-large-2512', label: 'Mistral Large 3', tier: 'production', note: 'Current multimodal large model.', tools: true, json: true, vision: true, context: 256000, maxOutput: 32768 },
       { id: 'codestral-2508', label: 'Codestral', tier: 'production', note: 'Current coding model; use for code-focused prompts.', tools: true, json: true, vision: false, context: 256000, maxOutput: 32768 },
+      { id: 'ministral-8b-2512', label: 'Ministral 8B', tier: 'production', note: 'Current edge-efficient model; cheap high-volume tier.', tools: true, json: true, vision: false, context: 128000, maxOutput: 8192 },
       { id: 'mistral-large-latest', label: 'Mistral Large', tier: 'production', note: 'Flagship with function calling.', tools: true, json: true, vision: false, context: 131072, maxOutput: 8192 },
       { id: 'mistral-small-latest', label: 'Mistral Small', tier: 'production', note: 'Cheap and quick.', tools: true, json: true, vision: false, context: 131072, maxOutput: 8192 },
       { id: 'magistral-medium-latest', label: 'Magistral Medium', tier: 'preview', note: 'Reasoning — no tool calls.', tools: false, json: false, vision: false, context: 40960, maxOutput: 40960 },
+      { id: 'magistral-small-latest', label: 'Magistral Small', tier: 'preview', note: 'Smaller reasoning model — no tool calls.', tools: false, json: false, vision: false, context: 40960, maxOutput: 40960 },
       { id: 'open-mistral-nemo', label: 'Mistral Nemo (open)', tier: 'legacy', note: '12B open weights.', tools: true, json: true, vision: false, context: 131072, maxOutput: 8192 },
     ],
   },
@@ -239,6 +263,9 @@ const PROVIDERS = [
       { id: 'MiniMaxAI/MiniMax-M3', label: 'MiniMax M3', tier: 'production', note: 'Current 1M-context agentic model with tool calling.', tools: true, json: true, vision: true, context: 524288, maxOutput: 131072 },
       { id: 'deepseek-ai/DeepSeek-V4-Flash-0731', label: 'DeepSeek V4 Flash 0731', tier: 'production', note: 'Current high-throughput DeepSeek model.', tools: true, json: true, vision: false, context: 1048576, maxOutput: 131072 },
       { id: 'deepseek-ai/DeepSeek-V4-Pro-0813', label: 'DeepSeek V4 Pro 0813', tier: 'production', note: 'Current flagship reasoning model.', tools: true, json: true, vision: false, context: 1048576, maxOutput: 131072 },
+      { id: 'moonshotai/Kimi-K3', label: 'Kimi K3', tier: 'production', note: 'Moonshot flagship reasoning model; 1M context.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 131072 },
+      { id: 'Qwen/Qwen3.5-9B', label: 'Qwen 3.5 9B', tier: 'production', note: 'Efficient multimodal model.', tools: true, json: true, vision: true, context: 262144, maxOutput: 65536 },
+      { id: 'google/gemma-4-31B-it', label: 'Gemma 4 31B IT', tier: 'production', note: 'Current Google open multimodal model.', tools: true, json: true, vision: true, context: 262144, maxOutput: 65536 },
       { id: 'meta-llama/Llama-3.3-70B-Instruct-Turbo', label: 'Llama 3.3 70B Turbo', tier: 'production', note: 'Tool-calling open model.', tools: true, json: true, vision: false, context: 131072, maxOutput: 4096 },
       { id: 'Qwen/Qwen2.5-72B-Instruct-Turbo', label: 'Qwen 2.5 72B Turbo', tier: 'production', note: 'Good JSON adherence.', tools: true, json: true, vision: false, context: 131072, maxOutput: 8192 },
       { id: 'deepseek-ai/DeepSeek-V3', label: 'DeepSeek V3', tier: 'production', note: 'Large MoE.', tools: true, json: true, vision: false, context: 163840, maxOutput: 8192 },
@@ -251,10 +278,14 @@ const PROVIDERS = [
     base: 'https://api.x.ai/v1', env: ['XAI_API_KEY'],
     keyPlaceholder: 'xai-…', keysUrl: 'https://console.x.ai/team/default/api-keys',
     defaultModel: 'grok-4.6',
-    fallbacks: ['grok-4.6', 'grok-4.5', 'grok-4'],
+    fallbacks: ['grok-4.6', 'grok-4.3', 'grok-4.5', 'grok-4'],
     models: [
       { id: 'grok-4.6', label: 'Grok 4.6', tier: 'production', note: 'Latest xAI flagship with configurable reasoning and tool calling.', tools: true, json: true, vision: true, context: 500000, maxOutput: 131072 },
-      { id: 'grok-4.5', label: 'Grok 4.5', tier: 'production', note: 'Current high-capability Grok route.', tools: true, json: true, vision: true, context: 256000, maxOutput: 65536 },
+      { id: 'grok-4.5', label: 'Grok 4.5', tier: 'production', note: 'Prior flagship, Opus-class at lower cost.', tools: true, json: true, vision: true, context: 500000, maxOutput: 131072 },
+      { id: 'grok-4.3', label: 'Grok 4.3', tier: 'production', note: 'Production sweet spot; 1M context with video input.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 65536 },
+      { id: 'grok-4-1-fast-reasoning', label: 'Grok 4.1 Fast Reasoning', tier: 'production', note: 'Cheap high-throughput reasoning; 2M context.', tools: true, json: true, vision: true, context: 2000000, maxOutput: 32768 },
+      { id: 'grok-4-1-fast-non-reasoning', label: 'Grok 4.1 Fast', tier: 'production', note: 'Cheapest high-volume tier; 2M context.', tools: true, json: true, vision: true, context: 2000000, maxOutput: 32768 },
+      { id: 'grok-code-fast-1', label: 'Grok Code Fast 1', tier: 'production', note: 'Coding-tuned fast tier.', tools: true, json: true, vision: true, context: 256000, maxOutput: 32768 },
       { id: 'grok-4', label: 'Grok 4', tier: 'production', note: 'Flagship reasoning + tools.', tools: true, json: true, vision: false, context: 256000, maxOutput: 32768 },
       { id: 'grok-3', label: 'Grok 3', tier: 'production', note: 'Previous flagship.', tools: true, json: true, vision: false, context: 131072, maxOutput: 8192 },
       { id: 'grok-3-mini', label: 'Grok 3 mini', tier: 'production', note: 'Cheap and fast.', tools: true, json: true, vision: false, context: 131072, maxOutput: 8192 },
@@ -267,12 +298,14 @@ const PROVIDERS = [
     base: 'https://api.cerebras.ai/v1', env: ['CEREBRAS_API_KEY'],
     keyPlaceholder: 'csk-…', keysUrl: 'https://cloud.cerebras.ai/',
     allowCustom: true, defaultModel: 'gpt-oss-120b',
-    fallbacks: ['gpt-oss-120b', 'qwen-3.8-27b'],
+    fallbacks: ['gpt-oss-120b', 'llama-3.3-70b', 'qwen-3-32b'],
     models: [
       { id: 'gpt-oss-120b', label: 'GPT-OSS 120B', tier: 'production', note: 'Cerebras public production model with tool calling.', tools: true, json: true, vision: false, context: 131072, maxOutput: 40960 },
-      { id: 'qwen-3.8-27b', label: 'Qwen 3.8 27B', tier: 'preview', note: 'Current public endpoint preview model.', tools: true, json: true, vision: true, context: 262144, maxOutput: 65536 },
       { id: 'llama-3.3-70b', label: 'Llama 3.3 70B', tier: 'production', note: 'Fastest 70B anywhere.', tools: true, json: true, vision: false, context: 64000, maxOutput: 8192 },
+      { id: 'llama3.1-8b', label: 'Llama 3.1 8B', tier: 'production', note: 'Small and extremely fast.', tools: true, json: true, vision: false, context: 64000, maxOutput: 8192 },
       { id: 'qwen-3-32b', label: 'Qwen 3 32B', tier: 'production', note: 'Tool support, very high throughput.', tools: true, json: true, vision: false, context: 64000, maxOutput: 8192 },
+      { id: 'qwen-3-235b-a22b-instruct-2507', label: 'Qwen 3 235B Instruct (preview)', tier: 'preview', note: 'Large MoE preview on the public endpoint.', tools: true, json: true, vision: false, context: 64000, maxOutput: 8192 },
+      { id: 'zai-glm-4.6', label: 'GLM 4.6 (preview)', tier: 'preview', note: 'Preview model; availability varies by account.', tools: true, json: true, vision: false, context: 64000, maxOutput: 8192 },
     ],
   },
 
@@ -288,9 +321,11 @@ const PROVIDERS = [
       { id: 'DeepSeek-V3.1', label: 'DeepSeek V3.1', tier: 'production', note: 'Hybrid thinking model; tool calling in non-thinking mode.', tools: true, json: true, vision: false, context: 131072, maxOutput: 32768 },
       { id: 'gpt-oss-120b', label: 'GPT-OSS 120B', tier: 'production', note: 'OpenAI open weights with tools.', tools: true, json: true, vision: false, context: 131072, maxOutput: 40960 },
       { id: 'MiniMax-M3', label: 'MiniMax M3', tier: 'preview', note: 'Multimodal preview; availability varies by account.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 131072 },
+      { id: 'DeepSeek-V3.2', label: 'DeepSeek V3.2', tier: 'preview', note: 'Current DeepSeek preview on SambaCloud.', tools: true, json: true, vision: false, context: 32768, maxOutput: 8192 },
+      { id: 'gemma-4-31B-it', label: 'Gemma 4 31B IT', tier: 'preview', note: 'Google multimodal preview (text, image, video in).', tools: true, json: true, vision: true, context: 131072, maxOutput: 8192 },
       { id: 'Meta-Llama-3.3-70B-Instruct', label: 'Llama 3.3 70B', tier: 'production', note: 'Tool-calling.', tools: true, json: true, vision: false, context: 131072, maxOutput: 4096 },
-      { id: 'Qwen3-32B', label: 'Qwen 3 32B', tier: 'production', note: 'Fast and cheap.', tools: true, json: true, vision: false, context: 16384, maxOutput: 4096 },
-      { id: 'DeepSeek-R1-Distill-Llama-70B', label: 'DeepSeek R1 Distill 70B', tier: 'preview', note: 'Reasoning distill.', tools: false, json: false, vision: false, context: 131072, maxOutput: 8192 },
+      { id: 'Qwen3-32B', label: 'Qwen 3 32B', tier: 'legacy', note: 'No longer in the published SambaCloud catalog — may 404.', tools: true, json: true, vision: false, context: 16384, maxOutput: 4096 },
+      { id: 'DeepSeek-R1-Distill-Llama-70B', label: 'DeepSeek R1 Distill 70B (retired)', tier: 'retired', note: 'Removed from the SambaCloud catalog — use DeepSeek V3.1.', tools: false, json: false, vision: false, context: 131072, maxOutput: 8192 },
     ],
   },
 
@@ -299,15 +334,28 @@ const PROVIDERS = [
     blurb: 'Fast serving of open models, compound AI and function calling.',
     base: 'https://api.fireworks.ai/inference/v1', env: ['FIREWORKS_API_KEY'],
     keyPlaceholder: 'fw_…', keysUrl: 'https://fireworks.ai/account/api-keys',
-    allowCustom: true, defaultModel: 'accounts/fireworks/models/deepseek-v3p1',
-    fallbacks: ['accounts/fireworks/models/deepseek-v3p1', 'accounts/fireworks/models/kimi-k2p5', 'accounts/fireworks/models/qwen3-235b-a22b-instruct-2507'],
+    allowCustom: true, defaultModel: 'accounts/fireworks/models/deepseek-v4-flash-0731',
+    fallbacks: ['accounts/fireworks/models/deepseek-v4-flash-0731', 'accounts/fireworks/models/minimax-m3', 'accounts/fireworks/models/gpt-oss-120b'],
     models: [
-      { id: 'accounts/fireworks/models/deepseek-v3p1', label: 'DeepSeek V3.1', tier: 'production', note: 'Current Fireworks documented production model for coding and agents.', tools: true, json: true, vision: false, context: 1048576, maxOutput: 131072 },
-      { id: 'accounts/fireworks/models/deepseek-v4-flash', label: 'DeepSeek V4 Flash (preview)', tier: 'preview', note: 'Preview route; availability varies by Fireworks account.', tools: true, json: true, vision: false, context: 1048576, maxOutput: 131072 },
-      { id: 'accounts/fireworks/models/kimi-k2p5', label: 'Kimi K2.5', tier: 'production', note: 'Current documented multimodal agent model.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 131072 },
-      { id: 'accounts/fireworks/models/llama-v3p3-70b-instruct', label: 'Llama 3.3 70B Instruct', tier: 'production', note: 'Tool calling supported.', tools: true, json: true, vision: false, context: 131072, maxOutput: 4096 },
-      { id: 'accounts/fireworks/models/qwen3-235b-a22b-instruct-2507', label: 'Qwen 3 235B Instruct', tier: 'production', note: 'Large MoE.', tools: true, json: true, vision: false, context: 262144, maxOutput: 32768 },
-      { id: 'accounts/fireworks/models/deepseek-v3', label: 'DeepSeek V3', tier: 'production', note: 'Cheap large model.', tools: true, json: true, vision: false, context: 131072, maxOutput: 8192 },
+      { id: 'accounts/fireworks/models/deepseek-v4-flash-0731', label: 'DeepSeek V4 Flash 0731', tier: 'production', note: 'Current 1M-context default; cheap with tool calling.', tools: true, json: true, vision: false, context: 1048576, maxOutput: 131072 },
+      { id: 'accounts/fireworks/models/deepseek-v4-pro-0813', label: 'DeepSeek V4 Pro 0813', tier: 'production', note: 'Flagship reasoning model; 1M context.', tools: true, json: true, vision: false, context: 1048576, maxOutput: 131072 },
+      { id: 'accounts/fireworks/models/kimi-k3', label: 'Kimi K3', tier: 'production', note: 'Moonshot flagship agent model; multimodal.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 131072 },
+      { id: 'accounts/fireworks/models/kimi-k2p6', label: 'Kimi K2.6', tier: 'production', note: 'Current Kimi reasoning tier.', tools: true, json: true, vision: false, context: 262144, maxOutput: 32768 },
+      { id: 'accounts/fireworks/models/kimi-k2p7-code', label: 'Kimi K2.7 Code', tier: 'production', note: 'Coding and agentic Kimi tier.', tools: true, json: true, vision: false, context: 262144, maxOutput: 32768 },
+      { id: 'accounts/fireworks/models/minimax-m3', label: 'MiniMax M3', tier: 'production', note: 'Native multimodal; 512K context.', tools: true, json: true, vision: true, context: 524288, maxOutput: 65536 },
+      { id: 'accounts/fireworks/models/gpt-oss-120b', label: 'GPT-OSS 120B', tier: 'production', note: 'OpenAI open weights with tools.', tools: true, json: true, vision: false, context: 131072, maxOutput: 32768 },
+      { id: 'accounts/fireworks/models/glm-5p3', label: 'GLM 5.3', tier: 'production', note: 'Z.ai flagship reasoning model.', tools: true, json: true, vision: false, context: 1048576, maxOutput: 131072 },
+      { id: 'accounts/fireworks/models/glm-5p3-flash', label: 'GLM 5.3 Flash', tier: 'production', note: 'Cheapest current GLM tier.', tools: true, json: true, vision: false, context: 1048576, maxOutput: 131072 },
+      { id: 'accounts/fireworks/models/qwen3p7-plus', label: 'Qwen 3.7 Plus', tier: 'production', note: 'Current Qwen serverless tier.', tools: true, json: true, vision: false, context: 262144, maxOutput: 32768 },
+      { id: 'accounts/fireworks/models/qwen3p8-max', label: 'Qwen 3.8 Max', tier: 'production', note: 'Largest current Qwen tier.', tools: true, json: true, vision: true, context: 262144, maxOutput: 32768 },
+      { id: 'accounts/fireworks/models/muse-glimmer-30b', label: 'Muse Glimmer 30B', tier: 'production', note: 'Meta multimodal model.', tools: true, json: true, vision: true, context: 131072, maxOutput: 16384 },
+      { id: 'accounts/fireworks/models/deepseek-v4-flash-vision-exp', label: 'DeepSeek V4 Flash Vision (experimental)', tier: 'preview', note: 'Text plus image input; validate before production use.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 131072 },
+      { id: 'accounts/fireworks/models/deepseek-v4-flash', label: 'DeepSeek V4 Flash alias (retired)', tier: 'retired', note: 'Unversioned alias retired — use deepseek-v4-flash-0731.', tools: true, json: true, vision: false, context: 1048576, maxOutput: 131072 },
+      { id: 'accounts/fireworks/models/deepseek-v3p1', label: 'DeepSeek V3.1 (retired)', tier: 'retired', note: 'Removed from serverless on 14 May 2026 — use Kimi K2.6.', tools: true, json: true, vision: false, context: 1048576, maxOutput: 131072 },
+      { id: 'accounts/fireworks/models/kimi-k2p5', label: 'Kimi K2.5 (retired)', tier: 'retired', note: 'Deprecated by Fireworks — use Kimi K2.6.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 131072 },
+      { id: 'accounts/fireworks/models/llama-v3p3-70b-instruct', label: 'Llama 3.3 70B (retired)', tier: 'retired', note: 'Removed from serverless on 14 May 2026 — use GPT-OSS 120B.', tools: true, json: true, vision: false, context: 131072, maxOutput: 4096 },
+      { id: 'accounts/fireworks/models/qwen3-235b-a22b-instruct-2507', label: 'Qwen 3 235B Instruct', tier: 'legacy', note: 'Superseded by Qwen 3.7 / 3.8 tiers.', tools: true, json: true, vision: false, context: 262144, maxOutput: 32768 },
+      { id: 'accounts/fireworks/models/deepseek-v3', label: 'DeepSeek V3 (retired)', tier: 'retired', note: 'Long removed from serverless — use DeepSeek V4 Flash.', tools: true, json: true, vision: false, context: 131072, maxOutput: 8192 },
     ],
   },
 
@@ -366,14 +414,16 @@ const PROVIDERS = [
     blurb: 'Your own machine — no API key, nothing leaves the server. Needs the OpenAI-compatible port.',
     base: 'http://127.0.0.1:11434/v1', env: ['OLLAMA_BASE_URL'], baseEnv: 'OLLAMA_BASE_URL',
     keyPlaceholder: 'not required', keysUrl: 'https://ollama.com/download', needsKey: false,
-    allowCustom: true, defaultModel: 'qwen3.6:27b',
-    fallbacks: ['qwen3.6:27b', 'gpt-oss:20b', 'llama3.3'],
+    allowCustom: true, defaultModel: 'qwen3:30b',
+    fallbacks: ['qwen3:30b', 'gpt-oss:20b', 'llama3.3'],
     models: [
-      { id: 'qwen3.6:27b', label: 'Qwen 3.6 27B', tier: 'production', note: 'Current Ollama general and coding model.', tools: true, json: true, vision: true, context: 262144, maxOutput: 65536 },
+      { id: 'qwen3:30b', label: 'Qwen 3 30B', tier: 'production', note: 'Best overall local model; pull with `ollama pull qwen3:30b`.', tools: true, json: true, vision: false, context: 262144, maxOutput: 65536 },
+      { id: 'qwen3:14b', label: 'Qwen 3 14B', tier: 'production', note: 'General chat for 12–16 GB machines.', tools: true, json: true, vision: false, context: 262144, maxOutput: 65536 },
       { id: 'gpt-oss:20b', label: 'GPT-OSS 20B', tier: 'production', note: 'Local reasoning and agent model.', tools: true, json: true, vision: false, context: 131072, maxOutput: 65536 },
       { id: 'gpt-oss:120b', label: 'GPT-OSS 120B', tier: 'production', note: 'Local frontier reasoning model.', tools: true, json: true, vision: false, context: 131072, maxOutput: 65536 },
       { id: 'gemma4', label: 'Gemma 4', tier: 'production', note: 'Current multimodal local model.', tools: true, json: true, vision: true, context: 262144, maxOutput: 65536 },
       { id: 'qwen3-coder:30b', label: 'Qwen 3 Coder 30B', tier: 'production', note: 'Agentic coding model.', tools: true, json: true, vision: false, context: 262144, maxOutput: 65536 },
+      { id: 'deepseek-r1:8b', label: 'DeepSeek R1 8B', tier: 'production', note: 'Lightweight local reasoning.', tools: false, json: true, vision: false, context: 131072, maxOutput: 32768 },
       { id: 'llama3.3', label: 'Llama 3.3', tier: 'production', note: 'Pull with `ollama pull llama3.3`.', tools: true, json: true, vision: false, context: 131072, maxOutput: 4096 },
       { id: 'qwen2.5', label: 'Qwen 2.5', tier: 'production', note: 'Pull with `ollama pull qwen2.5`.', tools: true, json: true, vision: false, context: 131072, maxOutput: 8192 },
       { id: 'gemma3', label: 'Gemma 3', tier: 'production', note: 'Vision-capable local model.', tools: false, json: true, vision: true, context: 131072, maxOutput: 8192 },
@@ -561,21 +611,37 @@ function modelMeta(id, pid) {
   return p.models.find((m) => m.id === wanted) || null;
 }
 
+/** A model is retired when its vendor has shut the id down. Retired ids are
+    rejected before any outbound call — unless the provider's own live catalog
+    still lists one, in which case our marking is the stale side. */
+function isRetiredModel(id, pid) {
+  const meta = modelMeta(id, pid);
+  if (!meta || meta.tier !== 'retired') return false;
+  return !liveSnapshot(provider(pid || activeId()).id).ids.includes(String(id || '').trim());
+}
+
 /** A model is known if it is in the static list, in the live list, or (for
     providers flagged allowCustom) any plausible id the admin typed. */
 function isKnownModel(id, pid) {
   const p = provider(pid || activeId());
   const wanted = String(id || '').trim();
   if (!wanted) return false;
+  const meta = p.models.find((m) => m.id === wanted) || null;
   const snapshot = liveSnapshot(p.id);
   const live = snapshot.ids;
-  /* Once a provider has returned a catalog, treat it as authoritative (even
-     when the response is an empty list). This is the important stale-selection
-     guard: a model that disappeared from a provider's own catalog must not be
-     sent just because it remains in our compatibility registry. Custom
-     gateways are intentionally different — their operator owns the catalog. */
-  if (snapshot.checked_at) return live.includes(wanted) || (p.allowCustom && looksLikeModelId(wanted));
-  if (p.models.some((m) => m.id === wanted)) return true;
+  /* A vendor-shutdown id is rejected outright — unless the provider's own
+     live catalog still lists it, in which case our marking is the stale one
+     and the id stays usable. */
+  if (meta && meta.tier === 'retired') return live.includes(wanted);
+  /* Once a provider has returned a NON-EMPTY catalog, treat it as
+     authoritative. This is the important stale-selection guard: a model that
+     disappeared from a provider's own catalog must not be sent just because
+     it remains in our compatibility registry. An empty live list is never
+     authoritative — some /models endpoints omit chat SKUs, and a transient
+     empty response must not nuke the whole picker. Custom gateways are
+     intentionally different — their operator owns the catalog. */
+  if (snapshot.checked_at && live.length) return live.includes(wanted) || (p.allowCustom && looksLikeModelId(wanted));
+  if (meta) return true;
   if (p.allowCustom && looksLikeModelId(wanted)) return true;
   return false;
 }
@@ -602,12 +668,13 @@ function modelFor(pid) {
   const liveSnapshotForSelection = liveSnapshot(p.id);
   const live = liveSnapshotForSelection.ids;
   /* A saved compatibility row is retained, but a newly resolved request must
-     not keep selecting a model explicitly marked legacy when a current default
-     exists. */
-  const preferredSaved = savedMeta && savedMeta.tier === 'legacy' ? '' : saved;
-  const preferredLegacy = legacyMeta && legacyMeta.tier === 'legacy' ? '' : legacy;
-  const candidates = [preferredSaved, preferredLegacy, p.defaultModel, ...(p.fallbacks || []), ...p.models.filter((m) => m.tier !== 'legacy').map((m) => m.id)];
-  if (liveSnapshotForSelection.checked_at) {
+     not keep selecting a model explicitly marked legacy or retired when a
+     current default exists. */
+  const staleTier = (meta) => Boolean(meta && (meta.tier === 'legacy' || meta.tier === 'retired'));
+  const preferredSaved = staleTier(savedMeta) ? '' : saved;
+  const preferredLegacy = staleTier(legacyMeta) ? '' : legacy;
+  const candidates = [preferredSaved, preferredLegacy, p.defaultModel, ...(p.fallbacks || []), ...p.models.filter((m) => m.tier !== 'legacy' && m.tier !== 'retired').map((m) => m.id)];
+  if (liveSnapshotForSelection.checked_at && live.length) {
     const liveSet = new Set(live);
     const selected = candidates.find((id) => id && liveSet.has(id));
     if (selected) return selected;
@@ -619,7 +686,10 @@ function modelFor(pid) {
     if (live[0]) return live[0];
     return '';
   }
-  return candidates.find(Boolean) || '';
+  /* Without a live catalog, only resolve to ids this console actually knows —
+     a stale saved id (renamed or retired upstream) falls through to the
+     current default instead of being sent to the wire to 404. */
+  return candidates.find((id) => id && isKnownModel(id, p.id)) || '';
 }
 
 function setModel(pid, id) {
@@ -658,19 +728,30 @@ function markLiveModels(pid, ids) {
   return clean;
 }
 
-/** Static models decorated with what this key can actually reach. */
+/** Static models decorated with what this key can actually reach.
+    Retired vendor ids are hidden (auto-removal) unless the provider's own
+    live catalog still lists them; live discoveries are appended (auto-add). */
 function usableModels(pid) {
   const p = provider(pid);
   const { ids, checked_at } = liveSnapshot(p.id);
   const live = new Set(ids);
+  const authoritative = ids.length > 0;
   const rows = p.models
-    .map((m) => ({ ...m, provider: p.id, available: ids.length || checked_at ? live.has(m.id) : null }))
+    .filter((m) => m.tier !== 'retired' || live.has(m.id))
+    .map((m) => ({
+      ...m,
+      /* A retired id the vendor still serves is our marking gone stale — show
+         it as a live discovery, not as a retired row. */
+      ...(m.tier === 'retired' ? { tier: 'live', note: 'Vendor lists this id again — kept available.' } : {}),
+      provider: p.id,
+      available: authoritative ? live.has(m.id) : null,
+    }))
     .map((m) => ({ ...m, checked_at: checked_at || '' }));
   /* Surface authenticated provider discoveries in the Admin picker as well as
      the JSON endpoint. This lets an account use a newly released model before
      the curated compatibility rows are updated, while the live catalog keeps
      stale static rows visibly unavailable. */
-  const known = new Set(p.models.map((m) => m.id));
+  const known = new Set(rows.map((m) => m.id));
   for (const id of ids) {
     if (known.has(id)) continue;
     rows.push({
@@ -744,6 +825,17 @@ function describeHttpError(res, data, pid) {
   }
   if (res.status === 429) {
     return { message: `${p.label} is rate-limiting this key. Retry shortly.`, code: 'llm_rate', status: 429 };
+  }
+  /* Out-of-credits is a billing state, not a gateway outage and not a model
+     problem: every model on the key shares the same balance, so no fallback
+     or retry is attempted — the operator must top up first. Surfaced as 402
+     (not 502) so the console never mislabels it as a Bad Gateway. */
+  if (res.status === 402
+    || (/payment required|insufficient (credits?|balance|funds|quota)|out of credits|top[ -]?up|delinquent|billing/i.test(String(apiMsg)) && res.status >= 400 && res.status < 500)) {
+    return {
+      message: `${p.label} is out of credits (HTTP 402). Top up billing at ${p.keysUrl || 'the provider dashboard'} — the key itself is fine, the account just needs funds. Nothing was retried because every model on this key shares the same balance.`,
+      code: 'payment_required', status: 402,
+    };
   }
   if (res.status === 404 || /decommission|no longer available|does not exist|not found|unknown model|invalid model|model_not_found|is not found/i.test(String(apiMsg))) {
     return { message: apiMsg || 'That model is not available on this key.', code: 'model_unavailable', status: 502 };
@@ -1111,16 +1203,51 @@ async function fetchLiveModels(pid) {
 
 async function syncModels(pid) {
   const id = pid || activeId();
+  const p = provider(id);
+  if (!p.listModels) {
+    return { provider: id, count: 0, skipped: 'no_list_endpoint', selected_available: null, missing: [] };
+  }
   const ids = await fetchLiveModels(id);
+  if (!ids.length) {
+    /* Never let an empty response wipe a good catalog: some /models endpoints
+       omit chat SKUs or hiccup transiently. Keep the previous snapshot so the
+       picker and the stale-selection guard stay intact. */
+    const prev = liveSnapshot(id);
+    return { provider: id, count: 0, empty: true, kept: prev.ids.length, selected_available: null, missing: [] };
+  }
   markLiveModels(id, ids);
   const set = new Set(ids);
-  const p = provider(id);
   return {
     provider: id,
     count: ids.length,
     selected_available: ids.includes(modelFor(id)),
-    missing: p.models.filter((m) => !set.has(m.id)).map((m) => m.id),
+    missing: p.models.filter((m) => m.tier !== 'retired' && !set.has(m.id)).map((m) => m.id),
+    added: ids.filter((x) => !p.models.some((m) => m.id === x)),
   };
+}
+
+/**
+ * Refresh every configured provider's catalog (auto-add new models, flag
+ * removed ones unavailable). With onlyStale (the default) providers synced
+ * within LIVE_TTL_MS are skipped, so the hourly upkeep tick stays cheap.
+ */
+async function syncAllProviders({ onlyStale = true } = {}) {
+  const results = [];
+  for (const p of PROVIDERS) {
+    if (!p.listModels) continue;
+    if (p.status === 'retired') continue;
+    if (!configured(p.id)) continue;
+    if (onlyStale && liveAgeMs(p.id) < LIVE_TTL_MS) {
+      results.push({ provider: p.id, skipped: 'fresh', count: liveSnapshot(p.id).ids.length });
+      continue;
+    }
+    try {
+      results.push(await syncModels(p.id));
+    } catch (e) {
+      results.push({ provider: p.id, ok: false, error: e.message, code: e.code || 'sync_failed' });
+    }
+  }
+  return results;
 }
 
 /** Background refresh at most every LIVE_TTL_MS — never blocks a request. */
@@ -1307,8 +1434,11 @@ function providerView(pid) {
     models: usableModels(pid),
     allow_custom: Boolean(p.allowCustom),
     list_models: Boolean(p.listModels),
+    sync_supported: Boolean(p.listModels),
     live_models: live.ids,
     live_checked_at: live.checked_at,
+    live_stale: liveAgeMs(p.id) >= LIVE_TTL_MS,
+    retired_hidden: p.models.filter((m) => m.tier === 'retired' && !live.ids.includes(m.id)).length,
     keys_url: p.keysUrl || '',
     active: activeId() === p.id,
   };
@@ -1342,7 +1472,9 @@ async function testConnection(pid, modelOverride) {
   try {
     if (p.listModels) {
       const ids = await fetchLiveModels(id);
-      markLiveModels(id, ids);
+      /* An empty listing never overwrites a good snapshot (see syncModels). */
+      if (ids.length) markLiveModels(id, ids);
+      else out.list_empty = true;
       out.models = ids;
       out.model_available = ids.length ? ids.includes(model) : null;
     }
@@ -1373,9 +1505,9 @@ module.exports = {
   apiKey, setApiKey, keySource, configured, maskKey,
   baseUrlFor, setBaseUrl, chatUrl, modelsUrl,
   activeModels, activeDefaultModel, modelFor, setModel, modelMeta,
-  isKnownModel, capabilities, supportsTools, supportsJson, looksLikeModelId,
-  usableModels, liveModelIds, liveSnapshot, markLiveModels,
-  fetchLiveModels, syncModels, maybeSyncModels,
+  isKnownModel, isRetiredModel, capabilities, supportsTools, supportsJson, looksLikeModelId,
+  usableModels, liveModelIds, liveSnapshot, liveAgeMs, markLiveModels,
+  fetchLiveModels, syncModels, syncAllProviders, maybeSyncModels, LIVE_TTL_MS,
   chat, assistantText, toolCalls, usage, testConnection,
   /* internals exposed for tests */
   _internal: {
