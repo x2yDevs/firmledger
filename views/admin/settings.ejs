@@ -388,6 +388,96 @@
         </div>
         <p class="form-note" style="margin-top:-4px">Walks the failover chain. Check inbox <em>and spam</em>.</p>
       </form>
+
+      <% if (typeof mailAllHops !== 'undefined' && mailAllHops.length) { %>
+      <form method="post" action="/admin3119Musa/mail/test-provider" style="margin-top:6px">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <h4 class="form-section" style="margin-top:22px">Test a specific provider</h4>
+        <p class="muted">Bypasses failover and pushes a test email through <b>one hop only</b> — the way to prove a backup or custom provider actually works before it's needed. Paused providers can be tested too.</p>
+        <div class="grid-3">
+          <label style="grid-column:span 2"><span>Provider to test</span>
+            <select name="hop_key" required>
+              <% mailAllHops.forEach(function (h) { %>
+                <option value="<%= h.key %>"><%= h.label %> — <%= h.host %>:<%= h.port %> (<%= h.source %><%= h.active ? '' : ', paused' %>)<%= h.last_used ? ' · last used ' + String(h.last_used).slice(0, 10) : ' · never used' %></option>
+              <% }) %>
+            </select>
+          </label>
+          <label><span>Send test to</span><input type="email" name="test_to" required placeholder="you@yourdomain.com" value="admin@firmledger.co.ke"></label>
+        </div>
+        <div class="form-actions"><button class="btn btn-ghost btn-sm" type="submit">Test this provider only</button></div>
+        <% var errHops = mailAllHops.filter(function (h) { return h.last_error; }); %>
+        <% if (errHops.length) { %>
+        <p class="form-note" style="margin-top:4px">Last recorded errors:
+          <% errHops.forEach(function (h, i) { %><%= i ? ' · ' : '' %><b><%= h.label %></b>: <%= String(h.last_error).slice(0, 120) %><% }) %>
+        </p>
+        <% } %>
+      </form>
+      <% } %>
+
+      <% if (typeof mailKeepAlive !== 'undefined') { %>
+      <h4 class="form-section" style="margin-top:22px">Inactivity keep-alive — stop vendors closing idle accounts</h4>
+      <p class="muted">Some SMTP vendors deactivate or delete accounts that go unused. Every configured provider — env slots, the legacy primary, saved presets <b>and custom entries</b> — that hasn't delivered anything inside the window below automatically sends itself a keep-alive email to <code>admin@firmledger.co.ke</code>, so the failover chain stays healthy without anyone clicking anything. The hourly job handles it; the default 14-day window pings roughly twice inside a typical 30-day deactivation period.</p>
+      <form method="post" action="/admin3119Musa/mail/keepalive">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <div class="grid-3">
+          <label><span>Idle window (days)</span><input type="number" name="mail_keepalive_days" min="1" max="90" value="<%= mailKeepAlive.days %>"></label>
+          <label style="grid-column:span 2"><span>Keep-alive pings go to</span><input type="email" name="mail_keepalive_to" value="<%= mailKeepAlive.to %>"></label>
+        </div>
+        <label class="check"><input type="checkbox" name="mail_keepalive_on" value="1" <%= mailKeepAlive.on ? 'checked' : '' %>><span>Automatically ping idle providers (recommended)</span></label>
+        <div class="form-actions"><button class="btn btn-primary btn-sm" type="submit">Save keep-alive</button></div>
+      </form>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px">
+        <form method="post" action="/admin3119Musa/mail/keepalive/run" style="margin:0">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <button class="btn btn-ghost btn-sm" type="submit">Sweep idle providers now</button>
+        </form>
+        <form method="post" action="/admin3119Musa/mail/keepalive/run" style="margin:0">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <input type="hidden" name="force" value="1">
+          <button class="btn btn-ghost btn-sm" type="submit">Ping all providers now</button>
+        </form>
+        <span class="form-note">Last sweep: <b><%= mailKeepAlive.last_run ? String(mailKeepAlive.last_run).slice(0, 16).replace('T', ' ') : 'never' %></b></span>
+      </div>
+      <% if (mailKeepAlive.last_report && mailKeepAlive.last_report.length) { %>
+      <div class="table-wrap" style="margin-top:12px">
+        <table class="table">
+          <thead><tr><th>Provider</th><th>Host</th><th>Source</th><th>Result</th></tr></thead>
+          <tbody>
+            <% mailKeepAlive.last_report.forEach(function (r) { %>
+            <tr>
+              <td><b><%= r.label %></b><%= r.active === false ? ' (paused)' : '' %></td>
+              <td class="mono" style="font-size:12px"><%= r.host %></td>
+              <td class="muted"><%= r.source %></td>
+              <td>
+                <% if (r.status === 'keep-alive sent') { %><span class="pill pill-approved">Pinged ✓</span>
+                <% } else if (r.status === 'failed') { %><span class="pill pill-rejected" title="<%= r.error || '' %>">Failed</span> <span class="score-hint"><%= String(r.error || '').slice(0, 80) %></span>
+                <% } else { %><span class="muted"><%= r.status %><%= r.last_used ? ' · ' + String(r.last_used).slice(0, 10) : '' %></span><% } %>
+              </td>
+            </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+      <% } %>
+      <% } %>
+
+      <% if (typeof mailAliases !== 'undefined') { %>
+      <h4 class="form-section" style="margin-top:22px">Sender aliases — the right From for every email</h4>
+      <p class="muted">Outbound mail automatically uses the alias that matches its purpose (receipts come from billing@, security alerts from security@, codes from noreply@…), so replies and filters land in the right inbox. These are fixed in code — configure them all as verified senders/identities at your SMTP providers.</p>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Alias</th><th>Used for</th></tr></thead>
+          <tbody>
+            <% Object.keys(mailAliases).forEach(function (k) { %>
+            <tr>
+              <td class="mono" style="font-size:12px;white-space:nowrap"><%= mailAliases[k].email %></td>
+              <td class="muted"><%= mailAliases[k].purpose %></td>
+            </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+      <% } %>
     </div>
     <script>
       /* Live progress for the "submit first 200 listings" batch run. The job runs

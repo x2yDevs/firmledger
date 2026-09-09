@@ -39,6 +39,7 @@ function finalizeVerifiedClaim(c, l, newUser) {
     : null;
 
   sendBranded(newUser.email, `Ownership verified — ${l.name}`, {
+    alias: 'support',
     kicker: 'Claim verified',
     title: `You now manage ${escHtml(l.name)}`,
     preheader: `Ownership of ${l.name} on FirmLedger has been verified.`,
@@ -61,6 +62,7 @@ function finalizeVerifiedClaim(c, l, newUser) {
 
   if (prev) {
     sendBranded(prev.email, `A verified owner claimed ${l.name}`, {
+      alias: 'legal',
       kicker: 'Listing claimed',
       title: `${escHtml(l.name)} now has a verified owner`,
       preheader: `Someone proved domain control and now manages ${l.name} on FirmLedger.`,

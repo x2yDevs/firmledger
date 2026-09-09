@@ -133,6 +133,7 @@ router.get('/billing/cancel', (req, res) => {
     const label = isAdCancel ? 'advertising' : 'upgrade';
     if (to) {
       sendBranded(to, 'Checkout cancelled — no charge was made', {
+        alias: 'billing',
       kicker: 'Checkout update',
       title: `Your ${label} checkout was cancelled`,
       preheader: 'No charge was made — you can finish whenever you\'re ready.',
@@ -212,6 +213,7 @@ router.get('/billing/callback', async (req, res) => {
       });
       if (listing) {
         sendBranded(cap.payer.email || payment.email || buyer.email, `Payment receipt — Sponsored Content (${planLike.name})`, {
+          alias: 'billing',
           kicker: 'Advertising receipt',
           title: `Thank you${cap.payer.name ? `, ${util.escHtml(cap.payer.name)}` : ''} — your listing is sponsored`,
           preheader: 'Your FirmLedger Sponsored Content placement was confirmed.',
@@ -240,6 +242,7 @@ router.get('/billing/callback', async (req, res) => {
         url: '/dashboard/upgrade',
       });
       sendBranded(cap.payer.email || payment.email || buyer.email, `Payment receipt — FirmLedger Pro (${planLike.name})`, {
+        alias: 'billing',
         kicker: 'Payment receipt',
         title: `Thank you${cap.payer.name ? `, ${util.escHtml(cap.payer.name)}` : ''} — Pro is active`,
         preheader: `Your FirmLedger Pro payment was confirmed.`,

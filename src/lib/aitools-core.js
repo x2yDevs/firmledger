@@ -73,6 +73,7 @@ function queueMail(recipients, subject, message) {
     for (const email of recipients) {
       try {
         const r = await sendBranded(email, `[FirmLedger] ${subject}`, {
+          alias: 'hello',
           kicker: 'Announcement',
           title: escHtml(subject),
           preheader: subject,

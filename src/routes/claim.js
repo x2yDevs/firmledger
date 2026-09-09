@@ -136,6 +136,7 @@ function claimStartEmail(user, l, c) {
   const verifyUrl = siteUrl(`/claim/verify/${c.id}`);
   const methodLabel = { dns: 'a DNS TXT record', meta: 'an HTML meta tag', badge: 'the FirmLedger website badge' }[c.method] || 'the verification method you chose';
   sendBranded(user.email, `Verify your claim — ${l.name}`, {
+    alias: 'noreply',
     kicker: 'Claim started',
     title: `Your claim on ${esc(l.name)} is underway`,
     preheader: 'Complete the verification to take control of the record.',
@@ -152,6 +153,7 @@ function claimStartEmail(user, l, c) {
 
 function claimCancelEmail(user, l, c) {
   sendBranded(user.email, `Claim cancelled — ${l.name}`, {
+    alias: 'support',
     kicker: 'Claim cancelled',
     title: `Your claim on ${esc(l.name)} was cancelled`,
     preheader: 'The claim file is closed; the listing is unchanged.',

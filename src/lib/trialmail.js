@@ -15,6 +15,7 @@ function esc(s) { return util.escHtml ? util.escHtml(String(s || '')) : String(s
 function sendTrialInvite(user) {
   if (!user || !user.email) return Promise.resolve();
   return sendBranded(user.email, `Your ${TRIAL_SIGNUP_DAYS}-day FirmLedger Pro trial is waiting`, {
+    alias: 'billing',
     kicker: 'Free trial',
     title: `Welcome${user.name ? `, ${esc(user.name)}` : ''} — your free Pro trial is ready`,
     preheader: `Activate ${TRIAL_SIGNUP_DAYS} days of full FirmLedger Pro — no card, one click on the pricing page.`,
@@ -33,6 +34,7 @@ function sendTrialActivated(user, { days, expiresAt }) {
   if (!user || !user.email) return Promise.resolve();
   const till = String(expiresAt || '').slice(0, 10);
   return sendBranded(user.email, `Your ${days}-day FirmLedger Pro trial is active`, {
+    alias: 'billing',
     kicker: 'Free trial activated',
     title: 'FirmLedger Pro is live on your account',
     preheader: `Full Pro access until ${till} — enjoy!`,
@@ -98,6 +100,7 @@ function sendTrialReminder(user, { slot, remaining }) {
     note = `You are receiving this because your ${user.trial_days || ''}-day free trial is running out. No action needed if you're happy on Free.`;
   }
   return sendBranded(user.email, subject, {
+    alias: 'billing',
     kicker,
     title,
     preheader,
@@ -115,6 +118,7 @@ function sendTrialEnded(user) {
   const ended = String(user.trial_expires_at || '').slice(0, 10) || 'recently';
   const who = user.name ? `, ${esc(user.name)}` : '';
   return sendBranded(user.email, 'Your FirmLedger Pro trial has ended', {
+    alias: 'billing',
     kicker: 'Plan update',
     title: `Your free trial has ended${who}`,
     preheader: `Your FirmLedger Pro trial ended on ${ended} — the account is back on the Free plan.`,

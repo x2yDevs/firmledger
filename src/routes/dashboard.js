@@ -189,6 +189,7 @@ router.post('/dashboard/account', (req, res) => {
   if (email !== oldEmail) {
     // notify BOTH addresses — a confirmed email change is a security event
     const base = (t) => ({
+      alias: 'security',
       kicker: 'Security notice',
       title: 'Your account email was changed',
       preheader: 'The email address on your FirmLedger account was changed.',
@@ -227,6 +228,7 @@ router.post('/dashboard/password', (req, res) => {
   db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(passwords.hash(next), req.user.id);
   db.prepare("DELETE FROM sessions WHERE user_id = ? AND kind = 'user' AND token <> ?").run(req.user.id, req.userSession.token);
   sendBranded(req.user.email, 'Your FirmLedger password was changed', {
+    alias: 'security',
     kicker: 'Security notice',
     title: 'Your password was changed',
     preheader: 'Your FirmLedger password was changed and other devices were signed out.',
@@ -583,6 +585,7 @@ router.post('/dashboard/security/2fa/verify', requireUser, async (req, res) => {
     });
   }
   sendBranded(req.user.email, 'Two-factor authentication is now ON for your FirmLedger account', {
+    alias: 'security',
     kicker: 'Security upgrade',
     title: 'Your account now requires two-factor',
     preheader: 'Two-factor authentication was just enabled on your FirmLedger account.',
@@ -634,6 +637,7 @@ router.post('/dashboard/security/2fa/disable', requireUser, async (req, res) => 
   }
   user2fa.disable(req.user.id);
   sendBranded(req.user.email, 'Two-factor authentication was turned OFF', {
+    alias: 'security',
     kicker: 'Security notice',
     title: '2FA disabled on your account',
     preheader: 'Two-factor authentication has been turned off on your FirmLedger account.',
@@ -1403,6 +1407,7 @@ router.post('/dashboard/delete-account', (req, res) => {
     'INSERT INTO deletion_requests (user_id, reason, improve, confirm_name) VALUES (?,?,?,?)'
   ).run(req.user.id, reason, improve, confirmName);
   sendBranded(req.user.email, 'Your FirmLedger account deletion request was received', {
+    alias: 'privacy',
     kicker: 'Account deletion',
     title: 'Deletion request received',
     preheader: 'We received your request to delete your FirmLedger account.',
@@ -1416,6 +1421,7 @@ router.post('/dashboard/delete-account', (req, res) => {
   }).catch(() => {});
   const adminTo = getSetting('admin_email', '') || process.env.ADMIN_NOTIFY_EMAIL || 'hello@firmledger.co.ke';
   sendBranded(adminTo, `Account deletion request — ${req.user.email}`, {
+    alias: 'privacy',
     kicker: 'Deletion request',
     title: `${escHtml(req.user.name || req.user.email)} asked to delete their account`,
     preheader: `${req.user.email} requested account deletion.`,

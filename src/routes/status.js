@@ -69,6 +69,7 @@ router.post('/subscribe', spam.gate('status', { checkEmail: true }), async (req,
     const from = process.env.STATUS_EMAIL_FROM || undefined;
     sendBranded(email, 'Confirm your FirmLedger status subscription', {
       from,
+      alias: 'status',
       kicker: 'Status subscription',
       title: 'Confirm your subscription',
       preheader: 'One click to confirm FirmLedger status alerts.',

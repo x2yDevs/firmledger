@@ -632,7 +632,7 @@ async function notifySubscribers(subject, opts = {}) {
   let sent = 0;
   for (const s of list) {
     try {
-      await sendBranded(s.email, subject, { ...opts, from: opts.from || from });
+      await sendBranded(s.email, subject, { alias: 'status', ...opts, from: opts.from || from });
       sent++;
     } catch { /* drop silently — one bad address must not block the rest */ }
   }
@@ -693,6 +693,7 @@ async function sendWeeklyStatusDigest(force = false) {
     try {
       await sendBranded(s.email, 'FirmLedger weekly status report', {
         from,
+        alias: 'status',
         kicker: 'Weekly status',
         title: 'FirmLedger — last 7 days',
         preheader: `Platform uptime was ${weekUptime}% this week.`,

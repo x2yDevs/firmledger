@@ -12,7 +12,12 @@
  *
  *   sendMail(to, subject, text)        plain text
  *   sendBranded(to, subject, {...})    FirmLedger-branded HTML + text fallback
+ *                                      (pass alias:'billing'|'security'|… to
+ *                                      pick the purpose-matched From address)
  *   sendTest(to)                       admin test through the live chain
+ *   sendTestVia(key, to)               test ONE provider, bypassing failover
+ *   keepAliveSweep()                   ping idle providers → admin@firmledger.co.ke
+ *                                      so vendors don't close unused accounts
  */
 const fs = require('fs');
 const path = require('path');
@@ -35,6 +40,31 @@ const PROVIDERS = [
   { id: 'dnsexit', name: 'DNSExit', host: 'mail.dnsexit.com', port: 587, secure: 0 },
   { id: 'custom', name: 'Custom SMTP', host: '', port: 587, secure: 0 },
 ];
+
+/**
+ * FirmLedger sender aliases — every outbound email picks the address that
+ * matches its purpose, so replies and spam filtering land in the right place.
+ * Pass `alias: '<key>'` to sendBranded (an explicit `from` still wins).
+ */
+const ALIASES = {
+  admin:    { email: 'admin@firmledger.co.ke',    name: 'FirmLedger Admin',    purpose: 'Admin console notices, mail keep-alive & deliverability checks' },
+  billing:  { email: 'billing@firmledger.co.ke',  name: 'FirmLedger Billing',  purpose: 'Receipts, checkout, plan & trial lifecycle' },
+  careers:  { email: 'careers@firmledger.co.ke',  name: 'FirmLedger Careers',  purpose: 'Job openings & applications' },
+  hello:    { email: 'hello@firmledger.co.ke',    name: 'FirmLedger',          purpose: 'Welcomes, newsletters, announcements & offers' },
+  legal:    { email: 'legal@firmledger.co.ke',    name: 'FirmLedger Legal',    purpose: 'Ownership disputes, takedowns & legal notices' },
+  noreply:  { email: 'noreply@firmledger.co.ke',  name: 'FirmLedger',          purpose: 'One-time codes & automated transactional mail' },
+  privacy:  { email: 'privacy@firmledger.co.ke',  name: 'FirmLedger Privacy',  purpose: 'Account deletion & personal-data requests' },
+  security: { email: 'security@firmledger.co.ke', name: 'FirmLedger Security', purpose: 'Password, 2FA, sign-in & account-security alerts' },
+  status:   { email: 'status@firmledger.co.ke',   name: 'FirmLedger Status',   purpose: 'Uptime, incidents & maintenance notices' },
+  support:  { email: 'support@firmledger.co.ke',  name: 'FirmLedger Support',  purpose: 'Claims, tickets & account help' },
+};
+
+/** RFC-5322 From string for an alias key — falls back to the global From. */
+function aliasFrom(key) {
+  const a = ALIASES[key];
+  if (!a) return fromAddress();
+  return `${a.name} <${a.email}>`;
+}
 
 let logoAttachment = null;
 function getLogoAttachment() {
@@ -107,6 +137,22 @@ function allAccountsRaw() {
   } catch { return []; }
 }
 
+function hopKey(h) { return `${h.source}:${h.id}`; }
+
+function adminHop(a) {
+  return {
+    via: a.label || a.provider, source: 'admin', id: a.id,
+    provider: a.provider, host: a.host, port: a.port, secure: Boolean(a.secure),
+    user: a.username, pass: a.password,
+    daily_limit: a.daily_limit || 0,
+    sent_today: a.sent_today || 0, sent_on: a.sent_on || '',
+    last_error: a.last_error || '', last_error_at: a.last_error_at || '',
+    last_ok_at: a.last_ok_at || '', active: Boolean(a.active),
+    created_at: a.created_at || '',
+    label: a.label || a.provider,
+  };
+}
+
 /** Ordered hop list used at send time. */
 function hops() {
   const list = envSlots();
@@ -123,18 +169,34 @@ function hops() {
       });
     }
   }
-  for (const a of dbAccounts()) {
-    list.push({
-      via: a.label || a.provider, source: 'admin', id: a.id,
-      provider: a.provider, host: a.host, port: a.port, secure: Boolean(a.secure),
-      user: a.username, pass: a.password,
-      daily_limit: a.daily_limit || 0,
-      sent_today: a.sent_today || 0, sent_on: a.sent_on || '',
-      last_error: a.last_error || '', last_error_at: a.last_error_at || '',
-      label: a.label || a.provider,
-    });
+  for (const a of dbAccounts()) list.push(adminHop(a));
+  return list.filter((h) => h.host).map((h) => ({ ...h, key: hopKey(h) }));
+}
+
+/** Every configured hop, including paused Admin providers — used by the
+ *  per-provider tester and the inactivity keep-alive (a paused provider can
+ *  still be deactivated by its vendor for sitting idle). */
+function allHops() {
+  const list = envSlots();
+  if (!list.length) {
+    const h = setting('smtp_host');
+    if (h) {
+      const p = Number(setting('smtp_port')) || 587;
+      list.push({
+        via: 'admin settings', source: 'settings', id: 'settings',
+        host: h, port: p,
+        secure: setting('smtp_secure') === '1' || p === 465,
+        user: setting('smtp_user'), pass: setting('smtp_pass'),
+        daily_limit: 0, label: 'Primary (settings)',
+      });
+    }
   }
-  return list.filter((h) => h.host);
+  for (const a of allAccountsRaw()) list.push(adminHop(a));
+  return list.filter((h) => h.host).map((h) => ({ ...h, key: hopKey(h), active: h.active !== false }));
+}
+
+function hopByKey(key) {
+  return allHops().find((h) => h.key === key) || null;
 }
 
 function fromAddress() {
@@ -143,7 +205,7 @@ function fromAddress() {
   if (f) return f;
   const first = hops()[0];
   if (first && first.user && String(first.user).includes('@')) return `FirmLedger <${first.user}>`;
-  return 'FirmLedger <no-reply@firmledger.co.ke>';
+  return 'FirmLedger <noreply@firmledger.co.ke>';
 }
 
 const transportCache = new Map();
@@ -182,7 +244,31 @@ function hopOverLimit(hop) {
   return (hop.sent_today || 0) >= hop.daily_limit;
 }
 
+/* Per-hop "last successfully used" clock. Admin providers keep it in
+   smtp_accounts.last_ok_at; env/settings hops keep it in a small JSON blob in
+   settings so the inactivity keep-alive can watch every hop equally. */
+function hopActivity() {
+  try { return JSON.parse(setting('mail_hop_activity') || '{}') || {}; } catch { return {}; }
+}
+function touchHopActivity(hop) {
+  try {
+    const map = hopActivity();
+    map[hop.key || hopKey(hop)] = new Date().toISOString();
+    setSettingSafe('mail_hop_activity', JSON.stringify(map));
+  } catch { /* ignore */ }
+}
+/** ISO timestamp of the last successful send through this hop ('' if never). */
+function hopLastUsed(hop) {
+  if (hop.source === 'admin' && hop.last_ok_at) {
+    // sqlite datetime('now') → "YYYY-MM-DD HH:MM:SS" (UTC, no zone marker)
+    return hop.last_ok_at.includes('T') ? hop.last_ok_at : hop.last_ok_at.replace(' ', 'T') + 'Z';
+  }
+  const map = hopActivity();
+  return map[hop.key || hopKey(hop)] || '';
+}
+
 function markSent(hop) {
+  touchHopActivity(hop);
   if (hop.source !== 'admin' || !hop.id) return;
   try {
     const { db } = require('../db');
@@ -286,10 +372,14 @@ function brandedHtml(opts = {}) {
 </body></html>`;
 }
 
+function unescEntities(s) {
+  return String(s).replace(/&(amp|lt|gt|quot|#39);/g, (m, k) => ({ amp: '&', lt: '<', gt: '>', quot: '"', '#39': "'" }[k]));
+}
+
 function brandedText(opts = {}) {
   const lines = [];
-  if (opts.title) { lines.push(opts.title.replace(/<[^>]+>/g, ''), ''); }
-  (opts.paragraphs || []).forEach((p) => lines.push(p.replace(/<[^>]+>/g, ''), ''));
+  if (opts.title) { lines.push(unescEntities(opts.title.replace(/<[^>]+>/g, '')), ''); }
+  (opts.paragraphs || []).forEach((p) => lines.push(unescEntities(p.replace(/<[^>]+>/g, '')), ''));
   if (opts.otp) lines.push(`Your code: ${opts.otp}`, '');
   if (opts.cta) lines.push(`${opts.cta.label}: ${opts.cta.url}`, '');
   if (opts.note) lines.push(opts.note.replace(/<[^>]+>/g, ''));
@@ -356,7 +446,10 @@ async function sendMail(to, subject, text, html) {
 }
 
 async function sendBranded(to, subject, opts = {}) {
-  return deliver(to, { subject, text: opts.text || brandedText(opts), html: brandedHtml(opts), from: opts.from });
+  // From resolution: explicit `from` wins, then a named alias (billing,
+  // security, noreply, …), then the global From address.
+  const from = opts.from || (opts.alias ? aliasFrom(opts.alias) : undefined);
+  return deliver(to, { subject, text: opts.text || brandedText(opts), html: brandedHtml(opts), from });
 }
 
 async function sendTest(to) {
@@ -364,6 +457,7 @@ async function sendTest(to) {
   if (!chain.length) return { ok: false, error: 'No SMTP configuration found — add a provider in Admin → Settings or set SMTP_URL / SMTP2_URL in .env.' };
   const hosts = chain.map((h) => `${h.host}:${h.port}`).join(' → ');
   const r = await sendBranded(to, 'FirmLedger test email', {
+    alias: 'admin',
     kicker: 'Configuration check',
     title: 'SMTP is working',
     preheader: 'This test email confirms your FirmLedger SMTP settings are live.',
@@ -378,6 +472,167 @@ async function sendTest(to) {
   });
   if (r.delivered) return { ok: true, via: r.via };
   return { ok: false, error: r.error || 'Unknown send failure' };
+}
+
+/**
+ * Test ONE specific provider (no failover) — the admin picks a hop in
+ * Settings and this pushes a branded test email through that hop only, so a
+ * broken failover provider can't hide behind a healthy primary.
+ */
+async function sendTestVia(key, to) {
+  const hop = hopByKey(key);
+  if (!hop) return { ok: false, error: 'That mail provider no longer exists — refresh the page.' };
+  const msgOpts = {
+    kicker: 'Provider check',
+    title: `Provider test — ${hop.label}`,
+    preheader: `Direct test through ${hop.host}:${hop.port} (no failover).`,
+    alert: `This email was sent through <b>${esc(hop.label)}</b> (<code>${esc(hop.host)}:${hop.port}</code>) <b>only</b> — the failover chain was bypassed on purpose.`,
+    alertTone: 'ok',
+    paragraphs: [
+      `If you are reading this, the provider <b>${esc(hop.label)}</b> is authenticated, connected and delivering.`,
+      `From address: <b>${esc(aliasFrom('admin'))}</b>. Source: <b>${esc(hop.source)}</b>.`,
+    ],
+    cta: { label: 'Open admin settings', url: require('./util').siteUrl('/admin3119Musa/settings') },
+    note: 'One-off provider test triggered from Admin → Settings. Check spam if it took a detour.',
+  };
+  const msg = {
+    subject: `FirmLedger provider test — ${hop.label}`,
+    text: brandedText(msgOpts), html: brandedHtml(msgOpts),
+    from: aliasFrom('admin'),
+  };
+  try {
+    await sendVia(hop, to, msg);
+    markSent(hop);
+    logOutbox(to, msg, 'SENT', `via=${hop.host} (direct test)`);
+    return { ok: true, via: `${hop.host}:${hop.port}`, label: hop.label };
+  } catch (e) {
+    const m = e.message || String(e);
+    markError(hop, m);
+    logOutbox(to, msg, 'FAILED', `via=${hop.host} (direct test) error=${m}`);
+    return { ok: false, error: `${hop.label} (${hop.host}:${hop.port}): ${m}`, label: hop.label };
+  }
+}
+
+/* ================= Inactivity keep-alive =================
+ * Several SMTP relays (Brevo, Mailtrap, SMTP2GO, Mailjet free tiers…) disable
+ * or delete accounts that go unused for a while. To stop that happening to a
+ * configured-but-idle hop, every hop that has not delivered anything for
+ * `mail_keepalive_days` (default 14 — roughly twice inside a typical 30-day
+ * deactivation window) automatically sends itself a branded keep-alive email
+ * to admin@firmledger.co.ke. Applies to EVERY configured provider: env slots,
+ * legacy settings SMTP, saved presets and custom entries — paused ones too,
+ * because a vendor can still expire a paused account.
+ */
+const KEEPALIVE_TO = 'admin@firmledger.co.ke';
+const KEEPALIVE_DEFAULT_DAYS = 14;
+
+function keepAliveSettings() {
+  const raw = parseInt(setting('mail_keepalive_days'), 10);
+  return {
+    on: setting('mail_keepalive_on') !== '0',
+    days: Number.isFinite(raw) && raw >= 1 ? raw : KEEPALIVE_DEFAULT_DAYS,
+    to: (setting('mail_keepalive_to') || KEEPALIVE_TO).trim() || KEEPALIVE_TO,
+    last_run: setting('mail_keepalive_last_run') || '',
+    last_report: (() => { try { return JSON.parse(setting('mail_keepalive_last_report') || '[]'); } catch { return []; } })(),
+  };
+}
+
+function keepAliveAttempts() {
+  try { return JSON.parse(setting('mail_keepalive_attempts') || '{}') || {}; } catch { return {}; }
+}
+function markKeepAliveAttempt(key) {
+  try {
+    const map = keepAliveAttempts();
+    map[key] = new Date().toISOString();
+    setSettingSafe('mail_keepalive_attempts', JSON.stringify(map));
+  } catch { /* ignore */ }
+}
+
+function keepAliveMessage(hop, days, lastUsed) {
+  const opts = {
+    kicker: 'Mail keep-alive',
+    title: `Keep-alive ping — ${hop.label}`,
+    preheader: `Automatic activity ping through ${hop.host} so the account is not closed for inactivity.`,
+    alert: `Provider <b>${esc(hop.label)}</b> (<code>${esc(hop.host)}:${hop.port}</code>) had not sent anything for ${lastUsed ? `<b>${days}+ days</b> (last send ${esc(String(lastUsed).slice(0, 10))})` : '<b>as long as FirmLedger has tracked it</b>'} — this automated email keeps the account active with its vendor.`,
+    alertTone: 'info',
+    paragraphs: [
+      'Some SMTP vendors deactivate or delete accounts that stay idle. FirmLedger pings every configured provider (env, legacy, preset and custom) that has gone quiet, so the failover chain stays healthy without anyone clicking anything.',
+      `Nothing to do — if this provider were broken, the send would have failed and the error would show in Admin → Settings instead of this email arriving.`,
+    ],
+    cta: { label: 'Review mail providers', url: require('./util').siteUrl('/admin3119Musa/settings') },
+    note: `Automatic keep-alive, sent at most once per idle window (${days} days) per provider.`,
+  };
+  return {
+    subject: `Mail keep-alive — ${hop.label} is idle, pinging to stay active`,
+    text: brandedText(opts), html: brandedHtml(opts),
+    from: aliasFrom('admin'),
+  };
+}
+
+/**
+ * Walk every configured hop and push a keep-alive email through any that has
+ * been idle longer than the configured window. Safe to call often — it
+ * throttles per hop (one attempt per ~20h) and only sends when actually idle.
+ */
+async function keepAliveSweep(force = false) {
+  const cfg = keepAliveSettings();
+  if (!cfg.on && !force) return { checked: 0, sent: 0, skipped: 'off' };
+  const now = Date.now();
+  const windowMs = cfg.days * 864e5;
+  const attempts = keepAliveAttempts();
+  const report = [];
+  let sent = 0;
+  for (const hop of allHops()) {
+    const entry = { key: hop.key, label: hop.label, host: hop.host, source: hop.source, active: hop.active !== false };
+    const last = hopLastUsed(hop);
+    const idleMs = last ? now - Date.parse(last) : Infinity;
+    // Never-used brand-new admin rows get a grace period from created_at so a
+    // provider added this morning is not instantly pinged.
+    const created = hop.created_at ? Date.parse(hop.created_at.replace(' ', 'T') + (hop.created_at.includes('Z') ? '' : 'Z')) : 0;
+    const ageMs = created ? now - created : Infinity;
+    const idle = Math.min(idleMs, ageMs);
+    if (!force && idle < windowMs) {
+      entry.status = 'recently active';
+      entry.last_used = last;
+      report.push(entry);
+      continue;
+    }
+    // Throttle: one attempt per hop per ~20 hours even if it keeps failing.
+    const lastTry = attempts[hop.key] ? Date.parse(attempts[hop.key]) : 0;
+    if (!force && lastTry && now - lastTry < 20 * 3600e3) {
+      entry.status = 'attempted recently';
+      report.push(entry);
+      continue;
+    }
+    markKeepAliveAttempt(hop.key);
+    try {
+      const msg = keepAliveMessage(hop, cfg.days, last);
+      await sendVia(hop, cfg.to, msg);
+      markSent(hop);
+      logOutbox(cfg.to, msg, 'SENT', `via=${hop.host} (keep-alive)`);
+      console.log('[mail:keep-alive]', hop.label, 'pinged →', cfg.to);
+      entry.status = 'keep-alive sent';
+      sent++;
+    } catch (e) {
+      const m = e.message || String(e);
+      markError(hop, m);
+      console.warn('[mail:keep-alive]', hop.label, 'FAILED —', m);
+      entry.status = 'failed';
+      entry.error = m.slice(0, 200);
+    }
+    report.push(entry);
+  }
+  setSettingSafe('mail_keepalive_last_run', new Date().toISOString());
+  setSettingSafe('mail_keepalive_last_report', JSON.stringify(report.slice(0, 40)));
+  return { checked: report.length, sent, report };
+}
+
+function saveKeepAliveSettings(body = {}) {
+  setSettingSafe('mail_keepalive_on', body.mail_keepalive_on === '1' ? '1' : '0');
+  const d = parseInt(body.mail_keepalive_days, 10);
+  if (Number.isFinite(d) && d >= 1 && d <= 90) setSettingSafe('mail_keepalive_days', String(d));
+  const to = String(body.mail_keepalive_to || '').trim().toLowerCase().slice(0, 200);
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(to)) setSettingSafe('mail_keepalive_to', to);
 }
 
 function mailConfigured() { return hops().length > 0; }
@@ -453,7 +708,9 @@ function saveGlobalFrom(from) {
 }
 
 module.exports = {
-  sendMail, sendBranded, sendTest, brandedHtml, mailConfigured,
-  PROVIDERS, hops, fromAddress, accountStatus, allAccountsRaw,
+  sendMail, sendBranded, sendTest, sendTestVia, brandedHtml, mailConfigured,
+  PROVIDERS, ALIASES, aliasFrom, hops, allHops, hopByKey, hopLastUsed,
+  fromAddress, accountStatus, allAccountsRaw,
   addAccount, updateAccount, toggleAccount, deleteAccount, saveGlobalFrom,
+  keepAliveSweep, keepAliveSettings, saveKeepAliveSettings,
 };

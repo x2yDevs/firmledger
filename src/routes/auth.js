@@ -45,6 +45,7 @@ function newOtp(email, name, passwordHash) {
 
 function sendOtpMailFix(email, name, code) {
   return sendBranded(email, `${code} is your FirmLedger verification code`, {
+    alias: 'noreply',
     kicker: 'Email verification',
     title: `Verify it's really you`,
     preheader: `Your FirmLedger verification code is ${code} — valid for ${OTP_TTL_MIN} minutes.`,
@@ -125,6 +126,7 @@ router.post('/register/verify', (req, res) => {
   const sess = createSession(info.lastInsertRowid, 'user');
   setSessionCookie(req, res, USER_COOKIE, sess.token);
   sendBranded(email, 'Welcome to FirmLedger', {
+    alias: 'hello',
     kicker: 'Account verified',
     title: `Welcome, ${escBuzz(row.name)}`,
     preheader: 'Your email is verified and your account is ready.',
@@ -233,6 +235,7 @@ function oauthCallback(strategy, label) {
         /* Brand-new account via Google/LinkedIn — same welcome as email
            sign-up: a free-trial invite the member activates on /pricing. */
         sendBranded(user.email, 'Welcome to FirmLedger', {
+          alias: 'hello',
           kicker: 'Account created',
           title: `Welcome, ${escBuzz(user.name || user.email)}`,
           preheader: `Your FirmLedger account is ready — created with ${label}.`,
@@ -301,6 +304,7 @@ router.post('/forgot', (req, res) => {
     const expires = new Date(Date.now() + 60 * 60 * 1000).toISOString();
     db.prepare('INSERT INTO resets (token, email, expires_at) VALUES (?,?,?)').run(token, email, expires);
     sendBranded(email, 'Reset your FirmLedger password', {
+      alias: 'security',
       kicker: 'Password reset',
       title: 'Reset your password',
       preheader: 'A password reset was requested for your FirmLedger account.',
@@ -358,6 +362,7 @@ router.post('/reset/:token', (req, res) => {
   // revoke existing sessions for that account
   db.prepare('DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE email = ?)').run(r.email);
   sendBranded(r.email, 'Your FirmLedger password was changed', {
+    alias: 'security',
     kicker: 'Security notice',
     title: 'Your password was changed',
     preheader: 'Your FirmLedger password was changed and all other sessions were signed out.',

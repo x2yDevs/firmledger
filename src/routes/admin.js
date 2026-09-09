@@ -58,6 +58,7 @@ function admin2faEmail() {
 function sendAdminEmailCode(code) {
   const to = admin2faEmail();
   sendBranded(to, `Your admin sign-in code — ${code}`, {
+    alias: 'security',
     kicker: 'Admin security',
     title: 'Your admin sign-in code',
     preheader: 'Use this one-time code to finish signing in to the console.',
@@ -77,6 +78,7 @@ function sendAdminRecoveryCodesEmail(codes, regenerated) {
   const to = adminNotifyEmail();
   const rows = codes.map((c, i) => `${i + 1}. ${c}`);
   sendBranded(to, regenerated ? 'Fresh set: your admin recovery codes — keep these safe' : 'Two-factor enabled — your admin recovery codes', {
+    alias: 'security',
     kicker: 'Admin security',
     title: regenerated ? 'Your new admin recovery codes' : 'Two-factor authentication is now ON',
     preheader: '10 one-time codes that open the admin console if the authenticator app is unreachable.',
@@ -883,6 +885,7 @@ router.post('/admin3119Musa/users/:id/plan', (req, res) => {
                         : `Lifetime FirmLedger Pro granted to ${u.name} (${u.email}).`;
     const { siteUrl: su8, escHtml: eh8 } = require('../lib/util');
     sendBranded(u.email, `You've been upgraded to FirmLedger Pro`, {
+      alias: 'billing',
       kicker: 'Pro activated',
       title: `Welcome to FirmLedger Pro${u.name ? `, ${eh8(u.name)}` : ''}`,
       preheader: 'FirmLedger Pro is now active on your account.',
@@ -901,6 +904,7 @@ router.post('/admin3119Musa/users/:id/plan', (req, res) => {
     revokeUserPro(u.id);
     const { siteUrl: su9, escHtml: eh9 } = require('../lib/util');
     sendBranded(u.email, 'Your FirmLedger Pro access has ended', {
+      alias: 'billing',
       kicker: 'Plan update',
       title: 'Your Pro access has ended',
       preheader: 'FirmLedger Pro access on your account has ended.',
@@ -1108,6 +1112,7 @@ router.post('/admin3119Musa/claims/:id/reject', (req, res) => {
     if (u) {
       const { siteUrl: su4, escHtml: eh4 } = require('../lib/util');
       sendBranded(u.email, `Ownership claim update — ${l ? l.name : 'your listing'}`, {
+        alias: 'support',
         kicker: 'Claim review',
         title: 'Your ownership claim was not verified',
         preheader: `Your ownership claim for ${l ? l.name : 'a listing'} could not be verified.`,
@@ -1176,6 +1181,7 @@ router.post('/admin3119Musa/users/:id/delete', (req, res) => {
   const u = db.prepare('SELECT * FROM users WHERE id=?').get(req.params.id);
   if (!u) return usersFail(req, res, 'User not found.');
   sendBranded(u.email, 'Your FirmLedger account has been deleted', {
+    alias: 'privacy',
     kicker: 'Account deleted',
     title: 'Your account has been deleted',
     preheader: 'Your FirmLedger account and personal data have been permanently removed.',
@@ -1669,6 +1675,7 @@ router.post('/admin3119Musa/users/:id/suspend', (req, res) => {
   if (u && !u.suspended) {
     const { siteUrl: su6 } = require('../lib/util');
     sendBranded(u.email, 'Your FirmLedger account has been suspended', {
+      alias: 'support',
       kicker: 'Account notice',
       title: 'Your account is suspended',
       preheader: 'Your FirmLedger account has been suspended by our team.',
@@ -1690,6 +1697,7 @@ router.post('/admin3119Musa/users/:id/unsuspend', (req, res) => {
   if (u && u.suspended) {
     const { siteUrl: su7 } = require('../lib/util');
     sendBranded(u.email, 'Your FirmLedger account has been reinstated', {
+      alias: 'support',
       kicker: 'Account notice',
       title: 'Welcome back',
       preheader: 'Your FirmLedger account suspension has been lifted.',
@@ -1897,6 +1905,7 @@ router.post('/admin3119Musa/email', async (req, res) => {
       let r;
       if (format === 'html') {
         r = await sendBranded(rcpt, `[FirmLedger] ${subject}`, {
+          alias: 'hello',
           title: subject,
           paragraphs: htmlParas,
           note: 'You received this because you\'re part of FirmLedger. Reply to this email to contact the team.',
@@ -2305,6 +2314,7 @@ router.post('/admin3119Musa/users/:id/reset', (req, res) => {
   db.prepare('INSERT INTO resets (email, token, expires_at) VALUES (?,?,?)').run(u.email, token, expires);
   const url = siteUrl('/reset/' + token);
   sendBranded(u.email, 'Reset your FirmLedger password', {
+    alias: 'security',
     kicker: 'Password reset',
     title: 'Reset your password',
     preheader: 'An administrator started a password reset for your FirmLedger account.',
