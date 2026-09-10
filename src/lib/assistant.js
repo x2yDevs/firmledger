@@ -21,6 +21,14 @@ const { db, getSetting } = require('../db');
 const tools = require('./aitools');
 const mailer = require('./mailer');
 
+/* Where “email admin” goes — the admin's notification inbox. The setting
+   (Admin → Settings → admin_email) wins, then ADMIN_NOTIFY_EMAIL, then the
+   shipped default. Mirrors adminNotifyEmail() in src/lib/ai.js so the
+   assistant and the moderation emails always land in the same place. */
+function adminEmail() {
+  return getSetting('admin_email', '') || process.env.ADMIN_NOTIFY_EMAIL || 'hello@firmledger.co.ke';
+}
+
 /* ------------------------------------------------------------------ */
 /* 1. Vocabulary                                                       */
 /* ------------------------------------------------------------------ */
@@ -1118,6 +1126,7 @@ rule('email_users', (c) => has(c, /\b(email|send)\b/) && !has(c, /\b(ticket|test
   let audience = slots.audience;
   if (!audience) {
     if (slots.emails.length) audience = slots.emails[0];
+    else if (has(c, /\b(admin|me|myself)\b/)) audience = adminEmail();
     else if (has(c, /\bnewsletter\b|\bsubscriber\b/)) audience = 'newsletter';
     else if (has(c, /\bpro\b/)) audience = 'pro';
     else if (has(c, /\bfree\b/)) audience = 'free';
@@ -1126,7 +1135,7 @@ rule('email_users', (c) => has(c, /\b(email|send)\b/) && !has(c, /\b(ticket|test
       if (u.ok) audience = u.value;
     }
   }
-  if (!audience) return { ask: 'Who should get it — a member (email), or the pro / free / newsletter / all audience?', entity: 'audience', partial: { subject, message } };
+  if (!audience) return { ask: `Who should get it — a member (email), the admin, or the pro / free / newsletter / all audience?`, entity: 'audience', partial: { subject, message } };
   if (!subject || !message) return { ask: `What is the subject and the message for ${audience}? e.g. subject: "Hello" message: "…"`, entity: 'mail', partial: { audience, subject, message } };
   return { args: { audience, subject, message } };
 });
@@ -1424,8 +1433,17 @@ function answerAsk(raw, ask, ctx) {
     case 'cadence': return slots.cadence ? pick(slots.cadence) : { ask: { ...ask, ask: 'daily, weekly or monthly?' } };
     case 'relType': return slots.relType ? pick(slots.relType) : { ask: { ...ask, ask: 'parent, subsidiary, brand, competitor or partner?' } };
     case 'audience': {
-      const a = slots.emails[0] || (/\b(all|everyone|everybody)\b/.test(low) ? 'all' : (low.match(/\b(pro|free|newsletter)\b/) || [])[1]);
-      if (!a) return { ask: { ...ask, ask: 'An email address, or pro / free / newsletter / all?' } };
+      let a = slots.emails[0];
+      if (!a && /\b(all|everyone|everybody|every member|every user|all users|all members)\b/.test(low)) a = 'all';
+      if (!a && /\b(admin|me|myself)\b/.test(low)) a = adminEmail();
+      if (!a) {
+        const m = low.match(/\b(pro|free|newsletter|subscribers?)\b/);
+        if (m) a = m[1].startsWith('subscriber') ? 'newsletter' : m[1];
+      }
+      if (!a) {
+        const example = adminEmail();
+        return { ask: { ...ask, ask: `I need a recipient — an email address (e.g. ${example}), or say “admin” to email ${example}, or pro / free / newsletter / all.` } };
+      }
       const args = { ...(ask.partial || {}), audience: a };
       if (!args.subject || !args.message) return { ask: { tool: ask.tool, entity: 'mail', partial: args, ask: 'What is the subject and message? e.g. subject: "Hello" message: "…"' } };
       return { resolved: { tool: ask.tool, args } };
@@ -1782,7 +1800,7 @@ const HELP_TOPICS = {
   adpackage: ['show ad packages', 'create ad package "Homepage Spotlight" $99 for 30 days', 'hide package 1', 'delete package 1'],
   category: ['show categories', 'create category Agritech', 'rename category Fintech to Financial Services', 'delete category Misc'],
   incident: ['status page', 'open incident titled "API latency" major', 'update incident 3 saying: fix deployed, monitoring', 'resolve incident 3', 'run the status check', 'reset component api'],
-  email: ['email bob@x.com subject: "Hello" message: "…"', 'email pro members about "New feature" saying: …', 'email everyone subject: "…" message: "…" (always confirms)', 'send newsletter digest now', 'set newsletter weekly', 'send a test email', 'set mail from "FirmLedger <no-reply@firmledger.co.ke>"'],
+  email: ['email bob@x.com subject: "Hello" message: "…"', 'email admin subject: "…" message: "…"', 'email pro members about "New feature" saying: …', 'email everyone subject: "…" message: "…" (always confirms)', 'send newsletter digest now', 'set newsletter weekly', 'send a test email', 'set mail from "FirmLedger <no-reply@firmledger.co.ke>"'],
   maintenance: ['take the site down / maintenance on', 'bring the site back / maintenance off', 'auto approve on/off', 'auto moderation on/off'],
   indexing: ['indexing status', 'indexing on/off', 'ping /listing/acme', 'google indexing on', 'run google indexing batch', 'clear indexing logs', 'refresh tech for all stale', 'run upkeep now', 'upkeep off'],
   ip: ['block ip 1.2.3.4', 'allow ip 1.2.3.4', 'block domain spam.example', 'unblock ip 1.2.3.4', 'set rate limit login=10 register=5'],

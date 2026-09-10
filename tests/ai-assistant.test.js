@@ -130,6 +130,17 @@ const plan = (text, ctx = {}) => { const r = bot.parseCommand(text, ctx); return
   r = await say('how many pending');
   check('a fresh command abandons the open question', /pending/i.test(r.text) && !/subject/i.test(r.text), r.text.slice(0, 160));
 
+  /* email admin — the operator must be able to target the admin inbox */
+  p = plan('email admin');
+  check('"email admin" asks for subject/message with the admin inbox as audience', p.raw && p.raw.type === 'ask' && p.raw.entity === 'mail' && /@/.test(String((p.raw.partial || {}).audience)), JSON.stringify(p.raw));
+  p = plan('email admin subject: "Quick note" message: "Testing 1 2 3 4 5 6"');
+  check('"email admin" full form targets the admin inbox', p.plan && p.plan.tool === 'email_users' && /@/.test(String(p.plan.args.audience)), JSON.stringify(p.plan));
+  const audienceAsk = { tool: 'email_users', entity: 'audience', partial: { subject: 'Hello', message: 'Testing 1 2 3 4 5 6' } };
+  const anAdmin = bot.answerAsk('admin', audienceAsk, {});
+  check('answering "admin" to the audience question resolves the admin inbox', anAdmin && anAdmin.resolved && /@/.test(String(anAdmin.resolved.args.audience)), JSON.stringify(anAdmin));
+  const anEmail = bot.answerAsk('ceo@nowhere.co.ke', audienceAsk, {});
+  check('answering with a fresh email address is accepted', anEmail && anEmail.resolved && anEmail.resolved.args.audience === 'ceo@nowhere.co.ke', JSON.stringify(anEmail));
+
   /* 3 — confirmation & cancellation */
   console.log('\nConfirmation & cancellation');
   r = await say('delete beta labs');

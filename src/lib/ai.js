@@ -221,7 +221,7 @@ function impactNote(steps) {
         case 'reject_listing': notes.push('Hidden from the directory; the owner is emailed the reason if one was given.'); break;
         case 'accept_all_pending_listings': case 'bulk_listing_action': notes.push('Applies to every matching record in one go — there is no bulk undo.'); break;
         case 'email_all_users': notes.push('Sends to every active member — this cannot be recalled once queued.'); break;
-        case 'email_users': if (a.audience && a.audience !== 'all' && !String(a.audience).includes('@')) notes.push(`Sends to the whole “${a.audience}” audience.`); break;
+        case 'email_users': if (a.audience && !['all', 'admin'].includes(String(a.audience).toLowerCase()) && !String(a.audience).includes('@')) notes.push(`Sends to the whole “${a.audience}” audience.`); break;
         case 'set_maintenance_mode': notes.push(a.on === false ? 'Visitors get the normal site again.' : 'Visitors see the maintenance page; the admin console stays reachable.'); break;
         case 'fulfill_removal': notes.push('Deletes the listing named in the request and closes it.'); break;
         case 'delete_category': notes.push('Listings in it are not deleted, they just lose the category.'); break;
@@ -394,7 +394,7 @@ const TOPIC_ACTIONS = {
   },
   email: {
     title: 'Email actions',
-    lines: ['send a test email', 'email <address> subject: "…" message: "…"', 'email pro members about "…" saying: …', 'send newsletter digest now', 'set newsletter weekly', 'email settings'],
+    lines: ['send a test email', 'email <address> subject: "…" message: "…"', 'email admin subject: "…" message: "…"', 'email pro members about "…" saying: …', 'send newsletter digest now', 'set newsletter weekly', 'email settings'],
   },
   indexing: {
     title: 'Indexing & upkeep actions',
@@ -423,7 +423,7 @@ function topicKey(raw) {
 function topicMenu(topic) {
   const key = topicKey(topic);
   const menu = TOPIC_ACTIONS[key] || TOPIC_ACTIONS.settings;
-  return [`**${menu.title}**`, 'Choose an action below, or type the full request. Reads run immediately; changes still ask for confirmation.', ...menu.lines.map((x) => `• ${x}`)].join('\\n');
+  return [`**${menu.title}**`, 'Choose an action below, or type the full request. Reads run immediately; changes still ask for confirmation.', ...menu.lines.map((x) => `• ${x}`)].join('\n');
 }
 
 /** Special (non-tool) intents. */
@@ -691,10 +691,6 @@ function notifyAdminUnsure(l, reason) {
       note: 'Turn off these emails in Admin → AI Playground → Settings.',
     }).catch(() => {});
   }
-}
-
-function adminNotifyEmail() {
-  return getSetting('admin_email', '') || process.env.ADMIN_NOTIFY_EMAIL || 'hello@firmledger.co.ke';
 }
 
 /* ---------------- Settings ---------------- */

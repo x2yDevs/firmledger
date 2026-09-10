@@ -308,7 +308,9 @@ function seed() {
   section('Content');
   await tool('email_users', { audience: 'all', subject: 'Ledger maintenance', message: 'A short scheduled-maintenance note for every member.' },
     (r) => (r.queued === count('SELECT COUNT(*) c FROM users') ? null : 'wrong recipient count'));
-  await tool('email_users', { audience: 'nobody@nowhere.example', subject: 'x', message: 'A message body long enough.' }, null, { expectFail: true });
+  await tool('email_users', { audience: 'nobody@nowhere.example', subject: 'Hello', message: 'A message body long enough.' },
+    (r) => (r.queued === 1 ? null : 'a single email address did not queue one message'));
+  await tool('email_users', { audience: 'not-an-audience', subject: 'x', message: 'A message body long enough.' }, null, { expectFail: true });
   await tool('email_all_users', { subject: 'Everyone', message: 'A broadcast to the whole member base.' },
     (r) => (r.queued === count('SELECT COUNT(*) c FROM users') ? null : 'broadcast recipient count wrong'));
 
