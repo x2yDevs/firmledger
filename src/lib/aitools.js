@@ -17,7 +17,12 @@ const { findListing, findUser, approveListingRow, rejectListingRow, queueMail } 
 const { sendBranded } = require('./mailer');
 const { deleteLogo } = require('./upload');
 const notify = require('./notify');
-const { siteUrl, escHtml, normalizeUrl, slugify, randomToken } = require('./util');
+const { siteUrl, escHtml, normalizeUrl, slugify, randomToken, isEmail } = require('./util');
+
+/* Where “email admin” goes — same admin inbox as ai.js/admin.js. */
+function adminNotifyEmail() {
+  return getSetting('admin_email', '') || process.env.ADMIN_NOTIFY_EMAIL || 'hello@firmledger.co.ke';
+}
 const catLib = require('./categories');
 const plans = require('./plans');
 const ad = require('./advertising');
@@ -1069,11 +1074,11 @@ const CORE_TOOLS = [
   /* ---------------- Content ---------------- */
   {
     name: 'email_users', group: 'content', label: 'Email members', mutating: true,
-    description: 'Email an audience: all, pro, free, newsletter, or a single email. Subject and message required.',
+    description: 'Email an audience: all, pro, free, newsletter, admin (the admin inbox), or a single email address. Subject and message required.',
     parameters: {
       type: 'object',
       properties: {
-        audience: { type: 'string', description: 'all | pro | free | newsletter | a specific email' },
+        audience: { type: 'string', description: 'all | pro | free | newsletter | admin | a specific email address' },
         subject: { type: 'string' },
         message: { type: 'string' },
       },
@@ -1093,10 +1098,12 @@ const CORE_TOOLS = [
       else if (to === 'pro') recipients = db.prepare(`SELECT email FROM users WHERE ${proSql}`).all(today).map((u) => u.email);
       else if (to === 'free') recipients = db.prepare(`SELECT email FROM users WHERE NOT ${proSql}`).all(today).map((u) => u.email);
       else if (to === 'newsletter') recipients = db.prepare('SELECT email FROM newsletter_subscribers WHERE active=1').all().map((n) => n.email);
+      else if (to === 'admin') recipients = [adminNotifyEmail().toLowerCase()];
+      else if (isEmail(to)) recipients = [to];
       else {
         const u = db.prepare('SELECT email FROM users WHERE email=?').get(to);
         const n = u ? null : db.prepare('SELECT email FROM newsletter_subscribers WHERE email=? AND active=1').get(to);
-        if (!u && !n) return { error: 'Unknown audience. Use all, pro, free, newsletter, or an email.' };
+        if (!u && !n) return { error: 'Unknown audience. Use all, pro, free, newsletter, admin, or a full email address.' };
         recipients = [(u || n).email];
       }
       if (!recipients.length) return { error: 'That audience is empty right now.' };
