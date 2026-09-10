@@ -619,6 +619,7 @@ rule('__thanks', (c) => /^\s*thanks\b/.test(c) && c.trim().split(' ').length <= 
 rule('__reset', (c) => /^\s*reset\s*$/.test(c));
 rule('__undo', (c) => has(c, /\bundo\b/));
 rule('__whoami', (c) => has(c, /\b(who am i|whoami|am i admin|my role)\b/));
+rule('__api_playground', (c) => has(c, /\b(api|developer)\b/) && has(c, /\b(playground|assistant|endpoints?|requests?|console)\b/) && !has(c, /\b(key|keys|revoke|usage)\b/), () => ({ args: {} }));
 
 /* A bare area name is not an unknown command. It opens a safe, actionable
  * menu so an admin can discover the same operations that are available in the
@@ -709,8 +710,8 @@ rule('__none_2fa', (c) => has(c, /\b2fa\b/) && has(c, /\b(on|off|start|enroll|se
 rule('set_ticket_status', (c) => has(c, /\bcloseallsolved\b/), () => ({ none: 'Tickets are closed one at a time so nothing slips — say “show solved tickets” and then “close FL-XXXX”, or “close it” after opening one.' }));
 rule('get_health', (c) => has(c, /\bhealth\b/) && !has(c, /\b(indexing|statuspage|component)\b/));
 rule('get_payments_summary', (c) => has(c, /\bpayment\b/) && !has(c, /\b(show|count)\b.*\bpayment\b.*\b(pending|failed|list)\b/) && !has(c, /\bpaypal\b/));
-rule('get_site_overview', (c) => has(c, /\boverview\b/) || has(c, /\b(show|help)\b.*\b(pages|console|sections|site)\b/) || /^\s*show (site|firmledger)\s*$/.test(c));
-rule('get_settings', (c) => (has(c, /\b(show|count)?\s*settings\b/) || (has(c, /\b(show|display|view|read)\b/) && has(c, /\bpaypal\b/) && !has(c, /\blisting\b/))) && !has(c, /\b(set|on|off|save)\b.*\bsettings\b/) && !has(c, /\bassistant\b/) && !has(c, /\b(upkeep|news|smtp|ratelimit)\b/));
+rule('get_site_overview', (c, b) => (has(c, /\boverview\b/) || has(c, /\b(show|help)\b.*\b(pages|console|sections|site)\b/) || /^\s*show (site|firmledger)\s*$/.test(c)) && !/\b(search|find|locate|lookup|look\s+up|where\s+is|where\s+are)\b/i.test(String(b && b.raw || '')));
+rule('get_settings', (c, b) => ((has(c, /\b(show|count)?\s*settings\b/) || (has(c, /\b(show|display|view|read)\b/) && has(c, /\bpaypal\b/) && !has(c, /\blisting\b/))) && !has(c, /\b(set|on|off|save)\b.*\bsettings\b/) && !has(c, /\bassistant\b/) && !has(c, /\b(upkeep|news|smtp|ratelimit)\b/)) && !/\b(search|find|locate|lookup|look\s+up|where\s+is|where\s+are)\b/i.test(String(b && b.raw || '')));
 rule('get_ai_playground', (c) => has(c, /\bassistant\b/) && has(c, /\b(show|status|settings|state|config)\b/));
 rule('get_indexing_status', (c) => has(c, /\b(indexing|indexnow|googleindex|upkeep|sweep)\b/) && has(c, /\b(show|status|count|health|progress|quota|running)\b/) && !has(c, /\b(on|off|run|start|cancel|stop|ping|delete)\b/));
 rule('get_status_page', (c) => has(c, /\bstatuspage\b/) && !has(c, /\b(statusreport|reset|run|refresh|delete|create|open|update|solved)\b/) || (has(c, /\b(show|count)\b/) && has(c, /\bcomponent\b/)) || (has(c, /\b(site|platform|service)\b/) && has(c, /\bstatus\b/) && !has(c, /\b(ticket|listing|incident|user)\b/)));
@@ -749,7 +750,7 @@ rule('list_listings', (c) => (has(c, /\b(show|open)\b/) || has(c, /\blisting (ow
     if (text && has(c, /\b(in|from)\b/) && !args.country && !args.category) { const cat = q.categoryByName(text); if (cat && !has(c, /\bfrom\b/)) args.category = cat.name; else args.country = text.replace(/\b\w/g, (m) => m.toUpperCase()); }
     return { args };
   });
-rule('get_listing', (c) => (has(c, /\b(show|open)\b/) && has(c, /\blisting\b/)) || (has(c, /\b(show|open)\b/) && !has(c, /\b(user|ticket|claim|removal|post|career|promo|planoffer|adpackage|category|incident|subscriber|payment|news|story|inbox|settings|health|stats|indexing|statuspage|smtp|ratelimit|ip|domain|backup|protection)\b/)),
+rule('get_listing', (c, b) => ((has(c, /\b(show|open)\b/) && has(c, /\blisting\b/)) || (has(c, /\b(show|open)\b/) && !has(c, /\b(user|ticket|claim|removal|post|career|promo|planoffer|adpackage|category|incident|subscriber|payment|news|story|inbox|settings|health|stats|indexing|statuspage|smtp|ratelimit|ip|domain|backup|protection)\b/))) && !/\b(search|find|locate|lookup|look\s+up|where\s+is|where\s+are)\b/i.test(String(b && b.raw || '')),
   ({ slots, ctx, text, c }) => {
     if (slots.emails.length && !slots.ids.listing) return { skip: true };
     if (has(c, /\bthem\b/) && !has(c, /\blisting\b/)) return { skip: true };
@@ -762,7 +763,22 @@ rule('get_listing', (c) => (has(c, /\b(show|open)\b/) && has(c, /\blisting\b/)) 
     }
     return { args: { id_or_slug: r.value }, listing: r.row };
   });
-rule('search_admin', (c) => has(c, /\b(show|search)\b/) && has(c, /\b(everywhere|everything|global|anywhere|across)\b/), ({ text, slots }) => { const qq = (text || '').replace(/\b(everywhere|everything|global|globally|anywhere|across|the|whole|site|console)\b/gi, ' ').replace(/\s+/g, ' ').trim() || slots.quoted[0] || slots.emails[0] || slots.domains[0]; return qq ? { args: { q: qq } } : { ask: 'Search for what?', entity: 'text' }; });
+rule('search_admin', (c, b) => {
+  const raw = String(b && b.raw || '');
+  const global = has(c, /\b(show|search|find|locate)\b/) && (has(c, /\b(everywhere|everything|anywhere|across|all)\b/) || /\bglobal(?:ly)?\s+search\b/i.test(raw));
+  const explicit = /\b(search|find|locate|lookup|look\s+up|where\s+is|where\s+are)\b/i.test(raw)
+    && !has(c, /\b(listings?|users?|members?|tickets?|claims?|removals?)\b/);
+  return global || explicit;
+}, ({ text, raw, slots }) => {
+  const source = String(text || raw || '');
+  const scoped = source.match(/\b(?:for|about|named|called|containing|matching)\s+(.+)$/i);
+  const qq = (scoped ? scoped[1] : source)
+    .replace(/^\s*(?:show|search|find|locate|lookup|look\s+up|where\s+is|where\s+are)\b\s*/i, '')
+    .replace(/\b(everywhere|everything|anywhere|across|all|the|whole|site|console|admin)\b/gi, ' ')
+    .replace(/\s+/g, ' ').trim();
+  const cleanQ = [...new Set(qq.split(/\s+/).filter(Boolean))].join(' ') || slots.quoted[0] || slots.emails[0] || slots.domains[0];
+  return cleanQ ? { args: { q: cleanQ } } : { ask: 'Search the entire site for what?', entity: 'text' };
+});
 rule('search_listings', (c) => has(c, /\b(show|search)\b/) && has(c, /\blisting\b/), ({ slots, text, c }) => {
   const term = slots.quoted[0] || slots.domains[0] || text;
   if (!term || term.length < 2) return { skip: true };
@@ -1252,6 +1268,18 @@ rule('get_listing', (c) => true, ({ slots, ctx, text, c }) => {
   return { skip: true };
 }, { guess: true });
 
+/* Last-resort recovery: an unfamiliar phrase is still a safe, read-only
+ * site-wide search. This means “where did that email/name/word go?” never
+ * dead-ends, while the guess flag and the no-match response make it explicit
+ * that nothing was silently treated as a write command. */
+rule('search_admin', (c, b) => {
+  const text = String(b && b.text || '').trim();
+  return text.length >= 2 && !/^\s*(yes|no|cancel|help|hello|thanks|ok|okay)\s*$/i.test(text);
+}, ({ text, slots }) => {
+  const query = String(text || '').trim() || slots.quoted[0] || slots.emails[0] || slots.domains[0];
+  return query ? { args: { q: query } } : { skip: true };
+}, { guess: true });
+
 /* ------------------------------------------------------------------ */
 /* 6. Parse one command                                                */
 /* ------------------------------------------------------------------ */
@@ -1315,7 +1343,7 @@ function parseCommand(raw, ctx = {}) {
   const b = { raw: lower(raw), c, slots, text, ctx };
   for (const r of R) {
     let ok = false;
-    try { ok = r.test(c); } catch { ok = false; }
+    try { ok = r.test(c, b); } catch { ok = false; }
     if (!ok) continue;
     let out;
     try { out = r.build(b); } catch (e) { out = { none: `I could not work that out: ${e.message}` }; }
@@ -1524,13 +1552,20 @@ const FORMAT = {
     ].join('\n');
   },
   search_admin(r) {
-    const parts = [];
-    if ((r.listings || []).length) parts.push('**Listings**\n' + list(r.listings, (l) => `#${l.id} ${l.name} — ${l.status} · ${l.category || ''}`));
-    if ((r.users || []).length) parts.push('**Members**\n' + list(r.users, (u) => `#${u.id} ${u.name || ''} <${u.email}>${u.suspended ? ' · suspended' : ''}`));
-    if ((r.tickets || []).length) parts.push('**Tickets**\n' + list(r.tickets, (t) => `${t.ref} ${t.subject} — ${t.status}`));
-    if ((r.claims || []).length) parts.push('**Claims**\n' + list(r.claims, (c) => `#${c.id} ${c.domain} — ${c.status}`));
-    if ((r.posts || []).length) parts.push('**Posts**\n' + list(r.posts, (p) => `#${p.id} ${p.title} — ${p.status}`));
-    return parts.length ? parts.join('\n') : 'Nothing matched anywhere.';
+    const areas = Array.isArray(r.areas) ? r.areas : [];
+    if (!areas.length) return `I am not sure which area that refers to, so I searched everywhere but found no match for **${r.query || 'that search'}**.\nI searched ${r.searched_tables || 'all'} functional areas. Try a broader name, email, id, slug, status or phrase.\n**Try a functional area:** show pending listings · show users · show open tickets · show settings · help`;
+    const rowText = (row) => {
+      const preferred = ['name', 'title', 'subject', 'email', 'label', 'ref', 'slug', 'key', 'domain', 'url', 'status', 'provider', 'action'];
+      const entries = preferred.filter((k) => row[k] !== undefined && row[k] !== null && String(row[k]) !== '').map((k) => `${k}=${String(row[k]).replace(/\s+/g, ' ').slice(0, 110)}`);
+      const extra = Object.entries(row).filter(([k, v]) => !preferred.includes(k) && v !== undefined && v !== null && String(v) !== '').slice(0, 3).map(([k, v]) => `${k}=${String(v).replace(/\s+/g, ' ').slice(0, 80)}`);
+      return (entries.concat(extra).join(' · ') || 'matching record').replace(/\n/g, ' ');
+    };
+    const parts = [`**Site-wide search: “${r.query || ''}”**`, `Found **${r.total_matches || 0}** match${r.total_matches === 1 ? '' : 'es'} across ${areas.length} area${areas.length === 1 ? '' : 's'}.`];
+    for (const area of areas) {
+      parts.push(`**${area.label || area.area}** · ${area.count} match${area.count === 1 ? '' : 'es'}\n${list(area.rows || [], rowText, 8)}\n**Commands for this area:** ${(area.commands || []).join(' · ')}`);
+    }
+    parts.push('These are live admin commands. Reads run now; changes still ask for confirmation, and destructive/bulk actions always confirm.');
+    return parts.join('\n\n');
   },
   get_audit_log(r) {
     if (!(r.entries || []).length) return 'The audit log is empty for that filter.';
@@ -1710,6 +1745,12 @@ function suggestionsFor(tool, plan, result, ctx) {
     case 'suspend_user': s.push('unsuspend them', 'show their listings'); break;
     case 'get_status_page': if (result && result.open_incidents && result.open_incidents.length) s.push(`resolve incident ${result.open_incidents[0].id}`); else s.push('open an incident titled "…"', 'run the status check'); break;
     case 'get_admin_inbox': if (result && result.unread) s.push('mark inbox read'); break;
+    case 'search_admin': {
+      const areas = result && Array.isArray(result.areas) ? result.areas : [];
+      if (areas[0] && Array.isArray(areas[0].commands)) s.push(...areas[0].commands.slice(0, 3));
+      s.push('search the entire site for <term>', 'show settings');
+      break;
+    }
     case 'get_settings': s.push('show paypal settings', 'email settings', 'indexing status', 'send a test email'); break;
     default: {
       const t = tools.getTool(tool);

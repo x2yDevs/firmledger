@@ -46,6 +46,98 @@ const GROUPS = [
   { id: 'indexing', label: 'Search indexing & upkeep' },
 ];
 
+/*
+ * Global search is deliberately broader than the five legacy result buckets
+ * below. The admin may search a name, email, URL, ticket reference, status,
+ * provider, setting key, incident, news title, audit action, or any other
+ * ordinary site record and get the area-specific commands that can actually
+ * operate on the returned records. Secrets and authentication material are
+ * never searchable or returned here.
+ */
+const GLOBAL_SEARCH_AREA_META = {
+  users: { key: 'users', label: 'Members', commands: ['show user <email or id>', 'suspend / unsuspend <email>', 'give <email> Pro for 30 days', 'show their listings', 'delete user <email>'] },
+  listings: { key: 'listings', label: 'Listings', commands: ['show listing <id, slug or name>', 'approve / reject <listing>', 'feature / sponsor <listing>', 'refresh tech for <listing>', 'set <listing> tagline="…"', 'delete listing <id>'] },
+  listing_events: { key: 'listing-events', label: 'Listing timelines', commands: ['show listing <id or slug>', 'add event to <listing> titled "…"', 'show <listing> timeline'] },
+  claims: { key: 'claims', label: 'Ownership claims', commands: ['show pending claims', 'recheck claim <id>', 'approve / reject claim <id>'] },
+  removal_requests: { key: 'removals', label: 'Removal requests', commands: ['show removal requests', 'dismiss removal <id>', 'fulfil removal <id>'] },
+  tickets: { key: 'tickets', label: 'Support tickets', commands: ['show open tickets', 'open ticket <ref>', 'reply to <ref> saying: …', 'mark <ref> solved', 'reopen ticket <ref>'] },
+  ticket_messages: { key: 'ticket-messages', label: 'Ticket messages', commands: ['open ticket <ref>', 'reply to <ref> saying: …', 'mark <ref> solved'] },
+  blog_posts: { key: 'posts', label: 'Blog posts', commands: ['show blog posts', 'edit post <id> title="…"', 'publish / unpublish post <id>', 'delete post <id>'] },
+  listing_news: { key: 'news', label: 'Listing news', commands: ['show pending news', 'approve / reject story <id>', 'add story to <listing> titled "…"', 'delete story <id>'] },
+  careers: { key: 'careers', label: 'Careers', commands: ['show roles', 'edit role <id> field=value', 'close / reopen role <id>', 'delete role <id>'] },
+  jobs: { key: 'jobs', label: 'Jobs', commands: ['show jobs', 'close / reopen job <id>', 'delete job <id>'] },
+  promo_codes: { key: 'promos', label: 'Promotions', commands: ['show promos', 'pause promo <code>', 'resume promo <code>', 'delete promo <code>'] },
+  promo_redemptions: { key: 'promo-redemptions', label: 'Promo redemptions', commands: ['show promos', 'show revenue', 'delete promo <code>'] },
+  plans: { key: 'plans', label: 'Plans and offers', commands: ['show plans', 'hide plan <id>', 'show plan <id>', 'delete plan <id>'] },
+  ad_packages: { key: 'ad-packages', label: 'Advertising packages', commands: ['show ad packages', 'hide package <id>', 'show package <id>', 'delete package <id>'] },
+  categories: { key: 'categories', label: 'Categories', commands: ['show categories', 'create category <name>', 'rename category <old> to <new>', 'delete category <name>'] },
+  payments: { key: 'payments', label: 'Payments', commands: ['show revenue', 'show pending payments', 'show user <email>', 'show settings'] },
+  newsletter_subscribers: { key: 'subscribers', label: 'Newsletter subscribers', commands: ['show subscribers', 'email newsletter subscribers', 'set newsletter weekly', 'send newsletter digest now'] },
+  notifications: { key: 'notifications', label: 'Admin notifications', commands: ['show inbox', 'mark inbox read', 'archive notification <id>', 'leave a note: …'] },
+  incidents: { key: 'incidents', label: 'Incidents', commands: ['status page', 'open incident titled "…" major', 'update incident <id> saying: …', 'resolve incident <id>'] },
+  incident_updates: { key: 'incident-updates', label: 'Incident updates', commands: ['show status page', 'update incident <id> saying: …', 'resolve incident <id>'] },
+  status_components: { key: 'status-components', label: 'Status components', commands: ['status page', 'reset component <slug>', 'run the status check', 'open an incident titled "…"'] },
+  component_status_history: { key: 'status-history', label: 'Status history', commands: ['status page', 'run the status check', 'show audit log', 'open an incident titled "…"'] },
+  spam_ip: { key: 'ip-rules', label: 'IP protection rules', commands: ['show blocked ips', 'block ip <address>', 'allow ip <address>', 'set rate limit login=…'] },
+  spam_domain: { key: 'domain-rules', label: 'Domain protection rules', commands: ['show blocked domains', 'block domain <domain>', 'allow domain <domain>', 'set rate limit login=…'] },
+  smtp_accounts: { key: 'mail', label: 'Mail providers', commands: ['email settings', 'add smtp host=… username=… password=…', 'send a test email', 'set mail from <address>'] },
+  admin_mail_log: { key: 'mail-log', label: 'Mail delivery log', commands: ['email settings', 'send a test email', 'show audit log'] },
+  api_keys: { key: 'api-keys', label: 'API keys', commands: ['show api keys', 'revoke api key <id>', 'show API keys'] },
+  api_webhooks: { key: 'webhooks', label: 'API webhooks', commands: ['open API playground', 'show API keys', 'show settings'] },
+  api_webhook_deliveries: { key: 'webhook-deliveries', label: 'Webhook deliveries', commands: ['open API playground', 'show API keys', 'show settings'] },
+  settings: { key: 'settings', label: 'Settings', commands: ['show settings', 'set site setting <key>=<value>', 'show PayPal settings', 'email settings', 'indexing status'] },
+  ai_audit_log: { key: 'audit', label: 'Assistant audit log', commands: ['show audit log', 'show moderation log', 'what did I just do', 'show settings'] },
+  ai_moderation_log: { key: 'moderation-log', label: 'Moderation decisions', commands: ['show moderation log', 'score <listing>', 'review <listing> now', 'moderation rules'] },
+  ai_pending_actions: { key: 'pending-actions', label: 'Pending confirmations', commands: ['show audit log', 'yes', 'cancel', 'show assistant status'] },
+  indexing_log: { key: 'indexing', label: 'Indexing log', commands: ['indexing status', 'clear indexing logs', 'run google indexing batch', 'refresh tech for all stale'] },
+  google_indexing_submissions: { key: 'google-indexing', label: 'Google indexing submissions', commands: ['indexing status', 'run google indexing batch', 'google indexing on', 'clear indexing logs'] },
+  api_usage_daily: { key: 'api-usage', label: 'API usage', commands: ['show api keys', 'show settings', 'open the API playground'] },
+  api_usage_endpoint_daily: { key: 'api-endpoint-usage', label: 'API endpoint usage', commands: ['show api keys', 'show settings', 'open the API playground'] },
+  relationships: { key: 'relationships', label: 'Listing relationships', commands: ['show listing <id or slug>', 'link <listing> to <listing> as partner', 'remove relationship <id>'] },
+  favorites: { key: 'favorites', label: 'Favourites', commands: ['show user <email>', 'show listing <id or slug>'] },
+  pro_transfer_requests: { key: 'pro-transfers', label: 'Pro transfers', commands: ['show pending transfers', 'approve transfer <id>', 'reject transfer <id>'] },
+  deletion_requests: { key: 'deletion-requests', label: 'Deletion requests', commands: ['show removal requests', 'dismiss removal <id>', 'fulfil removal <id>'] },
+  status_subscribers: { key: 'status-subscribers', label: 'Status subscribers', commands: ['show status page', 'send status update', 'set weekly status report on'] },
+};
+const GLOBAL_SEARCH_HIDDEN_TABLES = new Set(['sessions', 'resets', 'reg_otps', 'user_totp', 'sqlite_sequence']);
+const GLOBAL_SEARCH_SECRET_COLUMN = /(?:password|secret|token|cipher|csrf|otp|recovery|private|hash|credential|payload|result)/i;
+function sqlIdent(name) { return `"${String(name).replace(/"/g, '""')}"`; }
+function globalSearch(args) {
+  const query = String(args.q || '').trim().slice(0, 80);
+  if (query.length < 2) return { error: 'Need at least 2 characters.' };
+  const like = `%${query.replace(/[%_]/g, '')}%`;
+  const numeric = /^\\d+$/.test(query);
+  const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all();
+  const areas = [];
+  for (const { name } of tables) {
+    if (GLOBAL_SEARCH_HIDDEN_TABLES.has(name)) continue;
+    let info;
+    try { info = db.prepare(`PRAGMA table_info(${sqlIdent(name)})`).all(); } catch { continue; }
+    const safe = info.filter((c) => !GLOBAL_SEARCH_SECRET_COLUMN.test(c.name) && (name !== 'settings' || c.name === 'key'));
+    const searchable = safe.filter((c) => {
+      const textType = /CHAR|TEXT|CLOB|DATE|TIME/i.test(String(c.type || ''));
+      return textType || (numeric && c.name === 'id') || /^(id|status|kind|type|provider|channel|category|country|domain|slug|ref)$/i.test(c.name);
+    });
+    if (!searchable.length) continue;
+    const where = searchable.map((c) => `CAST(${sqlIdent(c.name)} AS TEXT) LIKE ?`).join(' OR ');
+    const selected = safe.slice(0, 18).map((c) => sqlIdent(c.name)).join(', ');
+    try {
+      const rows = db.prepare(`SELECT ${selected} FROM ${sqlIdent(name)} WHERE ${where} LIMIT 8`).all(...searchable.map(() => like));
+      if (!rows.length) continue;
+      const meta = GLOBAL_SEARCH_AREA_META[name] || { key: name.replace(/_/g, '-'), label: name.replace(/_/g, ' ').replace(/\\b\\w/g, (x) => x.toUpperCase()), commands: ['show ' + name.replace(/_/g, ' '), 'show settings'] };
+      areas.push({ area: meta.key, label: meta.label, table: name, count: rows.length, rows, commands: meta.commands });
+    } catch { /* migrations can add a table between the schema read and query */ }
+  }
+  const result = { query, searched_everywhere: true, searched_tables: tables.length - [...GLOBAL_SEARCH_HIDDEN_TABLES].filter((x) => tables.some((t) => t.name === x)).length, total_matches: areas.reduce((n, a) => n + a.count, 0), areas };
+  /* Preserve the original stable buckets used by existing clients/tests. */
+  for (const key of ['users', 'listings', 'tickets', 'claims', 'posts']) {
+    result[key] = [];
+    const matches = areas.filter((a) => a.area === key || (key === 'posts' && a.area === 'posts'));
+    result[key] = matches.flatMap((a) => a.rows).slice(0, 25);
+  }
+  return result;
+}
+
 const CORE_TOOLS = [
   /* ---------------- Lookups ---------------- */
   {
@@ -139,25 +231,14 @@ const CORE_TOOLS = [
   },
   {
     name: 'search_admin', group: 'read', label: 'Global admin search', mutating: false,
-    description: 'Search across users, listings, tickets, claims and blog posts (same as Admin → Search).',
+    description: 'Search every ordinary, non-secret admin record across the site: members, listings, tickets, claims, content, news, mail, payments, settings keys, protection, indexing, API, status, moderation and audit areas. The result includes the commands available for each matching area.',
     parameters: {
       type: 'object',
-      properties: { q: { type: 'string', description: 'Search text, 2+ characters.' } },
+      properties: { q: { type: 'string', description: 'Search text, 2+ characters. Searches all functional site areas; secrets and authentication material are excluded.' } },
       required: ['q'], additionalProperties: false,
     },
-    summarize(a) { return `Admin search “${a.q || ''}”.`; },
-    run(args) {
-      const q = String(args.q || '').trim().slice(0, 80);
-      if (q.length < 2) return { error: 'Need at least 2 characters.' };
-      const like = `%${q.replace(/[%_]/g, '')}%`;
-      return {
-        users: db.prepare('SELECT id, name, email, suspended FROM users WHERE name LIKE ? OR email LIKE ? LIMIT 10').all(like, like),
-        listings: db.prepare('SELECT id, slug, name, status, category FROM listings WHERE name LIKE ? OR slug LIKE ? OR website LIKE ? LIMIT 10').all(like, like, like),
-        tickets: db.prepare('SELECT id, ref, subject, status FROM tickets WHERE ref LIKE ? OR subject LIKE ? LIMIT 10').all(like, like),
-        claims: db.prepare('SELECT id, status, domain FROM claims WHERE domain LIKE ? LIMIT 10').all(like),
-        posts: db.prepare('SELECT id, slug, title, status FROM blog_posts WHERE title LIKE ? OR slug LIKE ? LIMIT 8').all(like, like),
-      };
-    },
+    summarize(a) { return `Search the entire admin site for “${a.q || ''}” and show matching area commands.`; },
+    run(args) { return globalSearch(args); },
   },
   {
     name: 'list_open_tickets', group: 'read', label: 'Open tickets', mutating: false,

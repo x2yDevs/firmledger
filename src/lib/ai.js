@@ -440,6 +440,7 @@ function special(plan, ctx) {
     case '__reset': return message('Fresh start — context cleared. What would you like to do?', {}, ['how many pending', 'show open tickets', 'help']);
     case '__cancelword': return message(ctx.ask ? bot.pick(bot.SAY.cancelled) : 'Nothing is waiting to be cancelled — what next?', { ...ctx, ask: null, pending: null }, ['how many pending', 'show open tickets', 'help']);
     case '__whoami': return message('You are signed in as the FirmLedger administrator. Everything I do runs with your admin session and is written to the audit log.', ctx, ['show audit log', 'help']);
+    case '__api_playground': return message('Open the [Developer API Playground](/dashboard/api/playground) to run the complete authenticated v1 surface: discovery, health, usage, listings, owner CRUD, categories, countries, suggestions, verification, CSV export and webhooks.', ctx, ['show api keys', 'show settings', 'help']);
     case '__undo': {
       const l = ctx.lastTool;
       const inverse = { approve_listing: 'reject it', reject_listing: 'approve it', feature_listing: 'unfeature it', suspend_user: 'unsuspend them', unsuspend_user: 'suspend them', grant_user_pro: 'revoke their pro', sponsor_listing: 'unsponsor it', set_maintenance_mode: 'maintenance off', block_ip: 'unblock that ip' };
