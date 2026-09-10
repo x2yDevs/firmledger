@@ -1280,26 +1280,35 @@ const CORE_TOOLS = [
   /* ---------------- Ops ---------------- */
   {
     name: 'set_maintenance_mode', group: 'ops', label: 'Maintenance mode', mutating: true, sensitive: true,
-    description: 'Turn the public maintenance holding page on or off. Admins stay signed in.',
+    description: 'Turn the public maintenance holding page on or off. Admins stay signed in. Optional title, message and eta (expected-back time) update what visitors read on the page.',
     parameters: {
       type: 'object',
       properties: {
         on: { type: 'boolean' },
         title: { type: 'string' },
         message: { type: 'string' },
+        eta: { type: 'string', description: 'Optional free-text expectation shown as a chip, e.g. “back at 18:00 EAT” (max 80 chars).' },
       },
       required: ['on'], additionalProperties: false,
     },
-    summarize(a) { return a.on ? 'Turn maintenance mode ON.' : 'Turn maintenance mode OFF.'; },
+    summarize(a) {
+      let s = a.on ? 'Turn maintenance mode ON' : 'Turn maintenance mode OFF';
+      if (a.on && a.title) s += ` — title “${a.title}”`;
+      if (a.on && a.message) s += ` — message “${String(a.message).slice(0, 60)}${String(a.message).length > 60 ? '…' : ''}”`;
+      if (a.on && a.eta) s += ` — back ${a.eta}`;
+      return s + '.';
+    },
     run(args) {
       const on = Boolean(args.on);
       setSetting('maintenance_on', on ? '1' : '0');
-      if (args.title) setSetting('maintenance_title', String(args.title).trim().slice(0, 120));
-      if (args.message) setSetting('maintenance_message', String(args.message).trim().slice(0, 2000));
+      if (args.title !== undefined) setSetting('maintenance_title', String(args.title).trim().slice(0, 120));
+      if (args.message !== undefined) setSetting('maintenance_message', String(args.message).trim().slice(0, 2000));
+      if (args.eta !== undefined) setSetting('maintenance_eta', String(args.eta).trim().slice(0, 80));
       return {
         maintenance_on: on,
         title: getSetting('maintenance_title', "We'll be back soon"),
         message: getSetting('maintenance_message', ''),
+        eta: getSetting('maintenance_eta', ''),
       };
     },
   },

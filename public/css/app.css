@@ -2630,3 +2630,126 @@ body.ai-modal-open { overflow: hidden; }
   .admin-form-cap .form-actions { flex-wrap: wrap; }
   .admin-form-cap .form-actions .btn { max-width: 100%; }
 }
+
+/* ---------- maintenance holding page + animated 404/500 ---------- */
+/* Both pages are pure design-system: Fraunces display, Inter body, JetBrains
+   Mono labels, paper/ink/navy tokens. Everything animated respects
+   prefers-reduced-motion. */
+
+/* … maintenance: full-screen navy stage … */
+.maint-body { background: var(--navy); color: #DCE4F0; min-height: 100vh; display: flex; flex-direction: column; overflow-x: hidden; }
+.maint-stage { position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
+/* drifting ledger grid — the "record layer" itself, slowly breathing */
+.maint-grid {
+  position: absolute; inset: -60px;
+  background-image:
+    linear-gradient(rgba(138,180,248,.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(138,180,248,.055) 1px, transparent 1px);
+  background-size: 44px 44px;
+  -webkit-mask-image: radial-gradient(ellipse 75% 65% at 50% 42%, #000 30%, transparent 78%);
+  mask-image: radial-gradient(ellipse 75% 65% at 50% 42%, #000 30%, transparent 78%);
+  animation: maintGrid 60s linear infinite;
+}
+@keyframes maintGrid { to { background-position: 44px 44px; } }
+/* two soft glows, different speeds, never in sync */
+.maint-glow { position: absolute; width: 62vmax; height: 62vmax; border-radius: 50%; filter: blur(2px); }
+.maint-glow-a { left: -18vmax; top: -22vmax; background: radial-gradient(circle at center, rgba(29,78,216,.24), transparent 62%); animation: maintDriftA 26s ease-in-out infinite alternate; }
+.maint-glow-b { right: -22vmax; bottom: -26vmax; background: radial-gradient(circle at center, rgba(181,140,46,.13), transparent 60%); animation: maintDriftB 34s ease-in-out infinite alternate; }
+@keyframes maintDriftA { from { transform: translate(0, 0) scale(1); } to { transform: translate(7vmax, 5vmax) scale(1.12); } }
+@keyframes maintDriftB { from { transform: translate(0, 0) scale(1.08); } to { transform: translate(-6vmax, -4vmax) scale(1); } }
+/* a single scan line sweeping the ledger, like a page being reviewed */
+.maint-scan { position: absolute; left: 0; right: 0; top: -8%; height: 2px; background: linear-gradient(90deg, transparent, rgba(138,180,248,.5), transparent); opacity: .5; animation: maintScan 9s ease-in-out infinite; }
+@keyframes maintScan { 0% { transform: translateY(0); opacity: 0; } 12% { opacity: .5; } 88% { opacity: .5; } 100% { transform: translateY(116vh); opacity: 0; } }
+
+.maint-main { flex: 1; display: flex; align-items: center; justify-content: center; position: relative; z-index: 1; padding: clamp(44px, 7vw, 90px) 20px; }
+.maint-card { max-width: 620px; text-align: center; }
+
+/* the mark: white logo inside a rotating dashed ring + counter-rotating arc */
+.maint-mark { position: relative; width: 92px; height: 92px; margin: 0 auto clamp(22px, 3.5vw, 32px); }
+.maint-logo { position: absolute; inset: 0; margin: auto; width: 46px; height: 46px; animation: maintRise .6s cubic-bezier(.22,.9,.28,1) both; }
+.maint-ring { position: absolute; inset: 6px; border-radius: 50%; border: 1px dashed #2C3E5C; animation: maintSpin 16s linear infinite; }
+.maint-ring-b { inset: -4px; border-style: solid; border-width: 1px; border-color: transparent; border-top-color: rgba(138,180,248,.65); border-right-color: rgba(138,180,248,.18); animation: maintSpin 7s linear infinite reverse; }
+.maint-ring::after { content: ""; position: absolute; inset: -12px; border-radius: 50%; background: radial-gradient(circle, rgba(29,78,216,.28), transparent 68%); animation: stPulse 3.2s ease-in-out infinite; }
+@keyframes maintSpin { to { transform: rotate(360deg); } }
+
+.maint-kicker { display: inline-flex; align-items: center; gap: 10px; font: 500 11px/1 var(--fm); letter-spacing: .18em; text-transform: uppercase; color: #8AB4F8; animation: maintRise .6s .08s cubic-bezier(.22,.9,.28,1) both; }
+.maint-kdot { width: 7px; height: 7px; border-radius: 50%; background: #E4B95B; animation: pulse 2.2s infinite; }
+.maint-dots { display: inline-flex; gap: 4px; }
+.maint-dots i { width: 3px; height: 3px; border-radius: 50%; background: #8AB4F8; animation: typing 1.05s infinite ease-in-out; }
+.maint-dots i:nth-child(2) { animation-delay: .16s; }
+.maint-dots i:nth-child(3) { animation-delay: .32s; }
+
+.maint-title { font: 600 clamp(2rem, 5vw, 3.1rem)/1.08 var(--fd); color: #fff; letter-spacing: -.012em; margin: 18px 0 0; animation: maintRise .6s .16s cubic-bezier(.22,.9,.28,1) both; }
+.maint-msg { color: #9FB0C8; font-size: clamp(15px, 2vw, 16.5px); line-height: 1.75; max-width: 540px; margin: 16px auto 0; animation: maintRise .6s .24s cubic-bezier(.22,.9,.28,1) both; }
+.maint-eta { display: inline-flex; align-items: center; gap: 8px; margin-top: 20px; padding: 9px 16px; border-radius: 999px; border: 1px solid #2C3E5C; color: #DCE4F0; font: 500 13px/1 var(--fb); background: rgba(22,41,74,.55); animation: maintRise .6s .3s cubic-bezier(.22,.9,.28,1) both, maintEtaPulse 3.4s 1s ease-in-out infinite; }
+.maint-eta b { color: #fff; font-weight: 600; }
+.maint-eta svg { color: #8AB4F8; flex: 0 0 auto; }
+@keyframes maintEtaPulse { 0%, 100% { border-color: #2C3E5C; } 50% { border-color: rgba(138,180,248,.55); } }
+
+/* indeterminate progress — the update is being applied */
+.maint-progress { margin: clamp(26px, 4vw, 38px) auto 0; max-width: 360px; animation: maintRise .6s .36s cubic-bezier(.22,.9,.28,1) both; }
+.maint-bar { height: 4px; border-radius: 4px; background: #16294A; overflow: hidden; position: relative; }
+.maint-bar i { position: absolute; top: 0; bottom: 0; width: 38%; border-radius: 4px; background: linear-gradient(90deg, var(--accent), #8AB4F8, #E4B95B); animation: maintBar 1.7s ease-in-out infinite; }
+@keyframes maintBar { 0% { left: -38%; } 55% { left: 100%; } 100% { left: 100%; } }
+.maint-progress-note { display: block; margin-top: 10px; font: 500 10.5px/1 var(--fm); letter-spacing: .14em; text-transform: uppercase; color: #64748B; }
+
+.maint-fine { margin-top: 22px; color: #64748B; font-size: 12.5px; animation: maintRise .6s .42s cubic-bezier(.22,.9,.28,1) both; }
+.maint-links { display: flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap; margin-top: 14px; animation: maintRise .6s .48s cubic-bezier(.22,.9,.28,1) both; }
+.maint-link { color: #8AB4F8; font: 500 13.5px/1 var(--fb); text-decoration: none; }
+a.maint-link:hover { color: #fff; }
+.maint-link.is-static { color: #64748B; cursor: default; }
+.maint-sep { color: #2C3E5C; }
+
+.maint-foot { position: relative; z-index: 1; text-align: center; padding: 22px 20px 30px; color: #64748B; font-size: 12.5px; border-top: 1px solid rgba(44,62,92,.45); }
+.maint-foot .mono { color: #9FB0C8; font-size: 11.5px; letter-spacing: .08em; }
+
+@keyframes maintRise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+
+/* … 404 / 500: the animated ledger lookup … */
+.err-hero { position: relative; overflow: hidden; border-block: 1px solid var(--hair); background: linear-gradient(180deg, #FFFFFF 0%, var(--paper) 100%); }
+.err-wrap { position: relative; text-align: center; padding: clamp(64px, 9vw, 120px) 20px; }
+/* drifting hairline rows — ledger lines passing by */
+.err-bg { position: absolute; inset: 0; pointer-events: none; }
+.err-bg i { position: absolute; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, var(--hair2) 18%, var(--hair2) 82%, transparent); opacity: .7; animation: errDrift 16s linear infinite; }
+.err-bg i:nth-child(1) { top: 22%; animation-duration: 19s; }
+.err-bg i:nth-child(2) { top: 48%; opacity: .45; animation-duration: 26s; animation-direction: reverse; }
+.err-bg i:nth-child(3) { top: 74%; opacity: .55; animation-duration: 22s; }
+@keyframes errDrift { from { transform: translateX(-14%); } to { transform: translateX(14%); } }
+
+.err-kicker { font: 500 11px/1 var(--fm); letter-spacing: .18em; text-transform: uppercase; color: var(--muted); animation: maintRise .5s both; }
+
+.err-code-wrap { position: relative; display: inline-flex; align-items: baseline; margin: 18px 0 6px; }
+.err-digit { font: 600 clamp(5.6rem, 16vw, 9.6rem)/1 var(--fd); color: var(--navy); letter-spacing: -.03em; display: inline-block; opacity: 0; animation: errDrop .75s cubic-bezier(.2, .9, .26, 1.18) both; text-shadow: 0 1px 0 var(--hair2); }
+.err-digit.err-d0 { animation-delay: .06s; }
+.err-digit.err-d1 { animation-delay: .18s; color: var(--accent); animation-name: errDrop, errFloat; animation-duration: .75s, 7s; animation-delay: .18s, 1.2s; animation-timing-function: cubic-bezier(.2,.9,.26,1.18), ease-in-out; animation-iteration-count: 1, infinite; animation-fill-mode: both, none; animation-direction: normal, alternate; }
+.err-digit.err-d2 { animation-delay: .3s; }
+@keyframes errDrop { 0% { opacity: 0; transform: translateY(-46px) rotate(-6deg) scale(1.06); } 70% { opacity: 1; transform: translateY(5px) rotate(1deg); } 100% { opacity: 1; transform: none; } }
+@keyframes errFloat { from { transform: translateY(0); } to { transform: translateY(-9px); } }
+
+/* the rejection stamp — lands hard and settles */
+.err-stamp {
+  position: absolute; right: -20px; bottom: 6px; transform: rotate(-8deg);
+  padding: 7px 13px; border: 2.5px solid var(--bad); border-radius: 7px;
+  color: var(--bad); background: rgba(251,236,234,.92);
+  font: 700 12px/1 var(--fm); letter-spacing: .16em; text-transform: uppercase;
+  box-shadow: 0 6px 18px -8px rgba(179,38,30,.45);
+  opacity: 0; animation: errStamp .5s .82s cubic-bezier(.2, 1.5, .36, 1) both;
+}
+@keyframes errStamp { 0% { opacity: 0; transform: rotate(-16deg) scale(1.9); } 85% { opacity: 1; transform: rotate(-7deg) scale(.96); } 100% { opacity: 1; transform: rotate(-8deg) scale(1); } }
+
+.err-entry { display: inline-flex; align-items: center; gap: 2px; font: 500 12px/1.9 var(--fm); letter-spacing: .1em; text-transform: uppercase; color: var(--ink2); background: var(--surface); border: 1px solid var(--hair); border-radius: 8px; padding: 7px 14px; margin: 8px 0 22px; animation: maintRise .5s .5s both; }
+.err-caret { width: 8px; height: 15px; margin-left: 7px; background: var(--accent); animation: errBlink 1.1s steps(1) infinite; }
+@keyframes errBlink { 50% { opacity: 0; } }
+
+.err-heading { font-size: clamp(1.6rem, 3.4vw, 2.2rem); animation: maintRise .5s .6s both; }
+.err-msg { max-width: 520px; margin: 12px auto 0; color: var(--ink2); animation: maintRise .5s .68s both; }
+.err-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 30px; animation: maintRise .5s .78s both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .maint-grid, .maint-glow, .maint-scan, .maint-ring, .maint-ring-b, .maint-ring::after,
+  .maint-dots i, .maint-kdot, .maint-bar i, .maint-eta, .maint-logo,
+  .err-bg i, .err-digit, .err-stamp, .err-caret, .err-kicker, .err-entry,
+  .err-heading, .err-msg, .err-actions { animation: none !important; }
+  .err-digit { opacity: 1; }
+  .err-kicker, .err-entry, .err-heading, .err-msg, .err-actions { opacity: 1; }
+}

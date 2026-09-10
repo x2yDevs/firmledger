@@ -1,12 +1,30 @@
 <%- include('partials/top') %>
 
-<div class="container" style="text-align:center;padding:clamp(70px,10vw,130px) 20px">
-  <p class="error-code"><%= code %></p>
-  <h1><%= heading %></h1>
-  <p style="max-width:520px;margin:14px auto 30px;color:var(--ink2)"><%= message %></p>
-  <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
-    <a class="btn btn-primary" href="/">Back to FirmLedger</a>
-    <a class="btn btn-ghost" href="/directory">Browse directory</a>
+<section class="err-hero">
+  <div class="err-bg" aria-hidden="true"><i></i><i></i><i></i></div>
+  <div class="container err-wrap">
+
+    <p class="err-kicker mono">FirmLedger &middot; ledger lookup</p>
+
+    <div class="err-code-wrap" role="text" aria-label="<%= code %>">
+      <% String(code).split('').forEach(function (ch, i) { %>
+        <span class="err-digit err-d<%= i %>" aria-hidden="true"><%= ch %></span>
+      <% }); %>
+      <% if (code === 404) { %><span class="err-stamp" aria-hidden="true">Not found</span><% } %>
+    </div>
+
+    <p class="err-entry mono">ENTRY&nbsp;#<%= String(code).padStart(6, '0') %> — <%= code === 404 ? 'no match in this ledger' : 'this entry could not be read' %><span class="err-caret" aria-hidden="true"></span></p>
+
+    <h1 class="err-heading"><%= heading %></h1>
+    <p class="err-msg"><%= message %></p>
+
+    <div class="err-actions">
+      <a class="btn btn-primary" href="/">Back to FirmLedger</a>
+      <a class="btn btn-ghost" href="/directory">Browse directory</a>
+      <a class="btn btn-gold" href="/search">Search instead</a>
+    </div>
+
   </div>
-</div>
+</section>
+
 <%- include('partials/bottom') %>

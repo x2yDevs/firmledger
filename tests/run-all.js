@@ -17,6 +17,15 @@
  *                contract, hostile input (XSS, forged context markers, SQL-ish
  *                text, malformed JSON) never executing or 500ing, audit rows,
  *                and latency/concurrency budgets.
+ *   ai-areas     production readiness per console area: Search, Inbox,
+ *                Listings, News, Categories, Claims, Users, Plan offers,
+ *                Pricing, Advertising, Careers, Status, Promos, Protection,
+ *                Health, Removals, Tickets, Email, Blog, AI Playground,
+ *                Settings and Maintenance — each driven through the chat
+ *                pipeline and verified in the database, plus the
+ *                conversational layer: time-of-day greetings (morning /
+ *                afternoon / evening / night), clock questions, small talk,
+ *                and every suggested menu command parsing.
  *   backup       .firmledger round trip — users, all listings + configuration.
  *   mail-providers Emitlo/Maileroo/Mailjet removed from presets and stored
  *                accounts; Admin → Email pins a bulk send to one provider
@@ -57,6 +66,8 @@ const suites = [
   ['AI admin assistant', 'ai-assistant.test.js'],
   ['AI assistant end-to-end (every admin action via chat)', 'ai-e2e.test.js'],
   ['AI assistant HTTP / production hardening', 'ai-http.test.js'],
+  ['AI Playground — every console area + conversation & clock', 'ai-areas.test.js'],
+  ['Maintenance holding page + animated error pages', 'maintenance-page.test.js'],
   ['Backup round trip', 'backup.test.js'],
   ['Mail providers', 'mail-providers.test.js'],
   ['Admin pages', 'admin-pages.test.js'],
