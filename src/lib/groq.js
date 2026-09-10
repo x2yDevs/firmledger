@@ -39,6 +39,7 @@ module.exports = {
   supportsTools: (id) => llm.supportsTools(id, active()),
   supportsJson: (id) => llm.supportsJson(id, active()),
   usableModels: () => llm.usableModels(active()),
+  playgroundModels: () => llm.playgroundModels(active()),
   liveModelIds: () => llm.liveModelIds(active()),
   liveSnapshot: () => llm.liveSnapshot(active()),
   markLiveModels: (ids) => llm.markLiveModels(active(), ids),

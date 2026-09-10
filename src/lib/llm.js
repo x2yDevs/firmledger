@@ -50,52 +50,52 @@ const PROVIDERS = [
       {
         id: 'openai/gpt-oss-120b', label: 'OpenAI GPT-OSS 120B', tier: 'production',
         note: 'Flagship — best tool-calling accuracy. Default for the assistant.',
-        tools: true, json: true, vision: false, context: 131072, maxOutput: 65536, tps: 500,
+        tools: true, json: true, vision: false, free: true, context: 131072, maxOutput: 65536, tps: 500,
       },
       {
         id: 'openai/gpt-oss-20b', label: 'OpenAI GPT-OSS 20B', tier: 'production',
         note: 'Fastest production option. Good for bulk drafting.',
-        tools: true, json: true, vision: false, context: 131072, maxOutput: 65536, tps: 1000,
+        tools: true, json: true, vision: false, free: true, context: 131072, maxOutput: 65536, tps: 1000,
       },
       {
         id: 'qwen/qwen3.8-27b', label: 'Qwen 3.8 27B', tier: 'preview',
         note: 'Preview — strong agentic/tool use, JSON schema mode.',
-        tools: true, json: true, vision: true, context: 131042, maxOutput: 16384, tps: 450,
+        tools: true, json: true, vision: true, free: true, context: 131042, maxOutput: 16384, tps: 450,
       },
       {
         id: 'qwen/qwen3.6-27b', label: 'Qwen 3.6 27B', tier: 'preview',
         note: 'Preview — cheaper than 3.8, same tool support.',
-        tools: true, json: true, vision: true, context: 131072, maxOutput: 16384, tps: 500,
+        tools: true, json: true, vision: true, free: true, context: 131072, maxOutput: 16384, tps: 500,
       },
       {
         id: 'openai/gpt-oss-safeguard-20b', label: 'GPT-OSS Safeguard 20B', tier: 'preview',
         note: 'Trust & safety tuned — the best fit for listing auto-moderation.',
-        tools: true, json: true, vision: false, context: 131072, maxOutput: 65536, tps: 1000,
+        tools: true, json: true, vision: false, free: true, context: 131072, maxOutput: 65536, tps: 1000,
       },
       {
         id: 'groq/compound', label: 'Groq Compound', tier: 'production',
         note: 'Groq hosted agent system with built-in search and code execution.',
-        tools: false, json: true, vision: false, context: 131072, maxOutput: 8192,
+        tools: false, json: true, vision: false, free: true, context: 131072, maxOutput: 8192,
       },
       {
         id: 'groq/compound-mini', label: 'Groq Compound Mini', tier: 'production',
         note: 'Lower-cost Groq hosted agent system.',
-        tools: false, json: true, vision: false, context: 131072, maxOutput: 8192,
+        tools: false, json: true, vision: false, free: true, context: 131072, maxOutput: 8192,
       },
       {
         id: 'minimaxai/minimax-m2.7', label: 'MiniMax M2.7', tier: 'preview',
         note: 'Preview — MiniMax reasoning model served on Groq with tool calling.',
-        tools: true, json: true, vision: false, context: 131072, maxOutput: 16384, tps: 400,
+        tools: true, json: true, vision: false, free: true, context: 131072, maxOutput: 16384, tps: 400,
       },
       {
         id: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B (retired)', tier: 'retired',
         note: 'Retired by Groq on 16 Aug 2026 — migrated to GPT-OSS 120B.',
-        tools: true, json: true, vision: false, context: 131072, maxOutput: 32768, tps: 280,
+        tools: true, json: true, vision: false, free: true, context: 131072, maxOutput: 32768, tps: 280,
       },
       {
         id: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B Instant (retired)', tier: 'retired',
         note: 'Retired by Groq on 16 Aug 2026 — migrated to GPT-OSS 20B.',
-        tools: true, json: true, vision: false, context: 131072, maxOutput: 131072, tps: 560,
+        tools: true, json: true, vision: false, free: true, context: 131072, maxOutput: 131072, tps: 560,
       },
     ],
   },
@@ -158,18 +158,18 @@ const PROVIDERS = [
     defaultModel: 'gemini-3.8-flash',
     fallbacks: ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-pro-preview'],
     models: [
-      { id: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash', tier: 'production', note: 'Latest stable Flash model; 1M context and tool calling.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 65536 },
-      { id: 'gemini-3.7-flash', label: 'Gemini 3.7 Flash', tier: 'production', note: 'Stable multimodal reasoning and agent model.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 65536 },
-      { id: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash', tier: 'production', note: 'High-throughput current Flash tier.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 65536 },
-      { id: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash', tier: 'production', note: 'Stable multimodal Flash model.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 65536 },
-      { id: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash-Lite', tier: 'production', note: 'Cost-efficient current model for extraction and routing.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 65536 },
-      { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash (preview)', tier: 'preview', note: 'Current preview Flash tier; 1M context.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 65536 },
-      { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro', tier: 'preview', note: 'Deep reasoning and coding; preview availability.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 65536 },
-      { id: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash-Lite', tier: 'production', note: 'Lowest-cost current 1M-context tier.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 65536 },
-      { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', tier: 'production', note: 'Fast, tool-capable, 1M context.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 65536 },
-      { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash-Lite', tier: 'production', note: 'Cheapest Gemini; fine for bulk drafting.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 65536 },
-      { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', tier: 'production', note: 'Strongest Gemini reasoning.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 65536 },
-      { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash', tier: 'legacy', note: 'Previous generation.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 8192 },
+      { id: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash', tier: 'production', note: 'Latest stable Flash model; 1M context and tool calling.', tools: true, json: true, vision: true, free: true, context: 1048576, maxOutput: 65536 },
+      { id: 'gemini-3.7-flash', label: 'Gemini 3.7 Flash', tier: 'production', note: 'Stable multimodal reasoning and agent model.', tools: true, json: true, vision: true, free: true, context: 1048576, maxOutput: 65536 },
+      { id: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash', tier: 'production', note: 'High-throughput current Flash tier.', tools: true, json: true, vision: true, free: true, context: 1048576, maxOutput: 65536 },
+      { id: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash', tier: 'production', note: 'Stable multimodal Flash model.', tools: true, json: true, vision: true, free: true, context: 1048576, maxOutput: 65536 },
+      { id: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash-Lite', tier: 'production', note: 'Cost-efficient current model for extraction and routing.', tools: true, json: true, vision: true, free: true, context: 1048576, maxOutput: 65536 },
+      { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash (preview)', tier: 'preview', note: 'Current preview Flash tier; 1M context.', tools: true, json: true, vision: true, free: true, context: 1048576, maxOutput: 65536 },
+      { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro', tier: 'preview', note: 'Deep reasoning and coding; preview availability.', tools: true, json: true, vision: true, free: true, context: 1048576, maxOutput: 65536 },
+      { id: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash-Lite', tier: 'production', note: 'Lowest-cost current 1M-context tier.', tools: true, json: true, vision: true, free: true, context: 1048576, maxOutput: 65536 },
+      { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', tier: 'production', note: 'Fast, tool-capable, 1M context.', tools: true, json: true, vision: true, free: true, context: 1048576, maxOutput: 65536 },
+      { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash-Lite', tier: 'production', note: 'Cheapest Gemini; fine for bulk drafting.', tools: true, json: true, vision: true, free: true, context: 1048576, maxOutput: 65536 },
+      { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', tier: 'production', note: 'Strongest Gemini reasoning.', tools: true, json: true, vision: true, free: true, context: 1048576, maxOutput: 65536 },
+      { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash', tier: 'legacy', note: 'Previous generation.', tools: true, json: true, vision: true, free: true, context: 1048576, maxOutput: 8192 },
     ],
   },
 
@@ -300,12 +300,12 @@ const PROVIDERS = [
     allowCustom: true, defaultModel: 'gpt-oss-120b',
     fallbacks: ['gpt-oss-120b', 'llama-3.3-70b', 'qwen-3-32b'],
     models: [
-      { id: 'gpt-oss-120b', label: 'GPT-OSS 120B', tier: 'production', note: 'Cerebras public production model with tool calling.', tools: true, json: true, vision: false, context: 131072, maxOutput: 40960 },
-      { id: 'llama-3.3-70b', label: 'Llama 3.3 70B', tier: 'production', note: 'Fastest 70B anywhere.', tools: true, json: true, vision: false, context: 64000, maxOutput: 8192 },
-      { id: 'llama3.1-8b', label: 'Llama 3.1 8B', tier: 'production', note: 'Small and extremely fast.', tools: true, json: true, vision: false, context: 64000, maxOutput: 8192 },
-      { id: 'qwen-3-32b', label: 'Qwen 3 32B', tier: 'production', note: 'Tool support, very high throughput.', tools: true, json: true, vision: false, context: 64000, maxOutput: 8192 },
-      { id: 'qwen-3-235b-a22b-instruct-2507', label: 'Qwen 3 235B Instruct (preview)', tier: 'preview', note: 'Large MoE preview on the public endpoint.', tools: true, json: true, vision: false, context: 64000, maxOutput: 8192 },
-      { id: 'zai-glm-4.6', label: 'GLM 4.6 (preview)', tier: 'preview', note: 'Preview model; availability varies by account.', tools: true, json: true, vision: false, context: 64000, maxOutput: 8192 },
+      { id: 'gpt-oss-120b', label: 'GPT-OSS 120B', tier: 'production', note: 'Cerebras public production model with tool calling.', tools: true, json: true, vision: false, free: true, context: 131072, maxOutput: 40960 },
+      { id: 'llama-3.3-70b', label: 'Llama 3.3 70B', tier: 'production', note: 'Fastest 70B anywhere.', tools: true, json: true, vision: false, free: true, context: 64000, maxOutput: 8192 },
+      { id: 'llama3.1-8b', label: 'Llama 3.1 8B', tier: 'production', note: 'Small and extremely fast.', tools: true, json: true, vision: false, free: true, context: 64000, maxOutput: 8192 },
+      { id: 'qwen-3-32b', label: 'Qwen 3 32B', tier: 'production', note: 'Tool support, very high throughput.', tools: true, json: true, vision: false, free: true, context: 64000, maxOutput: 8192 },
+      { id: 'qwen-3-235b-a22b-instruct-2507', label: 'Qwen 3 235B Instruct (preview)', tier: 'preview', note: 'Large MoE preview on the public endpoint.', tools: true, json: true, vision: false, free: true, context: 64000, maxOutput: 8192 },
+      { id: 'zai-glm-4.6', label: 'GLM 4.6 (preview)', tier: 'preview', note: 'Preview model; availability varies by account.', tools: true, json: true, vision: false, free: true, context: 64000, maxOutput: 8192 },
     ],
   },
 
@@ -317,15 +317,15 @@ const PROVIDERS = [
     allowCustom: true, defaultModel: 'MiniMax-M2.7',
     fallbacks: ['MiniMax-M2.7', 'DeepSeek-V3.1', 'gpt-oss-120b'],
     models: [
-      { id: 'MiniMax-M2.7', label: 'MiniMax M2.7', tier: 'production', note: 'Current SambaCloud production flagship.', tools: true, json: true, vision: false, context: 196608, maxOutput: 81920 },
-      { id: 'DeepSeek-V3.1', label: 'DeepSeek V3.1', tier: 'production', note: 'Hybrid thinking model; tool calling in non-thinking mode.', tools: true, json: true, vision: false, context: 131072, maxOutput: 32768 },
-      { id: 'gpt-oss-120b', label: 'GPT-OSS 120B', tier: 'production', note: 'OpenAI open weights with tools.', tools: true, json: true, vision: false, context: 131072, maxOutput: 40960 },
-      { id: 'MiniMax-M3', label: 'MiniMax M3', tier: 'preview', note: 'Multimodal preview; availability varies by account.', tools: true, json: true, vision: true, context: 1048576, maxOutput: 131072 },
-      { id: 'DeepSeek-V3.2', label: 'DeepSeek V3.2', tier: 'preview', note: 'Current DeepSeek preview on SambaCloud.', tools: true, json: true, vision: false, context: 32768, maxOutput: 8192 },
-      { id: 'gemma-4-31B-it', label: 'Gemma 4 31B IT', tier: 'preview', note: 'Google multimodal preview (text, image, video in).', tools: true, json: true, vision: true, context: 131072, maxOutput: 8192 },
-      { id: 'Meta-Llama-3.3-70B-Instruct', label: 'Llama 3.3 70B', tier: 'production', note: 'Tool-calling.', tools: true, json: true, vision: false, context: 131072, maxOutput: 4096 },
-      { id: 'Qwen3-32B', label: 'Qwen 3 32B', tier: 'legacy', note: 'No longer in the published SambaCloud catalog — may 404.', tools: true, json: true, vision: false, context: 16384, maxOutput: 4096 },
-      { id: 'DeepSeek-R1-Distill-Llama-70B', label: 'DeepSeek R1 Distill 70B (retired)', tier: 'retired', note: 'Removed from the SambaCloud catalog — use DeepSeek V3.1.', tools: false, json: false, vision: false, context: 131072, maxOutput: 8192 },
+      { id: 'MiniMax-M2.7', label: 'MiniMax M2.7', tier: 'production', note: 'Current SambaCloud production flagship.', tools: true, json: true, vision: false, free: true, context: 196608, maxOutput: 81920 },
+      { id: 'DeepSeek-V3.1', label: 'DeepSeek V3.1', tier: 'production', note: 'Hybrid thinking model; tool calling in non-thinking mode.', tools: true, json: true, vision: false, free: true, context: 131072, maxOutput: 32768 },
+      { id: 'gpt-oss-120b', label: 'GPT-OSS 120B', tier: 'production', note: 'OpenAI open weights with tools.', tools: true, json: true, vision: false, free: true, context: 131072, maxOutput: 40960 },
+      { id: 'MiniMax-M3', label: 'MiniMax M3', tier: 'preview', note: 'Multimodal preview; availability varies by account.', tools: true, json: true, vision: true, free: true, context: 1048576, maxOutput: 131072 },
+      { id: 'DeepSeek-V3.2', label: 'DeepSeek V3.2', tier: 'preview', note: 'Current DeepSeek preview on SambaCloud.', tools: true, json: true, vision: false, free: true, context: 32768, maxOutput: 8192 },
+      { id: 'gemma-4-31B-it', label: 'Gemma 4 31B IT', tier: 'preview', note: 'Google multimodal preview (text, image, video in).', tools: true, json: true, vision: true, free: true, context: 131072, maxOutput: 8192 },
+      { id: 'Meta-Llama-3.3-70B-Instruct', label: 'Llama 3.3 70B', tier: 'production', note: 'Tool-calling.', tools: true, json: true, vision: false, free: true, context: 131072, maxOutput: 4096 },
+      { id: 'Qwen3-32B', label: 'Qwen 3 32B', tier: 'legacy', note: 'No longer in the published SambaCloud catalog — may 404.', tools: true, json: true, vision: false, free: true, context: 16384, maxOutput: 4096 },
+      { id: 'DeepSeek-R1-Distill-Llama-70B', label: 'DeepSeek R1 Distill 70B (retired)', tier: 'retired', note: 'Removed from the SambaCloud catalog — use DeepSeek V3.1.', tools: false, json: false, vision: false, free: true, context: 131072, maxOutput: 8192 },
     ],
   },
 
@@ -417,17 +417,17 @@ const PROVIDERS = [
     allowCustom: true, defaultModel: 'qwen3:30b',
     fallbacks: ['qwen3:30b', 'gpt-oss:20b', 'llama3.3'],
     models: [
-      { id: 'qwen3:30b', label: 'Qwen 3 30B', tier: 'production', note: 'Best overall local model; pull with `ollama pull qwen3:30b`.', tools: true, json: true, vision: false, context: 262144, maxOutput: 65536 },
-      { id: 'qwen3:14b', label: 'Qwen 3 14B', tier: 'production', note: 'General chat for 12–16 GB machines.', tools: true, json: true, vision: false, context: 262144, maxOutput: 65536 },
-      { id: 'gpt-oss:20b', label: 'GPT-OSS 20B', tier: 'production', note: 'Local reasoning and agent model.', tools: true, json: true, vision: false, context: 131072, maxOutput: 65536 },
-      { id: 'gpt-oss:120b', label: 'GPT-OSS 120B', tier: 'production', note: 'Local frontier reasoning model.', tools: true, json: true, vision: false, context: 131072, maxOutput: 65536 },
-      { id: 'gemma4', label: 'Gemma 4', tier: 'production', note: 'Current multimodal local model.', tools: true, json: true, vision: true, context: 262144, maxOutput: 65536 },
-      { id: 'qwen3-coder:30b', label: 'Qwen 3 Coder 30B', tier: 'production', note: 'Agentic coding model.', tools: true, json: true, vision: false, context: 262144, maxOutput: 65536 },
-      { id: 'deepseek-r1:8b', label: 'DeepSeek R1 8B', tier: 'production', note: 'Lightweight local reasoning.', tools: false, json: true, vision: false, context: 131072, maxOutput: 32768 },
-      { id: 'llama3.3', label: 'Llama 3.3', tier: 'production', note: 'Pull with `ollama pull llama3.3`.', tools: true, json: true, vision: false, context: 131072, maxOutput: 4096 },
-      { id: 'qwen2.5', label: 'Qwen 2.5', tier: 'production', note: 'Pull with `ollama pull qwen2.5`.', tools: true, json: true, vision: false, context: 131072, maxOutput: 8192 },
-      { id: 'gemma3', label: 'Gemma 3', tier: 'production', note: 'Vision-capable local model.', tools: false, json: true, vision: true, context: 131072, maxOutput: 8192 },
-      { id: 'mistral', label: 'Mistral', tier: 'legacy', note: 'Small and fast.', tools: true, json: true, vision: false, context: 32768, maxOutput: 4096 },
+      { id: 'qwen3:30b', label: 'Qwen 3 30B', tier: 'production', note: 'Best overall local model; pull with `ollama pull qwen3:30b`.', tools: true, json: true, vision: false, free: true, context: 262144, maxOutput: 65536 },
+      { id: 'qwen3:14b', label: 'Qwen 3 14B', tier: 'production', note: 'General chat for 12–16 GB machines.', tools: true, json: true, vision: false, free: true, context: 262144, maxOutput: 65536 },
+      { id: 'gpt-oss:20b', label: 'GPT-OSS 20B', tier: 'production', note: 'Local reasoning and agent model.', tools: true, json: true, vision: false, free: true, context: 131072, maxOutput: 65536 },
+      { id: 'gpt-oss:120b', label: 'GPT-OSS 120B', tier: 'production', note: 'Local frontier reasoning model.', tools: true, json: true, vision: false, free: true, context: 131072, maxOutput: 65536 },
+      { id: 'gemma4', label: 'Gemma 4', tier: 'production', note: 'Current multimodal local model.', tools: true, json: true, vision: true, free: true, context: 262144, maxOutput: 65536 },
+      { id: 'qwen3-coder:30b', label: 'Qwen 3 Coder 30B', tier: 'production', note: 'Agentic coding model.', tools: true, json: true, vision: false, free: true, context: 262144, maxOutput: 65536 },
+      { id: 'deepseek-r1:8b', label: 'DeepSeek R1 8B', tier: 'production', note: 'Lightweight local reasoning.', tools: false, json: true, vision: false, free: true, context: 131072, maxOutput: 32768 },
+      { id: 'llama3.3', label: 'Llama 3.3', tier: 'production', note: 'Pull with `ollama pull llama3.3`.', tools: true, json: true, vision: false, free: true, context: 131072, maxOutput: 4096 },
+      { id: 'qwen2.5', label: 'Qwen 2.5', tier: 'production', note: 'Pull with `ollama pull qwen2.5`.', tools: true, json: true, vision: false, free: true, context: 131072, maxOutput: 8192 },
+      { id: 'gemma3', label: 'Gemma 3', tier: 'production', note: 'Vision-capable local model.', tools: false, json: true, vision: true, free: true, context: 131072, maxOutput: 8192 },
+      { id: 'mistral', label: 'Mistral', tier: 'legacy', note: 'Small and fast.', tools: true, json: true, vision: false, free: true, context: 32768, maxOutput: 4096 },
     ],
   },
 
@@ -599,6 +599,37 @@ function authHeaders(pid) {
 
 function looksLikeModelId(id) {
   return /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,120}$/.test(String(id || '').trim());
+}
+
+/* ------------------------------------------- free-tier model discovery */
+
+/**
+ * Which providers serve models on a free tier, and how a newly discovered
+ * live id is classified. Curated registry rows carry their own `free` flag;
+ * this table decides for ids the provider exposes that we have not curated
+ * yet — so a brand-new free model appears in the playground on its own at
+ * the next catalog sync, with no code change.
+ *   groq / cerebras / sambanova / ollama — whole catalog is free (rate limited)
+ *   gemini   — Google AI Studio free tier covers the Gemini + Gemma chat rows
+ *   openrouter — free variants carry the `:free` suffix
+ * Everyone else is paid-only, so unknown live ids are not treated as free.
+ */
+const FREE_LIVE_PATTERNS = {
+  groq: () => true,
+  gemini: (id) => /^(gemini|gemma|learnlm)[-.]/.test(id),
+  cerebras: () => true,
+  sambanova: () => true,
+  ollama: () => true,
+  openrouter: (id) => /:free$/i.test(id),
+};
+
+/** Does this model run on a free tier for the given provider? */
+function isFreeModel(id, pid) {
+  const p = provider(pid || activeId());
+  const meta = modelMeta(id, p.id);
+  if (meta) return meta.free === true;
+  const pattern = FREE_LIVE_PATTERNS[p.id];
+  return pattern ? pattern(String(id || '').trim()) : false;
 }
 
 function activeModels() { return provider(activeId()).models; }
@@ -802,6 +833,36 @@ function usableModels(pid) {
       provider: p.id, available: true, checked_at: checked_at || '',
     });
   }
+  /* Classify free-tier availability for every row — curated entries carry
+     their own flag, live discoveries are classified by FREE_LIVE_PATTERNS. */
+  return rows.map((m) => ({ ...m, free: m.free === true || isFreeModel(m.id, p.id) }));
+}
+
+/**
+ * The models the AI Playground offers: only models that run on a free tier,
+ * so the console never proposes a model a free key cannot use or that bills
+ * per token. New free models flow in automatically — the live catalog sync
+ * classifies discoveries through the same filter. Providers with no free
+ * tier at all keep their full catalog (an empty picker would be useless),
+ * and a currently selected non-free model stays listed so the operator can
+ * see and change the active pick.
+ */
+function playgroundModels(pid) {
+  const p = provider(pid);
+  const all = usableModels(p.id);
+  const free = all.filter((m) => m.free);
+  if (!free.length) return all;
+  const rows = free.slice();
+  const current = modelFor(p.id);
+  if (current && !rows.some((m) => m.id === current)) {
+    const cur = all.find((m) => m.id === current);
+    if (cur) {
+      rows.unshift({
+        ...cur,
+        note: `${cur.note || ''} Not a free-tier model — kept listed because it is the current pick.`.trim(),
+      });
+    }
+  }
   return rows;
 }
 
@@ -979,12 +1040,23 @@ function toAnthropicBody(opts, pid, model) {
 
 function geminiPartsFromText(text) { return [{ text: String(text || '') }]; }
 
+/** Gemini's schema validator is stricter than OpenAI's: besides the JSON
+    Schema extras it rejects empty-string enum values ("enum[3]: cannot be
+    empty"). Filter those out at the wire level so a loose tool definition
+    can never turn an assistant call into a 400. */
 function stripSchemaNoise(node) {
   if (Array.isArray(node)) return node.map(stripSchemaNoise);
   if (!node || typeof node !== 'object') return node;
   const out = {};
   for (const [k, v] of Object.entries(node)) {
     if (k === 'additionalProperties' || k === '$schema') continue;
+    if (k === 'enum' && Array.isArray(v)) {
+      const clean = v.filter((x) => String(x == null ? '' : x).trim() !== '');
+      /* An enum with nothing left is no constraint at all — drop it. */
+      if (!clean.length) continue;
+      out[k] = clean;
+      continue;
+    }
     out[k] = stripSchemaNoise(v);
   }
   return out;
@@ -1017,9 +1089,10 @@ function toGeminiBody(opts, pid, model) {
      on current stable models. Gemini 2.5 compatibility rows retain the old
      temperature behavior. */
   if (opts.temperature != null && !/^gemini-3\./.test(model)) gen.temperature = Number(opts.temperature);
-  /* Gemini 3.6+ exposes thinking levels instead of the 2.5 thinking budget;
-     medium is a safe default for both the agent and listing workloads. */
-  if (/^gemini-3\.[678]-/.test(model)) gen.thinkingConfig = { thinkingLevel: 'medium' };
+  /* Deep thinking is intentionally never forced on the wire: every model
+     runs with its own default thinking behavior, so free-tier keys are not
+     charged extra thinking tokens and the playground has no "deep thinking"
+     mode to speak of. */
   if (opts.max_tokens) gen.maxOutputTokens = Number(opts.max_tokens);
   if (opts.response_format && opts.response_format.type === 'json_object') gen.responseMimeType = 'application/json';
   if (Object.keys(gen).length) body.generationConfig = gen;
@@ -1098,10 +1171,9 @@ function toOpenAiBody(opts, pid, model) {
   });
   const payload = { model, messages, [completionTokenField(model, p.id)]: opts.max_tokens || 1800 };
   if (!reasoning && !deepseekV4 && opts.temperature != null) payload.temperature = opts.temperature;
-  if (deepseekV4) {
-    payload.thinking = { type: 'enabled' };
-    payload.reasoning_effort = 'high';
-  }
+  /* DeepSeek V4: no forced deep-thinking mode — the model runs with its
+     default behavior, which keeps free/cheap credits from being burned on
+     reasoning tokens the operator never asked for. */
   if (opts.tools && opts.tools.length) payload.tools = opts.tools;
   /* DeepSeek V4 supports tool calls but not the OpenAI tool_choice control. */
   if (opts.tools && opts.tools.length && opts.tool_choice && !deepseekV4) payload.tool_choice = opts.tool_choice;
@@ -1456,7 +1528,8 @@ function usage(data) {
 function providerView(pid) {
   const p = provider(pid);
   const live = liveSnapshot(p.id);
-  const src = keySource(p.id);
+  const src = keySource(pid);
+  const models = playgroundModels(pid);
   return {
     id: p.id,
     status: p.status || 'active',
@@ -1476,7 +1549,10 @@ function providerView(pid) {
     configured: configured(pid),
     model: modelFor(pid),
     default_model: p.defaultModel || '',
-    models: usableModels(pid),
+    /* The playground offers free-tier models only (see playgroundModels) —
+       providers without any free tier keep their full catalog. */
+    models,
+    free_only: models.length > 0 && models.every((m) => m.free),
     allow_custom: Boolean(p.allowCustom),
     list_models: Boolean(p.listModels),
     sync_supported: Boolean(p.listModels),
@@ -1551,6 +1627,7 @@ module.exports = {
   baseUrlFor, setBaseUrl, chatUrl, modelsUrl,
   activeModels, activeDefaultModel, modelFor, setModel, modelMeta,
   isKnownModel, isRetiredModel, capabilities, supportsTools, supportsJson, looksLikeModelId,
+  isFreeModel, playgroundModels,
   toolCapableModel, toolFallbackProvider,
   usableModels, liveModelIds, liveSnapshot, liveAgeMs, markLiveModels,
   fetchLiveModels, syncModels, syncAllProviders, maybeSyncModels, LIVE_TTL_MS,

@@ -1025,7 +1025,9 @@ function settingsSnapshot() {
     groq_base_url: groq.baseUrl(),
     groq_model: groq.modelId(),
     groq_default_model: groq.DEFAULT_MODEL,
-    models: groq.usableModels(),
+    /* The playground lists free-tier models only — new free models appear
+       automatically when the live catalog syncs. */
+    models: groq.playgroundModels(),
     live_models: live.ids,
     live_checked_at: live.checked_at,
     moderation_on: isModerationOn(),

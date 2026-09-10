@@ -108,7 +108,7 @@
       <label><span style="display:flex;align-items:center;gap:10px">Message
         <span style="display:inline-flex;align-items:center;gap:8px">
           <button type="button" class="btn btn-ghost btn-sm" id="rephraseBtn"
-                  title="Rewrite this message with the provider and model configured in Admin → AI Playground → Settings → Model providers">Rephrase with AI</button>
+                  title="Rewrite the subject line and this message with the provider and model configured in Admin → AI Playground → Settings → Model providers. Works for plain text and HTML alike.">Rephrase with AI</button>
           <% if (typeof ai !== 'undefined' && ai && ai.configured) { %>
             <span class="muted" style="font-weight:400;font-size:12px">via <%= ai.provider_label %> · <%= ai.model %></span>
           <% } else { %>
@@ -136,15 +136,17 @@
       </script>
       <script>
       /* Rephrase the draft with the model configured in Admin → AI Playground.
-         Plain text in → plain text out; HTML in → HTML out. The result lands
-         back in the box for review — nothing is sent until the admin clicks
-         Send. */
+         Plain text in → plain text out; HTML in → HTML out. The subject line
+         and the message body are both rephrased in one pass, and the results
+         land back in their fields for review — nothing is sent until the
+         admin clicks Send. */
       (function () {
         var CSRF = <%- JSON.stringify(csrfToken || '') %>;
         var btn = document.getElementById('rephraseBtn');
         var ta = document.getElementById('mailBody');
         var note = document.getElementById('rephraseNote');
         var fmt = document.getElementById('mailFormat');
+        var subj = document.querySelector('input[name="subject"]');
         if (!btn || !ta || !note) return;
         function say(msg, isError) {
           note.hidden = !msg;
@@ -167,17 +169,19 @@
         }
         btn.addEventListener('click', function () {
           var text = ta.value.trim();
-          if (text.length < 10) { say('Write at least a sentence first, then I can rephrase it.', true); return; }
+          var subject = subj ? subj.value.trim() : '';
+          if (text.length < 10 && subject.length < 5) { say('Write at least a sentence (or a subject line) first, then I can rephrase it.', true); return; }
           var format = fmt && fmt.value === 'html' ? 'html' : 'text';
+          var both = subject.length >= 1 && text.length >= 10;
           btn.disabled = true;
           var old = btn.textContent;
           btn.textContent = 'Rephrasing…';
-          say('Rephrasing with the AI configured in Admin → AI Playground' + (fmt && fmt.value === 'html' ? ' (HTML in → HTML out)' : ' (plain text in → plain text out)') + '…', false);
+          say('Rephrasing ' + (both ? 'the subject and the message' : 'the message') + ' with the AI configured in Admin → AI Playground' + (fmt && fmt.value === 'html' ? ' (HTML in → HTML out)' : ' (plain text in → plain text out)') + '…', false);
           fetch('/admin3119Musa/email/rephrase', {
             method: 'POST',
             credentials: 'same-origin',
             headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-Token': CSRF },
-            body: JSON.stringify({ text: text, format: format }),
+            body: JSON.stringify({ text: text, subject: subject, format: format }),
           }).then(function (res) {
             return res.text().then(function (raw) {
               var data = {};
@@ -191,9 +195,11 @@
               throw err;
             }
             ta.value = out.data.text;
+            var subjectDone = false;
+            if (subj && out.data.subject) { subj.value = out.data.subject; subjectDone = true; }
             ta.focus();
             var who = out.data.provider_label ? out.data.provider_label + ' (' + (out.data.model || 'default model') + ')' : (out.data.model || 'AI');
-            say('Rephrased with ' + who + ' — review the message before sending.', false);
+            say('Rephrased ' + (subjectDone ? 'the subject and the message' : 'the message') + ' with ' + who + ' — review both before sending.', false);
           }).catch(function (e) {
             say(guidance(e && e.code, e && e.message), true);
           }).finally(function () {

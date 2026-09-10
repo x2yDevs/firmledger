@@ -337,7 +337,7 @@ const TOOLS = [
     parameters: {
       type: 'object',
       properties: {
-        status: { type: 'string', enum: ['pending', 'approved', 'rejected', ''], description: 'Default pending.' },
+        status: { type: 'string', enum: ['pending', 'approved', 'rejected'], description: 'Which queue to list. Defaults to pending when omitted.' },
         listing: { type: 'string', description: 'Optional listing id or slug to scope the list.' },
       },
       additionalProperties: false,
@@ -565,7 +565,7 @@ const TOOLS = [
       properties: {
         action: { type: 'string', enum: ['approve', 'reject', 'delete', 'feature', 'unfeature', 'sponsor', 'unsponsor'] },
         ids: { type: 'array', items: { type: 'integer' }, description: 'Explicit listing ids (preferred).' },
-        status: { type: 'string', enum: ['pending', 'approved', 'rejected', ''], description: 'Filter when ids is empty.' },
+        status: { type: 'string', enum: ['pending', 'approved', 'rejected'], description: 'Filter when ids is empty. Omit to not filter by status.' },
         category: { type: 'string' }, country: { type: 'string' },
         days: { type: 'integer', description: 'Sponsorship length in days (sponsor only).' },
       },

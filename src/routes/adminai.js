@@ -173,7 +173,8 @@ router.post(`${BASE}/provider`, json(async (req, res) => {
 router.get(`${BASE}/models`, (req, res) => {
   res.json({
     ok: true,
-    models: groq.usableModels(),
+    /* Free-tier models only — matching what the playground UI offers. */
+    models: groq.playgroundModels(),
     selected: groq.modelId(),
     moderation_model: ai.moderationModelId(),
     default: groq.DEFAULT_MODEL,
