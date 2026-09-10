@@ -191,6 +191,12 @@ const TOOLS = [
           log_rows: indexlog.count(),
         },
         upkeep: upkeep.settings(),
+        security: {
+          admin_2fa_email: getSetting('admin_2fa_email', 'admin@firmledger.co.ke'),
+          console_auth: 'session + CSRF',
+          api_auth: 'Pro API keys + scopes',
+          secrets: 'masked / never returned',
+        },
         assistant: {
           engine: 'rule-based (no model, no API)',
           moderation_on: getSetting('ai_moderation_on', '0') === '1',
@@ -1364,19 +1370,33 @@ const TOOLS = [
   },
   {
     name: 'send_test_mail', group: 'mail', label: 'Send test email', mutating: true,
-    description: 'Send the branded configuration-check email through the live SMTP failover chain.',
+    description: 'Send the branded configuration-check email. With no provider selected the normal failover chain is used; provider may be a saved account, preset name, host, label or hop key.',
     parameters: {
       type: 'object',
-      properties: { to: { type: 'string', description: 'Destination address (default: the admin OTP inbox).' } },
+      properties: {
+        to: { type: 'string', description: 'Destination address (default: the admin OTP inbox).' },
+        provider: { type: 'string', description: 'Optional provider name, host, label or hop key. Select one when the assistant asks.' },
+      },
       additionalProperties: false,
     },
-    summarize(a) { return `Send a test email to ${a.to || 'the admin inbox'}.`; },
+    summarize(a) { return `Send a test email to ${a.to || 'the admin inbox'}${a.provider ? ` via ${a.provider}` : ' via the automatic failover chain'}.`; },
     async run(args) {
       const to = str(args.to, 190) || getSetting('admin_2fa_email', 'admin@firmledger.co.ke');
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return { error: 'That is not a valid email address.' };
-      const r = await mailer.sendTest(to);
+      const requested = str(args.provider, 160);
+      let r;
+      if (requested) {
+        const key = mailer.resolveProviderKey(requested);
+        if (!key) {
+          const choices = mailer.providerChoices();
+          return { error: `I could not find the mail provider “${requested}”.${choices.length ? ` Available: ${choices.map((x) => x.label).join('; ')}` : ' Add a provider in Admin → Settings first.'}` };
+        }
+        r = await mailer.sendTestVia(key, to);
+      } else {
+        r = await mailer.sendTest(to);
+      }
       if (!r.ok) return { error: r.error };
-      return { ok: true, to, via: r.via };
+      return { ok: true, to, via: r.via, provider: requested || 'automatic failover', label: r.label || '' };
     },
   },
 

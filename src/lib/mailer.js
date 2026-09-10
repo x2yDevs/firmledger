@@ -201,6 +201,39 @@ function hopByKey(key) {
 }
 
 /**
+ * Resolve the friendly provider name an administrator types in chat to the
+ * exact hop key used by the mailer. The settings page exposes hop keys, but a
+ * person should be able to say "Brevo", "smtp-relay.brevo.com", "provider 3"
+ * or the displayed label without knowing that implementation detail.
+ */
+function resolveProviderKey(value) {
+  const needle = String(value || '').trim().toLowerCase();
+  if (!needle) return '';
+  const hops = allHops();
+  const exact = hops.find((h) => String(h.key).toLowerCase() === needle);
+  if (exact) return exact.key;
+  const numeric = needle.match(/^(?:provider|hop|account)\s*#?\s*(\d+)$/);
+  if (numeric) {
+    const byId = hops.find((h) => String(h.id) === numeric[1]);
+    if (byId) return byId.key;
+  }
+  const hit = hops.find((h) => [h.provider, h.label, h.host, h.id, h.via]
+    .some((part) => part && String(part).toLowerCase() === needle))
+    || hops.find((h) => [h.provider, h.label, h.host, h.via]
+      .some((part) => part && String(part).toLowerCase().includes(needle)));
+  return hit ? hit.key : '';
+}
+
+/** Human-facing provider choices for command menus and the assistant. */
+function providerChoices() {
+  return allHops().map((h) => ({
+    key: h.key,
+    label: `${h.label || h.provider || 'SMTP provider'} — ${h.host}:${h.port}`,
+    provider: h.provider || h.label || h.host,
+  }));
+}
+
+/**
  * Failover chain for one message. When `viaKey` names an active hop, that
  * provider goes FIRST (the admin pinned it — e.g. the one relay that allows
  * bulk mail) and the rest of the chain stays armed behind it as failover.
@@ -768,8 +801,8 @@ function accountGroups() {
 
 module.exports = {
   sendMail, sendBranded, sendTest, sendTestVia, brandedHtml, mailConfigured,
-  PROVIDERS, ALIASES, aliasFrom, hops, hopsVia, allHops, hopByKey, hopLastUsed,
-  fromAddress, accountStatus, allAccountsRaw,
+  PROVIDERS, ALIASES, aliasFrom, hops, hopsVia, allHops, hopByKey, resolveProviderKey,
+  providerChoices, hopLastUsed, fromAddress, accountStatus, allAccountsRaw,
   addAccount, updateAccount, toggleAccount, deleteAccount, saveGlobalFrom,
   saveBulkVia, bulkVia, bulkViaHops, accountGroups,
   keepAliveSweep, keepAliveSettings, saveKeepAliveSettings,

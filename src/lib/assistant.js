@@ -19,6 +19,7 @@
  */
 const { db, getSetting } = require('../db');
 const tools = require('./aitools');
+const mailer = require('./mailer');
 
 /* ------------------------------------------------------------------ */
 /* 1. Vocabulary                                                       */
@@ -118,7 +119,9 @@ const WORDS = {
   count: 'count', total: 'count', totals: 'count', many: 'count',
   summary: 'stats', summarise: 'stats', summarize: 'stats', overview: 'overview', stats: 'stats', statistics: 'stats', numbers: 'stats', dashboard: 'stats', metrics: 'stats', figures: 'stats', kpis: 'stats',
   /* writing verbs */
-  approve: 'approve', approved: 'approve', accept: 'approve', accepted: 'approve', publish: 'approve', pass: 'approve', okay: 'approve', ok: 'approve', allow: 'allow', verify: 'verify', live: 'live', clear: 'clear',
+  approve: 'approve', approved: 'approve', approval: 'approve', approvals: 'approve', accept: 'approve', accepted: 'approve', acceptance: 'approve', publish: 'approve', pass: 'approve', okay: 'approve', ok: 'approve', allow: 'allow', verify: 'verify', live: 'live', clear: 'clear',
+  auto: 'auto', automatic: 'auto', automatically: 'auto', safely: 'safe', safe: 'safe', assess: 'moderate', assesss: 'moderate', evaluate: 'moderate', decide: 'moderate', decision: 'moderate', verdict: 'moderate', why: 'why', should: 'should', can: 'can',
+
   reject: 'reject', rejected: 'reject', decline: 'reject', declined: 'reject', refuse: 'reject', deny: 'reject', denied: 'reject', unpublish: 'unpublish', hide: 'hide',
   delete: 'delete', remove: 'delete', kill: 'delete', drop: 'delete', wipe: 'delete', erase: 'delete', destroy: 'delete', nuke: 'delete', purge: 'delete', trash: 'delete', scrap: 'delete', discard: 'delete',
   feature: 'feature', featured: 'feature', spotlight: 'feature', highlight: 'feature', showcase: 'feature', star: 'feature', pin: 'feature',
@@ -294,6 +297,15 @@ function extractSlots(raw) {
   const s = { ids: {}, numbers: [], quoted: [], emails: [], slugs: [], paths: [], urls: [], ips: [], domains: [] };
 
   s.emails = (low.match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/g) || []);
+  /* Mail provider slot. It deliberately accepts both human wording
+   * ("through Brevo", "using provider 2") and the names shown in Settings;
+   * the mail tool resolves it against the live configured hops at execution. */
+  const providerNames = (mailer.PROVIDERS || []).map((p) => p.id).filter(Boolean).join('|');
+  const providerPhrase = low.match(/\b(?:via|through|using|with|from)\s+(?:the\s+)?(?:(?:mail|smtp)\s+)?(?:provider\s+)?([a-z][a-z0-9_-]*)\b/i);
+  const providerNamed = providerPhrase && providerPhrase[1];
+  const providerKnown = low.match(new RegExp(`\\b(${providerNames})\\b`, 'i'));
+  if (providerNamed && !['email', 'mail', 'smtp', 'address', 'me', 'the'].includes(providerNamed)) s.provider = providerNamed;
+  else if (providerKnown) s.provider = providerKnown[1].toLowerCase();
   s.urls = (text.match(/https?:\/\/[^\s"'<>]+/gi) || []);
   const ref = text.match(/\bFL-[A-Z0-9]{3,}\b/i);
   if (ref) s.ref = ref[0].toUpperCase();
@@ -396,6 +408,16 @@ function extractSlots(raw) {
  * What's left of the sentence once verbs, nouns, stop-words and captured
  * slots are removed — the best guess for "a name the operator typed".
  */
+/* These words have operational meanings elsewhere, but are also common
+ * entity names. Keep them in the target text so "approve PayPal listing" or
+ * "show News listing" can resolve a real listing instead of dropping the
+ * name during normalisation. */
+const ENTITY_WORDS = new Set([
+  'paypal', 'news', 'status', 'health', 'stripe', 'google', 'zoho', 'brevo',
+  'resend', 'mailtrap', 'smtp2go', 'smtpfast', 'ahasend', 'forwardemail',
+  'dnsexit', 'custom', 'acme', 'meta', 'apple', 'amazon', 'microsoft',
+]);
+
 function freeText(raw, slots) {
   let t = lower(raw).replace(/\s+(?:because|since|as|due to|reason:?|cos|coz)\s+.+$/i, '');
   for (const q of slots.quoted) t = t.replace(q, ' ');
@@ -408,7 +430,7 @@ function freeText(raw, slots) {
     const l = w.toLowerCase();
     if (STOP.has(l)) continue;
     const k = stem(l);
-    if (WORDS[k] !== undefined && !/^[A-Z]/.test(w)) continue; // known verb/noun (lower-case) → not a name
+    if (WORDS[k] !== undefined && !/^[A-Z]/.test(w) && !ENTITY_WORDS.has(k)) continue; // known verb/noun (lower-case) → not a name
     keep.push(w);
   }
   return keep.join(' ').trim();
@@ -597,6 +619,30 @@ rule('__thanks', (c) => /^\s*thanks\b/.test(c) && c.trim().split(' ').length <= 
 rule('__reset', (c) => /^\s*reset\s*$/.test(c));
 rule('__undo', (c) => has(c, /\bundo\b/));
 rule('__whoami', (c) => has(c, /\b(who am i|whoami|am i admin|my role)\b/));
+rule('__api_playground', (c) => has(c, /\b(api|developer)\b/) && has(c, /\b(playground|assistant|endpoints?|requests?|console)\b/) && !has(c, /\b(key|keys|revoke|usage)\b/), () => ({ args: {} }));
+
+/* A bare area name is not an unknown command. It opens a safe, actionable
+ * menu so an admin can discover the same operations that are available in the
+ * console without guessing syntax. This is intentionally read-only: choosing
+ * an action still goes through the normal resolver and confirmation policy. */
+const BARE_TOPICS = new Set([
+  'news', 'settings', 'paypal', 'mail', 'email', 'smtp', 'indexing', 'upkeep',
+  'moderation', 'listing', 'listings', 'user', 'users', 'ticket', 'tickets',
+  'claim', 'claims', 'removal', 'removals', 'status', 'inbox', 'backup',
+  'protection', 'promo', 'promos', 'planoffer', 'adpackage', 'career', 'careers',
+  'post', 'blog', 'category', 'categories', 'payment', 'tech',
+]);
+rule('__topic_menu', (c) => /^\s*paypal\s+(?:listing|listings|payment|payments|settings?)\s*$/.test(c), () => ({ args: { topic: 'paypal' } }));
+rule('__topic_menu', (c) => BARE_TOPICS.has(c.trim()), ({ c }) => ({ args: { topic: c.trim() } }));
+
+/* Keep the high-risk-looking phrase "auto accept/approve new listings" from
+ * falling through to the listing-creation rule. It changes a site flag, not a
+ * record, and remains a normal confirmed write. */
+rule('set_auto_approve', (c) => has(c, /\b(auto|automatic)\b/) && has(c, /\b(approve|accept|approval)\b/) && !has(c, /\b(assistant|moderation|screener|screening)\b/), ({ slots }) => ({ args: { on: slots.on !== false } }));
+/* PayPal is both a provider and a possible listing name. Provider verbs are
+ * unambiguous and must win before entity resolution can turn "paypal" into a
+ * listing id. */
+rule('set_paypal_settings', (c) => has(c, /\bpaypal\b/) && has(c, /\b(set|live|sandbox|mode|credentials|switch|use)\b/), ({ slots, c }) => { const kv = slots.keyval || {}; const args = {}; if (kv.client_id) args.client_id = kv.client_id; if (kv.client_secret) args.client_secret = kv.client_secret; if (kv.mode) args.mode = kv.mode; else if (has(c, /\blive\b/)) args.mode = 'live'; else if (has(c, /\bsandbox\b/)) args.mode = 'sandbox'; return Object.keys(args).length ? { args } : { ask: 'Set PayPal to live or sandbox, or give client_id=… client_secret=…', entity: 'fields' }; });
 
 /* ---- confirmations (only used when a pending action exists — see ai.js) ---- */
 
@@ -630,11 +676,11 @@ rule('edit_moderation_rules', (c) => (has(c, /\b(block|flag|allow|trust|delete|u
   if (!term) return { ask: `Which ${kind === 'allow-domain' ? 'domain' : 'term'}? e.g. “block term casino” or “flag term crypto”.`, entity: 'text', partial: { action, kind } };
   return { args: { action, kind, term } };
 });
-rule('review_listing_now', (c) => has(c, /\b(moderate|score)\b/) && !has(c, /\b(on|off|set|show|log|rule|threshold|all|pending)\b/), (b) => {
+rule('review_listing_now', (c) => (has(c, /\b(moderate|score|assess|evaluate|decide|verdict)\b/) || (has(c, /\b(should|can|safe)\b/) && has(c, /\b(approve|accept|reject|decline)\b/))) && !has(c, /\b(on|off|set|show|log|rule|threshold|all|pending)\b/), (b) => {
   const t = listingTarget(b);
   if (!t.value) return t;
   if (t.fromContext && !b.slots.pronoun && !/^\s*(moderate|score)\s*(now)?\s*$/.test(b.c)) return { skip: true };
-  return { args: { id_or_slug: t.value, dry_run: has(b.c, /\bscore\b/) && !has(b.c, /\bmoderate\b/) }, listing: t.row };
+  return { args: { id_or_slug: t.value, dry_run: has(b.c, /\b(score|assess|evaluate|should|safe|decide|verdict)\b/) && !has(b.c, /\b(review|moderate)\b/) }, listing: t.row };
 });
 rule('list_protection_rules', (c) => has(c, /\b(iprule|domainrule)\b/) || (has(c, /\bshow\b/) && has(c, /\b(ip|domain|protection)\b/) && has(c, /\b(block|allow|rule|all|list)\b/)) || /^\s*(show\s+)?(protection|ratelimit)\s*$/.test(c), ({ c }) => ({ args: { list: has(c, /\bdomainrule\b/) && !has(c, /\biprule\b/) ? 'domain' : has(c, /\biprule\b/) && !has(c, /\bdomainrule\b/) ? 'ip' : 'all' } }));
 rule('list_mail_accounts', (c) => has(c, /\bmailaccount\b/) || (has(c, /\bshow\b/) && has(c, /\b(smtp|from)\b/) && !has(c, /\bset\b/)));
@@ -664,8 +710,8 @@ rule('__none_2fa', (c) => has(c, /\b2fa\b/) && has(c, /\b(on|off|start|enroll|se
 rule('set_ticket_status', (c) => has(c, /\bcloseallsolved\b/), () => ({ none: 'Tickets are closed one at a time so nothing slips — say “show solved tickets” and then “close FL-XXXX”, or “close it” after opening one.' }));
 rule('get_health', (c) => has(c, /\bhealth\b/) && !has(c, /\b(indexing|statuspage|component)\b/));
 rule('get_payments_summary', (c) => has(c, /\bpayment\b/) && !has(c, /\b(show|count)\b.*\bpayment\b.*\b(pending|failed|list)\b/) && !has(c, /\bpaypal\b/));
-rule('get_site_overview', (c) => has(c, /\boverview\b/) || has(c, /\b(show|help)\b.*\b(pages|console|sections|site)\b/) || /^\s*show (site|firmledger)\s*$/.test(c));
-rule('get_settings', (c) => has(c, /\b(show|count)?\s*settings\b/) && !has(c, /\b(set|on|off|save)\b.*\bsettings\b/) && !has(c, /\bassistant\b/) && !has(c, /\b(upkeep|news|smtp|paypal|ratelimit)\b/));
+rule('get_site_overview', (c, b) => (has(c, /\boverview\b/) || has(c, /\b(show|help)\b.*\b(pages|console|sections|site)\b/) || /^\s*show (site|firmledger)\s*$/.test(c)) && !/\b(search|find|locate|lookup|look\s+up|where\s+is|where\s+are)\b/i.test(String(b && b.raw || '')));
+rule('get_settings', (c, b) => ((has(c, /\b(show|count)?\s*settings\b/) || (has(c, /\b(show|display|view|read)\b/) && has(c, /\bpaypal\b/) && !has(c, /\blisting\b/))) && !has(c, /\b(set|on|off|save)\b.*\bsettings\b/) && !has(c, /\bassistant\b/) && !has(c, /\b(upkeep|news|smtp|ratelimit)\b/)) && !/\b(search|find|locate|lookup|look\s+up|where\s+is|where\s+are)\b/i.test(String(b && b.raw || '')));
 rule('get_ai_playground', (c) => has(c, /\bassistant\b/) && has(c, /\b(show|status|settings|state|config)\b/));
 rule('get_indexing_status', (c) => has(c, /\b(indexing|indexnow|googleindex|upkeep|sweep)\b/) && has(c, /\b(show|status|count|health|progress|quota|running)\b/) && !has(c, /\b(on|off|run|start|cancel|stop|ping|delete)\b/));
 rule('get_status_page', (c) => has(c, /\bstatuspage\b/) && !has(c, /\b(statusreport|reset|run|refresh|delete|create|open|update|solved)\b/) || (has(c, /\b(show|count)\b/) && has(c, /\bcomponent\b/)) || (has(c, /\b(site|platform|service)\b/) && has(c, /\bstatus\b/) && !has(c, /\b(ticket|listing|incident|user)\b/)));
@@ -704,7 +750,7 @@ rule('list_listings', (c) => (has(c, /\b(show|open)\b/) || has(c, /\blisting (ow
     if (text && has(c, /\b(in|from)\b/) && !args.country && !args.category) { const cat = q.categoryByName(text); if (cat && !has(c, /\bfrom\b/)) args.category = cat.name; else args.country = text.replace(/\b\w/g, (m) => m.toUpperCase()); }
     return { args };
   });
-rule('get_listing', (c) => (has(c, /\b(show|open)\b/) && has(c, /\blisting\b/)) || (has(c, /\b(show|open)\b/) && !has(c, /\b(user|ticket|claim|removal|post|career|promo|planoffer|adpackage|category|incident|subscriber|payment|news|story|inbox|settings|health|stats|indexing|statuspage|smtp|ratelimit|ip|domain|backup|protection)\b/)),
+rule('get_listing', (c, b) => ((has(c, /\b(show|open)\b/) && has(c, /\blisting\b/)) || (has(c, /\b(show|open)\b/) && !has(c, /\b(user|ticket|claim|removal|post|career|promo|planoffer|adpackage|category|incident|subscriber|payment|news|story|inbox|settings|health|stats|indexing|statuspage|smtp|ratelimit|ip|domain|backup|protection)\b/))) && !/\b(search|find|locate|lookup|look\s+up|where\s+is|where\s+are)\b/i.test(String(b && b.raw || '')),
   ({ slots, ctx, text, c }) => {
     if (slots.emails.length && !slots.ids.listing) return { skip: true };
     if (has(c, /\bthem\b/) && !has(c, /\blisting\b/)) return { skip: true };
@@ -717,7 +763,22 @@ rule('get_listing', (c) => (has(c, /\b(show|open)\b/) && has(c, /\blisting\b/)) 
     }
     return { args: { id_or_slug: r.value }, listing: r.row };
   });
-rule('search_admin', (c) => has(c, /\b(show|search)\b/) && has(c, /\b(everywhere|everything|global|anywhere|across)\b/), ({ text, slots }) => { const qq = (text || '').replace(/\b(everywhere|everything|global|globally|anywhere|across|the|whole|site|console)\b/gi, ' ').replace(/\s+/g, ' ').trim() || slots.quoted[0] || slots.emails[0] || slots.domains[0]; return qq ? { args: { q: qq } } : { ask: 'Search for what?', entity: 'text' }; });
+rule('search_admin', (c, b) => {
+  const raw = String(b && b.raw || '');
+  const global = has(c, /\b(show|search|find|locate)\b/) && (has(c, /\b(everywhere|everything|anywhere|across|all)\b/) || /\bglobal(?:ly)?\s+search\b/i.test(raw));
+  const explicit = /\b(search|find|locate|lookup|look\s+up|where\s+is|where\s+are)\b/i.test(raw)
+    && !has(c, /\b(listings?|users?|members?|tickets?|claims?|removals?)\b/);
+  return global || explicit;
+}, ({ text, raw, slots }) => {
+  const source = String(text || raw || '');
+  const scoped = source.match(/\b(?:for|about|named|called|containing|matching)\s+(.+)$/i);
+  const qq = (scoped ? scoped[1] : source)
+    .replace(/^\s*(?:show|search|find|locate|lookup|look\s+up|where\s+is|where\s+are)\b\s*/i, '')
+    .replace(/\b(everywhere|everything|anywhere|across|all|the|whole|site|console|admin)\b/gi, ' ')
+    .replace(/\s+/g, ' ').trim();
+  const cleanQ = [...new Set(qq.split(/\s+/).filter(Boolean))].join(' ') || slots.quoted[0] || slots.emails[0] || slots.domains[0];
+  return cleanQ ? { args: { q: cleanQ } } : { ask: 'Search the entire site for what?', entity: 'text' };
+});
 rule('search_listings', (c) => has(c, /\b(show|search)\b/) && has(c, /\blisting\b/), ({ slots, text, c }) => {
   const term = slots.quoted[0] || slots.domains[0] || text;
   if (!term || term.length < 2) return { skip: true };
@@ -803,7 +864,7 @@ rule('bulk_listing_action', (c) => has(c, /\b(approve|reject|delete|feature|unfe
     if (text) { const cat = q.categoryByName(text) || q.categoriesLike(text)[0]; if (cat) args.category = cat.name; else if (has(c, /\b(in|from)\b/)) args.country = text.replace(/\b\w/g, (m) => m.toUpperCase()); }
     return { args };
   });
-rule('approve_listing', (c) => (has(c, /\bapprove\b/) || (has(c, /\b(make|set)\b/) && has(c, /\blive\b/))) && !has(c, /\b(news|story|claim|transfer|post|user|ticket|auto|moderation|paypal)\b/), (b) => { const t = listingTarget(b); return t.value ? { args: { id_or_slug: t.value }, listing: t.row } : t; });
+rule('approve_listing', (c) => (has(c, /\bapprove\b/) || (has(c, /\b(make|set)\b/) && has(c, /\blive\b/))) && !has(c, /\b(news|story|claim|transfer|post|user|ticket|auto|moderation)\b/), (b) => { const t = listingTarget(b); return t.value ? { args: { id_or_slug: t.value }, listing: t.row } : t; });
 rule('reject_listing', (c) => has(c, /\breject\b/) && !has(c, /\b(news|story|claim|transfer|removal)\b/), (b) => { const t = listingTarget(b); return t.value ? { args: { id_or_slug: t.value }, listing: t.row } : t; });
 rule('unfeature_listing', (c) => has(c, /\bunfeature\b/) || (has(c, /\b(delete|revoke|off|stop)\b/) && has(c, /\bfeature\b/)), (b) => { const t = listingTarget(b); return t.value ? { tool: 'feature_listing', args: { id_or_slug: t.value, featured: false }, listing: t.row } : t; });
 rule('feature_listing', (c) => has(c, /\bfeature\b/) && !has(c, /\b(show|count|which)\b/), (b) => { const t = listingTarget(b); return t.value ? { args: { id_or_slug: t.value, featured: true }, listing: t.row } : t; });
@@ -978,8 +1039,9 @@ rule('delete_news_story', (c) => has(c, /\b(news|story)\b/) && has(c, /\bdelete\
 rule('set_news_settings', (c) => has(c, /\bnews\b/) && has(c, /\b(pending|moderation|review)\b/) && has(c, /\b(on|off|set)\b/), ({ slots }) => ({ args: { review_auto: slots.on !== false } }));
 rule('run_news_refresh', (c) => has(c, /\b(news|story)\b/) && has(c, /\b(refresh|run|start|cancel|stop|scan|search)\b/), ({ slots, ctx, text, c }) => {
   if (has(c, /\b(cancel|stop)\b/)) return { args: { action: 'cancel' } };
-  if (has(c, /\b(all|stale)\b/) || (!text && !slots.pronoun && !slots.ids.listing && !slots.slugs.length)) return { args: { action: 'start', limit: slots.limit || 20 } };
-  const l = resolveListing({ slots, ctx, text, c });
+  const listingText = String(text || '').replace(/\b(news|story|refresh|scan|search)\b/gi, ' ').replace(/\s+/g, ' ').trim();
+  if (has(c, /\b(all|stale)\b/) || (!listingText && !slots.pronoun && !slots.ids.listing && !slots.slugs.length)) return { args: { action: 'start', limit: slots.limit || 20 } };
+  const l = resolveListing({ slots, ctx, text: listingText, c });
   if (!l.ok) return askFor(l, 'listing') || { ask: l.ask, options: l.options, entity: 'listing' };
   return { args: { action: 'one', id_or_slug: l.value }, listing: l.row };
 });
@@ -1159,7 +1221,25 @@ rule('manage_notification', (c) => has(c, /\binbox\b/) && has(c, /\b(archive|res
 rule('notify_admin_inbox', (c) => has(c, /\b(note|inbox)\b/) && has(c, /\b(create|leave|remind|drop|write|send)\b/) && !has(c, /\b(email|user)\b/), ({ slots, raw }) => { const title = slots.title || slots.quoted[0] || slots.said || raw.replace(/^.*?\b(?:note|reminder|remind me|inbox)\b\s*(?:that|to|:)?\s*/i, '').trim(); if (!title) return { ask: 'What should the note say?', entity: 'title' }; return { args: { title: title.slice(0, 120), body: title.length > 120 ? title : '', kind: 'info' } }; });
 rule('export_backup', (c) => has(c, /\bbackup\b/) && !has(c, /\b(show|restore|import)\b/));
 rule('set_admin_2fa_email', (c) => has(c, /\b2fa\b/) && has(c, /\b(set|email|send|move|use)\b/), ({ slots }) => slots.emails.length ? { args: { email: slots.emails[0] } } : { ask: 'Which address should receive the admin sign-in codes?', entity: 'email' });
-rule('send_test_mail', (c) => has(c, /\btestmail\b/) || (has(c, /\bsmtp\b/) && has(c, /\btest\b/)), ({ slots }) => ({ args: slots.emails.length ? { to: slots.emails[0] } : {} }));
+function configuredMailChoices() {
+  try { return mailer.providerChoices(); } catch { return []; }
+}
+rule('send_test_mail', (c) => has(c, /\btestmail\b/) || (has(c, /\bsmtp\b/) && has(c, /\btest\b/)), ({ slots, raw }) => {
+  const args = slots.emails.length ? { to: slots.emails[0] } : {};
+  if (slots.provider) args.provider = slots.provider;
+  /* If failover has more than one live hop, do not silently pick a relay:
+   * ask the admin which one to prove. With zero/one hops, automatic (or the
+   * only available hop) is unambiguous and remains one turn. */
+  if (!args.provider && configuredMailChoices().length > 1) {
+    return {
+      ask: 'Which configured mail provider should receive the test? Choosing one tests that provider directly; “automatic failover” tests the normal chain.',
+      entity: 'mail_provider',
+      partial: args,
+      options: configuredMailChoices().map((p) => ({ label: p.label, value: p.key })),
+    };
+  }
+  return { args };
+});
 rule('set_mail_from', (c) => has(c, /\bfrom\b/) && has(c, /\b(email|smtp|set)\b/) && has(c, /\b(set|address|use)\b/) && !has(c, /\b(user|listing|ticket)\b/), ({ slots, quotedRaw }) => { const from = slots.quoted[0] || (slots.emails[0] ? slots.emails[0] : null); return from ? { args: { from } } : { ask: 'What should the From address be? e.g. "FirmLedger <no-reply@firmledger.co.ke>"', entity: 'from' }; });
 rule('set_mail_account', (c) => has(c, /\bsmtp\b/) && has(c, /\b(create|delete|on|off|toggle|pause|disable|enable)\b/) && !has(c, /\b(primary|host)\b.*\bset\b/), ({ slots, c }) => {
   const action = has(c, /\bcreate\b/) ? 'add' : has(c, /\bdelete\b/) ? 'delete' : 'toggle';
@@ -1186,6 +1266,18 @@ rule('get_listing', (c) => true, ({ slots, ctx, text, c }) => {
   if (u.ok) return { tool: 'get_user', args: { user: u.value }, user: u.row };
   if (u.options) return { ask: u.ask, options: u.options, entity: 'user' };
   return { skip: true };
+}, { guess: true });
+
+/* Last-resort recovery: an unfamiliar phrase is still a safe, read-only
+ * site-wide search. This means “where did that email/name/word go?” never
+ * dead-ends, while the guess flag and the no-match response make it explicit
+ * that nothing was silently treated as a write command. */
+rule('search_admin', (c, b) => {
+  const text = String(b && b.text || '').trim();
+  return text.length >= 2 && !/^\s*(yes|no|cancel|help|hello|thanks|ok|okay)\s*$/i.test(text);
+}, ({ text, slots }) => {
+  const query = String(text || '').trim() || slots.quoted[0] || slots.emails[0] || slots.domains[0];
+  return query ? { args: { q: query } } : { skip: true };
 }, { guess: true });
 
 /* ------------------------------------------------------------------ */
@@ -1251,7 +1343,7 @@ function parseCommand(raw, ctx = {}) {
   const b = { raw: lower(raw), c, slots, text, ctx };
   for (const r of R) {
     let ok = false;
-    try { ok = r.test(c); } catch { ok = false; }
+    try { ok = r.test(c, b); } catch { ok = false; }
     if (!ok) continue;
     let out;
     try { out = r.build(b); } catch (e) { out = { none: `I could not work that out: ${e.message}` }; }
@@ -1312,6 +1404,14 @@ function answerAsk(raw, ask, ctx) {
     case 'listing': { const r = resolveListing({ slots, ctx, text: freeText(raw, slots) || low, c, allowContext: false }); if (r.ok) return pick(r.value, r.row); if (r.options) return { ask: { ...ask, ask: r.ask, options: r.options } }; return { ask: { ...ask, ask: r.none || 'I still could not find that listing — try its id or slug.' } }; }
     case 'user': { const r = resolveUser({ slots, ctx, text: freeText(raw, slots) || low, allowContext: false }); if (r.ok) return pick(r.value, r.row); if (r.options) return { ask: { ...ask, ask: r.ask, options: r.options } }; return { ask: { ...ask, ask: r.none || 'I still could not find that member — try their email.' } }; }
     case 'ticket': { const r = resolveTicket({ slots, ctx, text: freeText(raw, slots) || low, allowContext: false }); if (r.ok) return pick(r.value, r.row); if (r.options) return { ask: { ...ask, ask: r.ask, options: r.options } }; return { ask: { ...ask, ask: r.none || 'I still could not find that ticket — try its FL- reference.' } }; }
+    case 'mail_provider': {
+      const value = (slots.provider || lower(raw).replace(/^["']|["']$/g, '')).trim();
+      if (!value || (!mailer.resolveProviderKey(value) && !/^automatic|failover|any$/i.test(value))) {
+        const options = mailer.providerChoices();
+        return { ask: { ...ask, options: options.map((o) => ({ label: o.label, value: o.key })), ask: options.length ? 'Pick one of the currently configured providers, or say “automatic failover”.' : 'No configured mail providers are available yet — add one in Settings first.' } };
+      }
+      return pick(/^automatic|failover|any$/i.test(value) ? '' : mailer.resolveProviderKey(value));
+    }
     case 'message': case 'title': case 'name': case 'value': case 'from': case 'paths': case 'email': case 'ip': case 'domain': {
       let v = lower(raw).replace(/^["']|["']$/g, '');
       if (ask.entity === 'email') { if (!slots.emails[0]) return { ask: { ...ask, ask: 'That is not an email address — try again.' } }; v = slots.emails[0]; }
@@ -1373,7 +1473,7 @@ function slotKeyFor(tool, entity, params) {
     listing: ['id_or_slug'], user: ['user', 'owner_email'], ticket: ['id_or_ref'], claim: ['id'], removal: ['id'], story: ['id'], post: ['id_or_slug', 'id'],
     incident: ['id'], promo: ['code_or_id', 'id'], plan: ['id'], package: ['id'], career: ['id'], transfer: ['id'], notification: ['id'], event: ['event_id'],
     relation: ['relation_id'], rule: ['id'], component: ['id'], account: ['id'], message: ['message'], title: ['title'], name: ['name', 'to'], value: ['value'], from: ['from'],
-    paths: ['paths'], email: ['email'], ip: ['ip'], domain: ['domain'], status: ['status'], cadence: ['cadence'], relType: ['rel_type'],
+    paths: ['paths'], email: ['email'], mail_provider: ['provider'], ip: ['ip'], domain: ['domain'], status: ['status'], cadence: ['cadence'], relType: ['rel_type'],
   };
   for (const k of map[entity] || []) if (params[k]) return k;
   return null;
@@ -1452,13 +1552,20 @@ const FORMAT = {
     ].join('\n');
   },
   search_admin(r) {
-    const parts = [];
-    if ((r.listings || []).length) parts.push('**Listings**\n' + list(r.listings, (l) => `#${l.id} ${l.name} — ${l.status} · ${l.category || ''}`));
-    if ((r.users || []).length) parts.push('**Members**\n' + list(r.users, (u) => `#${u.id} ${u.name || ''} <${u.email}>${u.suspended ? ' · suspended' : ''}`));
-    if ((r.tickets || []).length) parts.push('**Tickets**\n' + list(r.tickets, (t) => `${t.ref} ${t.subject} — ${t.status}`));
-    if ((r.claims || []).length) parts.push('**Claims**\n' + list(r.claims, (c) => `#${c.id} ${c.domain} — ${c.status}`));
-    if ((r.posts || []).length) parts.push('**Posts**\n' + list(r.posts, (p) => `#${p.id} ${p.title} — ${p.status}`));
-    return parts.length ? parts.join('\n') : 'Nothing matched anywhere.';
+    const areas = Array.isArray(r.areas) ? r.areas : [];
+    if (!areas.length) return `I am not sure which area that refers to, so I searched everywhere but found no match for **${r.query || 'that search'}**.\nI searched ${r.searched_tables || 'all'} functional areas. Try a broader name, email, id, slug, status or phrase.\n**Try a functional area:** show pending listings · show users · show open tickets · show settings · help`;
+    const rowText = (row) => {
+      const preferred = ['name', 'title', 'subject', 'email', 'label', 'ref', 'slug', 'key', 'domain', 'url', 'status', 'provider', 'action'];
+      const entries = preferred.filter((k) => row[k] !== undefined && row[k] !== null && String(row[k]) !== '').map((k) => `${k}=${String(row[k]).replace(/\s+/g, ' ').slice(0, 110)}`);
+      const extra = Object.entries(row).filter(([k, v]) => !preferred.includes(k) && v !== undefined && v !== null && String(v) !== '').slice(0, 3).map(([k, v]) => `${k}=${String(v).replace(/\s+/g, ' ').slice(0, 80)}`);
+      return (entries.concat(extra).join(' · ') || 'matching record').replace(/\n/g, ' ');
+    };
+    const parts = [`**Site-wide search: “${r.query || ''}”**`, `Found **${r.total_matches || 0}** match${r.total_matches === 1 ? '' : 'es'} across ${areas.length} area${areas.length === 1 ? '' : 's'}.`];
+    for (const area of areas) {
+      parts.push(`**${area.label || area.area}** · ${area.count} match${area.count === 1 ? '' : 'es'}\n${list(area.rows || [], rowText, 8)}\n**Commands for this area:** ${(area.commands || []).join(' · ')}`);
+    }
+    parts.push('These are live admin commands. Reads run now; changes still ask for confirmation, and destructive/bulk actions always confirm.');
+    return parts.join('\n\n');
   },
   get_audit_log(r) {
     if (!(r.entries || []).length) return 'The audit log is empty for that filter.';
@@ -1551,7 +1658,33 @@ const FORMAT = {
   get_payments_summary(r) { return [`Captured: **USD ${(Number(r.captured_usd || 0) / 100).toFixed(2)}**`, `Active Pro: ${r.pro_users} members · ${r.pro_listings} listings`, `By status: ${(r.totals || []).map((t) => `${t.status} ${t.n} (${money(t.amount, t.currency)})`).join(' · ') || 'none'}`, r.promo_redemptions !== undefined ? `Promo redemptions: ${r.promo_redemptions}` : '', (r.recent || []).length ? 'Recent:\n' + list(r.recent, (p) => `#${p.id} ${money(p.amount, p.currency)} ${p.status} · ${p.channel} · ${fmtDate(p.created_at)}`, 8) : ''].filter(Boolean).join('\n'); },
   get_indexing_status(r) { return [`IndexNow: ${r.indexnow && r.indexnow.enabled ? 'on' : 'off'} · ${r.indexnow ? r.indexnow.log_rows : 0} log rows`, r.google ? `Google Indexing API: ${r.google.enabled ? 'on' : 'off'} · ${r.google.configured ? 'credentials set' : 'no credentials'} · quota ${JSON.stringify(r.google.quota)} · pending ${r.google.pending}` : '', r.upkeep ? `Upkeep: ${r.upkeep.on ? 'on' : 'off'} (tech ${r.upkeep.tech_on ? 'on' : 'off'}, news ${r.upkeep.news_on ? 'on' : 'off'})` : '', r.tech_refresh ? `Tech sweep: ${JSON.stringify(r.tech_refresh)}` : '', r.news_refresh ? `News sweep: ${JSON.stringify(r.news_refresh)}` : ''].filter(Boolean).join('\n'); },
   get_status_page(r) { return [`Overall: **${r.overall && (r.overall.label || r.overall)}** · uptime ${r.uptime || '—'} · ${r.subscribers ?? 0} subscribers`, list(r.components || [], (c) => `${c.name} — ${c.status_label || c.status}${c.slug ? ' (`' + c.slug + '`)' : ''}`), (r.open_incidents || []).length ? 'Open incidents:\n' + list(r.open_incidents, (i) => `#${i.id} ${i.title} — ${i.status} · ${i.severity}`) : 'No open incidents.'].join('\n'); },
-  get_settings(r) { return [`**Site:** auto-approve ${r.site.auto_approve ? 'on' : 'off'} · indexing ${r.site.indexing_enabled ? 'on' : 'off'} · Google indexing ${r.site.google_indexing_enabled ? 'on' : 'off'} · maintenance ${r.site.maintenance_on ? 'ON' : 'off'} · news review ${r.site.news_review_auto ? 'on' : 'off'} · weekly status report ${r.site.status_weekly_report ? 'on' : 'off'} · newsletter ${r.site.newsletter_cadence} · trial ${r.site.trial_days} days · admin 2FA inbox ${r.site.admin_2fa_email}`, `**Protection:** ${Object.entries(r.protection.limits).map(([k, v]) => `${k}=${v}`).join(' ')} · ${r.protection.ip_rules} IP rules · ${r.protection.domain_rules} domain rules`, `**Mail:** ${r.mail.configured ? 'configured' : 'NOT configured'} · from ${r.mail.from} · hops: ${(r.mail.hops || []).map((h) => `${h.label} (${h.host}:${h.port}, ${h.sent_today} today${h.last_error ? ', error' : ''})`).join('; ') || 'none'}`, `**Payments:** PayPal ${r.payments.mode} · client ${r.payments.client_id || 'unset'} · secret ${r.payments.client_secret_set ? 'set' : 'missing'} (${r.payments.source})`, `**Indexing:** IndexNow key ${r.indexing.indexnow_key || 'none'} · Google ${r.indexing.google.enabled ? 'on' : 'off'}/${r.indexing.google.configured ? 'configured' : 'no credentials'} · ${r.indexing.log_rows} log rows`, `**Upkeep:** ${JSON.stringify(r.upkeep)}`, r.assistant ? `**Assistant:** auto-moderation ${r.assistant.moderation_on ? 'on' : 'off'} · auto-run: ${r.assistant.auto_run_tools.join(', ') || 'none'}` : ''].filter(Boolean).join('\n'); },
+  get_settings(r) {
+    const site = r.site || {}; const protection = r.protection || {}; const mail = r.mail || {};
+    const payments = r.payments || {}; const indexing = r.indexing || {}; const google = indexing.google || {};
+    const limits = protection.limits || {};
+    const hops = (mail.hops || []).map((h) => `${h.label || h.provider || 'provider'} (${h.host}:${h.port}${h.last_error ? ', error' : ''})`).join(' · ') || 'none configured';
+    return [
+      '**Site settings**',
+      `auto-approve: **${site.auto_approve ? 'ON' : 'off'}** · AI moderation: **${r.assistant && r.assistant.moderation_on ? 'ON' : 'off'}** · maintenance: **${site.maintenance_on ? 'ON' : 'off'}**`,
+      `indexing: ${site.indexing_enabled ? 'on' : 'off'} · Google indexing: ${site.google_indexing_enabled ? 'on' : 'off'} · news review: ${site.news_review_auto ? 'on' : 'off'} · weekly status report: ${site.status_weekly_report ? 'on' : 'off'}`,
+      `newsletter: ${site.newsletter_cadence || 'weekly'} · trial: ${site.trial_days || 0} days · admin 2FA inbox: ${site.admin_2fa_email || '—'}`,
+      '',
+      '**Payments**',
+      `PayPal mode: **${payments.mode || 'sandbox'}** · client id: ${payments.client_id || 'unset'} · secret: ${payments.client_secret_set ? 'set' : 'missing'} · source: ${payments.source || 'settings'}`,
+      '',
+      '**Mail providers**',
+      `${mail.configured ? 'configured' : 'NOT configured'} · From: ${mail.from || '—'} · ${hops}`,
+      '',
+      '**Protection**',
+      `${Object.entries(limits).map(([k, v]) => `${k}=${v}`).join(' · ') || 'default limits'} · ${protection.ip_rules || 0} IP rules · ${protection.domain_rules || 0} domain rules`,
+      '',
+      '**Indexing & upkeep**',
+      `IndexNow key: ${indexing.indexnow_key || 'none'} · Google: ${google.enabled ? 'on' : 'off'} / ${google.configured ? 'configured' : 'no credentials'} · ${indexing.log_rows || 0} log rows`,
+      `Upkeep: ${JSON.stringify(r.upkeep || {})}`,
+      r.security ? `**Security** · console ${r.security.console_auth || 'session + CSRF'} · API ${r.security.api_auth || 'key + scopes'} · admin 2FA inbox: ${r.security.admin_2fa_email || '—'} · secrets ${r.security.secrets || 'masked'}` : '',
+      r.assistant ? `**Assistant** · auto-moderation ${r.assistant.moderation_on ? 'on' : 'off'} · auto-run: ${(r.assistant.auto_run_tools || []).join(', ') || 'none'}` : '',
+    ].filter(Boolean).join('\n');
+  },
   get_site_overview(r) { return [`**${r.product.name}** — ${r.product.what} (${r.product.base_url})`, `Volumes: ${r.volumes.listings} listings · ${r.volumes.users} members · ${r.volumes.blog_posts} posts`, `Flags: ${Object.entries(r.feature_flags).map(([k, v]) => `${k}=${v ? 'on' : 'off'}`).join(' · ')}`, `Admin console: ${r.admin_console.map((p) => p.page.split(' — ')[0].split(':')[0]).join(' · ')}`, `Public pages: ${r.public_pages.length} · dashboard areas: ${r.member_dashboard.length}`].join('\n'); },
   get_ai_playground(r) { return [`Assistant: **rule engine, no model** · ${r.tools} console actions · auto-run: ${(r.auto_run_tools || []).join(', ') || 'none'}`, `Auto-moderation: ${r.moderation.on ? 'on' : 'off'} · email when unsure ${r.moderation.email_admin ? 'on' : 'off'} · ${r.moderation.blocklist_terms} blocked terms · approve at ≥${r.moderation.approve_at} · reject at ≤${r.moderation.reject_at}`, `Pending confirmations: ${r.pending_confirmations}`, (r.recent_audit || []).length ? 'Recent audit:\n' + list(r.recent_audit, (a) => `${fmtDate(a.created_at)} ${a.kind}/${a.action} — ${String(a.result || '').slice(0, 80)}`, 8) : ''].filter(Boolean).join('\n'); },
   export_backup(r) { return `Backup written: \`${r.path || r.file}\` (${r.size_human || r.size || '?'}) — download it from Admin → Health.`; },
@@ -1612,7 +1745,13 @@ function suggestionsFor(tool, plan, result, ctx) {
     case 'suspend_user': s.push('unsuspend them', 'show their listings'); break;
     case 'get_status_page': if (result && result.open_incidents && result.open_incidents.length) s.push(`resolve incident ${result.open_incidents[0].id}`); else s.push('open an incident titled "…"', 'run the status check'); break;
     case 'get_admin_inbox': if (result && result.unread) s.push('mark inbox read'); break;
-    case 'get_settings': s.push('turn maintenance on', 'set newsletter weekly', 'send a test email'); break;
+    case 'search_admin': {
+      const areas = result && Array.isArray(result.areas) ? result.areas : [];
+      if (areas[0] && Array.isArray(areas[0].commands)) s.push(...areas[0].commands.slice(0, 3));
+      s.push('search the entire site for <term>', 'show settings');
+      break;
+    }
+    case 'get_settings': s.push('show paypal settings', 'email settings', 'indexing status', 'send a test email'); break;
     default: {
       const t = tools.getTool(tool);
       if (t && t.mutating) {
