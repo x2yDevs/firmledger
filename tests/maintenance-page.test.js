@@ -156,6 +156,7 @@ function holdingPageChecks(html, label, custom) {
   check('404: drifting background shapes', /class="err-bg"/.test(r.text) && (r.text.match(/<i><\/i>/g) || []).length >= 3);
   check('404: kicker + heading + message', /err-kicker/.test(r.text) && /Page not found/.test(r.text) && /does not exist or was moved/.test(r.text));
   check('404: three CTAs (home / directory / search)', /class="btn btn-primary" href="\/"/.test(r.text) && /btn-ghost" href="\/directory"/.test(r.text) && /btn-gold" href="\/search"/.test(r.text));
+  check('404: rescue search uses the shared search-hero box (no inner focus ring)', /class="err-search search-hero"/.test(r.text) && /class="input search-hero-in"/.test(r.text) && /name="q"/.test(r.text) && /class="err-alt"/.test(r.text) && /href="\/claim"/.test(r.text));
   check('404: keeps full site chrome (partials)', /container/.test(r.text) && /favicon/.test(r.text) && /css\/app\.css/.test(r.text));
   check('404: noindex', /noindex/.test(r.text));
 

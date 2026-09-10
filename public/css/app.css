@@ -2750,14 +2750,13 @@ body.ai-modal-open { overflow: hidden; }
 .err-msg { max-width: 520px; margin: 12px auto 0; color: var(--ink2); animation: maintRise .5s .68s both; }
 .err-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 30px; animation: maintRise .5s .78s both; }
 
-/* inline rescue search + popular destinations under the CTAs */
-.err-search { display: flex; gap: 10px; max-width: 480px; margin: 28px auto 0; animation: maintRise .5s .86s both; }
-.err-search .input { flex: 1; height: 47px; }
-.err-search .btn { flex: 0 0 auto; }
+/* inline rescue search — same .search-hero box pattern as every other search
+   field on the site (borderless input, accent ring on the wrapper only) */
+.err-search { max-width: 480px; margin: 28px auto 0; animation: maintRise .5s .86s both; }
 .err-alt { margin-top: 18px; font-size: 13.5px; animation: maintRise .5s .92s both; }
 .err-alt a { color: var(--accent); font-weight: 500; }
 .err-alt a:hover { color: var(--accent2); text-decoration: underline; text-underline-offset: 2px; }
-@media (max-width: 520px) { .err-search { flex-direction: column; } .err-search .btn { width: 100%; } }
+
 
 @media (prefers-reduced-motion: reduce) {
   .maint-grid, .maint-glow, .maint-scan, .maint-ring, .maint-ring-b, .maint-ring::after,
