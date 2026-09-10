@@ -230,7 +230,7 @@ one-time code → authenticator or recovery code).
 | **Tickets** | Support threads with replies, status and auto-close rules |
 | **Email** | Compose to one member, a segment, or everyone |
 | **Blog** | Write, edit, publish — posts flow to `/blog`, the footer, RSS and the sitemap |
-| **AI Playground** | A rule-based admin assistant (no model, no API key) that understands the whole console — 117 tools behind confirmations, pronoun memory, disambiguation and quick replies — plus rule-based auto-moderation of new listings and full audit logs. |
+| **AI Playground** | A rule-based admin assistant (no model, no API key) that understands the whole console — 127 tools behind confirmations, pronoun memory, disambiguation and quick replies — plus rule-based auto-moderation of new listings and full audit logs. |
 | **Inbox / Search** | Admin notifications; global search across users, listings, tickets, claims and posts |
 | **Settings** | Moderation and indexing switches, IndexNow key, Google Indexing API, **automated upkeep**, console 2FA, SMTP providers, environment view |
 
@@ -393,7 +393,7 @@ rather than a broken one. Deployment, systemd, Caddy and backup routines live in
 
 | Suite | Proves |
 |---|---|
-| **AI admin tools** | all 117 assistant tools really change the database, and sensitive ones can never be auto-run |
+| **AI admin tools** | all 127 assistant tools really change the database, and sensitive ones can never be auto-run |
 | **AI admin assistant** | intent understanding, slot filling, pronoun memory, disambiguation, confirm/cancel flows, audit logging, rule-based auto-moderation |
 | **Backup round trip** | `.firmledger` export and restore into an empty database |
 | **Admin pages** | every console page renders; long lists scroll in place |

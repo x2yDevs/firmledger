@@ -1,3 +1,31 @@
+## 2026-09-10 (later) — Assistant covers the whole console; more templates
+
+**10 new console tools** (127 total, all wired to the assistant): `review_listing_now`
+(rule-based review or dry-run score of one listing), `set_moderation_thresholds`,
+`edit_moderation_rules` (block/flag/allow-domain lines), `get_moderation_rules`,
+`get_audit_log`, `get_moderation_log`, `list_protection_rules` (IP/domain rules +
+rate limits), `list_mail_accounts`, `list_api_keys`, `revoke_api_key` (sensitive).
+
+**Understanding.** ~120 new phrases ("what's pending", "briefing", "is everything
+up", "what did I just do", "whitelist 8.8.8.8", "who owns…", "top 5…", "this
+month", "never mind", "post a job", "make listing 2 live", "review it" …),
+contractions expanded, bare plural queries ("pending listings", "listings in
+Fintech", "listings from Kenya", "sponsored listings"), explicit id lists
+("approve listings 1 2 3" → bulk), category lookup by partial name, domain / IP
+protected as single tokens, `clear`/`live`/`review` no longer collide with
+approve/pending. Honest "console-only" answers for restore-backup, 2FA
+enrollment, sign-everyone-out and default trial length.
+
+**Templates.** New formatters for health, global search, audit log, moderation
+log/rules, protection rules, mail accounts, API keys and the review score; a
+"briefing" template that lists what needs attention; more phrasing variants for
+receipts, confirmations, cancellations and empty results; sensitive proposals
+get their own wording plus a one-line impact note ("They are signed out and
+cannot log in until unsuspended…"). Help topics added for moderation, audit,
+protection, mail, backup and briefing. Extra starter chips in the chat pane.
+
+**Tests.** `ai-tools` 191 checks (all 127 tools exercised), `ai-assistant` 50.
+
 ## 2026-09-10 — AI Playground: rule-based assistant, no models, no API keys
 
 **Model/provider layer removed.** `src/lib/llm.js`, `src/lib/groq.js`, every

@@ -1502,6 +1502,164 @@ const TOOLS = [
       };
     },
   },
+  /* ------------------------------------------------------------------ */
+  /* Assistant-native extras: moderation control, logs, protection, mail */
+  /* ------------------------------------------------------------------ */
+  {
+    name: 'review_listing_now', group: 'listings', label: 'Rule-based review', mutating: true,
+    description: 'Run the rule-based auto-moderation on one pending listing right now (approve / hold / reject by score), or just score it without acting when dry_run=true.',
+    parameters: {
+      type: 'object',
+      properties: { id_or_slug: { type: 'string' }, dry_run: { type: 'boolean', description: 'Score only, change nothing.' } },
+      required: ['id_or_slug'], additionalProperties: false,
+    },
+    summarize(a) { return a.dry_run ? `Score listing ${a.id_or_slug} (no changes).` : `Review listing ${a.id_or_slug} with the moderation rules.`; },
+    async run(args) {
+      const l = findListing(args.id_or_slug);
+      if (!l) return { error: 'No such listing.' };
+      const ai = require('./ai');
+      if (args.dry_run) return { listing: { id: l.id, name: l.name, status: l.status }, ...ai.scoreListing(l), dry_run: true };
+      if (l.status !== 'pending') return { error: `Listing #${l.id} is ${l.status}, only pending listings are reviewed.` };
+      const r = await ai.moderateListing(l.id);
+      const fresh = findListing(String(l.id));
+      return { listing: { id: l.id, name: l.name, status: fresh ? fresh.status : l.status }, ...r };
+    },
+  },
+  {
+    name: 'set_moderation_thresholds', group: 'ops', label: 'Moderation thresholds', mutating: true,
+    description: 'Set the auto-moderation score thresholds: approve_at (50–100) and/or reject_at (0–49).',
+    parameters: {
+      type: 'object',
+      properties: { approve_at: { type: 'integer' }, reject_at: { type: 'integer' } },
+      additionalProperties: false,
+    },
+    summarize(a) { return `Set moderation thresholds${a.approve_at !== undefined ? ` approve ≥ ${a.approve_at}` : ''}${a.reject_at !== undefined ? ` reject ≤ ${a.reject_at}` : ''}.`; },
+    run(args) {
+      if (args.approve_at === undefined && args.reject_at === undefined) return { error: 'Give approve_at and/or reject_at.' };
+      if (args.approve_at !== undefined) { const n = int(args.approve_at, 75); if (n < 50 || n > 100) return { error: 'approve_at must be 50–100.' }; setSetting('ai_moderation_approve_at', String(n)); }
+      if (args.reject_at !== undefined) { const n = int(args.reject_at, 25); if (n < 0 || n > 49) return { error: 'reject_at must be 0–49.' }; setSetting('ai_moderation_reject_at', String(n)); }
+      return { approve_at: Number(getSetting('ai_moderation_approve_at', '75')), reject_at: Number(getSetting('ai_moderation_reject_at', '25')) };
+    },
+  },
+  {
+    name: 'edit_moderation_rules', group: 'ops', label: 'Moderation rules', mutating: true,
+    description: 'Add or remove a rule line for auto-moderation: block: <term> (auto-reject), flag: <term> (hold for a human) or allow-domain: <host> (trust boost).',
+    parameters: {
+      type: 'object',
+      properties: {
+        action: { type: 'string', enum: ['add', 'remove'] },
+        kind: { type: 'string', enum: ['block', 'flag', 'allow-domain'] },
+        term: { type: 'string' },
+      },
+      required: ['action', 'kind', 'term'], additionalProperties: false,
+    },
+    summarize(a) { return `${a.action === 'remove' ? 'Remove' : 'Add'} moderation rule “${a.kind}: ${a.term}”.`; },
+    run(args) {
+      const term = str(args.term, 120).toLowerCase().trim();
+      if (!term) return { error: 'Term is empty.' };
+      const line = `${args.kind}: ${term}`;
+      const lines = getSetting('ai_moderation_rules', '').split('\n').map((x) => x.trim()).filter(Boolean);
+      const idx = lines.findIndex((x) => x.toLowerCase() === line);
+      if (args.action === 'remove') { if (idx === -1) return { error: `There is no rule “${line}”.` }; lines.splice(idx, 1); }
+      else if (idx === -1) lines.push(line);
+      setSetting('ai_moderation_rules', lines.join('\n'));
+      return { rules: lines, count: lines.length };
+    },
+  },
+  {
+    name: 'get_moderation_rules', group: 'read', label: 'Moderation rules', mutating: false,
+    description: 'Show the auto-moderation rule lines and thresholds.',
+    parameters: { type: 'object', properties: {}, additionalProperties: false },
+    summarize() { return 'Read the moderation rules.'; },
+    run() {
+      const lines = getSetting('ai_moderation_rules', '').split('\n').map((x) => x.trim()).filter(Boolean);
+      return { on: getSetting('ai_moderation_on', '0') === '1', approve_at: Number(getSetting('ai_moderation_approve_at', '75')), reject_at: Number(getSetting('ai_moderation_reject_at', '25')), rules: lines };
+    },
+  },
+  {
+    name: 'get_audit_log', group: 'read', label: 'Assistant audit log', mutating: false,
+    description: 'Recent assistant audit entries (chat turns, tool runs, moderation decisions). Filter by kind (tool|chat|moderation) or a search term.',
+    parameters: {
+      type: 'object',
+      properties: { kind: { type: 'string' }, q: { type: 'string' }, limit: { type: 'integer' } },
+      additionalProperties: false,
+    },
+    summarize() { return 'Read the audit log.'; },
+    run(args) {
+      const where = []; const p = [];
+      if (args.kind) { where.push('kind=?'); p.push(String(args.kind)); }
+      if (args.q) { where.push('(action LIKE ? OR payload LIKE ? OR result LIKE ?)'); const like = `%${String(args.q)}%`; p.push(like, like, like); }
+      const limit = Math.max(1, Math.min(100, int(args.limit, 20)));
+      const entries = rows(`SELECT id, kind, action, listing_id, ok, created_at, substr(payload,1,160) AS payload, substr(result,1,160) AS result FROM ai_audit_log${where.length ? ' WHERE ' + where.join(' AND ') : ''} ORDER BY id DESC LIMIT ${limit}`, ...p);
+      return { count: entries.length, total: countOf(`SELECT COUNT(*) c FROM ai_audit_log${where.length ? ' WHERE ' + where.join(' AND ') : ''}`, ...p), entries };
+    },
+  },
+  {
+    name: 'get_moderation_log', group: 'read', label: 'Moderation log', mutating: false,
+    description: 'Recent auto-moderation decisions (approve / reject / pending) with scores and reasons.',
+    parameters: { type: 'object', properties: { decision: { type: 'string' }, limit: { type: 'integer' } }, additionalProperties: false },
+    summarize() { return 'Read the moderation log.'; },
+    run(args) {
+      const limit = Math.max(1, Math.min(100, int(args.limit, 20)));
+      const where = args.decision ? ' WHERE m.decision=?' : '';
+      const entries = rows(`SELECT m.*, l.name AS listing_name FROM ai_moderation_log m LEFT JOIN listings l ON l.id=m.listing_id${where} ORDER BY m.id DESC LIMIT ${limit}`, ...(args.decision ? [String(args.decision)] : []));
+      return { count: entries.length, entries };
+    },
+  },
+  {
+    name: 'list_protection_rules', group: 'read', label: 'Blocked IPs & domains', mutating: false,
+    description: 'List the IP and domain block/allow rules and the rate limits (Admin → Protection).',
+    parameters: { type: 'object', properties: { list: { type: 'string', enum: ['ip', 'domain', 'all'] } }, additionalProperties: false },
+    summarize() { return 'Read the protection rules.'; },
+    run(args) {
+      const which = args.list || 'all';
+      const out = {};
+      if (which !== 'domain') out.ips = rows('SELECT id, value, kind, note, created_at FROM spam_ip ORDER BY id DESC LIMIT 100');
+      if (which !== 'ip') out.domains = rows('SELECT id, value, kind, note, created_at FROM spam_domain ORDER BY id DESC LIMIT 100');
+      out.limits = spam.limits ? spam.limits() : undefined;
+      return out;
+    },
+  },
+  {
+    name: 'list_mail_accounts', group: 'read', label: 'Mail accounts', mutating: false,
+    description: 'List configured SMTP/mail accounts (no passwords), the global From address and today\'s send counts.',
+    parameters: { type: 'object', properties: {}, additionalProperties: false },
+    summarize() { return 'Read the mail accounts.'; },
+    run() {
+      return {
+        from: getSetting('smtp_from', ''),
+        env_smtp: Boolean(process.env.SMTP_URL),
+        accounts: rows('SELECT id, provider, label, host, port, secure, username, daily_limit, sent_today, active FROM smtp_accounts ORDER BY id'),
+      };
+    },
+  },
+  {
+    name: 'list_api_keys', group: 'read', label: 'Developer API keys', mutating: false,
+    description: 'List developer API keys (prefix only, never the secret) with owner, usage and revocation state. Optionally filter by member.',
+    parameters: { type: 'object', properties: { user: { type: 'string' }, include_revoked: { type: 'boolean' } }, additionalProperties: false },
+    summarize() { return 'Read the API keys.'; },
+    run(args) {
+      const where = []; const p = [];
+      if (args.user) { const u = findUser(String(args.user)); if (!u) return { error: 'No such member.' }; where.push('k.user_id=?'); p.push(u.id); }
+      if (!args.include_revoked) where.push('k.revoked_at IS NULL');
+      const keys = rows(`SELECT k.id, k.label, k.prefix, k.created_at, k.last_used_at, k.revoked_at, k.total_requests, k.write_requests, u.email AS owner FROM api_keys k JOIN users u ON u.id=k.user_id${where.length ? ' WHERE ' + where.join(' AND ') : ''} ORDER BY k.id DESC LIMIT 100`, ...p);
+      return { count: keys.length, keys };
+    },
+  },
+  {
+    name: 'revoke_api_key', group: 'users', label: 'Revoke API key', mutating: true, sensitive: true,
+    description: 'Revoke one developer API key by id or prefix. Cannot be undone; the member must create a new key.',
+    parameters: { type: 'object', properties: { id_or_prefix: { type: 'string' } }, required: ['id_or_prefix'], additionalProperties: false },
+    summarize(a) { return `Revoke API key ${a.id_or_prefix}.`; },
+    run(args) {
+      const v = String(args.id_or_prefix);
+      const k = /^\d+$/.test(v) ? db.prepare('SELECT * FROM api_keys WHERE id=?').get(Number(v)) : db.prepare('SELECT * FROM api_keys WHERE prefix=?').get(v);
+      if (!k) return { error: 'No such API key.' };
+      if (k.revoked_at) return { error: 'That key is already revoked.' };
+      db.prepare("UPDATE api_keys SET revoked_at=datetime('now') WHERE id=?").run(k.id);
+      return { ok: true, id: k.id, prefix: k.prefix };
+    },
+  },
 ];
 
 module.exports = TOOLS;

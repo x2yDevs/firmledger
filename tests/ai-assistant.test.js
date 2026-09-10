@@ -81,6 +81,26 @@ const plan = (text, ctx = {}) => { const r = bot.parseCommand(text, ctx); return
   check('recency phrase → list_users since 7 days', p.plan && p.plan.tool === 'list_users' && Number(p.plan.args.since_days) === 7, JSON.stringify(p.plan));
   p = plan('listings owned by bob@example.com');
   check('owner filter on list_listings', p.plan && p.plan.tool === 'list_listings' && ['bob@example.com', String(bob)].includes(String(p.plan.args.owner)), JSON.stringify(p.plan));
+  p = plan('set approve threshold to 80');
+  check('moderation threshold intent', p.plan && p.plan.tool === 'set_moderation_thresholds' && p.plan.args.approve_at === 80, JSON.stringify(p.plan));
+  p = plan('block term casino');
+  check('moderation rule intent', p.plan && p.plan.tool === 'edit_moderation_rules' && p.plan.args.kind === 'block' && p.plan.args.term === 'casino', JSON.stringify(p.plan));
+  p = plan('score beta labs');
+  check('dry-run score intent', p.plan && p.plan.tool === 'review_listing_now' && p.plan.args.dry_run === true, JSON.stringify(p.plan));
+  p = plan('whitelist 8.8.8.8');
+  check('whitelist → allow ip', p.plan && p.plan.tool === 'block_ip' && p.plan.args.kind === 'allow' && p.plan.args.ip === '8.8.8.8', JSON.stringify(p.plan));
+  p = plan('show blocked ips');
+  check('protection list intent', p.plan && p.plan.tool === 'list_protection_rules', JSON.stringify(p.plan));
+  p = plan("what's pending");
+  check('contraction + queue phrase', p.plan && p.plan.tool === 'get_listing_stats', JSON.stringify(p.plan));
+  p = plan('listings in Technology');
+  check('bare plural + category filter', p.plan && p.plan.tool === 'list_listings' && p.plan.args.category === 'Technology', JSON.stringify(p.plan));
+  p = plan('what did I just do');
+  check('audit log phrase', p.plan && p.plan.tool === 'get_audit_log', JSON.stringify(p.plan));
+  p = plan('approve listings 1 2 3');
+  check('explicit id list → bulk action', p.plan && p.plan.tool === 'bulk_listing_action' && JSON.stringify(p.plan.args.ids) === '[1,2,3]', JSON.stringify(p.plan));
+  p = plan('suspnd bob@example.com');
+  check('one-edit typo repaired', p.plan && p.plan.tool === 'suspend_user', JSON.stringify(p.plan));
   const parts = bot.splitCommands('approve listing 1 and then feature it');
   check('multi-command sentence splits in two', parts.length === 2, JSON.stringify(parts));
   p = plan('flibbertigibbet the wombat');
@@ -136,6 +156,10 @@ const plan = (text, ctx = {}) => { const r = bot.parseCommand(text, ctx); return
   check('status page summary', /operational|status|component/i.test(r.text), r.text.slice(0, 120));
   r = await say('show settings');
   check('settings snapshot', /maintenance|auto.?approve|indexing/i.test(r.text), r.text.slice(0, 120));
+  r = await say('briefing');
+  check('briefing template lists what needs attention', /needs you|caught up|Nothing waiting|Queue is clear/i.test(r.text), r.text.slice(0, 120));
+  r = await say('health');
+  check('health template renders memory/disk', /Memory|Disk/.test(r.text), r.text.slice(0, 120));
   r = await say('asdf qwerty zxcv');
   check('unknown input recovers with suggestions', r.quick_replies.length >= 2 && /not sure|did you mean|help/i.test(r.text), r.text.slice(0, 120));
 

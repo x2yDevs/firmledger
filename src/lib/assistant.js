@@ -26,13 +26,47 @@ const tools = require('./aitools');
 
 /* Multi-word phrases first (longest match wins), mapped to one canonical token. */
 const PHRASES = [
+  /* queue / review questions */
+  ['anything waiting', 'count pending'], ['anything pending', 'count pending'], ['anything to review', 'count pending'], ['anything new', 'count pending'],
+  ['whats pending', 'count pending'], ['what is pending', 'count pending'], ['what needs my attention', 'briefing'], ['what needs attention', 'briefing'], ['what needs doing', 'briefing'],
+  ['what should i do', 'briefing'], ['where do i start', 'briefing'], ['morning briefing', 'briefing'], ['daily briefing', 'briefing'], ['catch me up', 'briefing'], ['whats new', 'briefing'], ['what is new', 'briefing'], ['todo', 'briefing'], ['to do', 'briefing'], ['my queue', 'briefing'],
+  ['is everything up', 'statuspage'], ['is everything ok', 'statuspage'], ['is everything okay', 'statuspage'], ['is the site up', 'statuspage'], ['is the site down', 'statuspage'], ['are we up', 'statuspage'], ['are we down', 'statuspage'],
+  ['how is the site', 'overview'], ['how are we doing', 'stats'], ['how are things', 'stats'], ['site summary', 'stats'],
+  ['audit log', 'auditlog'], ['audit trail', 'auditlog'], ['what did you do', 'auditlog'], ['what have you done', 'auditlog'], ['what did i just do', 'auditlog'], ['what did i do', 'auditlog'], ['recent actions', 'auditlog'], ['action history', 'auditlog'], ['command log', 'auditlog'],
+  ['moderation log', 'modlog'], ['moderation history', 'modlog'], ['moderation decisions', 'modlog'], ['auto moderation log', 'modlog'], ['screening log', 'modlog'],
+  ['moderation rules', 'modrules'], ['screening rules', 'modrules'], ['block list', 'modrules'], ['blocked terms', 'modrules'], ['blocked words', 'modrules'], ['flagged terms', 'modrules'],
+  ['approve threshold', 'approveat'], ['approval threshold', 'approveat'], ['approve at', 'approveat'], ['auto approve threshold', 'approveat'], ['reject threshold', 'rejectat'], ['rejection threshold', 'rejectat'], ['reject at', 'rejectat'],
+  ['blocked ips', 'show iprule'], ['blocked ip', 'show iprule'], ['ip blocks', 'show iprule'], ['ip rules', 'show iprule'], ['blocked domains', 'show domainrule'], ['domain rules', 'show domainrule'], ['spam rules', 'show iprule domainrule'], ['protection rules', 'show iprule domainrule'], ['allow list', 'show iprule domainrule'],
+  ['api keys', 'apikey'], ['api key', 'apikey'], ['developer keys', 'apikey'], ['developer key', 'apikey'],
+  ['mail accounts', 'mailaccount'], ['smtp accounts', 'mailaccount'], ['smtp settings', 'mailaccount'], ['email settings', 'mailaccount'], ['mail settings', 'mailaccount'], ['mail setup', 'mailaccount'], ['sent from', 'mailaccount'], ['from address', 'mailaccount'],
+  ['restore backup', 'restorebackup'], ['restore a backup', 'restorebackup'], ['import backup', 'restorebackup'], ['restore from backup', 'restorebackup'],
+  ['log everyone out', 'logoutall'], ['log out everyone', 'logoutall'], ['sign everyone out', 'logoutall'], ['invalidate sessions', 'logoutall'],
+  ['for review', 'pending'], ['to review', 'pending'], ['review queue', 'pending'], ['needs review', 'pending'], ['under review', 'pending'], ['in review', 'pending'], ['awaiting review', 'pending'], ['waiting review', 'pending'], ['pending review', 'pending'], ['review pending', 'show pending'], ['review the pending', 'show pending'], ['review the queue', 'show pending'], ['reviewed listings', 'approved listing'],
+  ['score it', 'score it'], ['moderate it', 'moderate it'], ['review it', 'moderate it'], ['run moderation on', 'moderate'], ['run the moderator on', 'moderate'], ['review listing', 'moderate listing'], ['review now', 'moderate'], ['review this', 'moderate it'], ['review that', 'moderate it'],
+  ['top 3', 'newest 3'], ['top 5', 'newest 5'], ['top 10', 'newest 10'], ['top ten', 'newest 10'], ['top five', 'newest 5'], ['top three', 'newest 3'], ['last 5', 'newest 5'], ['last 10', 'newest 10'], ['last 3', 'newest 3'], ['latest 5', 'newest 5'], ['latest 10', 'newest 10'],
+  ['this month', 'thismonth'], ['this week', 'thisweek'], ['last week', 'thisweek'], ['past week', 'thisweek'], ['last month', 'thismonth'], ['past month', 'thismonth'], ['last 7 days', 'thisweek'], ['last 30 days', 'thismonth'],
+  ['made money', 'payment'], ['make money', 'payment'], ['did we make', 'payment'], ['did we earn', 'payment'], ['cash in', 'payment'], ['how much did we', 'count payment'],
+  ['its fine', ''], ['it is fine', ''], ['ok fine', ''], ['fine', ''], ['sure', ''], ['alright', ''], ['go ahead and', ''], ['just', ''],
+  ['who is on trial', 'show trial user'], ['on trial', 'trial'], ['trialing', 'trial'], ['trialling', 'trial'],
+  ['notifications read', 'markread'], ['notifications as read', 'markread'], ['everything read', 'markread'],
+  ['never mind', 'cancel'], ['nevermind', 'cancel'], ['forget it', 'cancel'], ['forget that', 'cancel'], ['scratch that', 'cancel'], ['cancel that', 'cancel'], ['drop it', 'cancel'], ['stop that', 'cancel'],
+  ['start over', 'reset'], ['start again', 'reset'], ['clear context', 'reset'], ['new conversation', 'reset'], ['forget everything', 'reset'],
+  ['ping google', 'googleindex ping'], ['submit to google', 'googleindex ping'], ['resubmit to google', 'googleindex ping'], ['send to google', 'googleindex ping'], ['reindex', 'googleindex ping'], ['re index', 'googleindex ping'],
+  ['who owns', 'show owner of'], ['owner of', 'show owner of'], ['whose listing is', 'show owner of'],
+  ['what plan is', 'show'], ['which plan is', 'show'], ['when did', 'show'], ['is', 'show'],
+  ['close all solved', 'closeallsolved'], ['close solved tickets', 'closeallsolved'], ['close all resolved', 'closeallsolved'], ['archive solved tickets', 'closeallsolved'],
+  ['expire promo', 'promo off'], ['deactivate promo', 'promo off'], ['kill promo', 'promo off'], ['activate promo', 'promo on'], ['reactivate promo', 'promo on'],
+  ['post a job', 'create career'], ['post a role', 'create career'], ['new job', 'create career'], ['new role', 'create career'], ['new vacancy', 'create career'], ['hire for', 'create career'],
+  ['write a post', 'create post'], ['draft a post', 'create post'], ['new post', 'create post'], ['new article', 'create post'], ['new blog', 'create post'],
+  ['new plan', 'create planoffer'], ['new offer', 'create planoffer'], ['new tier', 'create planoffer'], ['new promo', 'create promo'], ['new coupon', 'create promo'], ['new category', 'create category'], ['new package', 'create adpackage'], ['new listing', 'create listing'], ['new company', 'create listing'], ['add a company', 'create listing'], ['add a listing', 'create listing'],
+  ['maintenance message', 'maintenance on message'], ['maintenance banner', 'maintenance on message'], ['put up maintenance', 'maintenance on'], ['maintenance mode', 'maintenance'],
   ['how many', 'count'], ['number of', 'count'], ['how much', 'count'],
   ['what are the', 'show'], ['what is the', 'show'], ['whats the', 'show'], ['what is', 'show'], ['what are', 'show'],
   ['tell me', 'show'], ['give me', 'show'], ['show me', 'show'], ['let me see', 'show'], ['pull up', 'show'],
   ['look up', 'show'], ['lookup', 'show'], ['looking for', 'show'], ['bring up', 'show'], ['check on', 'show'],
   ['whats up with', 'show'], ['what happened with', 'show'],
   ['get rid of', 'delete'], ['take down listing', 'delete listing'], ['take off', 'delete'],
-  ['make it live', 'approve it'], ['make live', 'approve'], ['go live', 'approve'], ['put live', 'approve'], ['set live', 'approve'],
+  ['make it live', 'approve it'], ['make live', 'approve'], ['live now', 'approve'], ['set it live', 'approve it'], ['go live', 'approve'], ['put live', 'approve'], ['set live', 'approve'],
   ['push live', 'approve'], ['sign off', 'approve'], ['green light', 'approve'], ['greenlight', 'approve'],
   ['turn down', 'reject'], ['knock back', 'reject'], ['send back', 'reject'],
   ['lock out', 'suspend'], ['lock them out', 'suspend them'], ['shut out', 'suspend'], ['boot out', 'suspend'],
@@ -63,6 +97,9 @@ const PHRASES = [
   ['this week', 'thisweek'], ['past week', 'thisweek'], ['last week', 'thisweek'], ['last 7 days', 'thisweek'], ['past 7 days', 'thisweek'],
   ['today', 'today'], ['this month', 'thismonth'], ['last 30 days', 'thismonth'], ['past 30 days', 'thismonth'],
   ['all of them', 'all'], ['every one', 'all'], ['everyone', 'all'], ['everybody', 'all'],
+  ['its fine', ''], ['it is fine', ''], ['ok fine', ''], ['fine', ''], ['sure', ''], ['alright', ''], ['go ahead and', ''], ['just', ''],
+  ['who is on trial', 'show trial user'], ['on trial', 'trial'], ['trialing', 'trial'], ['trialling', 'trial'],
+  ['notifications read', 'markread'], ['notifications as read', 'markread'], ['everything read', 'markread'],
   ['never mind', 'cancel'], ['nevermind', 'cancel'], ['forget it', 'cancel'], ['scratch that', 'cancel'],
   ['go ahead', 'yes'], ['do it', 'yes'], ['run it', 'yes'], ['proceed', 'yes'], ['confirm', 'yes'], ['confirmed', 'yes'],
   ['start over', 'reset'], ['new chat', 'reset'], ['clear chat', 'reset'],
@@ -79,7 +116,7 @@ const WORDS = {
   count: 'count', total: 'count', totals: 'count', many: 'count',
   summary: 'stats', summarise: 'stats', summarize: 'stats', overview: 'overview', stats: 'stats', statistics: 'stats', numbers: 'stats', dashboard: 'stats', metrics: 'stats', figures: 'stats', kpis: 'stats',
   /* writing verbs */
-  approve: 'approve', approved: 'approve', accept: 'approve', accepted: 'approve', publish: 'approve', pass: 'approve', okay: 'approve', ok: 'approve', allow: 'allow', verify: 'verify', live: 'approve', clear: 'approve',
+  approve: 'approve', approved: 'approve', accept: 'approve', accepted: 'approve', publish: 'approve', pass: 'approve', okay: 'approve', ok: 'approve', allow: 'allow', verify: 'verify', live: 'live', clear: 'clear',
   reject: 'reject', rejected: 'reject', decline: 'reject', declined: 'reject', refuse: 'reject', deny: 'reject', denied: 'reject', unpublish: 'unpublish', hide: 'hide',
   delete: 'delete', remove: 'delete', kill: 'delete', drop: 'delete', wipe: 'delete', erase: 'delete', destroy: 'delete', nuke: 'delete', purge: 'delete', trash: 'delete', scrap: 'delete', discard: 'delete',
   feature: 'feature', featured: 'feature', spotlight: 'feature', highlight: 'feature', showcase: 'feature', star: 'feature', pin: 'feature',
@@ -102,7 +139,7 @@ const WORDS = {
   user: 'user', users: 'user', member: 'user', members: 'user', account: 'user', accounts: 'user', customer: 'user', customers: 'user', person: 'user', people: 'user', client: 'user', clients: 'user', signup: 'user', signups: 'user', them: 'them', him: 'them', her: 'them', they: 'them', guy: 'user',
   ticket: 'ticket', tickets: 'ticket', issue: 'ticket', issues: 'ticket', case: 'ticket', cases: 'ticket', complaint: 'ticket', complaints: 'ticket', enquiry: 'ticket', inquiry: 'ticket', support: 'ticket',
   claim: 'claim', claims: 'claim', removal: 'removal', removals: 'removal', takedown: 'removal', takedowns: 'removal',
-  pending: 'pending', awaiting: 'pending', queue: 'pending', queued: 'pending', waiting: 'pending', unreviewed: 'pending', review: 'pending', backlog: 'pending',
+  pending: 'pending', awaiting: 'pending', queue: 'pending', queued: 'pending', waiting: 'pending', unreviewed: 'pending', review: 'moderate', backlog: 'pending',
   active: 'approved', public: 'approved', published: 'published', drafts: 'draft',
   post: 'post', posts: 'post', article: 'post', articles: 'post', blog: 'post',
   career: 'career', careers: 'career', job: 'career', jobs: 'career', vacancy: 'career', vacancies: 'career', role: 'career', roles: 'career', position: 'career', opening: 'career', openings: 'career',
@@ -127,6 +164,10 @@ const WORDS = {
   smtp: 'smtp', hop: 'smtp', hops: 'smtp', provider: 'smtp', from: 'from', sender: 'from', testmail: 'testmail', '2fa': '2fa',
   pro: 'pro', premium: 'pro', paid: 'pro', plus: 'pro', trial: 'trial', trials: 'trial', lifetime: 'lifetime', forever: 'lifetime', permanent: 'lifetime', permanently: 'lifetime', perpetual: 'lifetime',
   all: 'all', every: 'all', everything: 'all', bulk: 'all', mass: 'all',
+  trust: 'trust', flag: 'flag', auditlog: 'auditlog', modlog: 'modlog', modrules: 'modrules', approveat: 'approveat', rejectat: 'rejectat', threshold: 'threshold', thresholds: 'threshold', score: 'score', scored: 'score', moderate: 'moderate', moderator: 'moderate', screen: 'moderate',
+  iprule: 'iprule', domainrule: 'domainrule', apikey: 'apikey', mailaccount: 'mailaccount', restorebackup: 'restorebackup', logoutall: 'logoutall', closeallsolved: 'closeallsolved', expire: 'off', expired: 'off', deactivate: 'off', unread: 'unread',
+  exist: 'show', exists: 'show', available: 'show', configured: 'show', recent: 'newest', recently: 'newest', latest: 'newest', newest: 'newest', oldest: 'oldest', term: 'term', word: 'term', phrase: 'term', rule: 'rule', rules: 'rule',
+  thismonth: 'thismonth', thisweek: 'thisweek', today: 'today', yesterday: 'today', briefing: 'briefing',
   it: 'it', that: 'it', this: 'it', these: 'it', those: 'it', same: 'it', one: 'one', first: 'first', second: 'second', third: 'third', last: 'last',
   help: 'help', commands: 'help', capabilities: 'help', examples: 'help', assistant: 'assistant', playground: 'assistant', ai: 'assistant', bot: 'assistant',
   statuspage: 'statuspage', statusreport: 'statusreport', status: 'status', state: 'status', markread: 'markread',
@@ -154,6 +195,8 @@ function stem(w) {
 function lower(text) {
   return String(text || '')
     .replace(/[“”„]/g, '"').replace(/[‘’]/g, "'")
+    .replace(/\b(what|who|where|how|that|there|it|here)'s\b/gi, '$1 is')
+    .replace(/\bcan't\b/gi, 'cannot').replace(/\bwon't\b/gi, 'will not').replace(/\bn't\b/gi, ' not').replace(/\b(i|we|you|they)'(ll|d|ve|re|m)\b/gi, '$1')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -165,6 +208,8 @@ function canon(text) {
   s = s.replace(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/g, (m) => m.replace(/[.@+-]/g, '_'));
   s = s.replace(/https?:\/\/\S+/g, ' url ');
   s = s.replace(/\bfl-[a-z0-9]+\b/gi, ' ticketref ');
+  s = s.replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, ' ipaddr ');
+  s = s.replace(/\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}\b/g, ' domainname ');
   s = s.replace(/[?!.,;:()[\]{}"']/g, ' ');
   for (const [phrase, tok] of PHRASES.slice().sort((a, b) => b[0].length - a[0].length)) {
     s = s.replace(new RegExp(`\\b${phrase.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}\\b`, 'g'), ` ${tok} `);
@@ -257,7 +302,7 @@ function extractSlots(raw) {
   let rest = low
     .replace(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/g, ' ')
     .replace(/https?:\/\/[^\s"'<>]+/gi, ' ');
-  s.domains = (rest.match(/\b(?:[a-z0-9-]+\.)+(?:com|net|org|io|co|ke|uk|de|fr|za|ng|tz|ug|rw|ai|app|dev|info|biz|me|xyz|tech|africa|edu|gov|co\.ke|or\.ke|ac\.ke)\b/g) || [])
+  s.domains = (rest.match(/\b(?:[a-z0-9-]+\.)+(?:com|net|org|io|co|ke|uk|de|fr|za|ng|tz|ug|rw|ai|app|dev|info|biz|me|xyz|tech|africa|edu|gov|example|test|co\.ke|or\.ke|ac\.ke)\b/g) || [])
     .filter((d) => !s.ips.includes(d));
   s.slugs = (rest.match(/\b[a-z0-9]+(?:-[a-z0-9]+)+\b/g) || []).filter((w) => !/^fl-/.test(w) && !/^\d+-\d+$/.test(w) && !/^(?:re-open|two-factor|sign-in|log-in|e-mail|auto-approve|non-|pre-|co-|self-)/.test(w) && !/^\d{4}-\d{2}(-\d{2})?$/.test(w));
 
@@ -396,7 +441,16 @@ const q = {
     return db.prepare('SELECT t.id, t.ref, t.subject, t.status, u.email FROM tickets t JOIN users u ON u.id=t.user_id WHERE t.subject LIKE ? OR u.email LIKE ? OR u.name LIKE ? ORDER BY t.updated_at DESC LIMIT ?').all(like, like, like, limit);
   },
   onlyPendingListing: () => db.prepare("SELECT id, slug, name, status FROM listings WHERE status='pending' ORDER BY created_at ASC LIMIT 2").all(),
-  categoryByName: (name) => db.prepare('SELECT id, name, slug FROM categories WHERE name = ? COLLATE NOCASE OR slug = ? COLLATE NOCASE').get(name, name),
+  categoryByName: (name) => {
+    const exact = db.prepare('SELECT id, name, slug FROM categories WHERE name = ? COLLATE NOCASE OR slug = ? COLLATE NOCASE').get(name, name);
+    if (exact) return exact;
+    /* partial: "technology" → "Software & SaaS"? no — but "fintech" → "Fintech", "retail" → "E-commerce & Retail" */
+    const like = db.prepare('SELECT id, name, slug FROM categories WHERE name LIKE ? COLLATE NOCASE ORDER BY length(name) LIMIT 2').all(`%${String(name).replace(/[%_]/g, '')}%`);
+    if (like.length === 1) return like[0];
+    /* fall back to the listings table's own category values (listings may predate the categories table) */
+    const used = db.prepare('SELECT DISTINCT category AS name FROM listings WHERE category = ? COLLATE NOCASE LIMIT 1').get(name);
+    return used ? { id: 0, name: used.name, slug: '' } : null;
+  },
   categoriesLike: (text) => db.prepare('SELECT id, name, slug FROM categories WHERE name LIKE ? LIMIT 6').all(`%${String(text).replace(/[%_]/g, '')}%`),
   postById: (id) => db.prepare('SELECT id, slug, title, status FROM blog_posts WHERE id=?').get(id),
   postsByText: (text) => db.prepare('SELECT id, slug, title, status FROM blog_posts WHERE title LIKE ? OR slug LIKE ? ORDER BY id DESC LIMIT 6').all(`%${String(text).replace(/[%_]/g, '')}%`, `%${String(text).replace(/[%_]/g, '')}%`),
@@ -535,7 +589,7 @@ const rule = (tool, test, build, opts = {}) => R.push({ tool, test, build: build
 const askFor = (r, entity) => (r.ok ? null : (r.none ? { none: r.none } : { ask: r.ask, options: r.options, entity }));
 
 /* ---- conversational / meta ---- */
-rule('__help', (c) => has(c, /\bhelp\b/) || has(c, /^\s*(assistant|commands)\s*$/) || has(c, /\bwhat can (you|u|i) do\b/), ({ c, text }) => ({ args: { topic: text || (c.match(/\b(listing|user|ticket|claim|removal|post|career|promo|planoffer|adpackage|category|incident|newsletter|maintenance|indexing|tech|news|backup|inbox|health|settings|payment|ip|domain|smtp|email)\b/) || [])[1] || '' } }));
+rule('__help', (c) => has(c, /\bhelp\b/) || has(c, /^\s*(assistant|commands)\s*$/) || has(c, /\bwhat can (you|u|i) do\b/), ({ c, text }) => ({ args: { topic: text || (c.match(/\b(listing|user|ticket|claim|removal|post|career|promo|planoffer|adpackage|category|incident|newsletter|maintenance|indexing|tech|news|backup|inbox|health|settings|payment|ip|domain|smtp|email|moderation|modrules|modlog|auditlog|audit|protection|ratelimit|iprule|mailaccount|apikey|count)\b/) || [])[1] || '' } }));
 rule('__hello', (c) => /^\s*(hello|thanks)(\s+(assistant|there|again))?\s*$/.test(c) || /^\s*hello\b/.test(c) && c.trim().split(' ').length <= 3);
 rule('__thanks', (c) => /^\s*thanks\b/.test(c) && c.trim().split(' ').length <= 4);
 rule('__reset', (c) => /^\s*reset\s*$/.test(c));
@@ -545,6 +599,54 @@ rule('__whoami', (c) => has(c, /\b(who am i|whoami|am i admin|my role)\b/));
 /* ---- confirmations (only used when a pending action exists — see ai.js) ---- */
 
 /* ---- reads: stats & health ---- */
+
+/* ---- assistant-native extras ------------------------------------------ */
+rule('get_listing_stats', (c) => has(c, /\bbriefing\b/), () => ({ args: {}, focus: 'briefing' }));
+rule('get_listing_stats', (c) => /^\s*(pending\s*)+$/.test(c) || /^\s*(show\s+)?pending\s*$/.test(c), () => ({ args: {}, focus: 'pending' }));
+rule('get_audit_log', (c) => has(c, /\bauditlog\b/) || (has(c, /\b(show|count)\b/) && has(c, /\baudit\b/)), ({ slots, text, c }) => {
+  const args = { limit: slots.limit || 20 };
+  if (has(c, /\btool\b|\baction\b/)) args.kind = 'tool';
+  if (has(c, /\bmoderation\b/)) args.kind = 'moderation';
+  if (text && !/^(recent|latest|newest|last|all|log|entries)$/.test(text)) args.q = text;
+  return { args };
+});
+rule('get_moderation_log', (c) => has(c, /\bmodlog\b/) || (has(c, /\b(show|count)\b/) && has(c, /\bmoderation\b/) && has(c, /\b(log|decision|history)\b/)), ({ slots, c }) => ({ args: { limit: slots.limit || 20, ...(has(c, /\breject\b/) ? { decision: 'reject' } : has(c, /\bapprove\b/) ? { decision: 'approve' } : has(c, /\bpending\b/) ? { decision: 'pending' } : {}) } }));
+rule('get_moderation_rules', (c) => has(c, /\bmodrules\b/) || (has(c, /\b(show|count)\b/) && has(c, /\bmoderation\b/) && has(c, /\b(rule|term|threshold|approveat|rejectat)\b/)) || (has(c, /\bshow\b/) && has(c, /\b(approveat|rejectat|threshold)\b/)));
+rule('set_moderation_thresholds', (c) => has(c, /\b(approveat|rejectat|threshold)\b/) && (has(c, /\bset\b/) || /\b\d{1,3}\b/.test(c)) && !has(c, /\bshow\b/), ({ slots, c }) => {
+  const args = {};
+  const a = c.match(/\bapproveat\b[^0-9]*(\d{1,3})/) || c.match(/\bapprove\b[^0-9]*(\d{1,3})/);
+  const r = c.match(/\brejectat\b[^0-9]*(\d{1,3})/) || c.match(/\breject\b[^0-9]*(\d{1,3})/);
+  if (a) args.approve_at = Number(a[1]);
+  if (r) args.reject_at = Number(r[1]);
+  if (!a && !r && slots.numbers.length === 1) { if (has(c, /\breject/)) args.reject_at = Number(slots.numbers[0]); else args.approve_at = Number(slots.numbers[0]); }
+  return Object.keys(args).length ? { args } : { ask: 'Which threshold and what value? e.g. “set approve threshold to 80” or “set reject threshold to 20”.', entity: 'fields' };
+});
+rule('edit_moderation_rules', (c) => (has(c, /\b(block|flag|allow|trust|delete|unblock)\b/) && has(c, /\b(term|word|phrase)\b/)) || (has(c, /\btrust\b/) && has(c, /\b(domain|domainname)\b/)) || (has(c, /\b(allow|block)\b/) && has(c, /\bdomain\b/) && has(c, /\b(moderation|modrules|screening)\b/)), ({ slots, text, c }) => {
+  const kind = has(c, /\b(allow|trust)\b/) && has(c, /\bdomain\b/) ? 'allow-domain' : has(c, /\bflag\b/) ? 'flag' : 'block';
+  const action = has(c, /\b(delete|unblock)\b/) || /\bdelete\b/.test(c) || /^\s*(delete|remove|drop|un)/.test(c) ? 'remove' : 'add';
+  const term = slots.quoted[0] || (kind === 'allow-domain' ? slots.domains[0] : '') || (text || '').replace(/^(block|flag|allow|trust|unblock|delete|remove|add)\s+/i, '').replace(/\s+(term|word|phrase|domain)$/i, '').trim();
+  if (!term) return { ask: `Which ${kind === 'allow-domain' ? 'domain' : 'term'}? e.g. “block term casino” or “flag term crypto”.`, entity: 'text', partial: { action, kind } };
+  return { args: { action, kind, term } };
+});
+rule('review_listing_now', (c) => has(c, /\b(moderate|score)\b/) && !has(c, /\b(on|off|set|show|log|rule|threshold|all|pending)\b/), (b) => {
+  const t = listingTarget(b);
+  if (!t.value) return t;
+  if (t.fromContext && !b.slots.pronoun && !/^\s*(moderate|score)\s*(now)?\s*$/.test(b.c)) return { skip: true };
+  return { args: { id_or_slug: t.value, dry_run: has(b.c, /\bscore\b/) && !has(b.c, /\bmoderate\b/) }, listing: t.row };
+});
+rule('list_protection_rules', (c) => has(c, /\b(iprule|domainrule)\b/) || (has(c, /\bshow\b/) && has(c, /\b(ip|domain|protection)\b/) && has(c, /\b(block|allow|rule|all|list)\b/)) || /^\s*(show\s+)?(protection|ratelimit)\s*$/.test(c), ({ c }) => ({ args: { list: has(c, /\bdomainrule\b/) && !has(c, /\biprule\b/) ? 'domain' : has(c, /\biprule\b/) && !has(c, /\bdomainrule\b/) ? 'ip' : 'all' } }));
+rule('list_mail_accounts', (c) => has(c, /\bmailaccount\b/) || (has(c, /\bshow\b/) && has(c, /\b(smtp|from)\b/) && !has(c, /\bset\b/)));
+rule('list_api_keys', (c) => has(c, /\bapikey\b/) && !has(c, /\b(revoke|delete|cancel|stop)\b/), ({ slots, c }) => ({ args: { ...(slots.emails[0] ? { user: slots.emails[0] } : {}), include_revoked: has(c, /\b(all|revoked)\b/) } }));
+rule('revoke_api_key', (c) => has(c, /\bapikey\b/) && has(c, /\b(revoke|delete|cancel|stop)\b/), ({ slots }) => {
+  const id = slots.numbers[0] || (slots.quoted[0] || '').trim();
+  return id ? { args: { id_or_prefix: String(id) } } : { ask: 'Which key? Give me its id or prefix (see “show api keys”).', entity: 'text' };
+});
+rule('__cancelword', (c) => /^\s*cancel\s*$/.test(c) || /^\s*(no|nope|nah)\s*$/.test(c));
+rule('__none_trialdays', (c) => has(c, /\btrial\b/) && has(c, /\b(set|day)\b/) && !has(c, /[a-z0-9_]+_[a-z0-9_]+_[a-z]{2,}\b|\bthem\b|\buser\b/) && /\bset\b.*\btrial\b|\btrial\b.*\bdefault\b|\btrial day\b/.test(c), () => ({ none: 'The default trial length is fixed in code (plans.TRIAL_DEFAULT_DAYS). I can start a trial of any length for a specific member though: “start a 21 day trial for bob@x.com”.' }));
+rule('__none_restore', (c) => has(c, /\brestorebackup\b/), () => ({ none: 'Restoring a backup is a console-only step (Admin → Backups → Restore) because it replaces the whole database — I can take a fresh backup for you though: say “backup now”.' }));
+rule('__none_logout', (c) => has(c, /\blogoutall\b/), () => ({ none: 'Signing every member out is not exposed as a console action. You can suspend a specific member (“suspend bob@x.com”) or rotate the admin session by signing out yourself.' }));
+rule('__none_2fa', (c) => has(c, /\b2fa\b/) && has(c, /\b(on|off|start|enroll|setup|regenerate|codes)\b/) && !has(c, /\bemail\b/), () => ({ none: 'Two-factor enrollment and recovery codes stay in Admin → Settings → Security — the secrets must never pass through a chat. I can change the OTP inbox: “set 2fa email to admin@x.com”.' }));
+rule('set_ticket_status', (c) => has(c, /\bcloseallsolved\b/), () => ({ none: 'Tickets are closed one at a time so nothing slips — say “show solved tickets” and then “close FL-XXXX”, or “close it” after opening one.' }));
 rule('get_health', (c) => has(c, /\bhealth\b/) && !has(c, /\b(indexing|statuspage|component)\b/));
 rule('get_payments_summary', (c) => has(c, /\bpayment\b/) && !has(c, /\b(show|count)\b.*\bpayment\b.*\b(pending|failed|list)\b/) && !has(c, /\bpaypal\b/));
 rule('get_site_overview', (c) => has(c, /\boverview\b/) || has(c, /\b(show|help)\b.*\b(pages|console|sections|site)\b/) || /^\s*show (site|firmledger)\s*$/.test(c));
@@ -569,22 +671,22 @@ function focusOf(c, slots) {
   if (has(c, /\bsponsor\b/)) return 'sponsored';
   return st || 'total_listings';
 }
-rule('list_listings', (c) => (has(c, /\b(show|open)\b/) || has(c, /\blisting (owned|owner|belonging|by|of)\b/)) && has(c, /\b(pending|approved|rejected|newest|oldest|feature|sponsor|claimed|unclaimed|listing|their)\b/) && !has(c, /\b(user|ticket|claim|removal|post|career|promo|planoffer|adpackage|category|incident|subscriber|payment|news|story|inbox|settings|health|stats|tech|relation|event)\b/) && !has(c, /\b(approve|reject|delete|suspend|grant|revoke|set|create|email|reply)\b/),
+rule('list_listings', (c) => (has(c, /\b(show|open)\b/) || has(c, /\blisting (owned|owner|belonging|by|of|in|from)\b/) || /^\s*(?:all\s+)?(pending|approve|reject|newest|oldest|feature|sponsor|claimed|unclaim|unclaimed)(\s+\d+)?\s+listing\s*$/.test(c) || /^\s*(?:all\s+)?listing\s+(pending|approve|reject|feature|sponsor|claimed|unclaimed)\s*$/.test(c) || /^\s*newest \d+ (newest )?listing\s*$/.test(c)) && has(c, /\b(pending|approve|reject|newest|oldest|feature|sponsor|claimed|unclaim|unclaimed|listing|their)\b/) && !has(c, /\b(user|ticket|claim|removal|post|career|promo|planoffer|adpackage|category|incident|subscriber|payment|news|story|inbox|settings|health|stats|relation|event)\b/) && !(has(c, /\btech\b/) && !has(c, /\blisting in tech\b/)) && !(has(c, /\b(approve|reject)\b/) && !has(c, /\b(show|open)\b/) && !/^\s*(?:all\s+)?(approve|reject)\s+listing\s*$/.test(c)) && !has(c, /\b(delete|suspend|grant|revoke|set|create|email|reply)\b/),
   ({ c, slots, text, ctx }) => {
     if (slots.emails.length && has(c, /\b(owned|owner|by|belonging)\b/)) slots.theirListings = true;
-    if (text && text.length >= 2 && !slots.theirListings && !has(c, /\b(pending|approved|rejected|newest|oldest|feature|sponsor|claimed|unclaimed)\b/)) return { skip: true };
+    if (text && text.length >= 2 && !slots.theirListings && !has(c, /\b(pending|approve|reject|newest|oldest|feature|sponsor|claimed|unclaim|unclaimed)\b/) && !has(c, /\blisting (in|from)\b/)) return { skip: true };
     if (slots.ids.listing || slots.hashId || slots.slugs.length || slots.quoted.length || (slots.numbers.length && !slots.limit)) return { skip: true };
-    const status = (slots.statuses || []).find((s) => ['pending', 'approved', 'rejected'].includes(s)) || '';
+    const status = (slots.statuses || []).find((s) => ['pending', 'approved', 'rejected'].includes(s)) || (has(c, /\bpending\b/) ? 'pending' : has(c, /\bapprove\b/) && !has(c, /\bunclaim/) ? 'approved' : has(c, /\breject\b/) ? 'rejected' : '');
     const args = { limit: slots.limit || 20 };
     if (status) args.status = status;
     if (has(c, /\bfeature\b/)) args.featured = true;
     if (has(c, /\bsponsor\b/)) args.sponsored = true;
-    if (has(c, /\bunclaimed\b/)) args.claimed = false; else if (has(c, /\bclaimed\b/)) args.claimed = true;
+    if (has(c, /\b(unclaimed|unclaim)\b/)) args.claimed = false; else if (has(c, /\bclaimed\b/)) args.claimed = true;
     if (has(c, /\boldest\b/)) args.order = 'oldest';
     if (slots.sinceDays) args.since_days = slots.sinceDays;
     if (slots.theirListings || slots.emails.length) { const u = resolveUser({ slots, ctx, text: '', allowContext: true }); if (u.ok) args.owner = String(u.row.id); }
     for (const w of ['country', 'category']) if (slots.keyval && slots.keyval[w]) args[w] = slots.keyval[w];
-    if (text && has(c, /\bin\b/) && !args.country && !args.category) { const cat = q.categoryByName(text); if (cat) args.category = cat.name; else args.country = text.replace(/\b\w/g, (m) => m.toUpperCase()); }
+    if (text && has(c, /\b(in|from)\b/) && !args.country && !args.category) { const cat = q.categoryByName(text); if (cat && !has(c, /\bfrom\b/)) args.category = cat.name; else args.country = text.replace(/\b\w/g, (m) => m.toUpperCase()); }
     return { args };
   });
 rule('get_listing', (c) => (has(c, /\b(show|open)\b/) && has(c, /\blisting\b/)) || (has(c, /\b(show|open)\b/) && !has(c, /\b(user|ticket|claim|removal|post|career|promo|planoffer|adpackage|category|incident|subscriber|payment|news|story|inbox|settings|health|stats|indexing|statuspage|smtp|ratelimit|ip|domain|backup|protection)\b/)),
@@ -600,6 +702,7 @@ rule('get_listing', (c) => (has(c, /\b(show|open)\b/) && has(c, /\blisting\b/)) 
     }
     return { args: { id_or_slug: r.value }, listing: r.row };
   });
+rule('search_admin', (c) => has(c, /\b(show|search)\b/) && has(c, /\b(everywhere|everything|global|anywhere|across)\b/), ({ text, slots }) => { const qq = (text || '').replace(/\b(everywhere|everything|global|globally|anywhere|across|the|whole|site|console)\b/gi, ' ').replace(/\s+/g, ' ').trim() || slots.quoted[0] || slots.emails[0] || slots.domains[0]; return qq ? { args: { q: qq } } : { ask: 'Search for what?', entity: 'text' }; });
 rule('search_listings', (c) => has(c, /\b(show|search)\b/) && has(c, /\blisting\b/), ({ slots, text, c }) => {
   const term = slots.quoted[0] || slots.domains[0] || text;
   if (!term || term.length < 2) return { skip: true };
@@ -664,6 +767,7 @@ for (const [tok, what] of CONTENT) {
       return { args };
     });
 }
+rule('list_content', (c) => has(c, /\b(category|promo|planoffer|adpackage|career|post|incident|subscriber)\b/) && has(c, /\bshow\b/) && !has(c, /\b(create|delete|set|rename|on|off|approve|reject|hide|toggle|pause|resume|close|reopen|edit|draft|publish|unpublish|\d)\b/) && !has(c, /\b(listing|user|ticket)\b/), ({ c, slots }) => { const what = has(c, /\bcategory\b/) ? 'categories' : has(c, /\bpromo\b/) ? 'promos' : has(c, /\bplanoffer\b/) ? 'plans' : has(c, /\badpackage\b/) ? 'ads' : has(c, /\bcareer\b/) ? 'careers' : has(c, /\bpost\b/) ? 'blog' : has(c, /\bincident\b/) ? 'incidents' : 'subscribers'; return { args: { what, ...(slots.statuses && slots.statuses[0] ? { status: slots.statuses[0] } : {}) } }; });
 rule('list_content', (c) => has(c, /\bpayment\b/) && has(c, /\b(show|open)\b/) && has(c, /\b(pending|failed|list|newest)\b/), ({ slots }) => ({ args: { what: 'payments', status: (slots.statuses || [])[0] || '' } }));
 
 /* ---- writes: listings ---- */
@@ -672,18 +776,19 @@ const listingTarget = (b) => {
   if (!r.ok) return askFor(r, 'listing') || { ask: r.ask, options: r.options, entity: 'listing' };
   return { value: r.value, row: r.row };
 };
-rule('accept_all_pending_listings', (c) => has(c, /\bapprove\b/) && has(c, /\ball\b/) && has(c, /\b(pending|listing)\b/) && !has(c, /\b(news|story|claim)\b/));
-rule('bulk_listing_action', (c) => has(c, /\b(approve|reject|delete|feature|unfeature|sponsor|unsponsor)\b/) && has(c, /\ball\b/) && has(c, /\b(listing|pending|approved|rejected)\b/) && !has(c, /\b(news|story|claim|user|ticket)\b/),
+rule('accept_all_pending_listings', (c) => has(c, /\bapprove\b/) && has(c, /\ball\b/) && (has(c, /\b(pending|listing)\b/) || /^\s*approve all\s*$/.test(c)) && !has(c, /\b(news|story|claim|feature|sponsor|delete|reject)\b/));
+rule('bulk_listing_action', (c) => has(c, /\b(approve|reject|delete|feature|unfeature|sponsor|unsponsor)\b/) && ((has(c, /\ball\b/) && has(c, /\b(listing|pending|approved|rejected)\b/)) || /\b\d+\b(?:\s+(?:and\s+)?\d+\b){1,}/.test(c)) && !has(c, /\b(news|story|claim|user|ticket|post|career|promo|incident|category|planoffer|adpackage|day|month|year|percent|uses)\b/),
   ({ c, slots, text }) => {
     const action = has(c, /\bunfeature\b/) ? 'unfeature' : has(c, /\bunsponsor\b/) ? 'unsponsor' : has(c, /\bfeature\b/) ? 'feature' : has(c, /\bsponsor\b/) ? 'sponsor' : has(c, /\bdelete\b/) ? 'delete' : has(c, /\breject\b/) ? 'reject' : 'approve';
     const args = { action };
+    if (!has(c, /\ball\b/) && slots.numbers.length > 1) { args.ids = slots.numbers.map(Number); return { args }; }
     const st = (slots.statuses || []).find((s) => ['pending', 'approved', 'rejected'].includes(s));
     if (st) args.status = st;
     if (slots.days && action === 'sponsor') args.days = slots.days;
     if (text) { const cat = q.categoryByName(text) || q.categoriesLike(text)[0]; if (cat) args.category = cat.name; else if (has(c, /\b(in|from)\b/)) args.country = text.replace(/\b\w/g, (m) => m.toUpperCase()); }
     return { args };
   });
-rule('approve_listing', (c) => has(c, /\bapprove\b/) && !has(c, /\b(news|story|claim|transfer|post|user|ticket|auto|moderation)\b/), (b) => { const t = listingTarget(b); return t.value ? { args: { id_or_slug: t.value }, listing: t.row } : t; });
+rule('approve_listing', (c) => (has(c, /\bapprove\b/) || (has(c, /\b(make|set)\b/) && has(c, /\blive\b/))) && !has(c, /\b(news|story|claim|transfer|post|user|ticket|auto|moderation|paypal)\b/), (b) => { const t = listingTarget(b); return t.value ? { args: { id_or_slug: t.value }, listing: t.row } : t; });
 rule('reject_listing', (c) => has(c, /\breject\b/) && !has(c, /\b(news|story|claim|transfer|removal)\b/), (b) => { const t = listingTarget(b); return t.value ? { args: { id_or_slug: t.value }, listing: t.row } : t; });
 rule('unfeature_listing', (c) => has(c, /\bunfeature\b/) || (has(c, /\b(delete|revoke|off|stop)\b/) && has(c, /\bfeature\b/)), (b) => { const t = listingTarget(b); return t.value ? { tool: 'feature_listing', args: { id_or_slug: t.value, featured: false }, listing: t.row } : t; });
 rule('feature_listing', (c) => has(c, /\bfeature\b/) && !has(c, /\b(show|count|which)\b/), (b) => { const t = listingTarget(b); return t.value ? { args: { id_or_slug: t.value, featured: true }, listing: t.row } : t; });
@@ -812,7 +917,7 @@ rule('approve_pro_transfer', (c) => has(c, /\btransfer\b/) && has(c, /\bapprove\
 rule('reject_pro_transfer', (c) => has(c, /\btransfer\b/) && has(c, /\breject\b/), (b) => { const r = resolveTypedId('transfer', { ...b, label: 'transfer request' }); return r.ok ? { args: { id: r.value } } : { ask: r.ask, entity: 'transfer' }; });
 rule('delete_plan_offer', (c) => has(c, /\bplanoffer\b/) && has(c, /\bdelete\b/), (b) => { const r = resolveTypedId('plan', { ...b, label: 'plan offer' }); if (r.ok) return { args: { id: r.value } }; const rows = q.plansLike(b.text); if (rows.length === 1) return { args: { id: rows[0].id } }; return { ask: r.ask, entity: 'plan', options: rows.map((p) => ({ label: `${p.name} (#${p.id})`, value: p.id })) }; });
 rule('toggle_plan_offer', (c) => has(c, /\bplanoffer\b/) && has(c, /\b(hide|on|off|toggle|show|unpublish|approve|disable|enable)\b/) && !has(c, /\b(show|count)\b\s*(all\s*)?planoffer\s*$/), (b) => { const r = resolveTypedId('plan', { ...b, label: 'plan offer' }); if (r.ok) return { args: { id: r.value } }; const rows = q.plansLike(b.text); if (rows.length === 1) return { args: { id: rows[0].id } }; return { ask: r.ask, entity: 'plan', options: rows.map((p) => ({ label: `${p.name} (#${p.id})`, value: p.id })) }; });
-rule('create_plan_offer', (c) => has(c, /\bplanoffer\b/) && has(c, /\bcreate\b/), ({ slots, text }) => {
+rule('create_plan_offer', (c) => has(c, /\bplanoffer\b/) && has(c, /\bcreate\b/) && !has(c, /\b(post|career|promo)\b/), ({ slots, text }) => {
   const kv = slots.keyval || {};
   const name = kv.name || slots.quoted[0] || slots.named || text;
   const price = slots.usd !== undefined ? slots.usd : (kv.price ? Number(kv.price) : undefined);
@@ -929,7 +1034,7 @@ rule('email_all_users', (c) => has(c, /\b(email|send)\b/) && has(c, /\ball\b/) &
   if (!subject || !message) return { ask: 'What is the subject and the message? e.g. subject: "Maintenance tonight" message: "We will be offline…"', entity: 'mail', partial: { subject, message, audience: 'all' } };
   return { args: { subject, message } };
 });
-rule('email_users', (c) => has(c, /\b(email|send)\b/) && !has(c, /\b(ticket|testmail|passwordreset|reply|newsletter digest|2fa|smtp|from|backup|invoice)\b/) && !has(c, /\bnewsletter\b.*\b(run|send now|digest)\b/), ({ slots, ctx, text, raw, c }) => {
+rule('email_users', (c) => has(c, /\b(email|send)\b/) && !has(c, /\b(ticket|testmail|passwordreset|reply|newsletter digest|2fa|smtp|from|backup|invoice)\b/) && !has(c, /\bnewsletter\b/), ({ slots, ctx, text, raw, c }) => {
   const { subject, message } = mailParts(slots, raw);
   let audience = slots.audience;
   if (!audience) {
@@ -972,8 +1077,13 @@ rule('ping_indexnow', (c) => has(c, /\b(ping|indexnow|indexing)\b/) && (has(c, /
   if (!paths.length) return { ask: 'Which paths should I submit? e.g. /listing/acme or /directory/c/technology', entity: 'paths' };
   return { args: { paths } };
 });
-rule('clear_indexing_logs', (c) => has(c, /\bindexing\b/) && has(c, /\b(log|logs)\b/) && has(c, /\b(delete|clear|approve)\b/), ({ slots }) => ({ args: slots.numbers.length ? { id: slots.numbers[0] } : { all: true } }));
-rule('set_upkeep_settings', (c) => has(c, /\bupkeep\b/) && has(c, /\b(on|off|set|limit)\b/) && !has(c, /\b(run|start|now)\b/), ({ slots, c }) => {
+rule('clear_indexing_logs', (c) => has(c, /\bindexing\b/) && has(c, /\b(log|logs)\b/) && has(c, /\b(delete|clear|purge|empty)\b/), ({ slots }) => ({ args: slots.numbers.length ? { id: slots.numbers[0] } : { all: true } }));
+rule('set_upkeep_settings', (c) => has(c, /\bupkeep\b/) && has(c, /\b(on|off|set|limit|interval|every|hour|hours|day|age|max)\b/) && !has(c, /\b(run|start|now)\b/), ({ slots, c }) => {
+  const kv0 = slots.keyval || {};
+  if (has(c, /\b(interval|every|hour|hours)\b/) && !has(c, /\b(on|off|limit|age)\b/)) return { none: 'The upkeep sweep runs hourly on a fixed schedule — you can switch it on/off, or set tech_limit / news_limit / news_max_age_days per sweep.' };
+  const age = c.match(/\b(?:news )?(?:max )?age\s+(\d{1,4})\s*(?:day|days)?\b/);
+  if (age) kv0.news_max_age_days = age[1];
+  slots.keyval = kv0;
   const args = {};
   if (has(c, /\btech\b/)) args.tech_on = slots.on !== false;
   else if (has(c, /\bnews\b/)) args.news_on = slots.on !== false;
@@ -985,9 +1095,9 @@ rule('set_upkeep_settings', (c) => has(c, /\bupkeep\b/) && has(c, /\b(on|off|set
 rule('run_upkeep_sweep', (c) => has(c, /\bupkeep\b/) && has(c, /\b(run|start|now|sweep|refresh)\b/), ({ c }) => ({ args: { force: has(c, /\b(force|anyway|even)\b/) } }));
 rule('send_newsletter_digest', (c) => has(c, /\bnewsletter\b/) && has(c, /\b(send|run|now|start)\b/) && !has(c, /\bcadence\b/));
 rule('set_newsletter_cadence', (c) => has(c, /\bnewsletter\b|\bcadence\b/) && (has(c, /\b(daily|weekly|monthly|cadence)\b/) || has(c, /\bset\b/)), ({ slots }) => slots.cadence ? { args: { cadence: slots.cadence } } : { ask: 'Daily, weekly or monthly?', entity: 'cadence' });
-rule('block_ip', (c) => has(c, /\bip\b/) && has(c, /\b(block|allow|create|suspend|ban)\b/) && !has(c, /\bdelete\b/), ({ slots, c }) => slots.ips.length ? { args: { ip: slots.ips[0], kind: has(c, /\ballow\b/) ? 'allow' : 'block', note: slots.said || '' } } : { ask: 'Which IP address?', entity: 'ip', partial: { kind: has(c, /\ballow\b/) ? 'allow' : 'block' } });
-rule('block_domain', (c) => has(c, /\bdomain\b/) && has(c, /\b(block|allow|create|suspend|ban)\b/) && !has(c, /\bdelete\b/), ({ slots, c }) => slots.domains.length ? { args: { domain: slots.domains[0], kind: has(c, /\ballow\b/) ? 'allow' : 'block', note: slots.said || '' } } : { ask: 'Which email domain?', entity: 'domain', partial: { kind: has(c, /\ballow\b/) ? 'allow' : 'block' } });
-rule('delete_spam_rule', (c) => has(c, /\b(ip|domain|protection|rule)\b/) && has(c, /\b(delete|unblock|allow)\b/) && !has(c, /\b(create|block)\b/), ({ slots, c }) => {
+rule('block_ip', (c) => has(c, /\b(ip|ipaddr)\b/) && has(c, /\b(block|allow|create|suspend|ban)\b/) && !has(c, /\bdelete\b/), ({ slots, c }) => slots.ips.length ? { args: { ip: slots.ips[0], kind: has(c, /\ballow\b/) ? 'allow' : 'block', note: slots.said || '' } } : { ask: 'Which IP address?', entity: 'ip', partial: { kind: has(c, /\ballow\b/) ? 'allow' : 'block' } });
+rule('block_domain', (c) => has(c, /\b(domain|domainname)\b/) && has(c, /\b(block|allow|suspend|ban)\b|\bcreate domain\b/) && !has(c, /\b(delete|term|moderation|modrules|trust|smtp|host|mailaccount|listing|url)\b/), ({ slots, c }) => slots.domains.length ? { args: { domain: slots.domains[0], kind: has(c, /\ballow\b/) ? 'allow' : 'block', note: slots.said || '' } } : { ask: 'Which email domain?', entity: 'domain', partial: { kind: has(c, /\ballow\b/) ? 'allow' : 'block' } });
+rule('delete_spam_rule', (c) => has(c, /\b(ip|ipaddr|domain|domainname|protection|rule)\b/) && has(c, /\b(delete|unblock)\b/) && !has(c, /\b(create|block)\b/), ({ slots, c }) => {
   const list = has(c, /\bdomain\b/) ? 'domain' : 'ip';
   const id = slots.ids.rule || slots.numbers[0];
   if (id) return { args: { list, id } };
@@ -1043,7 +1153,7 @@ rule('set_mail_account', (c) => has(c, /\bsmtp\b/) && has(c, /\b(create|delete|o
   return { args };
 });
 rule('set_smtp_settings', (c) => has(c, /\bsmtp\b/) && has(c, /\b(set|primary|host)\b/), ({ slots }) => { const kv = slots.keyval || {}; if (!kv.host) return { ask: 'Give me host=… port=… username=… password=… secure=true|false', entity: 'fields' }; return { args: { host: kv.host, port: kv.port ? Number(kv.port) : 587, username: kv.username || kv.user || '', password: kv.password || kv.pass || '', secure: /^(1|true|yes)$/i.test(String(kv.secure || '')), from: kv.from || '' } }; });
-rule('set_paypal_settings', (c) => has(c, /\bpaypal\b/) && has(c, /\b(set|live|sandbox|mode|credentials)\b/), ({ slots, c }) => { const kv = slots.keyval || {}; const args = {}; if (kv.client_id) args.client_id = kv.client_id; if (kv.client_secret) args.client_secret = kv.client_secret; if (kv.mode) args.mode = kv.mode; else if (has(c, /\blive\b/)) args.mode = 'live'; else if (has(c, /\bsandbox\b/)) args.mode = 'sandbox'; return Object.keys(args).length ? { args } : { ask: 'Set PayPal to live or sandbox, or give client_id=… client_secret=…', entity: 'fields' }; });
+rule('set_paypal_settings', (c) => has(c, /\bpaypal\b/) && has(c, /\b(set|live|sandbox|mode|credentials|switch|use)\b/), ({ slots, c }) => { const kv = slots.keyval || {}; const args = {}; if (kv.client_id) args.client_id = kv.client_id; if (kv.client_secret) args.client_secret = kv.client_secret; if (kv.mode) args.mode = kv.mode; else if (has(c, /\blive\b/)) args.mode = 'live'; else if (has(c, /\bsandbox\b/)) args.mode = 'sandbox'; return Object.keys(args).length ? { args } : { ask: 'Set PayPal to live or sandbox, or give client_id=… client_secret=…', entity: 'fields' }; });
 
 /* ---- catch-all guesses ---- */
 rule('get_listing', (c) => true, ({ slots, ctx, text, c }) => {
@@ -1242,12 +1352,17 @@ function slotKeyFor(tool, entity, params) {
 function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
 const SAY = {
-  ran: ['Done.', 'All set.', 'Sorted.', 'Finished.', 'That is done.'],
-  lookedUp: ['Here is what I found.', 'Got it — here you go.', 'Here you go.', 'Found it.'],
-  nothing: ['Nothing there.', 'Empty — nothing to show.', 'No results.'],
-  confirm: ['Before I run it, please confirm:', 'This one changes data, so confirm first:', 'Ready when you are — confirm to run:'],
-  hello: ['Hello! What would you like to do in the console?', 'Hi — ask me for counts, queues, or actions like “approve acme”.', 'Hey. Listings, members, tickets, billing, settings — what do you need?'],
-  thanks: ['Any time.', 'You are welcome.', 'Glad to help — anything else?'],
+  ran: ['Done.', 'All set.', 'Sorted.', 'Finished.', 'That is done.', 'Done — logged in the audit trail.', 'Applied.', 'Consider it handled.'],
+  lookedUp: ['Here is what I found.', 'Got it — here you go.', 'Here you go.', 'Found it.', 'Pulled that up for you.', 'Right, here it is.'],
+  nothing: ['Nothing there.', 'Empty — nothing to show.', 'No results.', 'All clear — nothing matches.', 'That list is empty right now.'],
+  confirm: ['Before I run it, please confirm:', 'This one changes data, so confirm first:', 'Ready when you are — confirm to run:', 'Just checking — shall I go ahead with:', 'One tap to confirm:'],
+  confirmSensitive: ['This is a sensitive action and cannot be undone — please confirm:', 'Careful, this one is permanent. Confirm to run:', 'Double-checking, because this is irreversible:'],
+  hello: ['Hello! What would you like to do in the console?', 'Hi — ask me for counts, queues, or actions like “approve acme”.', 'Hey. Listings, members, tickets, billing, settings — what do you need?', 'Morning! Try “briefing” for what needs attention, or just tell me what to do.'],
+  thanks: ['Any time.', 'You are welcome.', 'Glad to help — anything else?', 'No problem. Shout if you need more.'],
+  cancelled: ['Okay — dropped that. Nothing changed.', 'Cancelled. Nothing was touched.', 'Fine, forget it — nothing happened.'],
+  unknown: ['I am not sure what to do with that.', 'That one did not land — let me guess what you meant.', 'Hmm, I did not catch an action in that.'],
+  partial: ['Nearly there — I just need one more thing.', 'Almost. One detail missing:', 'Got most of it. Still need:'],
+  emptyQueue: ['Queue is clear — nothing pending. 🎉', 'Nothing waiting on you right now.', 'All caught up.'],
 };
 
 function fmtDate(v) { return String(v || '').replace('T', ' ').slice(0, 16); }
@@ -1265,6 +1380,17 @@ const FORMAT = {
       pending: 'listings pending review', approved: 'approved (live) listings', rejected: 'rejected listings', total_listings: 'listings in total', users: 'members', suspended_users: 'suspended members',
       open_tickets: 'open tickets', pending_claims: 'pending claims', pending_removals: 'pending removal requests', open_incidents: 'open incidents', newsletter_subs: 'active newsletter subscribers', featured: 'featured listings', sponsored: 'sponsored listings', claimed: 'claimed listings',
     };
+    if (f === 'briefing') {
+      const items = [];
+      if (r.pending) items.push(`**${r.pending}** listing${r.pending === 1 ? '' : 's'} waiting for review`);
+      if (r.open_tickets) items.push(`**${r.open_tickets}** open ticket${r.open_tickets === 1 ? '' : 's'}`);
+      if (r.pending_claims) items.push(`**${r.pending_claims}** claim${r.pending_claims === 1 ? '' : 's'} to verify`);
+      if (r.pending_removals) items.push(`**${r.pending_removals}** removal request${r.pending_removals === 1 ? '' : 's'}`);
+      if (r.open_incidents) items.push(`**${r.open_incidents}** open incident${r.open_incidents === 1 ? '' : 's'}`);
+      if (r.maintenance_on) items.push('maintenance mode is **ON**');
+      if (!items.length) return `${pick(SAY.emptyQueue)} ${r.total_listings} listings live-ish, ${r.users} members, ${r.newsletter_subs} subscribers.`;
+      return `Here is what needs you:\n${items.map((x) => `• ${x}`).join('\n')}\nTell me where to start — e.g. “show pending listings”.`;
+    }
     if (f && r[f] !== undefined) return `**${r[f]}** ${label[f] || f}.` + (f === 'pending' && r.pending ? ' Say “show pending listings” to see them, or “approve all pending” to clear the queue.' : '');
     return [
       `**Listings:** ${r.total_listings} total — ${r.pending} pending · ${r.approved} approved · ${r.rejected} rejected · ${r.featured} featured · ${r.sponsored} sponsored · ${r.claimed} claimed`,
@@ -1274,7 +1400,65 @@ const FORMAT = {
       `**Flags:** maintenance ${r.maintenance_on ? 'ON' : 'off'} · auto-approve ${r.auto_approve ? 'on' : 'off'} · auto-moderation ${r.ai_moderation_on ? 'on' : 'off'}`,
     ].join('\n');
   },
-  get_health(r) { return Object.entries(r).map(([k, v]) => `**${k}:** ${typeof v === 'object' ? JSON.stringify(v) : v}`).join('\n'); },
+  get_health(r) {
+    if (!r || r.error) return `Health check failed: ${r && r.error}`;
+    const m = r.memory || {}; const d = r.disk || {}; const db_ = r.db || {}; const mail = r.mail || {};
+    const warn = [];
+    if (d.usedPct >= 90) warn.push('disk almost full');
+    if (m.rss > 900 * 1024 * 1024) warn.push('high memory');
+    if (!mail.configured) warn.push('mail not configured');
+    if (!r.lastBackupAgo) warn.push('no backup yet');
+    return [
+      `**Server:** up ${r.uptime || '—'} · Node ${r.node || ''} on ${r.platform || ''} (${r.hostname || 'host'})`,
+      `**Memory:** ${m.rssLabel || '—'} RSS · heap ${m.heapLabel || '—'} · system free ${m.systemLabel || '—'}`,
+      `**Disk:** ${d.freeLabel || '—'} free of ${d.totalLabel || '—'} (${d.usedPct ?? '?'}% used) · database ${db_.label || '—'}`,
+      `**Mail:** ${mail.configured ? 'configured' : 'NOT configured'} · from ${mail.from || '—'} · ${(mail.hops || []).length} hop(s)`,
+      `**Last backup:** ${r.lastBackupAgo || 'never'}`,
+      warn.length ? `⚠ ${warn.join(' · ')}` : '✓ Nothing looks wrong.',
+    ].join('\n');
+  },
+  search_admin(r) {
+    const parts = [];
+    if ((r.listings || []).length) parts.push('**Listings**\n' + list(r.listings, (l) => `#${l.id} ${l.name} — ${l.status} · ${l.category || ''}`));
+    if ((r.users || []).length) parts.push('**Members**\n' + list(r.users, (u) => `#${u.id} ${u.name || ''} <${u.email}>${u.suspended ? ' · suspended' : ''}`));
+    if ((r.tickets || []).length) parts.push('**Tickets**\n' + list(r.tickets, (t) => `${t.ref} ${t.subject} — ${t.status}`));
+    if ((r.claims || []).length) parts.push('**Claims**\n' + list(r.claims, (c) => `#${c.id} ${c.domain} — ${c.status}`));
+    if ((r.posts || []).length) parts.push('**Posts**\n' + list(r.posts, (p) => `#${p.id} ${p.title} — ${p.status}`));
+    return parts.length ? parts.join('\n') : 'Nothing matched anywhere.';
+  },
+  get_audit_log(r) {
+    if (!(r.entries || []).length) return 'The audit log is empty for that filter.';
+    return `Last ${r.count} of ${r.total} entries:\n` + list(r.entries, (e) => `${fmtDate(e.created_at)} · ${e.kind}/${e.action}${e.listing_id ? ` (listing #${e.listing_id})` : ''} — ${e.ok ? 'ok' : 'failed'}${e.payload && e.payload !== '{}' ? ` · ${e.payload.slice(0, 80)}` : ''}`, 20);
+  },
+  get_moderation_log(r) {
+    if (!(r.entries || []).length) return 'No moderation decisions yet.';
+    return list(r.entries, (e) => `${fmtDate(e.created_at)} · **${e.decision}** ${e.score !== undefined && e.score !== null ? `(${e.score})` : ''} — ${e.listing_name || `listing #${e.listing_id}`}${e.reason ? ` · ${String(e.reason).slice(0, 90)}` : ''}`, 20);
+  },
+  get_moderation_rules(r) {
+    return [`Auto-moderation is **${r.on ? 'on' : 'off'}** · approve at ≥ **${r.approve_at}** · reject at ≤ **${r.reject_at}** · listings in between wait for you.`, (r.rules || []).length ? '**Rules:**\n' + list(r.rules, (x) => `\`${x}\``, 40) : 'No custom rules — add one with “block term casino”, “flag term crypto” or “trust domain example.co.ke”.'].join('\n');
+  },
+  set_moderation_thresholds(r) { return `Thresholds now: approve ≥ **${r.approve_at}**, reject ≤ **${r.reject_at}**.`; },
+  edit_moderation_rules(r) { return `${r.count} rule(s) in force${(r.rules || []).length ? ': ' + r.rules.map((x) => `\`${x}\``).join(', ') : ''}.`; },
+  review_listing_now(r) {
+    if (r.error) return r.error;
+    const head = r.dry_run ? `Score for **${r.listing.name}** (#${r.listing.id}): **${r.score}/100** → would ${r.decision === 'pending' ? 'hold for review' : r.decision}.` : `Reviewed **${r.listing.name}** (#${r.listing.id}): score **${r.score ?? '?'}** → **${r.decision || r.listing.status}**${r.listing.status ? ` (now ${r.listing.status})` : ''}.`;
+    return head + ((r.reasons || []).length ? '\n' + list(r.reasons, (x) => x, 8) : '');
+  },
+  list_protection_rules(r) {
+    const out = [];
+    if (r.ips) out.push(`**IP rules (${r.ips.length}):**` + (r.ips.length ? '\n' + list(r.ips, (x) => `#${x.id} ${x.kind} ${x.value}${x.note ? ` — ${x.note}` : ''}`, 25) : ' none'));
+    if (r.domains) out.push(`**Domain rules (${r.domains.length}):**` + (r.domains.length ? '\n' + list(r.domains, (x) => `#${x.id} ${x.kind} ${x.value}${x.note ? ` — ${x.note}` : ''}`, 25) : ' none'));
+    if (r.limits) out.push(`**Rate limits:** ${Object.entries(r.limits).map(([k, v]) => `${k}=${v}`).join(' · ')}`);
+    return out.join('\n');
+  },
+  list_mail_accounts(r) {
+    return [`**From:** ${r.from || 'default'}${r.env_smtp ? ' · SMTP_URL set in the environment' : ''}`, (r.accounts || []).length ? list(r.accounts, (a) => `#${a.id} ${a.label || a.provider} — ${a.host}:${a.port}${a.secure ? ' (TLS)' : ''} as ${a.username || '—'} · ${a.sent_today}${a.daily_limit ? `/${a.daily_limit}` : ''} today · ${a.active ? 'active' : 'paused'}`) : 'No SMTP accounts saved — add one with “add smtp host=… username=… password=…”.'].join('\n');
+  },
+  list_api_keys(r) {
+    if (!(r.keys || []).length) return 'No API keys match.';
+    return list(r.keys, (k) => `#${k.id} \`${k.prefix}…\` ${k.label ? `“${k.label}” ` : ''}— ${k.owner} · ${k.total_requests} req (${k.write_requests} writes) · last used ${k.last_used_at ? fmtDate(k.last_used_at) : 'never'}${k.revoked_at ? ' · **revoked**' : ''}`, 25);
+  },
+  revoke_api_key(r) { return `Key \`${r.prefix}…\` (#${r.id}) is revoked — the member will need a new one.`; },
   list_listings(r) { if (!r.count) return pick(SAY.nothing) + ' No listings match.'; return `${r.count} listing${r.count === 1 ? '' : 's'}${r.filters ? ` (${r.filters})` : ''}:\n` + list(r.listings, (l) => `#${l.id} **${l.name}** — ${l.status}${l.category ? ' · ' + l.category : ''}${l.country ? ' · ' + l.country : ''}${l.featured ? ' · featured' : ''}${l.sponsored ? ' · sponsored' : ''} · \`${l.slug}\``, 20); },
   search_listings(r) { if (!r.count) return 'No listings match that.'; return `${r.count} match${r.count === 1 ? '' : 'es'}:\n` + list(r.listings, (l) => `#${l.id} **${l.name}** — ${l.status} · ${l.category || ''} · \`${l.slug}\``); },
   get_listing(r) {
@@ -1431,11 +1615,17 @@ const HELP_TOPICS = {
   ip: ['block ip 1.2.3.4', 'allow ip 1.2.3.4', 'block domain spam.example', 'unblock ip 1.2.3.4', 'set rate limit login=10 register=5'],
   inbox: ['show inbox', 'mark inbox read', 'archive notification 12', 'leave a note: check acme tomorrow'],
   settings: ['show settings', 'set 2fa email to admin@x.com', 'set paypal live', 'add smtp host=… username=… password=…', 'backup now', 'health'],
-  payment: ['show revenue', 'show pending payments'],
+  payment: ['show revenue', 'show pending payments', 'how much did we make this month', 'show api keys / revoke api key 3'],
+  moderation: ['moderation rules', 'moderation log', 'score acme (no changes) / review acme now', 'set approve threshold to 80', 'set reject threshold to 20', 'block term casino / flag term crypto / trust domain example.co.ke', 'auto moderation on/off'],
+  audit: ['show audit log', 'audit log for approve_listing', 'what did I just do', 'moderation log'],
+  protection: ['show blocked ips', 'show spam rules', 'block ip 1.2.3.4 / whitelist 8.8.8.8', 'block domain spam.example', 'unblock ip 1.2.3.4', 'set rate limit login=10 register=5'],
+  mail: ['smtp settings', 'add smtp host=… username=… password=…', 'set mail from to noreply@x.com', 'send a test email to me@x.com', 'email pro members about "…" saying: …'],
+  backup: ['backup now', 'health', 'show settings'],
+  briefing: ['briefing / what needs attention', 'how many pending', 'show open tickets', 'show pending claims', 'status page', 'show inbox'],
 };
 
 function helpText(topic) {
-  const key = Object.keys(HELP_TOPICS).find((k) => k === topic) || (topic === 'user' ? 'user' : '') || (/(tickets?|support)/.test(topic) ? 'ticket' : '') || (/(blog|post)/.test(topic) ? 'post' : '') || (/mail/.test(topic) ? 'email' : '') || (/(status|incident)/.test(topic) ? 'incident' : '') || (/(domain|protection|spam|rate)/.test(topic) ? 'ip' : '') || (/(smtp|paypal|backup|2fa)/.test(topic) ? 'settings' : '') || (/(promo|coupon)/.test(topic) ? 'promo' : '') || (/(plan|offer)/.test(topic) ? 'planoffer' : '') || (/(ad|advert|package)/.test(topic) ? 'adpackage' : '') || (/(index|seo|upkeep|tech)/.test(topic) ? 'indexing' : '') || (/(revenue|money|payment)/.test(topic) ? 'payment' : '');
+  const key = Object.keys(HELP_TOPICS).find((k) => k === topic) || (/(moderat|screen|score|threshold)/.test(topic) ? 'moderation' : '') || (/(audit|log|history)/.test(topic) ? 'audit' : '') || (/(protect|spam|ip|block|rate)/.test(topic) ? 'protection' : '') || (/(mail|smtp)/.test(topic) ? 'mail' : '') || (/(backup|health)/.test(topic) ? 'backup' : '') || (/(brief|start|morning)/.test(topic) ? 'briefing' : '') || (topic === 'user' ? 'user' : '') || (/(tickets?|support)/.test(topic) ? 'ticket' : '') || (/(blog|post)/.test(topic) ? 'post' : '') || (/mail/.test(topic) ? 'email' : '') || (/(status|incident)/.test(topic) ? 'incident' : '') || (/(domain|protection|spam|rate)/.test(topic) ? 'ip' : '') || (/(smtp|paypal|backup|2fa)/.test(topic) ? 'settings' : '') || (/(promo|coupon)/.test(topic) ? 'promo' : '') || (/(plan|offer)/.test(topic) ? 'planoffer' : '') || (/(ad|advert|package)/.test(topic) ? 'adpackage' : '') || (/(index|seo|upkeep|tech)/.test(topic) ? 'indexing' : '') || (/(revenue|money|payment)/.test(topic) ? 'payment' : '');
   if (key) return `**${key === 'planoffer' ? 'Plan offers' : key === 'adpackage' ? 'Advert packages' : key.charAt(0).toUpperCase() + key.slice(1)}** — try:\n` + HELP_TOPICS[key].map((x) => `• ${x}`).join('\n') + '\n\nLookups run at once; changes ask you to confirm (unless you auto-allow them in Settings); deletions and bulk actions always confirm.';
   return [
     'I run the admin console from plain language — no model, no API, everything happens here on the server.',

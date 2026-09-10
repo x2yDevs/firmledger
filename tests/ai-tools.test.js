@@ -423,6 +423,20 @@ function seed() {
   await tool('list_users', { since_days: 7 }, (r) => (r.count >= 1 ? null : 'recent members not listed'));
   await tool('list_tickets', { status: 'open' }, (r) => (Array.isArray(r.tickets) ? null : 'ticket list wrong'));
   await tool('get_ticket', { id_or_ref: 'nope' }, null, { expectFail: true });
+  await tool('get_moderation_rules', {}, (r) => (typeof r.approve_at === 'number' && Array.isArray(r.rules) ? null : 'rules shape wrong'));
+  await tool('set_moderation_thresholds', { approve_at: 80, reject_at: 20 }, (r) => (r.approve_at === 80 && r.reject_at === 20 ? null : 'thresholds not saved'));
+  await tool('set_moderation_thresholds', { approve_at: 10 }, null, { expectFail: true });
+  await tool('edit_moderation_rules', { action: 'add', kind: 'block', term: 'casino' }, (r) => (r.rules.includes('block: casino') ? null : 'rule not added'));
+  await tool('edit_moderation_rules', { action: 'remove', kind: 'block', term: 'casino' }, (r) => (!r.rules.includes('block: casino') ? null : 'rule not removed'));
+  await tool('review_listing_now', { id_or_slug: 'gamma-group', dry_run: true }, (r) => (typeof r.score === 'number' && r.dry_run && one('SELECT status FROM listings WHERE id=?', f.gamma).status === 'approved' ? null : 'dry run changed state or lacks score'));
+  await tool('get_audit_log', { limit: 5 }, (r) => (Array.isArray(r.entries) && typeof r.total === 'number' ? null : 'audit shape wrong'));
+  await tool('get_moderation_log', {}, (r) => (Array.isArray(r.entries) ? null : 'moderation log shape wrong'));
+  await tool('list_protection_rules', { list: 'all' }, (r) => (Array.isArray(r.ips) && Array.isArray(r.domains) ? null : 'protection shape wrong'));
+  await tool('list_mail_accounts', {}, (r) => (Array.isArray(r.accounts) ? null : 'mail accounts shape wrong'));
+  const keyId = db.prepare("INSERT INTO api_keys (user_id,label,prefix,key_hash) VALUES (?,?,?,?)").run(f.owner, 'test', 'fl_t3st1', 'hash-' + Date.now()).lastInsertRowid;
+  await tool('list_api_keys', { user: 'owner@example.com' }, (r) => (r.keys.some((k) => k.id === keyId && k.prefix === 'fl_t3st1') ? null : 'key not listed'));
+  await tool('revoke_api_key', { id_or_prefix: 'fl_t3st1' }, (r) => (r.ok && one('SELECT revoked_at FROM api_keys WHERE id=?', keyId).revoked_at ? null : 'key not revoked'));
+  await tool('revoke_api_key', { id_or_prefix: String(keyId) }, null, { expectFail: true });
 
   section('Listing edits, bulk actions, relations and timeline');
   await tool('create_listing', {

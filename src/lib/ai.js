@@ -206,13 +206,45 @@ function replyForRan(ran, ctx) {
   return { content: parts.join('\n\n'), quick_replies: quick };
 }
 
+/* One-line consequence preview shown under a proposal so the admin knows what
+   the click will do beyond the label. */
+function impactNote(steps) {
+  try {
+    const notes = [];
+    for (const s of steps) {
+      const a = s.args || {};
+      switch (s.name) {
+        case 'delete_listing': notes.push('The listing, its claims, events and relations disappear from the directory and the sitemap.'); break;
+        case 'delete_user': notes.push('The member, their listings ownership, tickets and API keys are removed permanently.'); break;
+        case 'suspend_user': notes.push('They are signed out and cannot log in until unsuspended; their listings stay live.'); break;
+        case 'approve_listing': notes.push('Goes live immediately, gets pinged to search engines and the owner is emailed.'); break;
+        case 'reject_listing': notes.push('Hidden from the directory; the owner is emailed the reason if one was given.'); break;
+        case 'accept_all_pending_listings': case 'bulk_listing_action': notes.push('Applies to every matching record in one go — there is no bulk undo.'); break;
+        case 'email_all_users': notes.push('Sends to every active member — this cannot be recalled once queued.'); break;
+        case 'email_users': if (a.audience && a.audience !== 'all' && !String(a.audience).includes('@')) notes.push(`Sends to the whole “${a.audience}” audience.`); break;
+        case 'set_maintenance_mode': notes.push(a.on === false ? 'Visitors get the normal site again.' : 'Visitors see the maintenance page; the admin console stays reachable.'); break;
+        case 'fulfill_removal': notes.push('Deletes the listing named in the request and closes it.'); break;
+        case 'delete_category': notes.push('Listings in it are not deleted, they just lose the category.'); break;
+        case 'remove_google_credentials': notes.push('Google indexing stops until a new service-account key is uploaded.'); break;
+        case 'revoke_api_key': notes.push('Any integration using this key starts failing immediately.'); break;
+        case 'set_smtp_settings': case 'set_paypal_settings': case 'set_admin_2fa_email': notes.push('Changes how the site sends mail / takes payments / signs you in — double-check the values.'); break;
+        case 'run_google_indexing_batch': notes.push('Uses part of the 200/day Google quota.'); break;
+        default: break;
+      }
+    }
+    return [...new Set(notes)].slice(0, 2).join(' ');
+  } catch { return ''; }
+}
+
 function proposalFor(steps, ctx, extraText) {
   const id = storePending({ steps, ctx });
   const labels = steps.map((s) => ({ name: s.name, label: tools.describeCall(s.name, s.args) }));
   const head = steps.length === 1 ? labels[0].label : `${steps.length} actions: ${labels.map((l) => l.label).join(' ')}`;
+  const sensitive = steps.some((s) => { const t = tools.getTool(s.name); return t && (t.sensitive || t.neverAuto); });
+  const impact = impactNote(steps);
   return {
     type: 'tool_proposal',
-    content: stampContext(`${extraText ? extraText + '\n\n' : ''}${bot.pick(bot.SAY.confirm)} **${head}**`, { ...ctx, ask: null, pending: id }),
+    content: stampContext(`${extraText ? extraText + '\n\n' : ''}${bot.pick(sensitive ? bot.SAY.confirmSensitive : bot.SAY.confirm)} **${head}**${impact ? `\n_${impact}_` : ''}`, { ...ctx, ask: null, pending: id }),
     pending_id: id,
     tool: { name: steps.length === 1 ? steps[0].name : 'batch', label: head, args: steps.length === 1 ? steps[0].args : { steps: steps.map((s) => ({ tool: s.name, args: s.args })) }, steps: labels },
     quick_replies: ['yes, run it', 'cancel'],
@@ -266,7 +298,7 @@ async function chatTurn(history) {
       else if (probe.type === 'plan' && !probe.guess && raw.split(/\s+/).length <= 5 && !/[.!?,]/.test(raw) && (t && (!t.mutating || t.sensitive || t.neverAuto))) fresh = probe;
     }
     const ans = fresh ? null : bot.answerAsk(raw, ctx.ask, ctx);
-    if (ans && ans.cancelled) { const c2 = { ...ctx, ask: null }; return message('Okay, dropped that. What next?', c2, ['how many pending', 'show open tickets', 'help']); }
+    if (ans && ans.cancelled) { const c2 = { ...ctx, ask: null }; return message(bot.pick(bot.SAY.cancelled), c2, ['how many pending', 'show open tickets', 'help']); }
     if (ans && ans.ask) return message(ans.ask.ask, { ...ctx, ask: ans.ask }, (ans.ask.options || []).slice(0, 4).map((o, i) => `${i + 1}`));
     if (ans && ans.resolved) {
       const plan = { type: 'plan', tool: ans.resolved.tool, args: ans.resolved.args };
@@ -348,6 +380,7 @@ function special(plan, ctx) {
     case '__hello': return message(bot.pick(bot.SAY.hello), ctx, ['how many pending', 'show open tickets', 'show revenue', 'help']);
     case '__thanks': return message(bot.pick(bot.SAY.thanks), ctx, ['how many pending', 'help']);
     case '__reset': return message('Fresh start — context cleared. What would you like to do?', {}, ['how many pending', 'show open tickets', 'help']);
+    case '__cancelword': return message(ctx.ask ? bot.pick(bot.SAY.cancelled) : 'Nothing is waiting to be cancelled — what next?', { ...ctx, ask: null, pending: null }, ['how many pending', 'show open tickets', 'help']);
     case '__whoami': return message('You are signed in as the FirmLedger administrator. Everything I do runs with your admin session and is written to the audit log.', ctx, ['show audit log', 'help']);
     case '__undo': {
       const l = ctx.lastTool;
