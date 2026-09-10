@@ -2,6 +2,7 @@
  * Maintenance mode — visitors see a branded holding page; admin stays in.
  */
 const { getSetting } = require('../db');
+const { siteUrl } = require('./util');
 
 function isOn() {
   return getSetting('maintenance_on', '0') === '1';
@@ -26,9 +27,14 @@ function gate(req, res, next) {
   if (/\.(css|js|png|jpg|jpeg|svg|woff2?|ico|txt|xml)$/i.test(p)) return next();
   res.set('Retry-After', '3600');
   const m = locals();
+  /* Full site chrome (shared header/footer): the holding page lives inside the
+     normal FirmLedger layout. The newsletter band is hidden — its subscribe
+     form can't post while the gate is up — and the canonical keeps crawlers
+     from treating the 503 body as a page of its own. */
   return res.status(503).render('maintenance', {
-    meta: { title: m.title + ' — FirmLedger', description: m.message, robots: 'noindex,nofollow' },
+    meta: { title: m.title + ' — FirmLedger', description: m.message, robots: 'noindex,nofollow', canonical: siteUrl(req.path || '/') },
     m,
+    hideNews: true,
   });
 }
 

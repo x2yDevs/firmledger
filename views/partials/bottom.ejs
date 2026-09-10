@@ -1,5 +1,7 @@
 </main>
 <% const _nl = (typeof nlFlash !== 'undefined' && nlFlash) ? nlFlash : ''; %>
+<% const _hideNews = (typeof hideNews !== 'undefined' && hideNews) ? true : false; %>
+<% if (!_hideNews) { %>
 <section class="news-band" aria-label="Weekly digest">
   <div class="container">
     <div class="news-inner">
@@ -20,6 +22,7 @@
     </div>
   </div>
 </section>
+<% } %>
 <footer class="site-footer">
   <div class="foot-top">
     <div class="container foot-top-in">

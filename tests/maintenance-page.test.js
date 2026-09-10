@@ -122,12 +122,15 @@ function holdingPageChecks(html, label, custom) {
   check(`${label}: custom message kept verbatim`, html.includes(c.message));
   check(`${label}: ETA chip with clock`, /class="maint-eta"/.test(html) && html.includes('Expected back:') && html.includes(c.eta));
   check(`${label}: animated stage (grid, glows, scan)`, /maint-grid/.test(html) && /maint-glow maint-glow-a/.test(html) && /maint-glow maint-glow-b/.test(html) && /maint-scan/.test(html));
-  check(`${label}: logo inside the rotating rings`, /maint-ring/.test(html) && /\/assets\/logo-white\.png/.test(html) && /maint-logo/.test(html));
+  check(`${label}: logo inside the rotating rings`, /maint-ring/.test(html) && /\/assets\/logo-mark\.png/.test(html) && /maint-logo/.test(html));
   check(`${label}: typing-dots kicker + live dot`, /maint-kdot/.test(html) && /maint-dots/.test(html) && /Scheduled maintenance/.test(html));
   check(`${label}: indeterminate progress bar`, /maint-bar/.test(html) && /Applying the update/.test(html));
   check(`${label}: auto-reload poller present`, /maintAuto/.test(html) && /Auto-refreshing/.test(html) && /visibilitychange/.test(html));
-  check(`${label}: links to live status only (standalone page)`, /href="\/status"/.test(html) && !/href="\/directory"/.test(html) && !/href="\/pricing"/.test(html));
-  check(`${label}: brand footer strip`, /maint-foot/.test(html) && /the business record layer/.test(html));
+  check(`${label}: full site chrome — shared header + footer stay mounted`, /site-header/.test(html) && /site-footer/.test(html) && /css\/app\.css/.test(html) && /favicon/.test(html));
+  check(`${label}: header nav + footer links intact`, /href="\/directory"/.test(html) && /href="\/pricing"/.test(html) && /href="\/status"/.test(html));
+  check(`${label}: footer brand line kept`, /the business record layer/i.test(html));
+  check(`${label}: newsletter band hidden (its form cannot post during the gate)`, !/news-band/.test(html));
+  check(`${label}: assurance cards (data safe / status live / auto-return)`, /maint-assure-card/.test(html) && /Your data is safe/.test(html) && /Status stays live/.test(html));
 }
 
 (async function main() {
@@ -153,6 +156,7 @@ function holdingPageChecks(html, label, custom) {
   check('404: drifting background shapes', /class="err-bg"/.test(r.text) && (r.text.match(/<i><\/i>/g) || []).length >= 3);
   check('404: kicker + heading + message', /err-kicker/.test(r.text) && /Page not found/.test(r.text) && /does not exist or was moved/.test(r.text));
   check('404: three CTAs (home / directory / search)', /class="btn btn-primary" href="\/"/.test(r.text) && /btn-ghost" href="\/directory"/.test(r.text) && /btn-gold" href="\/search"/.test(r.text));
+  check('404: rescue search uses the shared search-hero box (no inner focus ring)', /class="err-search search-hero"/.test(r.text) && /class="input search-hero-in"/.test(r.text) && /name="q"/.test(r.text) && /class="err-alt"/.test(r.text) && /href="\/claim"/.test(r.text));
   check('404: keeps full site chrome (partials)', /container/.test(r.text) && /favicon/.test(r.text) && /css\/app\.css/.test(r.text));
   check('404: noindex', /noindex/.test(r.text));
 
@@ -178,7 +182,8 @@ function holdingPageChecks(html, label, custom) {
 
   r = await get(BASE + '/');
   check('home → 503 + Retry-After 3600', r.status === 503 && r.headers.get('retry-after') === '3600', `${r.status} / ${r.headers.get('retry-after')}`);
-  check('home: noindex,nofollow + dark theme meta', /<meta name="robots" content="noindex,nofollow">/.test(r.text) && /#0A1628/.test(r.text));
+  check('home: noindex,nofollow + FirmLedger theme meta', /<meta name="robots" content="noindex,nofollow">/.test(r.text) && /#0A1628/.test(r.text) && /color-scheme" content="light"/.test(r.text));
+  check('home: canonical present (shared layout head)', /rel="canonical" href="[^"]+">/.test(r.text));
   check('home: custom title in <title> tag too', r.text.includes(`${CUSTOM.title} — FirmLedger`));
   holdingPageChecks(r.text, 'home');
 
@@ -287,6 +292,7 @@ function holdingPageChecks(html, label, custom) {
     check('500: no “Not found” stamp', !/err-stamp/.test(rendered));
     check('500: ledger entry wording swaps', /ENTRY&nbsp;#000500/.test(rendered) && /this entry could not be read/.test(rendered));
     check('500: caret + CTAs still there', /err-caret/.test(rendered) && /btn-gold" href="\/search"/.test(rendered));
+    check('500: rescue search + popular links still there', /err-search/.test(rendered) && /err-alt/.test(rendered) && /Popular right now/.test(rendered));
     check('500: real heading carried through', /Something went wrong/.test(rendered));
   }
 
