@@ -1,6 +1,33 @@
+## 2026-09-10 (production audit) — Every admin action verified through chat
+
+**Route audit.** Every admin route was compared against the assistant's tool list;
+two genuine gaps were closed: `set_mail_keepalive` (Email → keep-alive on/off,
+cadence, recipient, run now) and `regenerate_indexnow_key` (Indexing → rotate key).
+129 tools total, all reachable from plain language.
+
+**Understanding fixes.** Trailing reasons ("… because the domain is dead") are
+captured as a slot instead of polluting the target; quoted text and message bodies
+are never split on "and"/"then"; "link A with B as partner" works; API-key prefixes
+are picked out of prose; "bulk/mass" no longer implies "all".
+
+**Bugs found and fixed by the new suites.**
+- `runPlans` crashed (TypeError) when a message mixed unparseable fragments with a
+  clarifying question — e.g. SQL-looking garbage like `'; DROP TABLE listings; --`.
+  Fragments are now filtered before running.
+- Malformed JSON / oversized bodies on any route returned a 500 page that itself
+  crashed (`error.ejs` rendered before session locals existed). Body-parser errors
+  now answer 400/413 (JSON for API callers), and the 500 handler is
+  render-failure-safe.
+
+**Tests.** Two new suites in `npm test`: `ai-e2e` (147 checks — every mutating and
+read tool driven through `chatTurn` in plain language and verified by DB rows) and
+`ai-http` (38 checks — real server: session + CSRF, chat→execute→cancel contract,
+hostile input never executes or 500s, audit rows, 50-turn latency budget, 20-way
+concurrency, no leaked pending proposals). `ai-tools` 193, `ai-assistant` 55.
+
 ## 2026-09-10 (later) — Assistant covers the whole console; more templates
 
-**10 new console tools** (127 total, all wired to the assistant): `review_listing_now`
+**10 new console tools** (127 at the time, all wired to the assistant): `review_listing_now`
 (rule-based review or dry-run score of one listing), `set_moderation_thresholds`,
 `edit_moderation_rules` (block/flag/allow-domain lines), `get_moderation_rules`,
 `get_audit_log`, `get_moderation_log`, `list_protection_rules` (IP/domain rules +

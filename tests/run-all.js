@@ -10,6 +10,13 @@
  *                understanding, slot filling, pronoun memory, disambiguation,
  *                confirm/cancel flows, audit logging and rule-based
  *                auto-moderation actually moving listing state.
+ *   ai-e2e       every console action driven through the chat endpoint in
+ *                plain language — proposal, confirm, execute — and verified by
+ *                the resulting database rows (147 checks).
+ *   ai-http      the real HTTP surface: session + CSRF, the chat/execute/cancel
+ *                contract, hostile input (XSS, forged context markers, SQL-ish
+ *                text, malformed JSON) never executing or 500ing, audit rows,
+ *                and latency/concurrency budgets.
  *   backup       .firmledger round trip — users, all listings + configuration.
  *   mail-providers Emitlo/Maileroo/Mailjet removed from presets and stored
  *                accounts; Admin → Email pins a bulk send to one provider
@@ -48,6 +55,8 @@ const { spawnSync } = require('child_process');
 const suites = [
   ['AI admin tools', 'ai-tools.test.js'],
   ['AI admin assistant', 'ai-assistant.test.js'],
+  ['AI assistant end-to-end (every admin action via chat)', 'ai-e2e.test.js'],
+  ['AI assistant HTTP / production hardening', 'ai-http.test.js'],
   ['Backup round trip', 'backup.test.js'],
   ['Mail providers', 'mail-providers.test.js'],
   ['Admin pages', 'admin-pages.test.js'],

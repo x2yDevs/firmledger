@@ -184,6 +184,20 @@ const plan = (text, ctx = {}) => { const r = bot.parseCommand(text, ctx); return
   check('scheduled review runs on its own', approved);
   setSetting('ai_moderation_on', '0');
 
+  /* 8 — newest phrases + robustness */
+  console.log('\nNewest phrases & robustness');
+  p = plan('turn keepalive off');
+  check('mail keep-alive toggle', p.plan && p.plan.tool === 'set_mail_keepalive' && p.plan.args.on === false, JSON.stringify(p.plan));
+  p = plan('set keepalive to every 7 days');
+  check('mail keep-alive cadence', p.plan && p.plan.tool === 'set_mail_keepalive' && Number(p.plan.args.days) === 7, JSON.stringify(p.plan));
+  p = plan('rotate the indexnow key');
+  check('IndexNow key rotation', p.plan && p.plan.tool === 'regenerate_indexnow_key', JSON.stringify(p.plan));
+  const parts2 = bot.splitCommands('approve it and email the owner saying: "thanks and welcome aboard"');
+  check('quoted "and" never splits a payload', parts2.length === 2 && /welcome aboard/.test(parts2[1]), JSON.stringify(parts2));
+  let crashed = false;
+  try { await ai.chatTurn([{ role: 'user', content: "'; DROP TABLE listings; --" }]); } catch { crashed = true; }
+  check('SQL-looking garbage gets a reply, not a crash', !crashed && one("SELECT COUNT(*) c FROM sqlite_master WHERE name='listings'").c === 1);
+
   console.log('\n================================================================');
   console.log(`checks passed: ${passed}   failed: ${failures.length}`);
   failures.forEach((f) => console.log(`  • ${f}`));

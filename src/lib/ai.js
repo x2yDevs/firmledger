@@ -325,13 +325,15 @@ async function chatTurn(history) {
     if (p.type === 'ask') {
       /* run whatever was already understood, then ask */
       const ask = { tool: p.tool, entity: p.entity, partial: p.partial, options: (p.options || []).map((o) => ({ label: o.label, value: o.value, row: o.row ? slimRow(o.row) : undefined })) };
-      const prefix = plans.length ? await runPlans(plans, ctx, { silentCtx: true }) : null;
+      const done = plans.filter((x) => x.type === 'plan');
+      const prefix = done.length ? await runPlans(done, ctx, { silentCtx: true }) : null;
       const optionText = ask.options.length ? '\n' + ask.options.map((o, i) => `${i + 1}. ${o.label}`).join('\n') : '';
       const text = (prefix ? stripContext(prefix.content) + '\n\n' : '') + p.ask + optionText;
       return message(text, { ...ctx, ask }, ask.options.length ? ask.options.slice(0, 4).map((o, i) => `${i + 1}`).concat(['cancel']) : ['cancel']);
     }
     if (p.type === 'none') {
-      const prefix = plans.length ? await runPlans(plans, ctx, { silentCtx: true }) : null;
+      const done = plans.filter((x) => x.type === 'plan');
+      const prefix = done.length ? await runPlans(done, ctx, { silentCtx: true }) : null;
       return message((prefix ? stripContext(prefix.content) + '\n\n' : '') + p.text + ' ' + recoveryHint(p), ctx, ['how many pending', 'show open tickets', 'help']);
     }
     /* unknown: keep going; handled below if nothing else parsed */
@@ -397,7 +399,7 @@ function special(plan, ctx) {
  * auto-allowed, and the rest are parked as one confirmation batch.
  */
 async function runPlans(plans, ctx, opts = {}) {
-  if (plans.length === 1 && plans[0].tool.startsWith('__')) return special(plans[0], ctx);
+  if (plans.length === 1 && String(plans[0].tool || '').startsWith('__')) return special(plans[0], ctx);
   const ran = [];
   const needConfirm = [];
   const texts = [];

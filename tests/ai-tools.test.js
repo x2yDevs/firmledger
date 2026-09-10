@@ -623,6 +623,17 @@ function seed() {
     getSetting('smtp_from', '') === 'FirmLedger QA <qa@firmledger.test>' ? null : 'From address not stored'));
   await tool('set_mail_from', { from: 'nonsense' }, null, { expectFail: true });
   await tool('send_test_mail', { to: 'qa-admin@example.com' }, null, { expectFail: true });
+  await tool('set_mail_keepalive', { on: false, days: 7, to: 'keep@firmledger.test' }, () => {
+    if (getSetting('mail_keepalive_on', '1') !== '0') return 'keep-alive not switched off';
+    if (getSetting('mail_keepalive_days', '') !== '7') return 'cadence not stored';
+    if (getSetting('mail_keepalive_to', '') !== 'keep@firmledger.test') return 'recipient not stored';
+    return null;
+  });
+  const oldKey = getSetting('indexnow_key', '');
+  await tool('regenerate_indexnow_key', {}, () => {
+    const k = getSetting('indexnow_key', '');
+    return /^[a-f0-9]{32}$/.test(k) && k !== oldKey ? null : 'IndexNow key not rotated';
+  });
   await tool('set_smtp_settings', { host: 'smtp.qa.test', port: 2525, username: 'qa', password: 'secret', secure: false, from: 'FirmLedger QA <qa@firmledger.test>' }, () => {
     if (getSetting('smtp_host', '') !== 'smtp.qa.test') return 'host not stored';
     if (getSetting('smtp_port', '') !== '2525') return 'port not stored';

@@ -1660,6 +1660,34 @@ const TOOLS = [
       return { ok: true, id: k.id, prefix: k.prefix };
     },
   },
+  {
+    name: 'set_mail_keepalive', group: 'ops', label: 'Mail keep-alive', mutating: true,
+    description: 'Configure the SMTP keep-alive sweep that sends a tiny message through each mail account every N days so dormant accounts are not closed (on/off, days 1–90, recipient), or run it now with run=true.',
+    parameters: {
+      type: 'object',
+      properties: { on: { type: 'boolean' }, days: { type: 'integer' }, to: { type: 'string' }, run: { type: 'boolean' } },
+      additionalProperties: false,
+    },
+    summarize(a) { return a.run ? 'Run the mail keep-alive sweep now.' : `Set mail keep-alive${a.on !== undefined ? (a.on ? ' on' : ' off') : ''}${a.days ? ` every ${a.days} days` : ''}${a.to ? ` to ${a.to}` : ''}.`; },
+    async run(args) {
+      if (args.run) { const r = await mailer.keepAliveSweep(); return { ran: true, ...r }; }
+      const cur = mailer.keepAliveSettings();
+      if (args.on === undefined && !args.days && !args.to) return { error: 'Give on/off, days or a recipient.' };
+      mailer.saveKeepAliveSettings({ mail_keepalive_on: (args.on === undefined ? cur.on : args.on) ? '1' : '0', mail_keepalive_days: args.days || cur.days, mail_keepalive_to: args.to || cur.to });
+      return { ...mailer.keepAliveSettings() };
+    },
+  },
+  {
+    name: 'regenerate_indexnow_key', group: 'ops', label: 'Regenerate IndexNow key', mutating: true, sensitive: true,
+    description: 'Rotate the IndexNow key. The old key file URL stops validating immediately; search engines pick up the new one on the next ping.',
+    parameters: { type: 'object', properties: {}, additionalProperties: false },
+    summarize() { return 'Regenerate the IndexNow key.'; },
+    run() {
+      const key = require('crypto').randomBytes(16).toString('hex');
+      setSetting('indexnow_key', key);
+      return { ok: true, key_prefix: key.slice(0, 6) + '…', key_url: siteUrl(`/${key}.txt`) };
+    },
+  },
 ];
 
 module.exports = TOOLS;
