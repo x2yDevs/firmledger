@@ -2211,6 +2211,11 @@ body:has(.admin-bar) #main .scroll-table .table-wrap {
 .ai-chat.is-busy .chat-head-sub { opacity: .8; }
 
 .ai-starters { display: flex; flex-wrap: wrap; gap: 7px; padding: 8px 0 0; }
+/* Quick replies — the assistant's suggested next steps, above the composer. */
+.ai-quick { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 14px 8px; }
+.ai-quick[hidden] { display: none; }
+.ai-quick-btn { font-size: 11.5px; padding: 5px 11px; }
+.wa-text i { color: var(--ink2); }
 .ai-typing-row .wa-bubble { padding: 10px 14px; }
 .ai-set-main { min-width: 0; }
 .ai-set-side > * { min-width: 0; }

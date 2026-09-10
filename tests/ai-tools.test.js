@@ -9,8 +9,8 @@
  * changing anything fails here — the assistant must never claim work it did
  * not do.
  *
- * No network and no Groq key are required: the tools themselves are pure
- * server-side operations; only the natural-language wrapper needs Groq.
+ * No network is required: the tools are pure server-side operations and the
+ * assistant that drives them is a rule engine (no model, no API).
  */
 process.env.NODE_ENV = process.env.NODE_ENV || 'test';
 
@@ -22,11 +22,9 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'firmledger-tools-'));
 process.env.FIRMLEDGER_DATA_DIR = tmp;
 process.env.BASE_URL = process.env.BASE_URL || 'https://firmledger.test';
 process.env.SMTP_URL = '';           // mail lands in the outbox log, never the wire
-process.env.GROQ_API_KEY = process.env.GROQ_API_KEY || '';
 
 const { db, getSetting, setSetting } = require('../src/db');
 const tools = require('../src/lib/aitools');
-const llmLib = require('../src/lib/llm');
 
 /* ---------------------------------------------------------------- harness */
 let passed = 0;
@@ -385,14 +383,14 @@ function seed() {
     if (r.product.name !== 'FirmLedger') return 'product name missing';
     if (r.admin_console.length < 15) return 'admin console map too short';
     if (r.public_pages.length < 15) return 'public page map too short';
-    if (r.ai.provider_id !== 'groq' || !r.ai.provider_label) return 'active AI provider missing';
+    if (!r.assistant || !/rule/.test(r.assistant.engine)) return 'assistant engine missing';
     if (!r.feature_flags || typeof r.feature_flags.auto_approve !== 'boolean') return 'feature flags missing';
     return null;
   });
   await tool('get_settings', {}, (r) => {
     if (typeof r.site.auto_approve !== 'boolean') return 'site flags missing';
     if (typeof r.protection.limits.login !== 'number') return 'rate limits missing';
-    if (!r.ai.providers_with_keys) return 'provider list missing';
+    if (!r.assistant || !Array.isArray(r.assistant.auto_run_tools)) return 'assistant auto-run list missing';
     return null;
   });
   await tool('get_listing', { id_or_slug: 'gamma-group' }, (r) => {
@@ -416,12 +414,29 @@ function seed() {
     typeof r.indexnow.log_rows === 'number' && r.google && r.upkeep ? null : 'indexing shape wrong'));
   await tool('get_status_page', {}, (r) => (r.components.length > 0 && r.overall ? null : 'status components missing'));
   await tool('get_ai_playground', {}, (r) => {
-    if (r.providers.length < 10) return 'provider list too short';
-    if (r.active_provider !== 'groq') return 'active provider wrong';
-    const withKeys = r.providers.filter((p) => p.configured).map((p) => p.id);
-    if (JSON.stringify(withKeys) !== JSON.stringify(llmLib.configuredProviders())) return 'configured provider list mismatch';
+    if (r.engine !== 'rule-based') return 'engine wrong';
+    if (typeof r.tools !== 'number' || r.tools < 100) return 'tool count missing';
+    if (!r.moderation || typeof r.moderation.on !== 'boolean') return 'moderation state missing';
     return null;
   });
+  await tool('list_listings', { status: 'approved' }, (r) => (typeof r.total === 'number' && r.listings.every((l) => l.status === 'approved') ? null : 'listing list wrong'));
+  await tool('list_users', { since_days: 7 }, (r) => (r.count >= 1 ? null : 'recent members not listed'));
+  await tool('list_tickets', { status: 'open' }, (r) => (Array.isArray(r.tickets) ? null : 'ticket list wrong'));
+  await tool('get_ticket', { id_or_ref: 'nope' }, null, { expectFail: true });
+  await tool('get_moderation_rules', {}, (r) => (typeof r.approve_at === 'number' && Array.isArray(r.rules) ? null : 'rules shape wrong'));
+  await tool('set_moderation_thresholds', { approve_at: 80, reject_at: 20 }, (r) => (r.approve_at === 80 && r.reject_at === 20 ? null : 'thresholds not saved'));
+  await tool('set_moderation_thresholds', { approve_at: 10 }, null, { expectFail: true });
+  await tool('edit_moderation_rules', { action: 'add', kind: 'block', term: 'casino' }, (r) => (r.rules.includes('block: casino') ? null : 'rule not added'));
+  await tool('edit_moderation_rules', { action: 'remove', kind: 'block', term: 'casino' }, (r) => (!r.rules.includes('block: casino') ? null : 'rule not removed'));
+  await tool('review_listing_now', { id_or_slug: 'gamma-group', dry_run: true }, (r) => (typeof r.score === 'number' && r.dry_run && one('SELECT status FROM listings WHERE id=?', f.gamma).status === 'approved' ? null : 'dry run changed state or lacks score'));
+  await tool('get_audit_log', { limit: 5 }, (r) => (Array.isArray(r.entries) && typeof r.total === 'number' ? null : 'audit shape wrong'));
+  await tool('get_moderation_log', {}, (r) => (Array.isArray(r.entries) ? null : 'moderation log shape wrong'));
+  await tool('list_protection_rules', { list: 'all' }, (r) => (Array.isArray(r.ips) && Array.isArray(r.domains) ? null : 'protection shape wrong'));
+  await tool('list_mail_accounts', {}, (r) => (Array.isArray(r.accounts) ? null : 'mail accounts shape wrong'));
+  const keyId = db.prepare("INSERT INTO api_keys (user_id,label,prefix,key_hash) VALUES (?,?,?,?)").run(f.owner, 'test', 'fl_t3st1', 'hash-' + Date.now()).lastInsertRowid;
+  await tool('list_api_keys', { user: 'owner@example.com' }, (r) => (r.keys.some((k) => k.id === keyId && k.prefix === 'fl_t3st1') ? null : 'key not listed'));
+  await tool('revoke_api_key', { id_or_prefix: 'fl_t3st1' }, (r) => (r.ok && one('SELECT revoked_at FROM api_keys WHERE id=?', keyId).revoked_at ? null : 'key not revoked'));
+  await tool('revoke_api_key', { id_or_prefix: String(keyId) }, null, { expectFail: true });
 
   section('Listing edits, bulk actions, relations and timeline');
   await tool('create_listing', {
@@ -608,6 +623,17 @@ function seed() {
     getSetting('smtp_from', '') === 'FirmLedger QA <qa@firmledger.test>' ? null : 'From address not stored'));
   await tool('set_mail_from', { from: 'nonsense' }, null, { expectFail: true });
   await tool('send_test_mail', { to: 'qa-admin@example.com' }, null, { expectFail: true });
+  await tool('set_mail_keepalive', { on: false, days: 7, to: 'keep@firmledger.test' }, () => {
+    if (getSetting('mail_keepalive_on', '1') !== '0') return 'keep-alive not switched off';
+    if (getSetting('mail_keepalive_days', '') !== '7') return 'cadence not stored';
+    if (getSetting('mail_keepalive_to', '') !== 'keep@firmledger.test') return 'recipient not stored';
+    return null;
+  });
+  const oldKey = getSetting('indexnow_key', '');
+  await tool('regenerate_indexnow_key', {}, () => {
+    const k = getSetting('indexnow_key', '');
+    return /^[a-f0-9]{32}$/.test(k) && k !== oldKey ? null : 'IndexNow key not rotated';
+  });
   await tool('set_smtp_settings', { host: 'smtp.qa.test', port: 2525, username: 'qa', password: 'secret', secure: false, from: 'FirmLedger QA <qa@firmledger.test>' }, () => {
     if (getSetting('smtp_host', '') !== 'smtp.qa.test') return 'host not stored';
     if (getSetting('smtp_port', '') !== '2525') return 'port not stored';

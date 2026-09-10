@@ -36,7 +36,6 @@ const indexlog = require('./indexlog');
 const indexing = require('./indexing');
 const googleIndexing = require('./googleIndexing');
 const backup = require('./backup');
-const llm = require('./llm');
 const { TYPES, SIZES } = require('./taxonomy');
 const { siteUrl } = require('./util');
 const fs = require('fs');
@@ -71,11 +70,10 @@ const TOOLS = [
   /* ==================== Site knowledge ==================== */
   {
     name: 'get_site_overview', group: 'read', label: 'Site & console map', mutating: false,
-    description: 'Full orientation on FirmLedger: every public page, dashboard area and admin console section, the current feature flags, taxonomy, plans, advert packages and the live AI provider. Call this whenever you need to know what the site is or what an admin can change.',
+    description: 'Full orientation on FirmLedger: every public page, dashboard area and admin console section, the current feature flags, taxonomy, plans and advert packages.',
     parameters: { type: 'object', properties: {}, additionalProperties: false },
     summarize() { return 'Read the FirmLedger site and console map.'; },
     run() {
-      const provider = llm.provider(llm.activeId());
       return {
         product: {
           name: 'FirmLedger',
@@ -121,7 +119,7 @@ const TOOLS = [
           { path: '/admin3119Musa/notifications', page: 'Admin inbox' },
           { path: '/admin3119Musa/email', page: 'Send mail to members' },
           { path: '/admin3119Musa/settings', page: 'Site, SMTP, payments, indexing, upkeep, 2FA' },
-          { path: '/admin3119Musa/ai', page: 'AI Playground — generator, assistant, moderation, model providers' },
+          { path: '/admin3119Musa/ai', page: 'AI Playground — rule-based assistant, auto-moderation, audit logs' },
         ],
         taxonomy: {
           types: TYPES, sizes: SIZES,
@@ -142,13 +140,7 @@ const TOOLS = [
           paypal_mode: getSetting('paypal_mode', process.env.PAYPAL_MODE || 'sandbox'),
           paypal_configured: Boolean(process.env.PAYPAL_CLIENT_ID || getSetting('paypal_client_id', '')),
         },
-        ai: {
-          provider_label: provider.label,
-          provider_id: provider.id,
-          model: llm.modelFor(provider.id),
-          configured: llm.configured(provider.id),
-          other_providers_with_keys: llm.configuredProviders().filter((id) => id !== provider.id),
-        },
+        assistant: { engine: 'rule-based (no model, no API)', moderation_on: getSetting('ai_moderation_on', '0') === '1' },
         volumes: {
           listings: countOf('SELECT COUNT(*) c FROM listings'),
           users: countOf('SELECT COUNT(*) c FROM users'),
@@ -199,11 +191,9 @@ const TOOLS = [
           log_rows: indexlog.count(),
         },
         upkeep: upkeep.settings(),
-        ai: {
-          provider: llm.activeId(),
-          providers_with_keys: llm.configuredProviders(),
+        assistant: {
+          engine: 'rule-based (no model, no API)',
           moderation_on: getSetting('ai_moderation_on', '0') === '1',
-          moderation_model: getSetting('ai_moderation_model', '') || '(default)',
           auto_run_tools: [...require('./aitools').autoSet()],
         },
       };
@@ -437,28 +427,113 @@ const TOOLS = [
     },
   },
   {
-    name: 'get_ai_playground', group: 'read', label: 'AI Playground state', mutating: false,
-    description: 'The AI Playground: which provider is active, which providers hold keys (masked), the selected models, live model availability, auto-moderation settings, pending confirmations and the latest audit entries.',
+    name: 'get_ai_playground', group: 'read', label: 'Assistant state', mutating: false,
+    description: 'The AI Playground: assistant engine (rule-based, no model), auto-moderation settings, auto-run allow-list, pending confirmations and the latest audit entries.',
     parameters: { type: 'object', properties: {}, additionalProperties: false },
-    summarize() { return 'Read the AI Playground state.'; },
+    summarize() { return 'Read the assistant state.'; },
     run() {
-      const active = llm.activeId();
+      const aitools = require('./aitools');
       return {
-        active_provider: active,
-        active_model: llm.modelFor(active),
-        active_configured: llm.configured(active),
-        providers: llm.providersView().map((p) => ({
-          id: p.id, label: p.label, configured: p.configured, key_source: p.key_source, key_hint: p.key_hint,
-          model: p.model, base_url: p.base_url, live_models: p.live_models.length, active: p.active,
-        })),
+        engine: 'rule-based',
+        tools: aitools.TOOLS.length,
+        auto_run_tools: [...aitools.autoSet()],
         moderation: {
           on: getSetting('ai_moderation_on', '0') === '1',
-          model: getSetting('ai_moderation_model', '') || llm.modelFor(active),
           email_admin: getSetting('ai_moderation_email', '1') === '1',
+          approve_at: Number(getSetting('ai_moderation_approve_at', '75') || 75),
+          reject_at: Number(getSetting('ai_moderation_reject_at', '25') || 25),
+          blocklist_terms: String(getSetting('ai_moderation_blocklist', '') || '').split(/[\n,]/).map((x) => x.trim()).filter(Boolean).length,
         },
         pending_confirmations: countOf('SELECT COUNT(*) c FROM ai_pending_actions'),
         recent_audit: rows('SELECT id, kind, action, result, created_at FROM ai_audit_log ORDER BY id DESC LIMIT 15'),
       };
+    },
+  },
+  {
+    name: 'list_listings', group: 'read', label: 'List listings', mutating: false,
+    description: 'List listings filtered by status, featured, sponsored, claimed, category, country or recency. Newest first unless order=oldest.',
+    parameters: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', enum: ['pending', 'approved', 'rejected'] },
+        featured: { type: 'boolean' }, sponsored: { type: 'boolean' }, claimed: { type: 'boolean' },
+        category: { type: 'string' }, country: { type: 'string' }, owner: { type: 'string', description: 'Owner user id or email' },
+        since_days: { type: 'integer' }, order: { type: 'string', enum: ['newest', 'oldest'] }, limit: { type: 'integer' },
+      },
+      additionalProperties: false,
+    },
+    summarize(a) { return `List ${a.status || ''} listings${a.category ? ' in ' + a.category : ''}${a.country ? ' from ' + a.country : ''}.`; },
+    run(args) {
+      const where = []; const p = [];
+      if (['pending', 'approved', 'rejected'].includes(String(args.status || ''))) { where.push('status=?'); p.push(args.status); }
+      if (args.featured === true) where.push('featured=1');
+      if (args.sponsored === true) where.push('sponsored=1');
+      if (args.claimed === true) where.push('claimed=1'); else if (args.claimed === false) where.push('claimed=0');
+      if (args.category) { where.push('category = ? COLLATE NOCASE'); p.push(String(args.category)); }
+      if (args.country) { where.push('country LIKE ?'); p.push(`%${String(args.country)}%`); }
+      if (args.owner) { const u = findUser(String(args.owner)); if (!u) return { error: 'No member matches that owner.' }; where.push('owner_user_id=?'); p.push(u.id); }
+      const since = Math.min(3650, Math.max(0, Number(args.since_days || 0)));
+      if (since) { where.push("created_at >= datetime('now', ?)"); p.push(`-${since} days`); }
+      const limit = Math.min(100, Math.max(1, Number(args.limit || 20)));
+      const order = args.order === 'oldest' ? 'ASC' : 'DESC';
+      const sql = `SELECT id, slug, name, status, category, country, featured, sponsored, claimed, plan, created_at FROM listings${where.length ? ' WHERE ' + where.join(' AND ') : ''} ORDER BY created_at ${order}, id ${order} LIMIT ${limit}`;
+      const listings = rows(sql, ...p);
+      const total = countOf(`SELECT COUNT(*) c FROM listings${where.length ? ' WHERE ' + where.join(' AND ') : ''}`, ...p);
+      const filters = [args.status, args.featured && 'featured', args.sponsored && 'sponsored', args.claimed === true && 'claimed', args.claimed === false && 'unclaimed', args.category, args.country, args.owner && `owned by ${args.owner}`, since && `last ${since} days`].filter(Boolean).join(', ');
+      return { count: listings.length, total, filters, listings: listings.map((l) => ({ ...l, featured: !!l.featured, sponsored: !!l.sponsored, claimed: !!l.claimed })) };
+    },
+  },
+  {
+    name: 'list_users', group: 'read', label: 'List members', mutating: false,
+    description: 'List members, optionally only suspended, by plan (pro/free), on trial, or signed up in the last N days.',
+    parameters: {
+      type: 'object',
+      properties: {
+        suspended: { type: 'boolean' }, plan: { type: 'string', enum: ['pro', 'free'] }, trial: { type: 'boolean' },
+        since_days: { type: 'integer' }, limit: { type: 'integer' },
+      },
+      additionalProperties: false,
+    },
+    summarize(a) { return `List ${a.suspended ? 'suspended ' : ''}${a.plan || ''} members.`; },
+    run(args) {
+      const where = []; const p = [];
+      if (args.suspended === true) where.push('u.suspended=1');
+      if (args.plan === 'pro') where.push("u.plan='pro'"); else if (args.plan === 'free') where.push("(u.plan IS NULL OR u.plan='' OR u.plan='free')");
+      if (args.trial === true) where.push("u.trial_expires_at > datetime('now')");
+      const since = Math.min(3650, Math.max(0, Number(args.since_days || 0)));
+      if (since) { where.push("u.created_at >= datetime('now', ?)"); p.push(`-${since} days`); }
+      const limit = Math.min(100, Math.max(1, Number(args.limit || 20)));
+      const users = rows(`SELECT u.id, u.email, u.name, u.plan, u.suspended, u.trial_expires_at, u.created_at, (SELECT COUNT(*) FROM listings l WHERE l.owner_user_id=u.id) AS listings FROM users u${where.length ? ' WHERE ' + where.join(' AND ') : ''} ORDER BY u.id DESC LIMIT ${limit}`, ...p);
+      const total = countOf(`SELECT COUNT(*) c FROM users u${where.length ? ' WHERE ' + where.join(' AND ') : ''}`, ...p);
+      const filters = [args.suspended && 'suspended', args.plan, args.trial && 'on trial', since && `joined in the last ${since} days`].filter(Boolean).join(', ');
+      return { count: users.length, total, filters, users: users.map((u) => ({ ...u, suspended: !!u.suspended })) };
+    },
+  },
+  {
+    name: 'list_tickets', group: 'read', label: 'List tickets', mutating: false,
+    description: 'List support tickets by status (open, solved, closed) or all.',
+    parameters: { type: 'object', properties: { status: { type: 'string', enum: ['open', 'solved', 'closed', ''] }, limit: { type: 'integer' } }, additionalProperties: false },
+    summarize(a) { return `List ${a.status || 'all'} tickets.`; },
+    run(args) {
+      const st = ['open', 'solved', 'closed'].includes(String(args.status || '')) ? String(args.status) : '';
+      const limit = Math.min(100, Math.max(1, Number(args.limit || 30)));
+      const tickets = rows(`SELECT t.id, t.ref, t.subject, t.category, t.status, t.created_at, t.updated_at, u.email AS user_email FROM tickets t JOIN users u ON u.id=t.user_id${st ? ' WHERE t.status=?' : ''} ORDER BY t.updated_at DESC LIMIT ${limit}`, ...(st ? [st] : []));
+      return { count: tickets.length, status: st, tickets };
+    },
+  },
+  {
+    name: 'get_ticket', group: 'read', label: 'Ticket detail', mutating: false,
+    description: 'One support ticket with its message thread (id or FL- reference).',
+    parameters: { type: 'object', properties: { id_or_ref: { type: 'string' } }, required: ['id_or_ref'], additionalProperties: false },
+    summarize(a) { return `Read ticket ${a.id_or_ref}.`; },
+    run(args) {
+      const raw = String(args.id_or_ref || '').trim();
+      const t = /^\d+$/.test(raw)
+        ? db.prepare('SELECT t.*, u.email AS user_email, u.name AS user_name FROM tickets t JOIN users u ON u.id=t.user_id WHERE t.id=?').get(Number(raw))
+        : db.prepare('SELECT t.*, u.email AS user_email, u.name AS user_name FROM tickets t JOIN users u ON u.id=t.user_id WHERE t.ref=? COLLATE NOCASE').get(raw);
+      if (!t) return { error: 'Ticket not found.' };
+      const messages = rows('SELECT id, sender, body, attachment_name, created_at FROM ticket_messages WHERE ticket_id=? ORDER BY id ASC', t.id);
+      return { ticket: { id: t.id, ref: t.ref, subject: t.subject, category: t.category, status: t.status, user_id: t.user_id, user_email: t.user_email, user_name: t.user_name, created_at: t.created_at, updated_at: t.updated_at, closed_at: t.closed_at }, messages };
     },
   },
 
@@ -1425,6 +1500,192 @@ const TOOLS = [
         client_id_set: Boolean(getSetting('paypal_client_id', '')),
         client_secret_set: Boolean(getSetting('paypal_client_secret', '')),
       };
+    },
+  },
+  /* ------------------------------------------------------------------ */
+  /* Assistant-native extras: moderation control, logs, protection, mail */
+  /* ------------------------------------------------------------------ */
+  {
+    name: 'review_listing_now', group: 'listings', label: 'Rule-based review', mutating: true,
+    description: 'Run the rule-based auto-moderation on one pending listing right now (approve / hold / reject by score), or just score it without acting when dry_run=true.',
+    parameters: {
+      type: 'object',
+      properties: { id_or_slug: { type: 'string' }, dry_run: { type: 'boolean', description: 'Score only, change nothing.' } },
+      required: ['id_or_slug'], additionalProperties: false,
+    },
+    summarize(a) { return a.dry_run ? `Score listing ${a.id_or_slug} (no changes).` : `Review listing ${a.id_or_slug} with the moderation rules.`; },
+    async run(args) {
+      const l = findListing(args.id_or_slug);
+      if (!l) return { error: 'No such listing.' };
+      const ai = require('./ai');
+      if (args.dry_run) return { listing: { id: l.id, name: l.name, status: l.status }, ...ai.scoreListing(l), dry_run: true };
+      if (l.status !== 'pending') return { error: `Listing #${l.id} is ${l.status}, only pending listings are reviewed.` };
+      const r = await ai.moderateListing(l.id);
+      const fresh = findListing(String(l.id));
+      return { listing: { id: l.id, name: l.name, status: fresh ? fresh.status : l.status }, ...r };
+    },
+  },
+  {
+    name: 'set_moderation_thresholds', group: 'ops', label: 'Moderation thresholds', mutating: true,
+    description: 'Set the auto-moderation score thresholds: approve_at (50–100) and/or reject_at (0–49).',
+    parameters: {
+      type: 'object',
+      properties: { approve_at: { type: 'integer' }, reject_at: { type: 'integer' } },
+      additionalProperties: false,
+    },
+    summarize(a) { return `Set moderation thresholds${a.approve_at !== undefined ? ` approve ≥ ${a.approve_at}` : ''}${a.reject_at !== undefined ? ` reject ≤ ${a.reject_at}` : ''}.`; },
+    run(args) {
+      if (args.approve_at === undefined && args.reject_at === undefined) return { error: 'Give approve_at and/or reject_at.' };
+      if (args.approve_at !== undefined) { const n = int(args.approve_at, 75); if (n < 50 || n > 100) return { error: 'approve_at must be 50–100.' }; setSetting('ai_moderation_approve_at', String(n)); }
+      if (args.reject_at !== undefined) { const n = int(args.reject_at, 25); if (n < 0 || n > 49) return { error: 'reject_at must be 0–49.' }; setSetting('ai_moderation_reject_at', String(n)); }
+      return { approve_at: Number(getSetting('ai_moderation_approve_at', '75')), reject_at: Number(getSetting('ai_moderation_reject_at', '25')) };
+    },
+  },
+  {
+    name: 'edit_moderation_rules', group: 'ops', label: 'Moderation rules', mutating: true,
+    description: 'Add or remove a rule line for auto-moderation: block: <term> (auto-reject), flag: <term> (hold for a human) or allow-domain: <host> (trust boost).',
+    parameters: {
+      type: 'object',
+      properties: {
+        action: { type: 'string', enum: ['add', 'remove'] },
+        kind: { type: 'string', enum: ['block', 'flag', 'allow-domain'] },
+        term: { type: 'string' },
+      },
+      required: ['action', 'kind', 'term'], additionalProperties: false,
+    },
+    summarize(a) { return `${a.action === 'remove' ? 'Remove' : 'Add'} moderation rule “${a.kind}: ${a.term}”.`; },
+    run(args) {
+      const term = str(args.term, 120).toLowerCase().trim();
+      if (!term) return { error: 'Term is empty.' };
+      const line = `${args.kind}: ${term}`;
+      const lines = getSetting('ai_moderation_rules', '').split('\n').map((x) => x.trim()).filter(Boolean);
+      const idx = lines.findIndex((x) => x.toLowerCase() === line);
+      if (args.action === 'remove') { if (idx === -1) return { error: `There is no rule “${line}”.` }; lines.splice(idx, 1); }
+      else if (idx === -1) lines.push(line);
+      setSetting('ai_moderation_rules', lines.join('\n'));
+      return { rules: lines, count: lines.length };
+    },
+  },
+  {
+    name: 'get_moderation_rules', group: 'read', label: 'Moderation rules', mutating: false,
+    description: 'Show the auto-moderation rule lines and thresholds.',
+    parameters: { type: 'object', properties: {}, additionalProperties: false },
+    summarize() { return 'Read the moderation rules.'; },
+    run() {
+      const lines = getSetting('ai_moderation_rules', '').split('\n').map((x) => x.trim()).filter(Boolean);
+      return { on: getSetting('ai_moderation_on', '0') === '1', approve_at: Number(getSetting('ai_moderation_approve_at', '75')), reject_at: Number(getSetting('ai_moderation_reject_at', '25')), rules: lines };
+    },
+  },
+  {
+    name: 'get_audit_log', group: 'read', label: 'Assistant audit log', mutating: false,
+    description: 'Recent assistant audit entries (chat turns, tool runs, moderation decisions). Filter by kind (tool|chat|moderation) or a search term.',
+    parameters: {
+      type: 'object',
+      properties: { kind: { type: 'string' }, q: { type: 'string' }, limit: { type: 'integer' } },
+      additionalProperties: false,
+    },
+    summarize() { return 'Read the audit log.'; },
+    run(args) {
+      const where = []; const p = [];
+      if (args.kind) { where.push('kind=?'); p.push(String(args.kind)); }
+      if (args.q) { where.push('(action LIKE ? OR payload LIKE ? OR result LIKE ?)'); const like = `%${String(args.q)}%`; p.push(like, like, like); }
+      const limit = Math.max(1, Math.min(100, int(args.limit, 20)));
+      const entries = rows(`SELECT id, kind, action, listing_id, ok, created_at, substr(payload,1,160) AS payload, substr(result,1,160) AS result FROM ai_audit_log${where.length ? ' WHERE ' + where.join(' AND ') : ''} ORDER BY id DESC LIMIT ${limit}`, ...p);
+      return { count: entries.length, total: countOf(`SELECT COUNT(*) c FROM ai_audit_log${where.length ? ' WHERE ' + where.join(' AND ') : ''}`, ...p), entries };
+    },
+  },
+  {
+    name: 'get_moderation_log', group: 'read', label: 'Moderation log', mutating: false,
+    description: 'Recent auto-moderation decisions (approve / reject / pending) with scores and reasons.',
+    parameters: { type: 'object', properties: { decision: { type: 'string' }, limit: { type: 'integer' } }, additionalProperties: false },
+    summarize() { return 'Read the moderation log.'; },
+    run(args) {
+      const limit = Math.max(1, Math.min(100, int(args.limit, 20)));
+      const where = args.decision ? ' WHERE m.decision=?' : '';
+      const entries = rows(`SELECT m.*, l.name AS listing_name FROM ai_moderation_log m LEFT JOIN listings l ON l.id=m.listing_id${where} ORDER BY m.id DESC LIMIT ${limit}`, ...(args.decision ? [String(args.decision)] : []));
+      return { count: entries.length, entries };
+    },
+  },
+  {
+    name: 'list_protection_rules', group: 'read', label: 'Blocked IPs & domains', mutating: false,
+    description: 'List the IP and domain block/allow rules and the rate limits (Admin → Protection).',
+    parameters: { type: 'object', properties: { list: { type: 'string', enum: ['ip', 'domain', 'all'] } }, additionalProperties: false },
+    summarize() { return 'Read the protection rules.'; },
+    run(args) {
+      const which = args.list || 'all';
+      const out = {};
+      if (which !== 'domain') out.ips = rows('SELECT id, value, kind, note, created_at FROM spam_ip ORDER BY id DESC LIMIT 100');
+      if (which !== 'ip') out.domains = rows('SELECT id, value, kind, note, created_at FROM spam_domain ORDER BY id DESC LIMIT 100');
+      out.limits = spam.limits ? spam.limits() : undefined;
+      return out;
+    },
+  },
+  {
+    name: 'list_mail_accounts', group: 'read', label: 'Mail accounts', mutating: false,
+    description: 'List configured SMTP/mail accounts (no passwords), the global From address and today\'s send counts.',
+    parameters: { type: 'object', properties: {}, additionalProperties: false },
+    summarize() { return 'Read the mail accounts.'; },
+    run() {
+      return {
+        from: getSetting('smtp_from', ''),
+        env_smtp: Boolean(process.env.SMTP_URL),
+        accounts: rows('SELECT id, provider, label, host, port, secure, username, daily_limit, sent_today, active FROM smtp_accounts ORDER BY id'),
+      };
+    },
+  },
+  {
+    name: 'list_api_keys', group: 'read', label: 'Developer API keys', mutating: false,
+    description: 'List developer API keys (prefix only, never the secret) with owner, usage and revocation state. Optionally filter by member.',
+    parameters: { type: 'object', properties: { user: { type: 'string' }, include_revoked: { type: 'boolean' } }, additionalProperties: false },
+    summarize() { return 'Read the API keys.'; },
+    run(args) {
+      const where = []; const p = [];
+      if (args.user) { const u = findUser(String(args.user)); if (!u) return { error: 'No such member.' }; where.push('k.user_id=?'); p.push(u.id); }
+      if (!args.include_revoked) where.push('k.revoked_at IS NULL');
+      const keys = rows(`SELECT k.id, k.label, k.prefix, k.created_at, k.last_used_at, k.revoked_at, k.total_requests, k.write_requests, u.email AS owner FROM api_keys k JOIN users u ON u.id=k.user_id${where.length ? ' WHERE ' + where.join(' AND ') : ''} ORDER BY k.id DESC LIMIT 100`, ...p);
+      return { count: keys.length, keys };
+    },
+  },
+  {
+    name: 'revoke_api_key', group: 'users', label: 'Revoke API key', mutating: true, sensitive: true,
+    description: 'Revoke one developer API key by id or prefix. Cannot be undone; the member must create a new key.',
+    parameters: { type: 'object', properties: { id_or_prefix: { type: 'string' } }, required: ['id_or_prefix'], additionalProperties: false },
+    summarize(a) { return `Revoke API key ${a.id_or_prefix}.`; },
+    run(args) {
+      const v = String(args.id_or_prefix);
+      const k = /^\d+$/.test(v) ? db.prepare('SELECT * FROM api_keys WHERE id=?').get(Number(v)) : db.prepare('SELECT * FROM api_keys WHERE prefix=?').get(v);
+      if (!k) return { error: 'No such API key.' };
+      if (k.revoked_at) return { error: 'That key is already revoked.' };
+      db.prepare("UPDATE api_keys SET revoked_at=datetime('now') WHERE id=?").run(k.id);
+      return { ok: true, id: k.id, prefix: k.prefix };
+    },
+  },
+  {
+    name: 'set_mail_keepalive', group: 'ops', label: 'Mail keep-alive', mutating: true,
+    description: 'Configure the SMTP keep-alive sweep that sends a tiny message through each mail account every N days so dormant accounts are not closed (on/off, days 1–90, recipient), or run it now with run=true.',
+    parameters: {
+      type: 'object',
+      properties: { on: { type: 'boolean' }, days: { type: 'integer' }, to: { type: 'string' }, run: { type: 'boolean' } },
+      additionalProperties: false,
+    },
+    summarize(a) { return a.run ? 'Run the mail keep-alive sweep now.' : `Set mail keep-alive${a.on !== undefined ? (a.on ? ' on' : ' off') : ''}${a.days ? ` every ${a.days} days` : ''}${a.to ? ` to ${a.to}` : ''}.`; },
+    async run(args) {
+      if (args.run) { const r = await mailer.keepAliveSweep(); return { ran: true, ...r }; }
+      const cur = mailer.keepAliveSettings();
+      if (args.on === undefined && !args.days && !args.to) return { error: 'Give on/off, days or a recipient.' };
+      mailer.saveKeepAliveSettings({ mail_keepalive_on: (args.on === undefined ? cur.on : args.on) ? '1' : '0', mail_keepalive_days: args.days || cur.days, mail_keepalive_to: args.to || cur.to });
+      return { ...mailer.keepAliveSettings() };
+    },
+  },
+  {
+    name: 'regenerate_indexnow_key', group: 'ops', label: 'Regenerate IndexNow key', mutating: true, sensitive: true,
+    description: 'Rotate the IndexNow key. The old key file URL stops validating immediately; search engines pick up the new one on the next ping.',
+    parameters: { type: 'object', properties: {}, additionalProperties: false },
+    summarize() { return 'Regenerate the IndexNow key.'; },
+    run() {
+      const key = require('crypto').randomBytes(16).toString('hex');
+      setSetting('indexnow_key', key);
+      return { ok: true, key_prefix: key.slice(0, 6) + '…', key_url: siteUrl(`/${key}.txt`) };
     },
   },
 ];

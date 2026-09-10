@@ -230,7 +230,7 @@ one-time code → authenticator or recovery code).
 | **Tickets** | Support threads with replies, status and auto-close rules |
 | **Email** | Compose to one member, a segment, or everyone |
 | **Blog** | Write, edit, publish — posts flow to `/blog`, the footer, RSS and the sitemap |
-| **AI Playground** | An assistant that runs real console actions (113 tools — the whole admin surface) behind confirmations, with 20 sensitive actions locked to always-confirm, on any of 18 model providers. **Any selected model executes admin queries for real**: if the picked model has no tool calling, the action transparently runs on a tool-capable model (same provider first, then another configured one) and the reply names the model that ran. **Any phrasing works**: casual wording (“make acme live”, “kill that spam listing”) resolves to the real console tool — if a model answers in plain text without acting, the server re-asks once with forced tool choice, quoting the request. A reply that executed nothing is stamped “No console action ran in this turn”, so the assistant can never report a change that did not happen |
+| **AI Playground** | A rule-based admin assistant (no model, no API key) that understands the whole console — 129 tools behind confirmations, pronoun memory, disambiguation and quick replies — plus rule-based auto-moderation of new listings and full audit logs. |
 | **Inbox / Search** | Admin notifications; global search across users, listings, tickets, claims and posts |
 | **Settings** | Moderation and indexing switches, IndexNow key, Google Indexing API, **automated upkeep**, console 2FA, SMTP providers, environment view |
 
@@ -393,9 +393,8 @@ rather than a broken one. Deployment, systemd, Caddy and backup routines live in
 
 | Suite | Proves |
 |---|---|
-| **AI admin tools** | all 113 assistant tools really change the database, and sensitive ones can never be auto-run |
-| **AI agent loop** | chaining, batched confirmation, cancellation, honest failures (model stubbed) |
-| **AI model providers** | Groq / OpenAI / Claude / Gemini / DeepSeek / Hugging Face / OpenRouter + 11 more: wire formats, key resolution, switching, fallback, rate limits, console UI |
+| **AI admin tools** | all 129 assistant tools really change the database, and sensitive ones can never be auto-run |
+| **AI admin assistant** | intent understanding, slot filling, pronoun memory, disambiguation, confirm/cancel flows, audit logging, rule-based auto-moderation |
 | **Backup round trip** | `.firmledger` export and restore into an empty database |
 | **Admin pages** | every console page renders; long lists scroll in place |
 | **Admin technology refresh** | technology radar maintenance end to end |

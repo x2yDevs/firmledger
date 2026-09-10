@@ -59,6 +59,17 @@ app.set('views', path.join(__dirname, 'views'));
 app.use(compression());
 app.use(express.urlencoded({ extended: true, limit: '200kb' }));
 app.use(express.json({ limit: '200kb' }));
+/* Body-parser failures (malformed JSON, oversized payloads) happen before the
+   session middleware runs, so answer them here — JSON for API-style callers,
+   a plain 4xx otherwise — instead of letting them fall into the 500 page. */
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  if (!err || (err.type !== 'entity.parse.failed' && err.type !== 'entity.too.large' && err.type !== 'encoding.unsupported' && !(err instanceof SyntaxError && 'body' in err))) return next(err);
+  const status = err.type === 'entity.too.large' ? 413 : 400;
+  const wantsJson = /application\/json/.test(String(req.headers.accept || '')) || /application\/json/.test(String(req.headers['content-type'] || ''));
+  if (wantsJson) return res.status(status).json({ ok: false, error: status === 413 ? 'Request body too large.' : 'Malformed request body.' });
+  return res.status(status).type('text').send(status === 413 ? 'Request body too large.' : 'Malformed request body.');
+});
 app.use(cookieParser());
 
 /* Search-index guard: a box that isn't reachable at its own BASE_URL (unset value,
@@ -192,11 +203,19 @@ app.use((req, res) => {
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
   console.error('[error]', err);
+  if (res.headersSent) return;
+  const wantsJson = /application\/json/.test(String(req.headers.accept || '')) || /application\/json/.test(String(req.headers['content-type'] || ''));
+  if (wantsJson) return res.status(500).json({ ok: false, error: 'Unexpected error.' });
+  /* The error page needs the session locals; if the failure happened before
+     they were set, fall back to a plain response rather than a second crash. */
   res.status(500).render('error', {
     meta: { title: 'Something went wrong — FirmLedger', description: '', robots: 'noindex' },
     code: 500,
     heading: 'Something went wrong',
     message: 'An unexpected error occurred. Our team has been notified.',
+  }, (renderErr, html) => {
+    if (renderErr) return res.type('text').send('Something went wrong.');
+    res.send(html);
   });
 });
 
@@ -226,17 +245,6 @@ function hourlyJobs() {
      custom) that has been idle past the window pings admin@firmledger.co.ke
      automatically, so vendors never close the account for inactivity. */
   try { require('./src/lib/mailer').keepAliveSweep().catch((e) => console.error('[mail-keepalive]', e && e.message)); } catch (e) { console.error('[mail-keepalive]', e.message); }
-  /* AI model catalogs — refresh any provider whose live /models snapshot is
-     older than the gateway TTL, so newly released models appear and removed
-     ones drop to unavailable without any clicks. Stale-only, best-effort. */
-  try {
-    require('./src/lib/llm').syncAllProviders({ onlyStale: true })
-      .then((results) => {
-        const synced = results.filter((r) => !r.skipped && !r.error);
-        if (synced.length) console.log(`[llm] auto-synced ${synced.length} model catalog(s): ${synced.map((r) => `${r.provider} (${r.count})`).join(', ')}`);
-      })
-      .catch((e) => console.error('[llm] catalog auto-sync failed:', e && e.message));
-  } catch (e) { console.error('[llm] catalog auto-sync failed:', e.message); }
 }
 setInterval(hourlyJobs, 3600e3);
 setTimeout(hourlyJobs, 90e3);

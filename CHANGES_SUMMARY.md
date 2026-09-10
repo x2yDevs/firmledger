@@ -1,3 +1,98 @@
+## 2026-09-10 (production audit) — Every admin action verified through chat
+
+**Route audit.** Every admin route was compared against the assistant's tool list;
+two genuine gaps were closed: `set_mail_keepalive` (Email → keep-alive on/off,
+cadence, recipient, run now) and `regenerate_indexnow_key` (Indexing → rotate key).
+129 tools total, all reachable from plain language.
+
+**Understanding fixes.** Trailing reasons ("… because the domain is dead") are
+captured as a slot instead of polluting the target; quoted text and message bodies
+are never split on "and"/"then"; "link A with B as partner" works; API-key prefixes
+are picked out of prose; "bulk/mass" no longer implies "all".
+
+**Bugs found and fixed by the new suites.**
+- `runPlans` crashed (TypeError) when a message mixed unparseable fragments with a
+  clarifying question — e.g. SQL-looking garbage like `'; DROP TABLE listings; --`.
+  Fragments are now filtered before running.
+- Malformed JSON / oversized bodies on any route returned a 500 page that itself
+  crashed (`error.ejs` rendered before session locals existed). Body-parser errors
+  now answer 400/413 (JSON for API callers), and the 500 handler is
+  render-failure-safe.
+
+**Tests.** Two new suites in `npm test`: `ai-e2e` (147 checks — every mutating and
+read tool driven through `chatTurn` in plain language and verified by DB rows) and
+`ai-http` (38 checks — real server: session + CSRF, chat→execute→cancel contract,
+hostile input never executes or 500s, audit rows, 50-turn latency budget, 20-way
+concurrency, no leaked pending proposals). `ai-tools` 193, `ai-assistant` 55.
+
+## 2026-09-10 (later) — Assistant covers the whole console; more templates
+
+**10 new console tools** (127 at the time, all wired to the assistant): `review_listing_now`
+(rule-based review or dry-run score of one listing), `set_moderation_thresholds`,
+`edit_moderation_rules` (block/flag/allow-domain lines), `get_moderation_rules`,
+`get_audit_log`, `get_moderation_log`, `list_protection_rules` (IP/domain rules +
+rate limits), `list_mail_accounts`, `list_api_keys`, `revoke_api_key` (sensitive).
+
+**Understanding.** ~120 new phrases ("what's pending", "briefing", "is everything
+up", "what did I just do", "whitelist 8.8.8.8", "who owns…", "top 5…", "this
+month", "never mind", "post a job", "make listing 2 live", "review it" …),
+contractions expanded, bare plural queries ("pending listings", "listings in
+Fintech", "listings from Kenya", "sponsored listings"), explicit id lists
+("approve listings 1 2 3" → bulk), category lookup by partial name, domain / IP
+protected as single tokens, `clear`/`live`/`review` no longer collide with
+approve/pending. Honest "console-only" answers for restore-backup, 2FA
+enrollment, sign-everyone-out and default trial length.
+
+**Templates.** New formatters for health, global search, audit log, moderation
+log/rules, protection rules, mail accounts, API keys and the review score; a
+"briefing" template that lists what needs attention; more phrasing variants for
+receipts, confirmations, cancellations and empty results; sensitive proposals
+get their own wording plus a one-line impact note ("They are signed out and
+cannot log in until unsuspended…"). Help topics added for moderation, audit,
+protection, mail, backup and briefing. Extra starter chips in the chat pane.
+
+**Tests.** `ai-tools` 191 checks (all 127 tools exercised), `ai-assistant` 50.
+
+## 2026-09-10 — AI Playground: rule-based assistant, no models, no API keys
+
+**Model/provider layer removed.** `src/lib/llm.js`, `src/lib/groq.js`, every
+provider preset, API-key storage and the "Model providers" settings block are
+gone. The `.env.example` provider section is replaced by a note. Nothing in the
+admin area calls an external AI service any more, and there is no local model.
+
+**Listing generator removed** from Admin → AI Playground (tab, route and
+`generateListing`/`publishListing`).
+
+**Email → "Rephrase with AI" removed** (`POST /admin3119Musa/email/rephrase`,
+the button and its script).
+
+**New admin assistant — `src/lib/assistant.js` (rule engine).** Replaces the
+LLM agent behind the same chat UI and keeps the full 117-tool registry
+(`aitools*.js`). Techniques: input normalisation + stemming + one-edit typo
+repair, phrase/synonym expansion, ~150 ordered regex intents with resolvers,
+slot extraction (ids, slugs, emails, ticket refs, IPs, domains, dates,
+percentages, "N uses", quoted/`saying:` payloads, key=value pairs, ordinals,
+recency phrases), name lookup with disambiguation ("which one? 1. … 2. …"),
+multi-turn context carried in a hidden marker (pronouns "it/them/their" resolve
+to the last listing/member/ticket), slot-filling questions with a state
+machine that a fresh command can always escape, compound sentences
+("approve 1 and then feature it"), confirmation for every write (typed
+yes/no or buttons; sensitive writes always confirm), personalised receipts,
+varied phrasing, proactive next-step quick replies, honest recovery with
+"did you mean" suggestions, and audit rows for every turn and action.
+
+**Auto-moderation is rule-based.** `scoreListing()` scores 0–100 from the
+listing's own fields plus admin-editable rules (`block:`, `flag:`,
+`allow-domain:`) and thresholds; approve / hold / reject with reasons in the
+moderation log. Runs in the background on new submissions as before.
+
+**Tools.** `list_listings` gained an `owner` filter; `list_users`,
+`list_tickets`, `get_ticket` added; `get_ai_playground` reports the engine.
+
+**Tests.** `tests/ai-agent.test.js`, `ai-playground.test.js` and
+`ai-providers.test.js` replaced by `tests/ai-assistant.test.js` (38 checks);
+`ai-tools` updated (178 checks). `npm run test:ai` runs both.
+
 # FirmLedger — change summary
 
 ## 2026-09-09 — Trial countdown emails + in-app reminders, console scroll audit, email AI rephrase hardening
