@@ -1,3 +1,43 @@
+## 2026-09-10 — AI Playground: rule-based assistant, no models, no API keys
+
+**Model/provider layer removed.** `src/lib/llm.js`, `src/lib/groq.js`, every
+provider preset, API-key storage and the "Model providers" settings block are
+gone. The `.env.example` provider section is replaced by a note. Nothing in the
+admin area calls an external AI service any more, and there is no local model.
+
+**Listing generator removed** from Admin → AI Playground (tab, route and
+`generateListing`/`publishListing`).
+
+**Email → "Rephrase with AI" removed** (`POST /admin3119Musa/email/rephrase`,
+the button and its script).
+
+**New admin assistant — `src/lib/assistant.js` (rule engine).** Replaces the
+LLM agent behind the same chat UI and keeps the full 117-tool registry
+(`aitools*.js`). Techniques: input normalisation + stemming + one-edit typo
+repair, phrase/synonym expansion, ~150 ordered regex intents with resolvers,
+slot extraction (ids, slugs, emails, ticket refs, IPs, domains, dates,
+percentages, "N uses", quoted/`saying:` payloads, key=value pairs, ordinals,
+recency phrases), name lookup with disambiguation ("which one? 1. … 2. …"),
+multi-turn context carried in a hidden marker (pronouns "it/them/their" resolve
+to the last listing/member/ticket), slot-filling questions with a state
+machine that a fresh command can always escape, compound sentences
+("approve 1 and then feature it"), confirmation for every write (typed
+yes/no or buttons; sensitive writes always confirm), personalised receipts,
+varied phrasing, proactive next-step quick replies, honest recovery with
+"did you mean" suggestions, and audit rows for every turn and action.
+
+**Auto-moderation is rule-based.** `scoreListing()` scores 0–100 from the
+listing's own fields plus admin-editable rules (`block:`, `flag:`,
+`allow-domain:`) and thresholds; approve / hold / reject with reasons in the
+moderation log. Runs in the background on new submissions as before.
+
+**Tools.** `list_listings` gained an `owner` filter; `list_users`,
+`list_tickets`, `get_ticket` added; `get_ai_playground` reports the engine.
+
+**Tests.** `tests/ai-agent.test.js`, `ai-playground.test.js` and
+`ai-providers.test.js` replaced by `tests/ai-assistant.test.js` (38 checks);
+`ai-tools` updated (178 checks). `npm run test:ai` runs both.
+
 # FirmLedger — change summary
 
 ## 2026-09-09 — Trial countdown emails + in-app reminders, console scroll audit, email AI rephrase hardening

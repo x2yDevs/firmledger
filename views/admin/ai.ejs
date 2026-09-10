@@ -1,67 +1,38 @@
 <%- include('../partials/top') %>
 <%- include('../partials/adminnav') %>
 
-<%
-  const ready = Boolean(settings.groq_configured);
-  const offAttr = ready ? '' : ' disabled';
-  const tierLabel = { production: 'Production', preview: 'Preview', legacy: 'Legacy', live: 'Live', retired: 'Retired' };
-  const chatTitle = 'Admin assistant';
-%>
-
 <section class="section-tight ai-page">
   <div class="container">
     <div class="section-head">
       <div>
-        <p class="klabel">Admin · AI</p>
+        <p class="klabel">Admin · Assistant</p>
         <h2>AI Playground</h2>
-        <p class="muted ai-lede">Draft listings from a brief, run the admin assistant against real console actions, and let the model pre-screen new submissions. Reads run immediately; writes ask first unless you allow them under Settings — and sensitive actions always ask. Bring your own key from any supported provider; it never leaves this server.</p>
+        <p class="muted ai-lede">Run the whole console from plain language. The assistant is a rule engine that lives on this server — no model, no API key, nothing leaves the machine. Lookups run at once; writes ask first unless you allow them under Settings, and sensitive actions always ask. Auto-moderation scores new listings the same way: deterministically, with reasons.</p>
       </div>
       <div class="ai-status-row">
-        <% if (ready) { %>
-          <span class="pill pill-approved"><%= settings.provider_label %> ready · <%= settings.groq_key_source === 'env' ? '.env' : 'saved key' %></span>
-        <% } else { %>
-          <span class="pill pill-rejected"><%= settings.provider_label %> key missing</span>
-        <% } %>
+        <span class="pill pill-approved">No model · no API · offline</span>
         <% if (settings.moderation_on) { %>
           <span class="pill pill-approved">Auto-moderation on</span>
         <% } else { %>
           <span class="pill pill-pending">Auto-moderation off</span>
         <% } %>
-        <button class="btn btn-ghost btn-sm" type="button" id="test-key-btn">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>
-          Check key &amp; sync models
-        </button>
         <a class="btn btn-ghost btn-sm" href="/admin3119Musa/listings?status=pending">Review queue</a>
       </div>
     </div>
 
     <div class="ai-keyline">
-      <span class="ai-keyline-item"><span class="ai-keyline-k">Provider</span> <b><%= settings.provider_label %></b> <small class="muted">(<%= settings.providers_configured.length %> keyed)</small></span>
-      <span class="ai-keyline-item"><span class="ai-keyline-k">Model</span> <b class="mono"><%= settings.groq_model %></b></span>
-      <span class="ai-keyline-item"><span class="ai-keyline-k">Key</span> <b class="mono"><%= settings.groq_key_hint || 'none' %></b></span>
+      <span class="ai-keyline-item"><span class="ai-keyline-k">Engine</span> <b>rule-based</b> <small class="muted">(intents · slots · context)</small></span>
+      <span class="ai-keyline-item"><span class="ai-keyline-k">Console actions</span> <b><%= (settings.tools || []).length %></b></span>
+      <span class="ai-keyline-item"><span class="ai-keyline-k">Auto-run</span> <b><%= (settings.auto_tools || []).length %></b> <small class="muted">write actions without confirm</small></span>
       <span class="ai-keyline-item"><span class="ai-keyline-k">Assistant</span> <b>stateless · no saved history</b></span>
-      <span class="ai-keyline-item"><span class="ai-keyline-k">Pending writes</span> <b><%= settings.pending_actions %></b></span>
-      <span class="ai-keyline-item ai-keyline-live"><span class="ai-keyline-k">Models seen</span>
-        <b><%= settings.live_models.length ? settings.live_models.length + ' on this key' : 'not checked yet' %></b>
-        <% if (settings.live_checked_at) { %><small class="muted"> · <%= settings.live_checked_at.slice(0, 16) %> UTC</small><% } %>
-      </span>
+      <span class="ai-keyline-item ai-keyline-live"><span class="ai-keyline-k">Pending writes</span> <b><%= settings.pending_actions %></b></span>
     </div>
 
-    <% var activeProviderView = (settings.providers || []).find(function (p) { return p.active; }); %>
-    <% if (activeProviderView && activeProviderView.retired) { %>
-      <div class="alert alert-warn"><%= activeProviderView.retired_note || settings.provider_label + ' is retired.' %> Choose another provider under <b>Settings → Model providers</b>; existing keys and settings are retained for migration.</div>
-    <% } else if (!ready) { %>
-      <div class="alert alert-warn"><%= settings.provider_label %> has no key. Open <b>Settings → Model providers</b> below, paste a key for <%= settings.provider_label %> (or pick another provider you already have a key for), press <b>Save settings</b>, then <b>Test &amp; sync</b>. Environment variables such as <code>GROQ_API_KEY</code>, <code>OPENAI_API_KEY</code>, <code>ANTHROPIC_API_KEY</code> or <code>GEMINI_API_KEY</code> work too and always win.</div>
-    <% } %>
     <% if (ok) { %><div class="alert alert-ok" role="status"><%= ok %></div><% } %>
     <% if (err) { %><div class="alert alert-err" role="alert"><%= err %></div><% } %>
 
     <div class="ai-tabs" role="tablist" aria-label="AI Playground sections">
-      <button type="button" class="ai-tab active" data-tab="gen" role="tab" aria-selected="true" aria-controls="pane-gen">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v3M12 18v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M3 12h3M18 12h3M4.9 19.1 7 17M17 7l2.1-2.1"/><circle cx="12" cy="12" r="3.4"/></svg>
-        Listing generator
-      </button>
-      <button type="button" class="ai-tab" data-tab="chat" role="tab" aria-selected="false" aria-controls="pane-chat">
+      <button type="button" class="ai-tab active" data-tab="chat" role="tab" aria-selected="true" aria-controls="pane-chat">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
         Admin assistant
         <% if (settings.pending_actions) { %><span class="ai-tab-badge"><%= settings.pending_actions %></span><% } %>
@@ -72,118 +43,20 @@
       </button>
     </div>
 
-    <!-- ================= Listing generator ================= -->
-    <div class="ai-pane is-on" data-pane="gen" id="pane-gen" role="tabpanel" aria-label="Listing generator">
-      <div class="ai-gen-grid">
-        <div class="form-card ai-card ai-card-tight ai-gen-brief">
-          <div class="ai-card-head">
-            <h3 class="form-section">Brief</h3>
-            <div class="ai-card-head-actions">
-              <label class="ai-inline-select"><span class="sr-only">Model for this draft</span>
-                <select id="gen-model" class="ai-model-select">
-                  <% settings.models.forEach(function (m) { %>
-                    <option value="<%= m.id %>" <%= settings.groq_model === m.id ? 'selected' : '' %>><%= m.label %><%= m.available === false ? ' · not on this key' : '' %></option>
-                  <% }) %>
-                </select>
-              </label>
-            </div>
-          </div>
-          <p class="muted ai-card-note">Describe a business (name, website, a snippet). The draft respects the public API field limits — nothing is published until you review and save.</p>
-          <label class="ai-prompt-label"><span>Prompt <span class="count" id="c-prompt">0 / 4000</span></span>
-            <textarea id="gen-prompt" class="ai-prompt-input" rows="12" maxlength="4000" placeholder="e.g. Acme Cold Chain Ltd, acmecold.co.ke — refrigerated freight between Mombasa and Kampala for horticulture exporters, founded 2019, ~40 staff, Nairobi."<%= offAttr %>></textarea>
-          </label>
-          <div class="ai-chips" role="group" aria-label="Example briefs">
-            <button type="button" class="ai-chip" data-seed="Northwind Analytics, northwind.co.ke — self-service BI dashboards for SACCOs and MFIs in Kenya, founded 2021, 12 staff, Nairobi.">Analytics SaaS</button>
-            <button type="button" class="ai-chip" data-seed="Acme Cold Chain Ltd, acmecold.co.ke — refrigerated freight between Mombasa and Kampala for horticulture exporters, founded 2019, about 40 staff, Nairobi.">Cold-chain logistics</button>
-            <button type="button" class="ai-chip" data-seed="Rift Valley Fabrication Ltd — steel fabrication and agricultural implements for smallholder co-operatives, Eldoret, founded 2016, 60 staff.">Manufacturer</button>
-            <button type="button" class="ai-chip" data-seed="Ubora Studio — brand and product design studio in Nairobi, founded 2022, 5 people, works with fintech and health clients.">Design studio</button>
-          </div>
-          <div class="form-actions">
-            <button class="btn btn-primary" type="button" id="gen-btn"<%= offAttr %>>Generate draft</button>
-            <button class="btn btn-ghost" type="button" id="gen-clear">Clear</button>
-            <span class="muted ai-status" id="gen-status" role="status"></span>
-          </div>
-        </div>
-
-        <form id="gen-form" class="form form-card ai-card ai-card-tight" hidden>
-          <div class="ai-card-head">
-            <h3 class="form-section">Review draft</h3>
-            <span class="pill" id="gen-model-pill" hidden></span>
-          </div>
-          <p class="muted ai-card-note">Edit anything that looks off. Save creates a <b>pending</b> listing, exactly like Admin → Listings → New. The assistant never publishes on its own.</p>
-          <div id="gen-errors" class="alert alert-err" hidden></div>
-          <label><span>Name * <small>2–60</small> <span class="count" id="c-name"></span></span>
-            <input type="text" name="name" id="f-name" required minlength="2" maxlength="60">
-          </label>
-          <label><span>Tagline * <small>20–90, one sentence</small> <span class="count" id="c-tagline"></span></span>
-            <input type="text" name="tagline" id="f-tagline" required minlength="20" maxlength="90">
-          </label>
-          <label><span>Description * <small>100–1200</small> <span class="count" id="c-desc"></span></span>
-            <textarea name="description" id="f-description" rows="7" required minlength="100" maxlength="1200"></textarea>
-          </label>
-          <div class="grid-2">
-            <label><span>Type *</span>
-              <select name="type" id="f-type" required>
-                <% TYPES.forEach(function (t) { %><option value="<%= t.value %>"><%= t.label %></option><% }) %>
-              </select>
-            </label>
-            <label><span>Category *</span>
-              <input type="text" name="category" id="f-category" list="catlist" required maxlength="40" autocomplete="off">
-            </label>
-          </div>
-          <datalist id="catlist"><% allCats.forEach(function (c) { %><option value="<%= c.name %>"><% }) %></datalist>
-          <div class="grid-2">
-            <label><span>Website *</span><input type="url" name="website" id="f-website" required placeholder="https://"></label>
-            <label><span>Country *</span><input type="text" name="country" id="f-country" list="ctlist" required maxlength="60"></label>
-          </div>
-          <datalist id="ctlist"><% COUNTRIES.forEach(function (c) { %><option value="<%= c %>"><% }) %></datalist>
-          <div class="grid-3">
-            <label><span>Founded</span><input type="text" name="founded" id="f-founded" maxlength="12" placeholder="2019"></label>
-            <label><span>City</span><input type="text" name="city" id="f-city" maxlength="80"></label>
-            <label><span>Team size</span>
-              <select name="size" id="f-size">
-                <option value="">—</option>
-                <% SIZES.forEach(function (s) { %><option value="<%= s %>"><%= s %></option><% }) %>
-              </select>
-            </label>
-          </div>
-          <div class="grid-2">
-            <label><span>Tags</span><input type="text" name="tags" id="f-tags" maxlength="160" placeholder="logistics, cold-chain"></label>
-            <label><span>Public email</span><input type="email" name="email" id="f-email" maxlength="190"></label>
-          </div>
-          <div class="form-actions">
-            <button class="btn btn-primary" type="submit" id="save-btn">Save listing (pending)</button>
-            <button class="btn btn-ghost" type="button" id="gen-redo">Regenerate</button>
-            <button class="btn btn-ghost" type="button" id="gen-discard">Discard</button>
-            <span class="muted ai-status" id="save-status" role="status"></span>
-          </div>
-          <p class="fine-print">Saved listings enter the review queue. With AI auto-moderation on, the selected model approves, rejects, or leaves them pending in the background.</p>
-        </form>
-      </div>
-    </div>
-
     <!-- ================= Assistant ================= -->
-    <div class="ai-pane" data-pane="chat" id="pane-chat" role="tabpanel" aria-label="Admin assistant">
+    <div class="ai-pane is-on" data-pane="chat" id="pane-chat" role="tabpanel" aria-label="Admin assistant">
       <div class="chat-window ai-chat" id="ai-chat">
         <header class="chat-head">
-          <div class="chat-head-avatar" aria-hidden="true">AI</div>
+          <div class="chat-head-avatar" aria-hidden="true">FL</div>
           <div class="chat-head-meta">
-            <div class="chat-head-name" id="chat-head-title"><%= chatTitle %></div>
+            <div class="chat-head-name" id="chat-head-title">Admin assistant</div>
             <div class="chat-head-sub">
-              <span class="ai-live-dot <%= ready ? 'is-on' : 'is-off' %>" aria-hidden="true"></span>
-              <span id="chat-head-sub"><%= ready ? 'Live · ' + settings.provider_label + ' · ' + settings.groq_model : settings.provider_label + ' key required' %> · writes confirm first</span>
+              <span class="ai-live-dot is-on" aria-hidden="true"></span>
+              <span id="chat-head-sub">Online · rule engine · no model · writes confirm first</span>
             </div>
           </div>
           <div class="chat-head-actions">
-            <label class="chat-model-pick">
-              <span class="sr-only">Model for this assistant</span>
-              <select id="chat-model" title="Model for this assistant">
-                <% settings.models.forEach(function (m) { %>
-                  <option value="<%= m.id %>" <%= settings.groq_model === m.id ? 'selected' : '' %>><%= m.label %><%= m.available === false ? ' · not on this key' : '' %></option>
-                <% }) %>
-              </select>
-            </label>
-            <button class="btn btn-sm btn-ghost" type="button" id="new-chat-btn"<%= offAttr %> title="Clear the current assistant conversation">
+            <button class="btn btn-sm btn-ghost" type="button" id="new-chat-btn" title="Clear the current assistant conversation">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
               Clear chat
             </button>
@@ -198,31 +71,34 @@
               <div class="wa-row wa-theirs">
                 <div class="wa-bubble">
                   <div class="wa-who">Assistant</div>
-                  <div class="wa-text">Ask in plain language. I can run the same actions as the rest of this console — listings, users, billing, tickets, claims, blog, email, protection, status, and more. Lookups run immediately; writes show a confirmation first unless you auto-allow them in Settings. Chat history is not saved.</div>
+                  <div class="wa-text">Hi — ask in plain language. I can read and act on everything in this console: listings, members, billing, claims, tickets, removals, blog, news, careers, promos, plans, categories, advertising, email, indexing, upkeep, status page, protection, inbox, backups and settings. Follow-ups like “approve it” or “email them” work. Lookups run immediately; writes show a confirmation first unless you auto-allow them in Settings.</div>
                 </div>
               </div>
               <div class="ai-starters" role="group" aria-label="Starter prompts">
-                <button type="button" class="ai-starter" data-prompt="How many listings are pending right now?">Pending count</button>
-                <button type="button" class="ai-starter" data-prompt="Summarise this week's signups and any suspended accounts.">Weekly signup summary</button>
-                <button type="button" class="ai-starter" data-prompt="List the newest pending listings with their domains.">Newest pending</button>
-                <button type="button" class="ai-starter" data-prompt="Are there open incidents on the status page?">Incident check</button>
+                <button type="button" class="ai-starter" data-prompt="how many pending">How many pending?</button>
+                <button type="button" class="ai-starter" data-prompt="show pending listings">Pending listings</button>
+                <button type="button" class="ai-starter" data-prompt="show open tickets">Open tickets</button>
+                <button type="button" class="ai-starter" data-prompt="new signups this week">Signups this week</button>
+                <button type="button" class="ai-starter" data-prompt="status page">Status page</button>
+                <button type="button" class="ai-starter" data-prompt="show revenue">Revenue</button>
+                <button type="button" class="ai-starter" data-prompt="help">What can you do?</button>
               </div>
             </div>
 
             <div class="chat-status-line" id="chat-status" role="status"></div>
-            <p class="composer-hint" id="chat-model-note" hidden><b>No tool calling on this model</b> — console actions will still run for real on a tool-capable model instead; each reply names the model that ran.</p>
+            <div class="ai-quick" id="chat-quick" role="group" aria-label="Quick replies" hidden></div>
 
             <form class="chat-composer" id="chat-form">
               <div class="composer-box">
                 <label class="sr-only" for="chat-input">Message the admin assistant</label>
-                <textarea id="chat-input" rows="1" maxlength="4000" placeholder="<%= ready ? 'e.g. How many listings are pending?' : 'Add a model provider key in Settings to use the assistant' %>"<%= offAttr %>></textarea>
+                <textarea id="chat-input" rows="1" maxlength="4000" placeholder="e.g. approve acme and feature it · suspend bob@x.com · reply to FL-1A2B saying: on it"></textarea>
                 <span class="composer-count" id="chat-count">0 / 4000</span>
               </div>
-              <button class="composer-send" id="chat-send" type="submit" aria-label="Send message"<%= offAttr %>>
+              <button class="composer-send" id="chat-send" type="submit" aria-label="Send message">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2 11 13"/><path d="M22 2 15 22 11 13 2 9 22 2z"/></svg>
               </button>
             </form>
-            <p class="composer-hint">Enter sends · Shift+Enter for a new line · this assistant does not save chat history</p>
+            <p class="composer-hint">Enter sends · Shift+Enter for a new line · ↑ recalls your last message · nothing is stored server-side</p>
           </div>
         </div>
       </div>
@@ -233,135 +109,29 @@
       <div class="ai-set-grid" id="ai-settings">
         <form method="post" action="/admin3119Musa/ai/settings" class="form form-card ai-card ai-card-tight ai-set-main">
           <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-          <h3 class="form-section">Model providers</h3>
-          <p class="muted ai-card-note">Choose the service that runs the admin assistant, the listing generator and auto-moderation — and paste keys for as many providers as you like. Providers without a key stay dormant. An environment variable (<code>GROQ_API_KEY</code>, <code>OPENAI_API_KEY</code>, <code>ANTHROPIC_API_KEY</code>, …) always wins over a saved key. Only a masked hint is ever shown; a key is never sent back to the browser.</p>
-
-          <% var ap = settings.providers.filter(function (p) { return p.active; })[0] || settings.providers[0]; %>
-          <div class="ai-prov-picker">
-            <label class="ai-prov-select-field"><span>Provider</span>
-              <select id="prov-select" aria-controls="prov-config">
-                <% settings.providers.forEach(function (p) { %>
-                  <option value="<%= p.id %>" <%= p.active ? 'selected' : '' %>><%= p.label %><%= p.retired ? ' · retired' : '' %><%
-                    if (p.active) { %> — in use<%
-                    } else if (p.key_source === 'env') { %> — .env key<%
-                    } else if (p.key_set) { %> — key saved<%
-                    } else if (!p.needs_key) { %> — no key needed<%
-                    } else { %> — no key<% } %></option>
-                <% }) %>
-              </select>
-              <small class="muted ai-field-note">Pick a provider to configure it below. Saving switches the whole console to the chosen provider.</small>
-            </label>
-            <input type="hidden" name="llm_provider" id="llm-provider-input" value="<%= ap.id %>">
-          </div>
-
-          <div class="ai-prov-card ai-prov-config is-active<%= ap.configured ? ' is-ready' : '' %>" id="prov-config" data-prov="<%= ap.id %>">
-            <div class="ai-prov-config-head">
-              <span class="ai-prov-name" id="prov-cfg-name"><%= ap.label %></span>
-              <em class="ai-prov-badge on" id="prov-cfg-active"<%= ap.active ? '' : ' hidden' %>>in use</em>
-              <em class="ai-prov-badge env" id="prov-cfg-pending" hidden>selected — save to switch</em>
-              <% if (ap.key_source === 'env') { %><em class="ai-prov-badge env" id="prov-cfg-badge">.env</em>
-              <% } else if (ap.key_set) { %><em class="ai-prov-badge saved" id="prov-cfg-badge">key saved</em>
-              <% } else if (!ap.needs_key) { %><em class="ai-prov-badge saved" id="prov-cfg-badge">no key needed</em>
-              <% } else { %><em class="ai-prov-badge off" id="prov-cfg-badge">no key</em><% } %>
-            </div>
-            <p class="ai-prov-blurb" id="prov-cfg-blurb"><%= ap.blurb %></p>
-            <div class="alert alert-warn" id="prov-cfg-retired"<%= ap.retired ? '' : ' hidden' %>><%= ap.retired_note || '' %></div>
-
-            <label class="ai-prov-field"><span>API key</span>
-              <input type="password" name="llm_key_<%= ap.id %>" id="prov-cfg-key" autocomplete="new-password" spellcheck="false"
-                     placeholder="<%= ap.key_placeholder %>" data-prov-key="<%= ap.id %>"
-                     <%= ap.key_source === 'env' ? 'disabled' : '' %>>
-              <small class="muted ai-field-note" id="prov-cfg-hint" data-prov-hint="<%= ap.id %>">
-                <% if (ap.key_source === 'env') { %>✓ from <code><%= ap.env[0] %></code> — rotate it there
-                <% } else if (ap.key_set) { %>✓ saved (<%= ap.key_hint %>) — paste a new one to rotate
-                <% } else { %>not saved yet<% } %>
-              </small>
-            </label>
-
-            <label class="check ai-clear-key" id="prov-cfg-clear-wrap"<%= (ap.key_set && ap.key_source !== 'env' && ap.needs_key) ? '' : ' hidden' %>>
-              <input type="checkbox" name="llm_key_<%= ap.id %>_clear" id="prov-cfg-clear" value="1"><span>Clear this saved key (rotate it at the provider first)</span>
-            </label>
-
-            <label class="ai-prov-field ai-prov-adv"><span>Endpoint <small class="muted">optional override</small></span>
-              <input type="text" name="llm_base_<%= ap.id %>" id="prov-cfg-base" value="<%= ap.base_url %>" placeholder="<%= ap.default_base %>" spellcheck="false" autocomplete="off">
-            </label>
-
-            <div class="ai-prov-foot">
-              <button class="btn btn-xs btn-ghost" type="button" id="prov-cfg-test" data-test-prov="<%= ap.id %>">Test &amp; sync</button>
-              <a class="ai-prov-link" id="prov-cfg-getkey" href="<%= ap.keys_url || '#' %>" target="_blank" rel="noopener"<%= ap.keys_url ? '' : ' hidden' %>>Get a key ↗</a>
-              <span class="muted ai-prov-status" id="prov-cfg-status" data-prov-status="<%= ap.id %>" role="status"><%= ap.live_models.length ? ap.live_models.length + ' ids seen' : '' %></span>
-            </div>
-          </div>
-          <p class="fine-print">Testing uses the key that is already saved (or the one in <code>.env</code>) — press <b>Save settings</b> after pasting a new key, then <b>Test &amp; sync</b>.</p>
-
-          <h4 class="form-section form-section-sm">Default model — <span id="prov-model-owner"><%= settings.provider_label %></span></h4>
-          <div class="grid-2">
-            <label><span>Model used by the assistant, generator and moderation</span>
-              <select name="llm_model_<%= settings.provider %>" id="set-model">
-                <% settings.models.forEach(function (m) { %><option value="<%= m.id %>" <%= settings.groq_model === m.id ? 'selected' : '' %> <%= m.available === false ? 'disabled' : '' %>><%= m.label %></option><% }) %>
-              </select>
-              <small class="muted ai-field-note" id="set-model-note">Selected model: <span class="mono"><%= settings.groq_model %></span></small>
-            </label>
-            <div class="ai-quick-card">
-              <h4 class="ai-quick-h">Why the choice matters</h4>
-              <p class="muted ai-card-note">The assistant <b>executes console actions for real</b> on every model you pick. If the selected model has no tool calling (DeepSeek Reasoner, Perplexity Sonar, Groq Compound…), the action transparently runs on a tool-capable model — same provider first, then another configured one — and the reply names the model that ran. Only if <i>no</i> configured model can call tools does the assistant answer questions and say plainly that it cannot act. JSON mode speeds up the listing generator and auto-moderation.</p>
-            </div>
-          </div>
-          <div class="ai-model-tools">
-            <label class="ai-inline-search ai-model-filter"><span class="sr-only">Filter models</span>
-              <input type="search" id="model-filter" placeholder="Filter models…" maxlength="60" autocomplete="off">
-            </label>
-            <label class="ai-model-tier"><span class="sr-only">Tier</span>
-              <select id="model-tier">
-                <option value="">All tiers</option>
-                <option value="production">Production</option>
-                <option value="preview">Preview</option>
-                <option value="legacy">Legacy</option>
-                <option value="live">Live</option>
-              </select>
-            </label>
-            <label class="ai-model-hide"><input type="checkbox" id="model-hide-off" checked><span>Hide unavailable</span></label>
-            <span class="muted ai-model-count" id="model-count" role="status"></span>
-          </div>
-          <div class="ai-model-strip" id="model-strip" tabindex="0" aria-label="Models for the selected provider">
-            <% settings.models.forEach(function (m) { %>
-              <button type="button" class="ai-model-chip <%= m.id === settings.groq_model ? 'on' : '' %>" data-model="<%= m.id %>" data-tier="<%= m.tier %>" data-avail="<%= m.available === false ? '0' : '1' %>" data-label="<%= (m.label + ' ' + m.id).toLowerCase() %>" title="<%= m.note || '' %> · <%= (m.tools ? 'tools ' : 'no tools ') + (m.json ? '+ JSON mode' : 'no JSON mode') %>">
-                <span class="mc-label"><%= m.label %></span>
-                <span class="mc-meta"><%= tierLabel[m.tier] || m.tier %><%= m.free ? ' · free tier' : '' %><%= m.available === false ? ' · unavailable' : '' %></span>
-              </button>
-            <% }) %>
-          </div>
-          <p class="fine-print" id="model-sync-note">Only models with a <b>free tier</b> are offered here — never a model that bills per token. Catalogs refresh automatically (hourly when stale, plus every Test &amp; sync), so when the provider adds a new free model it shows up on its own, and removed ones disappear. <span id="model-sync-when"></span></p>
-          <div class="form-actions form-actions-tight">
-            <button class="btn btn-primary" type="submit">Save settings</button>
-            <button class="btn btn-ghost" type="button" id="test-key-btn-2">Test &amp; sync models</button>
-            <button class="btn btn-ghost" type="button" id="sync-all-btn" title="Refresh every configured provider's model catalog">Sync all catalogs</button>
-            <span class="muted ai-status" id="test-status" role="status"></span>
-          </div>
-          <p class="fine-print" id="prov-endpoint">Endpoint: <span class="mono"><%= settings.groq_base_url %></span><% if (settings.groq_env) { %> · key source: <span class="mono">.env</span><% } else { %> · key source: settings table<% } %></p>
-
-          <h3 class="form-section">AI auto-moderation</h3>
+          <input type="hidden" name="ai_moderation_present" value="1">
+          <h3 class="form-section">Auto-moderation (rule-based)</h3>
+          <p class="muted ai-card-note">New pending listings are scored 0–100 from their own fields — description substance, website validity, name/domain match, category, country, duplicates, spam phrasing and your block/flag terms. No model or API is involved; every decision is written to the moderation log with its reasons.</p>
           <label class="check check-lg">
             <input type="checkbox" name="ai_moderation_on" value="1" <%= settings.moderation_on ? 'checked' : '' %>>
-            <span><strong>Evaluate every new pending listing with the selected model</strong><br><small class="muted">Runs in the background after dashboard, API, admin, or generator creates a listing. Failures leave the record pending and never block creation. Takes precedence over the simple auto-approve toggle.</small></span>
+            <span><strong>Score every new pending listing automatically</strong><br><small class="muted">Runs in the background after dashboard, API or admin creates a listing. Anything the rules are unsure about stays pending for you. Takes precedence over the simple auto-approve toggle.</small></span>
           </label>
           <label class="check check-lg">
             <input type="checkbox" name="ai_moderation_email" value="1" <%= settings.moderation_email ? 'checked' : '' %>>
-            <span><strong>Email the admin inbox when the model is unsure</strong><br><small class="muted">Also writes an in-console notification either way.</small></span>
+            <span><strong>Email the admin inbox when the rules are unsure</strong><br><small class="muted">Also writes an in-console notification either way.</small></span>
           </label>
           <div class="grid-2">
-            <label><span>Moderation model</span>
-              <select name="ai_moderation_model">
-                <option value="__default__" <%= !settings.moderation_model || settings.moderation_model === settings.groq_model ? 'selected' : '' %>>Same as default (<%= settings.groq_model %>)</option>
-                <% settings.models.forEach(function (m) { %>
-                  <option value="<%= m.id %>" <%= settings.moderation_model === m.id ? 'selected' : '' %>><%= m.label %></option>
-                <% }) %>
-              </select>
-              <small class="muted ai-field-note">GPT-OSS Safeguard 20B is trained for policy classification — the natural fit here. GPT-OSS 20B is the cheapest general option.</small>
-            </label>
+            <div class="ai-quick-card">
+              <h4 class="ai-quick-h">Thresholds</h4>
+              <p class="muted ai-card-note">Approve at or above the first score, reject at or below the second — everything between stays pending. Flagged terms and possible duplicates always stay pending.</p>
+              <div class="grid-2">
+                <label><span>Approve at ≥</span><input type="number" name="ai_moderation_approve_at" min="50" max="100" value="<%= settings.moderation_approve_at %>"></label>
+                <label><span>Reject at ≤</span><input type="number" name="ai_moderation_reject_at" min="0" max="49" value="<%= settings.moderation_reject_at %>"></label>
+              </div>
+            </div>
             <div class="ai-quick-card">
               <h4 class="ai-quick-h">Review one now</h4>
-              <p class="muted ai-card-note">Run the moderation pass against one pending listing — useful right after editing the rules. <%= pendingSamples.length %> awaiting review.<% if (!pendingSamples.length) { %> (queue is empty)<% } %></p>
+              <p class="muted ai-card-note">Score one pending listing now — useful right after editing the rules or thresholds (save first). <%= pendingSamples.length %> awaiting review.<% if (!pendingSamples.length) { %> (queue is empty)<% } %></p>
               <div class="ai-quick-row">
                 <label class="sr-only" for="mod-listing-id">Listing id</label>
                 <input type="text" id="mod-listing-id" list="pending-ids" inputmode="numeric" pattern="[0-9]*" placeholder="listing id" maxlength="8" autocomplete="off">
@@ -373,7 +143,7 @@
               <span class="muted ai-status" id="mod-status" role="status"></span>
             </div>
           </div>
-          <label><span>Moderation rules / prompt <span class="count" id="c-rules"></span></span>
+          <label><span>Moderation rules <small>block: / flag: / allow-domain: — one per line</small> <span class="count" id="c-rules"></span></span>
             <textarea name="ai_moderation_rules" id="mod-rules" rows="12" maxlength="8000"><%= settings.moderation_rules %></textarea>
           </label>
           <div class="form-actions form-actions-tight">
@@ -437,7 +207,7 @@
             <p class="muted ai-card-note"><span id="mod-total"><%= moderation.total %></span> decisions recorded · newest first</p>
             <div class="table-wrap log-table-wrap" id="moderation-log-wrap" data-log="moderation" data-offset="<%= moderation.rows.length %>">
               <table class="table">
-                <thead><tr><th>When</th><th>Listing</th><th>Decision</th><th>Reason</th><th>Model</th><th></th></tr></thead>
+                <thead><tr><th>When</th><th>Listing</th><th>Decision</th><th>Reason</th><th>Engine</th><th></th></tr></thead>
                 <tbody>
                   <% moderation.rows.forEach(function (r) { %>
                     <tr>
@@ -477,7 +247,7 @@
                 </button>
               </div>
             </div>
-            <p class="muted ai-card-note">Every generate, publish, proposed tool, execution, cancellation, moderation write and settings save. <span id="audit-total"><%= auditLog.total %></span> rows.</p>
+            <p class="muted ai-card-note">Every assistant turn, proposed action, execution, cancellation, moderation decision and settings save. <span id="audit-total"><%= auditLog.total %></span> rows.</p>
             <div class="table-wrap log-table-wrap" id="audit-log-wrap" data-log="audit" data-offset="<%= auditLog.rows.length %>">
               <table class="table">
                 <thead><tr><th>When</th><th>Kind</th><th>Action</th><th>Result</th><th>OK</th><th></th></tr></thead>
@@ -528,18 +298,18 @@
 <div class="ai-modal ai-help-modal" id="ai-help" hidden>
   <div class="ai-modal-card" role="dialog" aria-modal="true" aria-labelledby="ai-help-title">
     <p class="klabel">Admin assistant</p>
-    <h3 id="ai-help-title">How this playground behaves</h3>
+    <h3 id="ai-help-title">How this assistant works</h3>
     <ul class="ai-help-list">
+      <li><b>No model, no API.</b> Your message is normalised, matched against intent rules and synonyms, and the ids, emails, names, statuses and durations in it are pulled out. Everything runs on this server.</li>
+      <li><b>It knows the whole console.</b> Listings, members &amp; billing, claims, tickets, removals, blog, news, careers, promos, plans, categories, advertising, email, indexing, upkeep, status page, protection &amp; rate limits, inbox, backups and settings — <%= (settings.tools || []).length %> actions.</li>
       <li><b>Reads run straight away.</b> Counts, lookups and status checks never change anything.</li>
-      <li><b>Writes are confirmed.</b> A proposal card appears with the exact arguments; nothing executes until you press Run — unless you allow that action under Settings → Assistant auto-run.</li>
-      <li><b>Sensitive actions always ask.</b> Deletions, bulk listing actions, emailing everyone, maintenance mode, credentials and search-index resets are confirmed every time and can never be switched to auto-run.</li>
-      <li><b>Any provider.</b> Settings → Model providers lets you paste keys for Groq, OpenAI, Claude, Gemini, DeepSeek, Hugging Face, OpenRouter and more, and pick which one runs the console.</li>
-      <li><b>Any model executes for real.</b> Pick any model from any provider — every admin query is handled. If that model has no tool calling, the action transparently runs on a tool-capable model instead (same provider first, then another configured one) and the reply names the model that ran. A reply that executed nothing is stamped “No console action ran in this turn”.</li>
-      <li><b>Any phrasing.</b> “Make acme live”, “kill that spam listing”, “kick that user”, “spotlight it”, “give them pro” — casual wording resolves to the real console tool (lookups included). If a model answers your request in plain text without acting, the server re-asks it once with tool calling forced, quoting your exact request — a dodge can never turn into a fake “done”.</li>
-      <li><b>Multi-step jobs finish.</b> Ask for a look-up plus an action and the assistant chains them in one turn. Several write actions arrive as a single numbered confirmation and run in order once you approve.</li>
-      <li><b>Only real results are reported.</b> Every claim in a reply comes from the tool's actual return value — a failed action is reported as failed, never as done.</li>
-      <li><b>No saved history.</b> The assistant can use messages visible in this tab for context, but conversations are not stored or restored after reload.</li>
-      <li><b>Nothing auto-publishes.</b> Generated listings are saved as <span class="mono">pending</span> and still pass the normal review queue.</li>
+      <li><b>Writes are confirmed.</b> A proposal card shows the exact arguments; nothing executes until you press Run — unless you allow that action under Settings → Assistant auto-run.</li>
+      <li><b>Sensitive actions always ask.</b> Deletions, bulk listing actions, emailing everyone, maintenance mode, credentials and index resets are confirmed every time.</li>
+      <li><b>Context carries over.</b> After “show acme”, say “approve it”, “feature it”, “email the owner”. After a list, “the first one” or “#42” picks an item.</li>
+      <li><b>It asks when unsure.</b> Two members called Bob? You get a numbered choice. Missing a subject line? It asks for just that.</li>
+      <li><b>Chains work.</b> “approve 42 and feature it, then email the owner” runs in order; several writes arrive as one numbered confirmation.</li>
+      <li><b>Only real results are reported.</b> Every reply comes from the action's actual return value — a failed action is reported as failed.</li>
+      <li><b>No saved history.</b> The visible conversation in this tab is the only context; reloading starts fresh.</li>
     </ul>
     <div class="form-actions">
       <button class="btn btn-primary" type="button" id="ai-help-close">Got it</button>
@@ -553,27 +323,6 @@
 
   var CSRF = <%- JSON.stringify(csrfToken || '') %>;
   var BASE = '/admin3119Musa/ai';
-  var READY = <%- ready ? 'true' : 'false' %>;
-  /* Every provider the console can talk to: id, label, models, endpoint, key state. */
-  var PROVIDERS = <%- JSON.stringify((settings.providers || []).map(function (p) {
-    return {
-      id: p.id, label: p.label, active: !!p.active, retired: !!p.retired, retired_note: p.retired_note || '', needs_key: !!p.needs_key,
-      key_source: p.key_source || '', key_set: !!p.key_set, key_hint: p.key_hint || '',
-      base_url: p.base_url || '', default_base: p.default_base || '',
-      model: p.model || '', default_model: p.default_model || '',
-      blurb: p.blurb || '', env: p.env || [], key_placeholder: p.key_placeholder || '',
-      keys_url: p.keys_url || '', live_models: p.live_models || [],
-      live_checked_at: p.live_checked_at || '', live_stale: !!p.live_stale,
-      sync_supported: p.sync_supported !== false, retired_hidden: p.retired_hidden || 0,
-      free_only: !!p.free_only,
-      models: (p.models || []).map(function (m) {
-        return { id: m.id, label: m.label, tier: m.tier, note: m.note || '', tools: !!m.tools, json: !!m.json, free: !!m.free, available: m.available == null ? null : !!m.available };
-      }),
-    };
-  })) %>;
-  var ACTIVE = <%- JSON.stringify(settings.provider) %>;
-  var ACTIVE_LABEL = <%- JSON.stringify(settings.provider_label) %>;
-  var MODELS = <%- JSON.stringify(settings.models.map(function (m) { return { id: m.id, label: m.label, tier: m.tier, available: m.available == null ? null : !!m.available, note: m.note || '', tools: !!m.tools, free: !!m.free }; })) %>;
   var START_TAB = <%- JSON.stringify(tab) %>;
   var DEFAULT_RULES = <%- JSON.stringify(settings.default_rules) %>;
 
@@ -669,22 +418,6 @@
   }
   function esc(s) { return String(s == null ? '' : s); }
 
-  function modelLabel(id) {
-    for (var i = 0; i < MODELS.length; i++) if (MODELS[i].id === id) return MODELS[i].label;
-    return id || 'unknown';
-  }
-
-  /* Show the "no tool calling" hint whenever the picked assistant model
-     cannot run console actions itself — actions then fall back to a
-     tool-capable model server-side, and the reply names it. */
-  function refreshChatModelNote() {
-    var note = $('chat-model-note');
-    if (!note || !chatModel) return;
-    var m = null;
-    for (var i = 0; i < MODELS.length; i++) if (MODELS[i].id === chatModel.value) { m = MODELS[i]; break; }
-    note.hidden = !(m && !m.tools);
-  }
-
   /* ---------------- tabs ---------------- */
 
   var tabs = Array.prototype.slice.call(document.querySelectorAll('.ai-tab'));
@@ -696,20 +429,14 @@
       t.setAttribute('aria-selected', on ? 'true' : 'false');
       t.tabIndex = on ? 0 : -1;
     });
-    panes.forEach(function (p) {
-      p.classList.toggle('is-on', p.getAttribute('data-pane') === name);
-    });
+    panes.forEach(function (p) { p.classList.toggle('is-on', p.getAttribute('data-pane') === name); });
     store('fl-ai-tab', name);
     if (push !== false) {
       var url = new URL(window.location.href);
       url.searchParams.set('tab', name);
-      url.searchParams.delete('session');
       window.history.replaceState({}, '', url.toString());
     }
-    if (name === 'chat') {
-      var input = $('chat-input');
-      if (input && READY && !input.disabled) input.focus();
-    }
+    if (name === 'chat') { var i = $('chat-input'); if (i && !i.disabled) i.focus(); }
   }
   tabs.forEach(function (t) {
     t.addEventListener('click', function () { showTab(t.getAttribute('data-tab')); });
@@ -727,21 +454,8 @@
 
   var pane = $('chat-pane');
   var statusLine = $('chat-status');
-  var state = {
-    model: <%- JSON.stringify(settings.groq_model) %>,
-    busy: false,
-    pending: null,
-    lastUser: '',
-    transcript: [],
-  };
-
-  var genModel = $('gen-model');
-  if (genModel) genModel.value = state.model;
-  var chatModel = $('chat-model');
-  if (chatModel) chatModel.value = state.model;
-  refreshChatModelNote();
-
-  /* ---------------- char counters ---------------- */
+  var quickBar = $('chat-quick');
+  var state = { busy: false, pending: null, lastUser: '', transcript: [] };
 
   function bindCount(input, out, min, max) {
     if (!input) return;
@@ -751,17 +465,12 @@
         out.textContent = n + ' / ' + max;
         out.className = 'count' + (n > max || (min && n < min && n > 0) ? ' count-warn' : ' count-ok');
       }
-      input.setAttribute('aria-invalid', n > max ? 'true' : 'false');
     }
     input.addEventListener('input', tick);
     tick();
   }
-  bindCount($('f-tagline'), $('c-tagline'), 20, 90);
-  bindCount($('f-description'), $('c-desc'), 100, 1200);
-  bindCount($('f-name'), $('c-name'), 2, 60);
   bindCount($('mod-rules'), $('c-rules'), 0, 8000);
   bindCount($('chat-input'), $('chat-count'), 0, 4000);
-  bindCount($('gen-prompt'), $('c-prompt'), 0, 4000);
 
   function autoGrow(node) {
     if (!node) return;
@@ -774,135 +483,19 @@
   }
   autoGrow($('chat-input'));
 
-  /* ================= listing generator ================= */
-
-  var genBtn = $('gen-btn');
-  var genStatus = $('gen-status');
-  var genForm = $('gen-form');
-  var genErrors = $('gen-errors');
-  var genPrompt = $('gen-prompt');
-  var genPill = $('gen-model-pill');
-
-  document.querySelectorAll('.ai-chip').forEach(function (chip) {
-    chip.addEventListener('click', function () {
-      if (!genPrompt) return;
-      genPrompt.value = chip.getAttribute('data-seed');
-      genPrompt.dispatchEvent(new Event('input'));
-      genPrompt.focus();
-    });
-  });
-
-  function fillDraft(d) {
-    var model = {
-      'f-name': d.name, 'f-tagline': d.tagline, 'f-description': d.description,
-      'f-type': d.type, 'f-category': d.category, 'f-website': d.website,
-      'f-country': d.country, 'f-founded': d.founded, 'f-city': d.city,
-      'f-size': d.size, 'f-tags': Array.isArray(d.tags) ? d.tags.join(', ') : d.tags,
-      'f-email': d.email,
-    };
-    Object.keys(model).forEach(function (id) {
-      var node = $(id);
-      if (node) node.value = model[id] == null ? '' : model[id];
-    });
-    ['f-tagline', 'f-description', 'f-name'].forEach(function (id) {
-      var node = $(id);
-      if (node) node.dispatchEvent(new Event('input'));
-    });
-    genForm.hidden = false;
-    document.querySelector('.ai-gen-grid').classList.add('is-wide');
-    if (genErrors) genErrors.hidden = true;
-    if (genPill) {
-      genPill.hidden = false;
-      genPill.textContent = 'Draft by ' + modelLabel(draftModelUsed);
-    }
-    genForm.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }
-
-  var draftModelUsed = '';
-
-  if (genBtn) {
-    genBtn.addEventListener('click', function () {
-      if (!READY) { fail(genStatus, new Error('Add a model provider key first (Settings tab).')); return; }
-      var prompt = (genPrompt.value || '').trim();
-      if (prompt.length < 8) { fail(genStatus, new Error('Add a bit more detail first — name, site, or a couple of facts.')); return; }
-      genBtn.disabled = true;
-      genStatus.textContent = 'Generating…';
-      api('/generate-listing', { body: { prompt: prompt, model: genModel ? genModel.value : '' } })
-        .then(function (data) {
-          draftModelUsed = data.model || (genModel ? genModel.value : '');
-          fillDraft(data.draft || {});
-          var tok = data.usage && data.usage.total_tokens ? ' · ' + data.usage.total_tokens + ' tokens' : '';
-          genStatus.textContent = 'Draft ready · ' + modelLabel(draftModelUsed) + tok;
-          toast('ok', 'Draft generated — review it before saving.', 'Listing generator');
-        })
-        .catch(function (e) { fail(genStatus, e); })
-        .then(function () { genBtn.disabled = !READY; });
-    });
-  }
-  if ($('gen-redo')) {
-    $('gen-redo').addEventListener('click', function () { if (genBtn) genBtn.click(); });
-  }
-  function resetDraft() {
-    if (!genForm) return;
-    genForm.reset();
-    genForm.hidden = true;
-    document.querySelector('.ai-gen-grid').classList.remove('is-wide');
-    if (genErrors) genErrors.hidden = true;
-    if (genPill) genPill.hidden = true;
-  }
-  if ($('gen-discard')) {
-    $('gen-discard').addEventListener('click', function () {
-      resetDraft();
-      genStatus.textContent = 'Draft discarded.';
-    });
-  }
-  if ($('gen-clear')) {
-    $('gen-clear').addEventListener('click', function () {
-      genPrompt.value = '';
-      genPrompt.dispatchEvent(new Event('input'));
-      resetDraft();
-      genStatus.textContent = '';
-      genPrompt.focus();
-    });
-  }
-  if (genForm) {
-    genForm.addEventListener('submit', function (ev) {
-      ev.preventDefault();
-      if (genErrors) genErrors.hidden = true;
-      var body = {
-        name: $('f-name').value, tagline: $('f-tagline').value, description: $('f-description').value,
-        type: $('f-type').value, category: $('f-category').value, website: $('f-website').value,
-        country: $('f-country').value, founded: $('f-founded').value, city: $('f-city').value,
-        size: $('f-size').value, tags: $('f-tags').value, email: $('f-email').value,
-      };
-      $('save-btn').disabled = true;
-      $('save-status').textContent = 'Saving…';
-      api('/publish-listing', { body: body }).then(function (data) {
-        var l = data.listing || {};
-        $('save-status').textContent = 'Saved as pending.';
-        toast('ok', 'Listing saved as pending' + (l.slug ? ' · /listing/' + l.slug : '') + '.', 'AI Playground');
-        genStatus.textContent = 'Published to the review queue.' + (l.id ? ' · #' + l.id : '');
-        resetDraft();
-        if (data.meta && data.meta.note) genStatus.textContent += ' ' + data.meta.note;
-      }).catch(function (e) {
-        if (genErrors) {
-          genErrors.hidden = false;
-          genErrors.textContent = e.message;
-        }
-        $('save-status').textContent = '';
-      }).then(function () { $('save-btn').disabled = false; });
-    });
-  }
-
   /* ================= assistant ================= */
 
   var input = $('chat-input');
   var sendBtn = $('chat-send');
+  /* The server tucks a context marker onto every reply so "it / them" keeps
+     working across turns. Keep it in the transcript, never show it. */
+  var CTX_RE = /\n?\u2063ctx:\{.*?\}\u2063/g;
+  function visible(text) { return String(text || '').replace(CTX_RE, ''); }
 
   function setBusy(busy, label) {
     state.busy = !!busy;
-    if (input) input.disabled = !READY || !!busy;
-    if (sendBtn) sendBtn.disabled = !READY || !!busy;
+    if (input) input.disabled = !!busy;
+    if (sendBtn) sendBtn.disabled = !!busy;
     if (statusLine) {
       statusLine.textContent = busy ? (label || 'Thinking…') : '';
       statusLine.classList.toggle('is-live', !!busy);
@@ -912,7 +505,7 @@
   }
 
   function renderRich(target, text) {
-    /* Safe by construction: only textContent + explicit <pre>/<code> nodes, never innerHTML. */
+    /* Safe by construction: only textContent + explicit nodes, never innerHTML. */
     var raw = esc(text);
     var fence = raw.split('```');
     fence.forEach(function (chunk, idx) {
@@ -927,10 +520,11 @@
       chunk.split(/\n/).forEach(function (line) {
         if (!line.trim()) return;
         var row = el('div', 'wa-line');
-        var parts = line.split(/(\*\*[^*]+\*\*|`[^`]+`)/);
+        var parts = line.split(/(\*\*[^*]+\*\*|`[^`]+`|_[^_]{2,80}_)/);
         parts.forEach(function (part) {
           if (/^\*\*[^*]+\*\*$/.test(part)) row.appendChild(el('b', null, part.slice(2, -2)));
           else if (/^`[^`]+`$/.test(part)) row.appendChild(el('code', null, part.slice(1, -1)));
+          else if (/^_[^_]{2,80}_$/.test(part)) row.appendChild(el('i', null, part.slice(1, -1)));
           else row.appendChild(document.createTextNode(part));
         });
         target.appendChild(row);
@@ -938,42 +532,19 @@
     });
   }
 
-  /* Day separators follow the message timestamps, so an old chat never claims to be "Today". */
-  /* Stored stamps are UTC "YYYY-MM-DD HH:MM:SS"; label them the same way the
-     server markup does so hydration never shifts a message to another day. */
-  var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  function utcDay(offset) { return new Date(Date.now() - (offset || 0) * 86400000).toISOString().slice(0, 10); }
-  function stampOf(value) {
-    var s = String(value || '');
-    if (!s) { s = new Date().toISOString().slice(0, 16).replace('T', ' '); }
-    return { day: s.slice(0, 10), time: s.slice(11, 16) };
-  }
-  function dayLabel(value) {
-    var day = stampOf(value).day;
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return 'Today';
-    var today = utcDay(0);
-    if (day === today) return 'Today';
-    if (day === utcDay(1)) return 'Yesterday';
-    var p = day.split('-');
-    return parseInt(p[2], 10) + ' ' + MON[parseInt(p[1], 10) - 1] + (p[0] === today.slice(0, 4) ? '' : ' ' + p[0]);
-  }
+  function nowStamp() { return new Date().toISOString().slice(11, 16); }
 
   function addBubble(role, text, meta) {
-    var chips = pane.querySelectorAll('.chat-day');
-    var lastChip = chips.length ? chips[chips.length - 1] : null;
-    var label = dayLabel(meta && meta.when);
-    if (!lastChip || lastChip.textContent !== label) pane.appendChild(el('div', 'chat-day', label));
     var row = el('div', 'wa-row ' + (role === 'user' ? 'wa-mine' : 'wa-theirs') + (meta && meta.kind ? ' ai-' + meta.kind : ''));
     var bubble = el('div', 'wa-bubble');
     bubble.appendChild(el('div', 'wa-who', role === 'user' ? 'You' : 'Assistant'));
     var body = el('div', 'wa-text');
     if (role === 'user') body.textContent = text;
-    else renderRich(body, text);
+    else renderRich(body, visible(text));
     bubble.appendChild(body);
     if (meta && meta.tool) bubble.appendChild(el('div', 'wa-tag ai-tag-' + (meta.ok === false ? 'bad' : 'ok'), meta.tool));
     var foot = el('div', 'wa-meta');
-    foot.appendChild(el('span', null, stampOf(meta && meta.when).time));
-    if (meta && meta.model) foot.appendChild(el('span', 'wa-meta-model', modelLabel(meta.model)));
+    foot.appendChild(el('span', null, nowStamp()));
     bubble.appendChild(foot);
     row.appendChild(bubble);
     pane.appendChild(row);
@@ -982,8 +553,8 @@
   }
 
   function remember(role, content) {
-    state.transcript.push({ role: role === 'user' ? 'user' : 'assistant', content: String(content || '').slice(0, 4000) });
-    if (state.transcript.length > 20) state.transcript = state.transcript.slice(-20);
+    state.transcript.push({ role: role === 'user' ? 'user' : 'assistant', content: String(content || '').slice(0, 6000) });
+    if (state.transcript.length > 30) state.transcript = state.transcript.slice(-30);
   }
 
   function addTyping() {
@@ -1000,17 +571,41 @@
   }
   function killTyping(node) { if (node && node.parentNode) node.parentNode.removeChild(node); }
 
-  var starters = $('chat-pane').querySelector('.ai-starters');
-  if (starters) {
-    starters.querySelectorAll('.ai-starter').forEach(function (b) {
+  /* A short, human pause before the reply lands (reads as "thinking", and
+     keeps instant answers from flickering). Scaled to reply length. */
+  function humanDelay(text) {
+    var n = Math.min(900, 250 + Math.min(650, String(text || '').length * 3));
+    return new Promise(function (r) { setTimeout(r, n); });
+  }
+
+  function showQuick(list) {
+    if (!quickBar) return;
+    quickBar.textContent = '';
+    var items = (list || []).filter(Boolean).slice(0, 5);
+    quickBar.hidden = !items.length;
+    items.forEach(function (q) {
+      var b = el('button', 'ai-starter ai-quick-btn', q);
+      b.type = 'button';
       b.addEventListener('click', function () {
-        if (!READY) return;
+        if (/…$/.test(q) || /"…"/.test(q)) { input.value = q.replace(/…$/, ''); input.dispatchEvent(new Event('input')); input.focus(); return; }
+        input.value = q;
+        input.dispatchEvent(new Event('input'));
+        send();
+      });
+      quickBar.appendChild(b);
+    });
+  }
+
+  function wireStarters(root) {
+    root.querySelectorAll('.ai-starter').forEach(function (b) {
+      b.addEventListener('click', function () {
         input.value = b.getAttribute('data-prompt');
         input.dispatchEvent(new Event('input'));
         send();
       });
     });
   }
+  wireStarters(pane);
 
   function proposalCard(tool, pendingId) {
     var steps = (tool.steps && tool.steps.length > 1) ? tool.steps : null;
@@ -1027,11 +622,11 @@
     args.textContent = JSON.stringify(tool.args || {}, null, 2);
     wrap.appendChild(args);
     var actions = el('div', 'ai-proposal-actions');
-    var run = el('button', 'btn btn-sm btn-primary', 'Review in dialog');
+    var run = el('button', 'btn btn-sm btn-primary', 'Run');
     run.type = 'button';
     run.addEventListener('click', function () { openModal({ pending_id: pendingId, name: tool.name, label: tool.label, args: tool.args, steps: tool.steps }); });
     actions.appendChild(run);
-    var drop = el('button', 'btn btn-sm btn-ghost', 'Discard');
+    var drop = el('button', 'btn btn-sm btn-ghost', 'Cancel');
     drop.type = 'button';
     drop.addEventListener('click', function () { cancelProposal(); });
     actions.appendChild(drop);
@@ -1042,91 +637,65 @@
   function handleReply(data) {
     var content = data.content || 'Done.';
     if (data.type === 'tool_proposal') {
-      var bubble = addBubble('assistant', content, { kind: 'await', model: data.model });
+      var bubble = addBubble('assistant', content, { kind: 'await' });
       bubble.appendChild(proposalCard(data.tool || {}, data.pending_id));
       remember('assistant', content);
       state.pending = { pending_id: data.pending_id, name: data.tool && data.tool.name, label: data.tool && data.tool.label, args: data.tool && data.tool.args, steps: data.tool && data.tool.steps };
+      showQuick([]);
       openModal(state.pending, true);
       return;
     }
-    addBubble('assistant', content, { model: data.model, kind: data.executed ? 'ran' : (data.error ? 'bad' : null), tool: data.tool || '', ok: data.executed !== false });
+    addBubble('assistant', content, { kind: data.executed ? 'ran' : (data.error ? 'bad' : null), tool: data.tool || '', ok: data.executed !== false });
     remember('assistant', content);
-    refreshHeadTitle();
+    showQuick(data.quick_replies || []);
+  }
+
+  /* "yes" / "cancel" typed while a proposal is open resolve it directly. */
+  function answerPending(text) {
+    if (!state.pending) return false;
+    var t = text.toLowerCase().trim();
+    if (/^(yes|y|yes,? run it|run it|go ahead|do it|confirm|ok|okay|proceed|sure)[.!]?$/.test(t)) { addBubble('user', text); remember('user', text); runPending(); return true; }
+    if (/^(no|n|cancel|stop|never ?mind|forget it|don'?t)[.!]?$/.test(t)) { addBubble('user', text); remember('user', text); cancelProposal(); return true; }
+    return false;
   }
 
   function send() {
-    if (!READY) { fail(statusLine, new Error('Add a model provider key first (Settings tab).')); return; }
     if (state.busy) return;
     var text = (input.value || '').trim();
     if (!text) return;
     input.value = '';
     input.dispatchEvent(new Event('input'));
     state.lastUser = text;
-    var prior = state.transcript.slice(-20);
+    if (answerPending(text)) return;
+    var prior = state.transcript.slice(-30);
     addBubble('user', text);
     remember('user', text);
+    showQuick([]);
     var typing = addTyping();
     setBusy(true, 'Thinking…');
-    api('/chat', {
-      body: { text: text, messages: prior, model: chatModel ? chatModel.value : '' },
-    }).then(function (data) {
-      killTyping(typing);
-      handleReply(data);
-      refreshHeadTitle();
-      syncUrl();
+    api('/chat', { body: { text: text, messages: prior } }).then(function (data) {
+      return humanDelay(data.content).then(function () { killTyping(typing); handleReply(data); syncUrl(); });
     }).catch(function (e) {
       killTyping(typing);
-      var bubble = addBubble('assistant', 'The model could not answer: ' + e.message, { kind: 'bad', ok: false });
-      remember('assistant', 'The model could not answer: ' + e.message);
+      var bubble = addBubble('assistant', 'Something went wrong: ' + e.message, { kind: 'bad', ok: false });
+      remember('assistant', 'Something went wrong: ' + e.message);
       var retry = el('button', 'btn btn-xs btn-ghost', 'Try again');
       retry.type = 'button';
-      retry.addEventListener('click', function () {
-        input.value = state.lastUser;
-        input.dispatchEvent(new Event('input'));
-        send();
-      });
+      retry.addEventListener('click', function () { input.value = state.lastUser; input.dispatchEvent(new Event('input')); send(); });
       bubble.appendChild(retry);
-      if (e.status === 429) statusLine.textContent = e.message;
-    }).then(function () { setBusy(false); });
+    }).then(function () { setBusy(false); if (input) input.focus(); });
   }
 
-  $('chat-form').addEventListener('submit', function (ev) {
-    ev.preventDefault();
-    send();
-  });
+  $('chat-form').addEventListener('submit', function (ev) { ev.preventDefault(); send(); });
   input.addEventListener('keydown', function (ev) {
-    if (ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey ? true : !ev.shiftKey)) {
-      ev.preventDefault();
-      send();
-    }
+    if (ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey ? true : !ev.shiftKey)) { ev.preventDefault(); send(); return; }
+    if (ev.key === 'ArrowUp' && !input.value && state.lastUser) { input.value = state.lastUser; input.dispatchEvent(new Event('input')); }
   });
-  if (chatModel) {
-    chatModel.addEventListener('change', function () {
-      state.model = chatModel.value;
-      toast('ok', 'Assistant now uses ' + modelLabel(chatModel.value) + ' for this tab.', 'Model switched');
-      refreshHeadTitle();
-      refreshChatModelNote();
-    });
-  }
   function syncUrl() {
     var url = new URL(window.location.href);
-    url.searchParams.delete('session');
     url.searchParams.set('tab', 'chat');
     window.history.replaceState({}, '', url.toString());
   }
-  function refreshHeadTitle() {
-    var head = $('chat-head-title');
-    if (head) head.textContent = 'Admin assistant';
-    var sub = $('chat-head-sub');
-    if (sub) {
-      var bits = [];
-      bits.push(READY ? 'Live · ' + (activeProvider().label || ACTIVE_LABEL) + ' · ' + modelLabel(chatModel ? chatModel.value : state.model) : (ACTIVE_LABEL + ' key required'));
-      bits.push('no saved history');
-      bits.push('writes confirm first');
-      sub.textContent = bits.join(' · ');
-    }
-  }
-  refreshHeadTitle();
 
   /* ---------- confirmation modal ---------- */
 
@@ -1140,14 +709,12 @@
     if (!tool) return;
     state.pending = tool;
     var many = tool.steps && tool.steps.length > 1;
-    $('ai-modal-title').textContent = many
-      ? ('Run these ' + tool.steps.length + ' console actions?')
-      : 'Run this console action?';
+    $('ai-modal-title').textContent = many ? ('Run these ' + tool.steps.length + ' console actions?') : 'Run this console action?';
     modalLabel.textContent = many
       ? tool.steps.map(function (s, i) { return (i + 1) + '. ' + (s.label || s.name); }).join('  ')
       : (tool.label || tool.name);
     modalArgs.textContent = JSON.stringify(tool.args || {}, null, 2);
-    modalStatus.textContent = silent ? 'Awaiting your confirm · expires in 10 minutes' : '';
+    modalStatus.textContent = silent ? 'Awaiting your confirm · expires in 10 minutes · you can also type “yes” or “cancel”' : '';
     lastFocus = document.activeElement;
     modal.hidden = false;
     document.body.classList.add('ai-modal-open');
@@ -1165,39 +732,38 @@
     closeModal();
     api('/cancel', { body: { pending_id: id } }).then(function (data) {
       var content = data.content || 'Cancelled. Nothing ran.';
-      addBubble('assistant', content, { kind: 'muted', tool: cancelledName ? 'cancelled: ' + cancelledName : 'cancelled', model: data.model });
+      addBubble('assistant', content, { kind: 'muted', tool: cancelledName ? 'cancelled: ' + cancelledName : 'cancelled' });
       remember('assistant', content);
       state.pending = null;
+      showQuick(data.quick_replies || []);
     }).catch(function (e) {
       addBubble('assistant', e.message, { kind: 'bad', ok: false });
       remember('assistant', e.message);
       state.pending = null;
     });
   }
-  $('ai-modal-ok').addEventListener('click', function () {
+  function runPending() {
     if (!state.pending) { closeModal(); return; }
     var id = state.pending.pending_id;
     var toolName = state.pending.name;
     $('ai-modal-ok').disabled = true;
     modalStatus.textContent = 'Running…';
+    setBusy(true, 'Running…');
     api('/execute', { body: { pending_id: id } }).then(function (data) {
       closeModal();
       var content = data.content || 'Done.';
-      addBubble('assistant', content, {
-        kind: data.executed === false ? 'bad' : 'ran',
-        ok: data.executed !== false,
-        tool: toolName,
-        model: data.model,
-      });
+      addBubble('assistant', content, { kind: data.executed === false ? 'bad' : 'ran', ok: data.executed !== false, tool: toolName });
       remember('assistant', content);
       state.pending = null;
-      toast(data.executed === false ? 'err' : 'ok', (data.content || 'Action finished').slice(0, 140), 'Assistant');
+      showQuick(data.quick_replies || []);
+      toast(data.executed === false ? 'err' : 'ok', visible(data.content || 'Action finished').slice(0, 140), 'Assistant');
     }).catch(function (e) {
       modalStatus.textContent = e.message;
       toast('err', e.message, 'Action failed');
-      state.pending = null;
-    }).then(function () { $('ai-modal-ok').disabled = false; });
-  });
+      if (e.status === 410) { closeModal(); state.pending = null; addBubble('assistant', e.message, { kind: 'bad', ok: false }); }
+    }).then(function () { $('ai-modal-ok').disabled = false; setBusy(false); });
+  }
+  $('ai-modal-ok').addEventListener('click', runPending);
   $('ai-modal-cancel').addEventListener('click', cancelProposal);
   modal.addEventListener('click', function (ev) { if (ev.target === modal) cancelProposal(); });
 
@@ -1215,277 +781,25 @@
     state.pending = null;
     state.transcript = [];
     pane.textContent = '';
-    addBubble('assistant', 'New chat. Ask anything about the ledger — counts, pending queues, suspensions, incidents. Writes still confirm first. This conversation is not saved.', {});
+    pane.appendChild(el('div', 'chat-day', 'Today'));
+    addBubble('assistant', 'Fresh start — context cleared. Ask for counts, queues, a listing or member by name, or tell me what to change. Writes still confirm first.', {});
     var grid = el('div', 'ai-starters');
-    ['How many listings are pending right now?', 'List the newest pending listings with their domains.', 'Summarise this week of signups.'].forEach(function (p) {
-      var b = el('button', 'ai-starter', p.split(' ')[0] + ' …');
+    [['how many pending', 'How many pending?'], ['show pending listings', 'Pending listings'], ['show open tickets', 'Open tickets'], ['status page', 'Status page'], ['help', 'What can you do?']].forEach(function (p) {
+      var b = el('button', 'ai-starter', p[1]);
       b.type = 'button';
-      b.setAttribute('data-prompt', p);
-      b.addEventListener('click', function () {
-        input.value = p;
-        input.dispatchEvent(new Event('input'));
-        send();
-      });
+      b.setAttribute('data-prompt', p[0]);
       grid.appendChild(b);
     });
     pane.appendChild(grid);
-    if (input) { input.disabled = !READY; input.focus(); }
-    refreshHeadTitle();
+    wireStarters(grid);
+    showQuick([]);
+    if (input) { input.disabled = false; input.focus(); }
     syncUrl();
     if (!silent) toast('ok', 'Conversation cleared.', 'Admin assistant');
   }
-
-  $('new-chat-btn').addEventListener('click', function () {
-    if (!READY) { fail(statusLine, new Error('Add a model provider key first (Settings tab).')); return; }
-    startFresh();
-  });
+  $('new-chat-btn').addEventListener('click', function () { startFresh(); });
 
   /* ================= settings tab ================= */
-
-  /* -------- model providers: switching the active provider re-points the
-     default-model select and the chip strip at that provider's catalogue. -------- */
-
-  function activeProvider() {
-    var picker = $('prov-select');
-    var id = picker ? picker.value : ACTIVE;
-    for (var i = 0; i < PROVIDERS.length; i++) if (PROVIDERS[i].id === id) return PROVIDERS[i];
-    return PROVIDERS[0];
-  }
-
-  /* Re-render the single provider config panel for the chosen provider — key
-     field, endpoint, hint, badge and the test/get-key controls all re-point. */
-  function renderProviderConfig(p) {
-    var hidden = $('llm-provider-input');
-    if (hidden) hidden.value = p.id;
-    var card = $('prov-config');
-    if (card) {
-      card.setAttribute('data-prov', p.id);
-      card.classList.toggle('is-ready', !!(p.key_set || !p.needs_key));
-    }
-    var name = $('prov-cfg-name');
-    if (name) name.textContent = p.label;
-    var blurb = $('prov-cfg-blurb');
-    if (blurb) blurb.textContent = p.blurb || '';
-    var retired = $('prov-cfg-retired');
-    if (retired) {
-      retired.hidden = !p.retired;
-      retired.textContent = p.retired_note || 'This provider has been retired. Choose another provider.';
-    }
-    var activeBadge = $('prov-cfg-active');
-    if (activeBadge) activeBadge.hidden = p.id !== ACTIVE;
-    var pendingBadge = $('prov-cfg-pending');
-    if (pendingBadge) pendingBadge.hidden = p.id === ACTIVE;
-
-    var badge = $('prov-cfg-badge');
-    if (badge) {
-      badge.className = 'ai-prov-badge';
-      if (p.key_source === 'env') { badge.classList.add('env'); badge.textContent = '.env'; badge.hidden = false; }
-      else if (p.key_set) { badge.classList.add('saved'); badge.textContent = 'key saved'; badge.hidden = false; }
-      else if (!p.needs_key) { badge.classList.add('saved'); badge.textContent = 'no key needed'; badge.hidden = false; }
-      else { badge.classList.add('off'); badge.textContent = 'no key'; badge.hidden = false; }
-    }
-
-    var key = $('prov-cfg-key');
-    if (key) {
-      key.value = '';
-      key.setAttribute('name', 'llm_key_' + p.id);
-      key.setAttribute('data-prov-key', p.id);
-      key.placeholder = p.key_placeholder || '';
-      key.disabled = p.key_source === 'env' || p.retired;
-    }
-    var hint = $('prov-cfg-hint');
-    if (hint) {
-      hint.setAttribute('data-prov-hint', p.id);
-      if (p.key_source === 'env') hint.innerHTML = '✓ from <code>' + esc((p.env && p.env[0]) || '') + '</code> — rotate it there';
-      else if (p.key_set) hint.textContent = '✓ saved (' + (p.key_hint || '') + ') — paste a new one to rotate';
-      else hint.textContent = 'not saved yet';
-    }
-    var clearWrap = $('prov-cfg-clear-wrap');
-    var clear = $('prov-cfg-clear');
-    if (clearWrap && clear) {
-      var canClear = p.key_set && p.key_source !== 'env' && p.needs_key;
-      clearWrap.hidden = !canClear;
-      clear.checked = false;
-      clear.setAttribute('name', 'llm_key_' + p.id + '_clear');
-    }
-    var base = $('prov-cfg-base');
-    if (base) {
-      base.setAttribute('name', 'llm_base_' + p.id);
-      base.value = p.base_url || '';
-      base.placeholder = p.default_base || '';
-    }
-    var test = $('prov-cfg-test');
-    if (test) { test.setAttribute('data-test-prov', p.id); test.disabled = !!p.retired; }
-    var getkey = $('prov-cfg-getkey');
-    if (getkey) {
-      if (p.keys_url) { getkey.href = p.keys_url; getkey.hidden = false; }
-      else { getkey.href = '#'; getkey.hidden = true; }
-    }
-    var status = $('prov-cfg-status');
-    if (status) {
-      status.setAttribute('data-prov-status', p.id);
-      status.className = 'muted ai-prov-status';
-      status.textContent = (p.live_models && p.live_models.length) ? (p.live_models.length + ' ids seen') : '';
-    }
-  }
-
-  function setModelNote(id) {
-    var note = $('set-model-note');
-    if (!note) return;
-    note.innerHTML = '';
-    note.appendChild(document.createTextNode('Selected model: '));
-    note.appendChild(el('span', 'mono', id));
-  }
-
-  /** Rebuild a <select> from a provider catalogue, keeping the current pick when possible. */
-  function fillModelSelect(node, p) {
-    if (!node) return;
-    var keep = node.value;
-    node.innerHTML = '';
-    p.models.forEach(function (m) {
-      var o = document.createElement('option');
-      o.value = m.id;
-      o.disabled = m.available === false;
-      o.textContent = m.label + (m.available === false ? ' · not on this key' : '');
-      node.appendChild(o);
-    });
-    node.value = p.models.some(function (m) { return m.id === keep; }) ? keep : (p.model || (p.models[0] || {}).id || '');
-  }
-
-  function renderProviderModels(p) {
-    var sel = $('set-model');
-    if (sel) {
-      sel.innerHTML = '';
-      sel.setAttribute('name', 'llm_model_' + p.id);
-      sel.disabled = !!p.retired;
-      p.models.forEach(function (m) {
-        var o = document.createElement('option');
-        o.value = m.id;
-        o.disabled = m.available === false;
-        o.textContent = m.label + (m.available === false ? ' · not on this key' : '');
-        o.title = (m.note || '') + ' · ' + (m.tools ? 'tools ' : 'no tools ') + (m.json ? '+ JSON mode' : 'no JSON mode');
-        if (m.id === p.model) o.selected = true;
-        sel.appendChild(o);
-      });
-      if (!sel.value && p.models.length) sel.value = p.models[0].id;
-      setModelNote(sel.value || p.model || p.default_model);
-      state.model = sel.value || p.model;
-    }
-    var strip = $('model-strip');
-    if (strip) {
-      var TIERS = { production: 'Production', preview: 'Preview', legacy: 'Legacy', live: 'Live', retired: 'Retired' };
-      strip.textContent = '';
-      p.models.forEach(function (m) {
-        var b = el('button', 'ai-model-chip' + (sel && m.id === sel.value ? ' on' : ''));
-        b.type = 'button';
-        b.disabled = m.available === false;
-        b.setAttribute('data-model', m.id);
-        b.setAttribute('data-tier', m.tier || '');
-        b.setAttribute('data-avail', m.available === false ? '0' : '1');
-        b.setAttribute('data-label', ((m.label || '') + ' ' + (m.id || '')).toLowerCase());
-        b.title = (m.note || '') + ' · ' + (m.tools ? 'tools ' : 'no tools ') + (m.json ? '+ JSON mode' : 'no JSON mode');
-        b.appendChild(el('span', 'mc-label', m.label));
-        b.appendChild(el('span', 'mc-meta', (TIERS[m.tier] || m.tier || '') + (m.free ? ' · free tier' : '') + (m.available === false ? ' · unavailable' : '')));
-        strip.appendChild(b);
-      });
-      bindModelChips();
-      applyModelFilter();
-    }
-    MODELS = p.models.slice();
-    var when = $('model-sync-when');
-    if (when) {
-      var bits = [];
-      if (p.live_checked_at) bits.push('Last checked ' + String(p.live_checked_at).slice(0, 16) + ' UTC');
-      else if (p.sync_supported) bits.push('Not checked yet — press Test & sync');
-      else bits.push('No live catalog for this provider — curated list');
-      if (p.retired_hidden) bits.push(p.retired_hidden + ' retired hidden');
-      when.textContent = bits.join(' · ') + '.';
-    }
-    fillModelSelect(chatModel, p);
-    fillModelSelect(genModel, p);
-    if (chatModel) chatModel.value = (sel && sel.value) || chatModel.value;
-    if (genModel) genModel.value = (sel && sel.value) || genModel.value;
-    refreshChatModelNote();
-    var owner = $('prov-model-owner');
-    if (owner) owner.textContent = p.label;
-    var ep = $('prov-endpoint');
-    if (ep) {
-      ep.innerHTML = '';
-      ep.appendChild(document.createTextNode('Endpoint: '));
-      ep.appendChild(el('span', 'mono', p.base_url || p.default_base));
-      ep.appendChild(document.createTextNode(p.key_source === 'env' ? ' · key source: .env' : (p.key_set ? ' · key source: settings table' : ' · no key saved yet')));
-    }
-    document.querySelectorAll('.ai-prov-card').forEach(function (card) {
-      card.classList.toggle('is-active', card.getAttribute('data-prov') === p.id);
-    });
-    markModelChips();
-    refreshHeadTitle();
-  }
-
-  function markModelChips() {
-    document.querySelectorAll('.ai-model-chip').forEach(function (c) {
-      c.classList.toggle('on', c.getAttribute('data-model') === (chatModel ? chatModel.value : ''));
-    });
-  }
-  /* Narrow the (scrollable) chip strip by text, tier and availability so a
-     provider with dozens of live models never makes the page extra long. */
-  function applyModelFilter() {
-    var q = ($('model-filter') && $('model-filter').value || '').trim().toLowerCase();
-    var tier = $('model-tier') ? $('model-tier').value : '';
-    var hideOff = $('model-hide-off') ? $('model-hide-off').checked : false;
-    var shown = 0, total = 0;
-    document.querySelectorAll('.ai-model-chip').forEach(function (c) {
-      total += 1;
-      var ok = true;
-      if (tier && c.getAttribute('data-tier') !== tier) ok = false;
-      if (hideOff && c.getAttribute('data-avail') === '0') ok = false;
-      if (q && (c.getAttribute('data-label') || '').indexOf(q) === -1) ok = false;
-      c.style.display = ok ? '' : 'none';
-      if (ok) shown += 1;
-    });
-    var count = $('model-count');
-    if (count) count.textContent = total ? ('Showing ' + shown + ' of ' + total) : 'No models';
-  }
-  ['model-filter', 'model-tier', 'model-hide-off'].forEach(function (id) {
-    var node = $(id);
-    if (node) node.addEventListener(id === 'model-filter' ? 'input' : 'change', applyModelFilter);
-  });
-  function pickModel(id) {
-    if (chatModel) chatModel.value = id;
-    if (genModel) genModel.value = id;
-    var setSel = $('set-model');
-    if (setSel) setSel.value = id;
-    setModelNote(id);
-    state.model = id;
-    markModelChips();
-    refreshHeadTitle();
-  }
-  function bindModelChips() {
-    document.querySelectorAll('.ai-model-chip').forEach(function (chip) {
-      if (chip.dataset.bound === '1') return;
-      chip.dataset.bound = '1';
-      chip.addEventListener('click', function () { pickModel(chip.getAttribute('data-model')); });
-    });
-  }
-  bindModelChips();
-  markModelChips();
-
-  /* Choosing a provider in the dropdown re-points the config panel and the model
-     picker straight away; the change itself is stored when the form is saved. */
-  if ($('prov-select')) {
-    $('prov-select').addEventListener('change', function () {
-      var p = activeProvider();
-      renderProviderConfig(p);
-      renderProviderModels(p);
-      var out = $('test-status');
-      if (out) {
-        out.textContent = p.id === ACTIVE
-          ? ''
-          : p.label + ' selected — press Save settings to switch the whole console over to it.';
-        out.className = 'muted ai-status';
-      }
-    });
-  }
 
   if ($('rules-defaults')) {
     $('rules-defaults').addEventListener('click', function () {
@@ -1508,128 +822,18 @@
   document.querySelectorAll('[data-run-all]').forEach(function (b) {
     b.addEventListener('click', function () {
       var on = b.getAttribute('data-run-all') === '1';
-      if (on && !window.confirm('Allow every write action listed here to run without a confirm? Account deletion always still asks.')) return;
+      if (on && !window.confirm('Allow every write action listed here to run without a confirm? Sensitive actions always still ask.')) return;
       runBoxes.forEach(function (x) { x.checked = on; });
       recountRuns();
     });
   });
-
-  function providerById(id) {
-    for (var i = 0; i < PROVIDERS.length; i++) if (PROVIDERS[i].id === id) return PROVIDERS[i];
-    return null;
-  }
-
-  /* Slim a full providerView (from /test or /sync-all) into the shape the
-     picker was booted with, so refreshed catalogs re-render losslessly. */
-  function slimProvider(p) {
-    return {
-      id: p.id, label: p.label, active: !!p.active, retired: !!p.retired, retired_note: p.retired_note || '', needs_key: !!p.needs_key,
-      key_source: p.key_source || '', key_set: !!p.key_set, key_hint: p.key_hint || '',
-      base_url: p.base_url || '', default_base: p.default_base || '',
-      model: p.model || '', default_model: p.default_model || '',
-      blurb: p.blurb || '', env: p.env || [], key_placeholder: p.key_placeholder || '',
-      keys_url: p.keys_url || '', live_models: p.live_models || [],
-      live_checked_at: p.live_checked_at || '', live_stale: !!p.live_stale,
-      sync_supported: p.sync_supported !== false, retired_hidden: p.retired_hidden || 0,
-      free_only: !!p.free_only,
-      models: (p.models || []).map(function (m) {
-        return { id: m.id, label: m.label, tier: m.tier, note: m.note || '', tools: !!m.tools, json: !!m.json, free: !!m.free, available: m.available == null ? null : !!m.available };
-      }),
-    };
-  }
-
-  function markLiveModels(pid, ids) {
-    var p = providerById(pid);
-    if (!p) return;
-    p.models.forEach(function (m) { m.available = ids.indexOf(m.id) > -1; });
-    MODELS = p.models;
-  }
-
-  /** Test one provider — the top buttons use whichever provider is selected. */
-  function testConnection(providerId, statusEl) {
-    var pid = providerId || activeProvider().id;
-    var p = providerById(pid) || {};
-    var btns = [$('test-key-btn'), $('test-key-btn-2'), document.querySelector('[data-test-prov="' + pid + '"]')].filter(Boolean);
-    btns.forEach(function (b) { b.dataset.was = b.textContent.trim(); b.textContent = 'Checking…'; b.disabled = true; });
-    var out = statusEl || $('test-status');
-    if (out) out.textContent = 'Asking ' + (p.label || pid) + ' for the live model list…';
-    var sel = $('set-model');
-    var model = pid === activeProvider().id && sel ? sel.value : (p.model || '');
-    return api('/test', { method: 'POST', body: { provider: pid, model: model } }).then(function (data) {
-      var t = data.test || {};
-      var line;
-      if (t.ok) {
-        line = (t.provider_label || pid) + ' reachable · model ' + (t.used_model || t.model) + ' replied "' + (t.reply || 'ok') + '"'
-          + (t.models ? ' · ' + t.models.length + ' ids available' : '')
-          + (t.model_available === false ? ' · selected id not on this key' : '');
-      } else {
-        line = (t.provider_label || pid) + ' test failed: ' + (t.error || t.list_error || 'unknown error');
-      }
-      if (out) {
-        out.textContent = line;
-        out.className = (statusEl ? 'muted ai-prov-status ' : 'ai-status ') + (t.ok ? 'ai-status-ok' : 'ai-status-bad');
-      }
-      /* The response carries the full refreshed catalog — adopt it so newly
-         discovered models appear (and removed ones drop) without a reload. */
-      if (data.providers) {
-        PROVIDERS = data.providers.map(slimProvider);
-        var refreshed = providerById(pid);
-        if (refreshed) MODELS = refreshed.models;
-      } else if (t.models && t.models.length) {
-        markLiveModels(pid, t.models);
-      }
-      if (pid === activeProvider().id) renderProviderModels(activeProvider());
-      toast(t.ok ? 'ok' : 'err', line.slice(0, 180), 'Model provider');
-    }).catch(function (e) {
-      if (out) { out.textContent = e.message; out.className = (statusEl ? 'muted ai-prov-status ' : 'ai-status ') + 'ai-status-bad'; }
-    }).then(function () {
-      btns.forEach(function (b) { b.textContent = b.dataset.was || b.textContent; b.disabled = false; });
-    });
-  }
-  [$('test-key-btn'), $('test-key-btn-2')].forEach(function (b) {
-    if (b) b.addEventListener('click', function () { testConnection(null, $('test-status')); });
-  });
-  document.querySelectorAll('[data-test-prov]').forEach(function (b) {
-    b.addEventListener('click', function () {
-      var pid = b.getAttribute('data-test-prov');
-      testConnection(pid, document.querySelector('[data-prov-status="' + pid + '"]'));
-    });
-  });
-
-  /* Refresh every configured provider's catalog at once — the hourly upkeep
-     tick does the same for stale catalogs in the background. */
-  function syncAllCatalogs() {
-    var btn = $('sync-all-btn');
-    var out = $('test-status');
-    if (btn) { btn.dataset.was = btn.textContent.trim(); btn.textContent = 'Syncing…'; btn.disabled = true; }
-    if (out) { out.textContent = 'Refreshing every configured catalog…'; out.className = 'ai-status'; }
-    api('/sync-all', { method: 'POST', body: {} }).then(function (data) {
-      if (data.providers) PROVIDERS = data.providers.map(slimProvider);
-      var p = activeProvider();
-      renderProviderConfig(p);
-      renderProviderModels(p);
-      var line = 'Synced ' + (data.synced || 0) + ' catalog(s)' + (data.added ? ' · ' + data.added + ' new model(s) discovered' : '') + '.';
-      var errs = (data.results || []).filter(function (r) { return r.error; });
-      if (errs.length) line += ' ' + errs.length + ' failed: ' + errs.map(function (r) { return r.provider; }).join(', ') + '.';
-      if (out) {
-        out.textContent = line;
-        out.className = 'ai-status ' + (errs.length ? 'ai-status-bad' : 'ai-status-ok');
-      }
-      toast(errs.length ? 'err' : 'ok', line.slice(0, 200), 'Model catalogs');
-    }).catch(function (e) {
-      if (out) { out.textContent = e.message; out.className = 'ai-status ai-status-bad'; }
-    }).then(function () {
-      if (btn) { btn.textContent = btn.dataset.was || 'Sync all catalogs'; btn.disabled = false; }
-    });
-  }
-  if ($('sync-all-btn')) $('sync-all-btn').addEventListener('click', syncAllCatalogs);
 
   if ($('mod-run-btn')) {
     $('mod-run-btn').addEventListener('click', function () {
       var id = Number($('mod-listing-id').value) || 0;
       if (!id) { $('mod-status').textContent = 'Enter a listing id first.'; return; }
       $('mod-run-btn').disabled = true;
-      $('mod-status').textContent = 'Sending to the moderation model…';
+      $('mod-status').textContent = 'Scoring…';
       api('/moderate', { body: { listing_id: id } }).then(function (data) {
         var r = data.result || {};
         $('mod-status').textContent = r.skipped
@@ -1642,7 +846,9 @@
     });
   }
 
+
   /* ================= logs ================= */
+
 
   function logRow(kind, r) {
     var tr = document.createElement('tr');
@@ -1767,25 +973,11 @@
 
   /* ---------------- boot ---------------- */
 
-  /* Normalise the model picker on boot: filter controls, the sync note and the
-     chip strip all derive from the booted provider catalog. */
-  try { renderProviderModels(activeProvider()); } catch (e) { applyModelFilter(); }
-  var wantTab = START_TAB || store('fl-ai-tab') || 'gen';
+  var wantTab = START_TAB || store('fl-ai-tab') || 'chat';
   if (window.location.hash === '#ai-settings') wantTab = 'set';
+  if (wantTab !== 'chat' && wantTab !== 'set') wantTab = 'chat';
   showTab(wantTab, false);
   setBusy(false);
-  refreshHeadTitle();
-  ['moderation', 'audit'].forEach(function (kind) {
-    var page = kind === 'moderation'
-      ? <%- JSON.stringify({ rows: moderation.rows, total: moderation.total, has_more: moderation.has_more }) %>
-      : <%- JSON.stringify({ rows: auditLog.rows, total: auditLog.total, has_more: auditLog.has_more }) %>;
-    var more = document.querySelector('[data-more-log="' + kind + '"]');
-    if (more) more.disabled = !page.has_more;
-  });
-  if (!READY) {
-    var s = $('chat-head-sub');
-    if (s) s.textContent = ACTIVE_LABEL + ' key required — add one in Settings';
-  }
 })();
 </script>
 

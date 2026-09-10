@@ -9,8 +9,8 @@
  * changing anything fails here — the assistant must never claim work it did
  * not do.
  *
- * No network and no Groq key are required: the tools themselves are pure
- * server-side operations; only the natural-language wrapper needs Groq.
+ * No network is required: the tools are pure server-side operations and the
+ * assistant that drives them is a rule engine (no model, no API).
  */
 process.env.NODE_ENV = process.env.NODE_ENV || 'test';
 
@@ -22,11 +22,9 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'firmledger-tools-'));
 process.env.FIRMLEDGER_DATA_DIR = tmp;
 process.env.BASE_URL = process.env.BASE_URL || 'https://firmledger.test';
 process.env.SMTP_URL = '';           // mail lands in the outbox log, never the wire
-process.env.GROQ_API_KEY = process.env.GROQ_API_KEY || '';
 
 const { db, getSetting, setSetting } = require('../src/db');
 const tools = require('../src/lib/aitools');
-const llmLib = require('../src/lib/llm');
 
 /* ---------------------------------------------------------------- harness */
 let passed = 0;
@@ -385,14 +383,14 @@ function seed() {
     if (r.product.name !== 'FirmLedger') return 'product name missing';
     if (r.admin_console.length < 15) return 'admin console map too short';
     if (r.public_pages.length < 15) return 'public page map too short';
-    if (r.ai.provider_id !== 'groq' || !r.ai.provider_label) return 'active AI provider missing';
+    if (!r.assistant || !/rule/.test(r.assistant.engine)) return 'assistant engine missing';
     if (!r.feature_flags || typeof r.feature_flags.auto_approve !== 'boolean') return 'feature flags missing';
     return null;
   });
   await tool('get_settings', {}, (r) => {
     if (typeof r.site.auto_approve !== 'boolean') return 'site flags missing';
     if (typeof r.protection.limits.login !== 'number') return 'rate limits missing';
-    if (!r.ai.providers_with_keys) return 'provider list missing';
+    if (!r.assistant || !Array.isArray(r.assistant.auto_run_tools)) return 'assistant auto-run list missing';
     return null;
   });
   await tool('get_listing', { id_or_slug: 'gamma-group' }, (r) => {
@@ -416,12 +414,15 @@ function seed() {
     typeof r.indexnow.log_rows === 'number' && r.google && r.upkeep ? null : 'indexing shape wrong'));
   await tool('get_status_page', {}, (r) => (r.components.length > 0 && r.overall ? null : 'status components missing'));
   await tool('get_ai_playground', {}, (r) => {
-    if (r.providers.length < 10) return 'provider list too short';
-    if (r.active_provider !== 'groq') return 'active provider wrong';
-    const withKeys = r.providers.filter((p) => p.configured).map((p) => p.id);
-    if (JSON.stringify(withKeys) !== JSON.stringify(llmLib.configuredProviders())) return 'configured provider list mismatch';
+    if (r.engine !== 'rule-based') return 'engine wrong';
+    if (typeof r.tools !== 'number' || r.tools < 100) return 'tool count missing';
+    if (!r.moderation || typeof r.moderation.on !== 'boolean') return 'moderation state missing';
     return null;
   });
+  await tool('list_listings', { status: 'approved' }, (r) => (typeof r.total === 'number' && r.listings.every((l) => l.status === 'approved') ? null : 'listing list wrong'));
+  await tool('list_users', { since_days: 7 }, (r) => (r.count >= 1 ? null : 'recent members not listed'));
+  await tool('list_tickets', { status: 'open' }, (r) => (Array.isArray(r.tickets) ? null : 'ticket list wrong'));
+  await tool('get_ticket', { id_or_ref: 'nope' }, null, { expectFail: true });
 
   section('Listing edits, bulk actions, relations and timeline');
   await tool('create_listing', {

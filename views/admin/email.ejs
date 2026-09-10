@@ -105,20 +105,9 @@
           <option value="html" <%= (typeof draft !== 'undefined' && draft && draft.format === 'html') ? 'selected' : '' %>>Branded HTML — FirmLedger design, with logo header</option>
         </select>
       </label>
-      <label><span style="display:flex;align-items:center;gap:10px">Message
-        <span style="display:inline-flex;align-items:center;gap:8px">
-          <button type="button" class="btn btn-ghost btn-sm" id="rephraseBtn"
-                  title="Rewrite the subject line and this message with the provider and model configured in Admin → AI Playground → Settings → Model providers. Works for plain text and HTML alike.">Rephrase with AI</button>
-          <% if (typeof ai !== 'undefined' && ai && ai.configured) { %>
-            <span class="muted" style="font-weight:400;font-size:12px">via <%= ai.provider_label %> · <%= ai.model %></span>
-          <% } else { %>
-            <span class="muted" style="font-weight:400;font-size:12px;color:var(--bad,#b3261e)">no AI provider configured — set one in Admin → AI Playground</span>
-          <% } %>
-        </span>
-      </span>
+      <label><span>Message</span>
         <textarea name="body" id="mailBody" rows="12" required placeholder="Hello — a quick note from the FirmLedger moderation team…"><%= typeof draft !== 'undefined' && draft ? draft.body : '' %></textarea>
       </label>
-      <p class="fine-print" id="rephraseNote" hidden></p>
       <p class="fine-print" id="fmtHint" style="margin-top:-6px">Plain text is sent exactly as written (newlines preserved).</p>
       <script>
       (function () {
@@ -131,81 +120,6 @@
             h.textContent = 'Plain text is sent exactly as written (newlines preserved).';
             ta.placeholder = 'Hello — a quick note from the FirmLedger moderation team…';
           }
-        });
-      })();
-      </script>
-      <script>
-      /* Rephrase the draft with the model configured in Admin → AI Playground.
-         Plain text in → plain text out; HTML in → HTML out. The subject line
-         and the message body are both rephrased in one pass, and the results
-         land back in their fields for review — nothing is sent until the
-         admin clicks Send. */
-      (function () {
-        var CSRF = <%- JSON.stringify(csrfToken || '') %>;
-        var btn = document.getElementById('rephraseBtn');
-        var ta = document.getElementById('mailBody');
-        var note = document.getElementById('rephraseNote');
-        var fmt = document.getElementById('mailFormat');
-        var subj = document.querySelector('input[name="subject"]');
-        if (!btn || !ta || !note) return;
-        function say(msg, isError) {
-          note.hidden = !msg;
-          note.textContent = msg || '';
-          note.style.color = isError ? 'var(--bad, #b3261e)' : '';
-        }
-        function guidance(code, message) {
-          if (!code) return message;
-          var plain = String(message || '').replace(/\s+/g, ' ').trim();
-          if (code === 'not_configured' || code === 'bad_model' || code === 'no_model') {
-            return (plain ? plain + ' ' : '') + 'Open Admin → AI Playground → Settings → Model providers to pick a provider and model (or set the provider key in .env), then try again.';
-          }
-          if (code === 'invalid_key') {
-            return (plain ? plain + ' ' : '') + 'The saved provider key was rejected — refresh it in Admin → AI Playground → Settings → Model providers.';
-          }
-          if (code === 'empty_reply') {
-            return (plain || 'The model returned an empty rephrase.') + ' If it keeps happening, pick another model in Admin → AI Playground → Settings.';
-          }
-          return plain || 'Rephrase failed. Try again in a moment.';
-        }
-        btn.addEventListener('click', function () {
-          var text = ta.value.trim();
-          var subject = subj ? subj.value.trim() : '';
-          if (text.length < 10 && subject.length < 5) { say('Write at least a sentence (or a subject line) first, then I can rephrase it.', true); return; }
-          var format = fmt && fmt.value === 'html' ? 'html' : 'text';
-          var both = subject.length >= 1 && text.length >= 10;
-          btn.disabled = true;
-          var old = btn.textContent;
-          btn.textContent = 'Rephrasing…';
-          say('Rephrasing ' + (both ? 'the subject and the message' : 'the message') + ' with the AI configured in Admin → AI Playground' + (fmt && fmt.value === 'html' ? ' (HTML in → HTML out)' : ' (plain text in → plain text out)') + '…', false);
-          fetch('/admin3119Musa/email/rephrase', {
-            method: 'POST',
-            credentials: 'same-origin',
-            headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-Token': CSRF },
-            body: JSON.stringify({ text: text, subject: subject, format: format }),
-          }).then(function (res) {
-            return res.text().then(function (raw) {
-              var data = {};
-              try { data = raw ? JSON.parse(raw) : {}; } catch (e) { data = { error: raw.slice(0, 200) }; }
-              return { res: res, data: data };
-            });
-          }).then(function (out) {
-            if (!out.res.ok || out.data.ok === false) {
-              var err = new Error(out.data.error || ('Rephrase failed (' + out.res.status + ')'));
-              err.code = out.data.code || '';
-              throw err;
-            }
-            ta.value = out.data.text;
-            var subjectDone = false;
-            if (subj && out.data.subject) { subj.value = out.data.subject; subjectDone = true; }
-            ta.focus();
-            var who = out.data.provider_label ? out.data.provider_label + ' (' + (out.data.model || 'default model') + ')' : (out.data.model || 'AI');
-            say('Rephrased ' + (subjectDone ? 'the subject and the message' : 'the message') + ' with ' + who + ' — review both before sending.', false);
-          }).catch(function (e) {
-            say(guidance(e && e.code, e && e.message), true);
-          }).finally(function () {
-            btn.disabled = false;
-            btn.textContent = old;
-          });
         });
       })();
       </script>

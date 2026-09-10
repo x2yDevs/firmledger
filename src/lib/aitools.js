@@ -1403,7 +1403,7 @@ if (DUPLICATE_NAMES.length) throw new Error(`Duplicate admin tool names: ${DUPLI
 
 const BY_NAME = Object.fromEntries(TOOLS.map((t) => [t.name, t]));
 
-function groqTools() {
+function toolSchemas() {
   return TOOLS.map((t) => ({
     type: 'function',
     function: {
@@ -1519,7 +1519,7 @@ function sensitiveTools() {
 }
 
 module.exports = {
-  TOOLS, CORE_TOOLS, ADMIN_TOOLS, GROUPS, groqTools, getTool, parseArgs, describeCall, execute,
+  TOOLS, CORE_TOOLS, ADMIN_TOOLS, GROUPS, toolSchemas, getTool, parseArgs, describeCall, execute,
   findListing, findUser, approveListingRow, rejectListingRow, queueMail,
   isAuto, isSensitive, catalog, saveAutoTools, autoSet, capabilityPrompt, toolIndex, sensitiveTools,
 };

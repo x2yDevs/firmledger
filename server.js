@@ -226,17 +226,6 @@ function hourlyJobs() {
      custom) that has been idle past the window pings admin@firmledger.co.ke
      automatically, so vendors never close the account for inactivity. */
   try { require('./src/lib/mailer').keepAliveSweep().catch((e) => console.error('[mail-keepalive]', e && e.message)); } catch (e) { console.error('[mail-keepalive]', e.message); }
-  /* AI model catalogs — refresh any provider whose live /models snapshot is
-     older than the gateway TTL, so newly released models appear and removed
-     ones drop to unavailable without any clicks. Stale-only, best-effort. */
-  try {
-    require('./src/lib/llm').syncAllProviders({ onlyStale: true })
-      .then((results) => {
-        const synced = results.filter((r) => !r.skipped && !r.error);
-        if (synced.length) console.log(`[llm] auto-synced ${synced.length} model catalog(s): ${synced.map((r) => `${r.provider} (${r.count})`).join(', ')}`);
-      })
-      .catch((e) => console.error('[llm] catalog auto-sync failed:', e && e.message));
-  } catch (e) { console.error('[llm] catalog auto-sync failed:', e.message); }
 }
 setInterval(hourlyJobs, 3600e3);
 setTimeout(hourlyJobs, 90e3);

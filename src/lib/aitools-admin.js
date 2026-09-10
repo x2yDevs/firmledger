@@ -36,7 +36,6 @@ const indexlog = require('./indexlog');
 const indexing = require('./indexing');
 const googleIndexing = require('./googleIndexing');
 const backup = require('./backup');
-const llm = require('./llm');
 const { TYPES, SIZES } = require('./taxonomy');
 const { siteUrl } = require('./util');
 const fs = require('fs');
@@ -71,11 +70,10 @@ const TOOLS = [
   /* ==================== Site knowledge ==================== */
   {
     name: 'get_site_overview', group: 'read', label: 'Site & console map', mutating: false,
-    description: 'Full orientation on FirmLedger: every public page, dashboard area and admin console section, the current feature flags, taxonomy, plans, advert packages and the live AI provider. Call this whenever you need to know what the site is or what an admin can change.',
+    description: 'Full orientation on FirmLedger: every public page, dashboard area and admin console section, the current feature flags, taxonomy, plans and advert packages.',
     parameters: { type: 'object', properties: {}, additionalProperties: false },
     summarize() { return 'Read the FirmLedger site and console map.'; },
     run() {
-      const provider = llm.provider(llm.activeId());
       return {
         product: {
           name: 'FirmLedger',
@@ -121,7 +119,7 @@ const TOOLS = [
           { path: '/admin3119Musa/notifications', page: 'Admin inbox' },
           { path: '/admin3119Musa/email', page: 'Send mail to members' },
           { path: '/admin3119Musa/settings', page: 'Site, SMTP, payments, indexing, upkeep, 2FA' },
-          { path: '/admin3119Musa/ai', page: 'AI Playground — generator, assistant, moderation, model providers' },
+          { path: '/admin3119Musa/ai', page: 'AI Playground — rule-based assistant, auto-moderation, audit logs' },
         ],
         taxonomy: {
           types: TYPES, sizes: SIZES,
@@ -142,13 +140,7 @@ const TOOLS = [
           paypal_mode: getSetting('paypal_mode', process.env.PAYPAL_MODE || 'sandbox'),
           paypal_configured: Boolean(process.env.PAYPAL_CLIENT_ID || getSetting('paypal_client_id', '')),
         },
-        ai: {
-          provider_label: provider.label,
-          provider_id: provider.id,
-          model: llm.modelFor(provider.id),
-          configured: llm.configured(provider.id),
-          other_providers_with_keys: llm.configuredProviders().filter((id) => id !== provider.id),
-        },
+        assistant: { engine: 'rule-based (no model, no API)', moderation_on: getSetting('ai_moderation_on', '0') === '1' },
         volumes: {
           listings: countOf('SELECT COUNT(*) c FROM listings'),
           users: countOf('SELECT COUNT(*) c FROM users'),
@@ -199,11 +191,9 @@ const TOOLS = [
           log_rows: indexlog.count(),
         },
         upkeep: upkeep.settings(),
-        ai: {
-          provider: llm.activeId(),
-          providers_with_keys: llm.configuredProviders(),
+        assistant: {
+          engine: 'rule-based (no model, no API)',
           moderation_on: getSetting('ai_moderation_on', '0') === '1',
-          moderation_model: getSetting('ai_moderation_model', '') || '(default)',
           auto_run_tools: [...require('./aitools').autoSet()],
         },
       };
@@ -437,28 +427,113 @@ const TOOLS = [
     },
   },
   {
-    name: 'get_ai_playground', group: 'read', label: 'AI Playground state', mutating: false,
-    description: 'The AI Playground: which provider is active, which providers hold keys (masked), the selected models, live model availability, auto-moderation settings, pending confirmations and the latest audit entries.',
+    name: 'get_ai_playground', group: 'read', label: 'Assistant state', mutating: false,
+    description: 'The AI Playground: assistant engine (rule-based, no model), auto-moderation settings, auto-run allow-list, pending confirmations and the latest audit entries.',
     parameters: { type: 'object', properties: {}, additionalProperties: false },
-    summarize() { return 'Read the AI Playground state.'; },
+    summarize() { return 'Read the assistant state.'; },
     run() {
-      const active = llm.activeId();
+      const aitools = require('./aitools');
       return {
-        active_provider: active,
-        active_model: llm.modelFor(active),
-        active_configured: llm.configured(active),
-        providers: llm.providersView().map((p) => ({
-          id: p.id, label: p.label, configured: p.configured, key_source: p.key_source, key_hint: p.key_hint,
-          model: p.model, base_url: p.base_url, live_models: p.live_models.length, active: p.active,
-        })),
+        engine: 'rule-based',
+        tools: aitools.TOOLS.length,
+        auto_run_tools: [...aitools.autoSet()],
         moderation: {
           on: getSetting('ai_moderation_on', '0') === '1',
-          model: getSetting('ai_moderation_model', '') || llm.modelFor(active),
           email_admin: getSetting('ai_moderation_email', '1') === '1',
+          approve_at: Number(getSetting('ai_moderation_approve_at', '75') || 75),
+          reject_at: Number(getSetting('ai_moderation_reject_at', '25') || 25),
+          blocklist_terms: String(getSetting('ai_moderation_blocklist', '') || '').split(/[\n,]/).map((x) => x.trim()).filter(Boolean).length,
         },
         pending_confirmations: countOf('SELECT COUNT(*) c FROM ai_pending_actions'),
         recent_audit: rows('SELECT id, kind, action, result, created_at FROM ai_audit_log ORDER BY id DESC LIMIT 15'),
       };
+    },
+  },
+  {
+    name: 'list_listings', group: 'read', label: 'List listings', mutating: false,
+    description: 'List listings filtered by status, featured, sponsored, claimed, category, country or recency. Newest first unless order=oldest.',
+    parameters: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', enum: ['pending', 'approved', 'rejected'] },
+        featured: { type: 'boolean' }, sponsored: { type: 'boolean' }, claimed: { type: 'boolean' },
+        category: { type: 'string' }, country: { type: 'string' }, owner: { type: 'string', description: 'Owner user id or email' },
+        since_days: { type: 'integer' }, order: { type: 'string', enum: ['newest', 'oldest'] }, limit: { type: 'integer' },
+      },
+      additionalProperties: false,
+    },
+    summarize(a) { return `List ${a.status || ''} listings${a.category ? ' in ' + a.category : ''}${a.country ? ' from ' + a.country : ''}.`; },
+    run(args) {
+      const where = []; const p = [];
+      if (['pending', 'approved', 'rejected'].includes(String(args.status || ''))) { where.push('status=?'); p.push(args.status); }
+      if (args.featured === true) where.push('featured=1');
+      if (args.sponsored === true) where.push('sponsored=1');
+      if (args.claimed === true) where.push('claimed=1'); else if (args.claimed === false) where.push('claimed=0');
+      if (args.category) { where.push('category = ? COLLATE NOCASE'); p.push(String(args.category)); }
+      if (args.country) { where.push('country LIKE ?'); p.push(`%${String(args.country)}%`); }
+      if (args.owner) { const u = findUser(String(args.owner)); if (!u) return { error: 'No member matches that owner.' }; where.push('owner_user_id=?'); p.push(u.id); }
+      const since = Math.min(3650, Math.max(0, Number(args.since_days || 0)));
+      if (since) { where.push("created_at >= datetime('now', ?)"); p.push(`-${since} days`); }
+      const limit = Math.min(100, Math.max(1, Number(args.limit || 20)));
+      const order = args.order === 'oldest' ? 'ASC' : 'DESC';
+      const sql = `SELECT id, slug, name, status, category, country, featured, sponsored, claimed, plan, created_at FROM listings${where.length ? ' WHERE ' + where.join(' AND ') : ''} ORDER BY created_at ${order}, id ${order} LIMIT ${limit}`;
+      const listings = rows(sql, ...p);
+      const total = countOf(`SELECT COUNT(*) c FROM listings${where.length ? ' WHERE ' + where.join(' AND ') : ''}`, ...p);
+      const filters = [args.status, args.featured && 'featured', args.sponsored && 'sponsored', args.claimed === true && 'claimed', args.claimed === false && 'unclaimed', args.category, args.country, args.owner && `owned by ${args.owner}`, since && `last ${since} days`].filter(Boolean).join(', ');
+      return { count: listings.length, total, filters, listings: listings.map((l) => ({ ...l, featured: !!l.featured, sponsored: !!l.sponsored, claimed: !!l.claimed })) };
+    },
+  },
+  {
+    name: 'list_users', group: 'read', label: 'List members', mutating: false,
+    description: 'List members, optionally only suspended, by plan (pro/free), on trial, or signed up in the last N days.',
+    parameters: {
+      type: 'object',
+      properties: {
+        suspended: { type: 'boolean' }, plan: { type: 'string', enum: ['pro', 'free'] }, trial: { type: 'boolean' },
+        since_days: { type: 'integer' }, limit: { type: 'integer' },
+      },
+      additionalProperties: false,
+    },
+    summarize(a) { return `List ${a.suspended ? 'suspended ' : ''}${a.plan || ''} members.`; },
+    run(args) {
+      const where = []; const p = [];
+      if (args.suspended === true) where.push('u.suspended=1');
+      if (args.plan === 'pro') where.push("u.plan='pro'"); else if (args.plan === 'free') where.push("(u.plan IS NULL OR u.plan='' OR u.plan='free')");
+      if (args.trial === true) where.push("u.trial_expires_at > datetime('now')");
+      const since = Math.min(3650, Math.max(0, Number(args.since_days || 0)));
+      if (since) { where.push("u.created_at >= datetime('now', ?)"); p.push(`-${since} days`); }
+      const limit = Math.min(100, Math.max(1, Number(args.limit || 20)));
+      const users = rows(`SELECT u.id, u.email, u.name, u.plan, u.suspended, u.trial_expires_at, u.created_at, (SELECT COUNT(*) FROM listings l WHERE l.owner_user_id=u.id) AS listings FROM users u${where.length ? ' WHERE ' + where.join(' AND ') : ''} ORDER BY u.id DESC LIMIT ${limit}`, ...p);
+      const total = countOf(`SELECT COUNT(*) c FROM users u${where.length ? ' WHERE ' + where.join(' AND ') : ''}`, ...p);
+      const filters = [args.suspended && 'suspended', args.plan, args.trial && 'on trial', since && `joined in the last ${since} days`].filter(Boolean).join(', ');
+      return { count: users.length, total, filters, users: users.map((u) => ({ ...u, suspended: !!u.suspended })) };
+    },
+  },
+  {
+    name: 'list_tickets', group: 'read', label: 'List tickets', mutating: false,
+    description: 'List support tickets by status (open, solved, closed) or all.',
+    parameters: { type: 'object', properties: { status: { type: 'string', enum: ['open', 'solved', 'closed', ''] }, limit: { type: 'integer' } }, additionalProperties: false },
+    summarize(a) { return `List ${a.status || 'all'} tickets.`; },
+    run(args) {
+      const st = ['open', 'solved', 'closed'].includes(String(args.status || '')) ? String(args.status) : '';
+      const limit = Math.min(100, Math.max(1, Number(args.limit || 30)));
+      const tickets = rows(`SELECT t.id, t.ref, t.subject, t.category, t.status, t.created_at, t.updated_at, u.email AS user_email FROM tickets t JOIN users u ON u.id=t.user_id${st ? ' WHERE t.status=?' : ''} ORDER BY t.updated_at DESC LIMIT ${limit}`, ...(st ? [st] : []));
+      return { count: tickets.length, status: st, tickets };
+    },
+  },
+  {
+    name: 'get_ticket', group: 'read', label: 'Ticket detail', mutating: false,
+    description: 'One support ticket with its message thread (id or FL- reference).',
+    parameters: { type: 'object', properties: { id_or_ref: { type: 'string' } }, required: ['id_or_ref'], additionalProperties: false },
+    summarize(a) { return `Read ticket ${a.id_or_ref}.`; },
+    run(args) {
+      const raw = String(args.id_or_ref || '').trim();
+      const t = /^\d+$/.test(raw)
+        ? db.prepare('SELECT t.*, u.email AS user_email, u.name AS user_name FROM tickets t JOIN users u ON u.id=t.user_id WHERE t.id=?').get(Number(raw))
+        : db.prepare('SELECT t.*, u.email AS user_email, u.name AS user_name FROM tickets t JOIN users u ON u.id=t.user_id WHERE t.ref=? COLLATE NOCASE').get(raw);
+      if (!t) return { error: 'Ticket not found.' };
+      const messages = rows('SELECT id, sender, body, attachment_name, created_at FROM ticket_messages WHERE ticket_id=? ORDER BY id ASC', t.id);
+      return { ticket: { id: t.id, ref: t.ref, subject: t.subject, category: t.category, status: t.status, user_id: t.user_id, user_email: t.user_email, user_name: t.user_name, created_at: t.created_at, updated_at: t.updated_at, closed_at: t.closed_at }, messages };
     },
   },
 

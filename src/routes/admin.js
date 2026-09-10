@@ -16,8 +16,6 @@ const { submitForIndexing, getIndexNowKey } = require('../lib/indexing');
 const googleIndexing = require('../lib/googleIndexing');
 const indexlog = require('../lib/indexlog');
 const { parseLines, normalizeUrl, slugify, domainOf, siteUrl, escHtml, randomToken, isEmail } = require('../lib/util');
-const groq = require('../lib/groq');
-const llm = require('../lib/llm');
 const catLib = require('../lib/categories');
 const graphLib = require('../lib/graph');
 const { deleteLogo } = require('../lib/upload');
@@ -1817,26 +1815,12 @@ router.get('/admin3119Musa/email/users.json', (req, res) => {
   res.json({ users });
 });
 
-/** Which AI Playground provider/model the Rephrase button will use. */
-function rephraseAiStatus() {
-  const pid = llm.activeId();
-  const prov = llm.provider(pid);
-  const model = llm.modelFor(pid) || prov.defaultModel || '';
-  return {
-    provider: pid,
-    provider_label: prov.label,
-    model,
-    configured: llm.configured(pid) && Boolean(model),
-  };
-}
-
 router.get('/admin3119Musa/email', (req, res) => {
   const users = db.prepare('SELECT id, name, email FROM users ORDER BY name LIMIT 1000').all();
   const log = db.prepare('SELECT * FROM admin_mail_log ORDER BY created_at DESC LIMIT 25').all();
   res.render('admin/email', {
     meta: { title: 'Email — FirmLedger Admin', description: '', robots: 'noindex,nofollow' },
     users, log, counts: emailCounts(), preset: String(req.query.to || ''), smtp: mailConfigured(), section: 'email',
-    ai: rephraseAiStatus(),
     /* Which provider this bulk send goes out on: the remembered pick
        ('' = automatic failover chain) plus the active hops, grouped. */
     bulkVia: bulkVia(), mailHops: bulkViaHops(),
@@ -1900,8 +1884,7 @@ router.post('/admin3119Musa/email', async (req, res) => {
       meta: { title: 'Email — FirmLedger Admin', description: '', robots: 'noindex,nofollow' },
       users, log, counts: emailCounts(), preset: to, smtp: mailConfigured(), section: 'email',
       errors: err, draft: { subject, body, format, external: externalRaw },
-      ai: rephraseAiStatus(),
-      bulkVia: via, mailHops: bulkViaHops(),
+        bulkVia: via, mailHops: bulkViaHops(),
     });
   }
   for (const e of external) if (!recipients.includes(e)) recipients.push(e);
@@ -1938,108 +1921,6 @@ router.post('/admin3119Musa/email', async (req, res) => {
       : `No SMTP configured — ${logged} message${logged === 1 ? '' : 's'} written to data/outbox.log for later delivery.`;
   if (viaHop) msg += ` Sent out first through ${viaHop.label} (the rest of the failover chain stayed armed behind it).`;
   res.redirect('/admin3119Musa/email?ok=' + encodeURIComponent(msg));
-});
-
-/* Rephrase a draft with the model configured in Admin → AI Playground.
-   Works for both plain-text and HTML drafts. The operator reviews the result
-   in the message box before anything is sent — this endpoint never delivers
-   mail.
-
-   The provider, key and model are resolved exactly like the rest of the AI
-   Playground (src/lib/llm.js — Admin → AI Playground → Settings → Model
-   providers): whichever provider is active there powers this button, its key
-   is read from the same place, and the model falls back to that provider's
-   default if the saved choice is no longer known. Errors are returned as a
-   JSON envelope { ok:false, error, code } so the page can show the operator a
-   real reason (missing key, invalid key, model unavailable) instead of a bare
-   gateway error. */
-router.post('/admin3119Musa/email/rephrase', async (req, res) => {
-  const text = String((req.body && req.body.text) || '').trim().slice(0, 10000);
-  /* The subject line travels with the body so both come back rephrased in
-     one pass. The "[FirmLedger]" prefix is added at send time — it is
-     stripped here so the model never rewrites or duplicates it. */
-  const subject = String((req.body && req.body.subject) || '').trim()
-    .replace(/^\[FirmLedger\]\s*/i, '').slice(0, 200);
-  const format = req.body && req.body.format === 'html' ? 'html' : 'text';
-  if (text.length < 10 && subject.length < 5) {
-    return res.status(422).json({ ok: false, error: 'Write at least a sentence (or a subject line) to rephrase.' });
-  }
-  /* Same resolution the Playground uses for its own calls — the active
-     provider, with the saved model when it is still known. */
-  const providerId = llm.activeId();
-  const prov = llm.provider(providerId);
-  const savedModel = llm.modelFor(providerId);
-  const model = savedModel && llm.isKnownModel(savedModel, providerId)
-    ? savedModel
-    : (prov.defaultModel || savedModel || '');
-  const kind = format === 'html'
-    ? 'the SUBJECT LINE and the HTML body of a branded member email'
-    : 'the SUBJECT LINE and the plain-text body of a member email';
-  const bodyRules = format === 'html'
-    ? 'In the body keep the HTML tags and structure (you may rewrite the text inside tags), keep every link and its href, keep every date and fact, and keep any {{name}} placeholder exactly as written. Do not add or remove paragraphs, and do not wrap the output in <html> or <body> tags.'
-    : 'In the body keep every fact, link and date, keep any {{name}} placeholder exactly as written, and keep the plain-text formatting with one blank line between paragraphs.';
-  const system = subject && text.length >= 10
-    ? `You are the writing assistant in the FirmLedger admin console. The operator pasted ${kind}. Rephrase BOTH the subject line and the message body so they read more naturally, clearly and professionally while keeping exactly the same meaning. The subject must stay short (under 80 characters), specific and compelling — no "[FirmLedger]" prefix, no quotation marks. ${bodyRules} Reply in EXACTLY this format, nothing else:\nSUBJECT: <the rephrased subject line>\nBODY:\n<the rephrased message body>\nNo markdown fences, no explanation before or after.`
-    : `You are the writing assistant in the FirmLedger admin console. The operator pasted the ${format === 'html' ? 'HTML body' : 'plain-text body'} of a member email. Rephrase it so it reads more naturally, clearly and professionally while keeping the same meaning. ${bodyRules} Output ONLY the rephrased body — no markdown fences, no quotes, no explanation.`;
-  const userContent = subject && text.length >= 10
-    ? `Subject line:\n${subject}\n\nMessage body:\n${text}`
-    : text;
-  try {
-    const data = await groq.chat({
-      provider: providerId,
-      model: model || undefined,
-      temperature: 0.8,
-      max_tokens: 2800,
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: userContent },
-      ],
-    });
-    let out = groq.assistantText(data).trim();
-    /* Models sometimes wrap the result in a code fence — strip it. */
-    out = out.replace(/^```[a-zA-Z0-9]*\s*/m, '').replace(/```\s*$/m, '').trim();
-    if (!out) {
-      console.error('[email-rephrase] empty reply from', providerId, model || '(default)');
-      return res.status(502).json({
-        ok: false,
-        error: `${prov.label} returned an empty rephrase. Try again — if it keeps happening pick another model in Admin → AI Playground → Settings.`,
-        code: 'empty_reply',
-      });
-    }
-    /* Split the SUBJECT:/BODY: envelope when both parts were rephrased.
-       If the model ignored the format, fall back gracefully: the whole
-       reply becomes the body and the original subject is kept. */
-    let newSubject = '';
-    let body = out;
-    const sm = out.match(/^[\s>]*SUBJECT:\s*(.+)\s*$/im);
-    if (sm) {
-      newSubject = sm[1].trim().replace(/^["']|["']$/g, '').replace(/^\[FirmLedger\]\s*/i, '').slice(0, 200);
-      const bm = out.match(/^[\s>]*BODY:[ \t]*(.*)$/im);
-      if (bm) {
-        body = (bm[1] ? bm[1] + '\n' : '') + out.slice(bm.index + bm[0].length);
-      } else {
-        body = out.slice(sm.index + sm[0].length);
-      }
-      body = body.trim();
-      /* A parsing accident must never lose the operator's draft. */
-      if (body.length < Math.min(10, text.length)) { body = out; newSubject = ''; }
-    }
-    return res.json({
-      ok: true,
-      text: body.slice(0, 10000),
-      subject: newSubject,
-      rephrased_subject: Boolean(newSubject),
-      model: data._model || model,
-      provider: providerId,
-      provider_label: prov.label,
-    });
-  } catch (e) {
-    const status = (e && e.status) || 502;
-    const code = (e && e.code) || 'llm_error';
-    console.error('[email-rephrase] failed:', code, (e && e.message) || e);
-    const message = (e && e.message) || `${prov.label} did not return a usable reply. Try again.`;
-    return res.status(status).json({ ok: false, error: message, code });
-  }
 });
 
 /* ---------------- Admin: add a listing ---------------- */
