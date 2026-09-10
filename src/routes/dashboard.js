@@ -1004,14 +1004,27 @@ router.post('/dashboard/api/webhooks/:id/delete', (req, res) => {
 
 /* --- Playground: calls run through the same service layer as /api/v1 --- */
 const PLAYGROUND_ENDPOINTS = [
+  { m: 'GET', path: '/api/v1', body: '' },
+  { m: 'GET', path: '/api/v1/health', body: '' },
   { m: 'GET', path: '/api/v1/me', body: '' },
   { m: 'GET', path: '/api/v1/usage', body: '' },
   { m: 'GET', path: '/api/v1/webhooks', body: '' },
   { m: 'POST', path: '/api/v1/webhooks', body: '{\n  "label": "Production receiver",\n  "url": "https://example.com/firmledger",\n  "events": ["listing.approved", "listing.rejected", "claim.verified"]\n}' },
+  { m: 'GET', path: '/api/v1/webhooks/{id}', body: '' },
+  { m: 'PATCH', path: '/api/v1/webhooks/{id}', body: '{\n  "active": false\n}' },
+  { m: 'PUT', path: '/api/v1/webhooks/{id}', body: '{\n  "active": true\n}' },
+  { m: 'DELETE', path: '/api/v1/webhooks/{id}', body: '' },
+  { m: 'POST', path: '/api/v1/webhooks/{id}/rotate-secret', body: '' },
   { m: 'GET', path: '/api/v1/webhooks/{id}/deliveries', body: '' },
+  { m: 'POST', path: '/api/v1/webhooks/{id}/deliveries/{deliveryId}/retry', body: '' },
   { m: 'POST', path: '/api/v1/webhooks/{id}/test', body: '' },
   { m: 'GET', path: '/api/v1/listings', body: '' },
+  { m: 'POST', path: '/api/v1/listings', body: '{\n  "name": "Acme Logistics Ltd",\n  "tagline": "Cold-chain freight for East African exporters end to end",\n  "description": "Acme Logistics Ltd runs refrigerated trucking and bonded warehousing between Mombasa, Nairobi and Kampala, giving horticulture and pharma exporters a single audited cold chain from packhouse to airport.",\n  "website": "https://acme-logistics.example",\n  "country": "Kenya",\n  "type": "company",\n  "founded": "2019",\n  "city": "Nairobi",\n  "tags": ["logistics", "cold-chain", "freight"]\n}' },
   { m: 'GET', path: '/api/v1/listings/{slug}', body: '' },
+  { m: 'PUT', path: '/api/v1/listings/{id}', body: '{\n  "tagline": "Cold-chain freight and bonded warehousing, Mombasa to Kampala",\n  "city": "Mombasa"\n}' },
+  { m: 'DELETE', path: '/api/v1/listings/{id}', body: '' },
+  { m: 'GET', path: '/api/v1/directory', body: '' },
+  { m: 'GET', path: '/api/v1/directory/{slug}', body: '' },
   { m: 'GET', path: '/api/v1/my/listings', body: '' },
   { m: 'POST', path: '/api/v1/my/listings', body: '{\n  \"name\": \"Acme Logistics Ltd\",\n  \"tagline\": \"Cold-chain freight for East African exporters end to end\",\n  \"description\": \"Acme Logistics Ltd runs refrigerated trucking and bonded warehousing between Mombasa, Nairobi and Kampala, giving horticulture and pharma exporters a single audited cold chain from packhouse to airport.\",\n  \"website\": \"https://acme-logistics.example\",\n  \"country\": \"Kenya\",\n  \"type\": \"company\",\n  \"founded\": \"2019\",\n  \"city\": \"Nairobi\",\n  \"tags\": [\"logistics\", \"cold-chain\", \"freight\"]\n}' },
   { m: 'GET', path: '/api/v1/my/listings/{id}', body: '' },
@@ -1043,6 +1056,24 @@ function runPlaygroundCall(user, method, path, rawBody) {
     try { body = rawBody && rawBody.trim() ? JSON.parse(rawBody) : {}; }
     catch { return { status: 400, json: { error: { code: 'invalid_json', message: 'The playground body is not valid JSON — fix it and re-run.' } } }; }
   }
+  /* Keep discovery and liveness in the browser playground too. They are
+   * authenticated on the wire, so the playground returns the same useful
+   * contract rather than forcing an admin to leave the page for curl. */
+  if (!segs.length && m === 'GET') return { status: 200, json: {
+    name: 'FirmLedger API', version: 'v1', docs: siteUrl('/api/docs'),
+    endpoints: {
+      health: 'GET /api/v1/health', me: 'GET /api/v1/me', usage: 'GET /api/v1/usage',
+      directory: ['GET /api/v1/listings', 'GET /api/v1/listings/:slug', 'GET /api/v1/directory', 'GET /api/v1/directory/:slug'],
+      listing_writes: ['POST /api/v1/listings', 'PUT /api/v1/listings/:id', 'DELETE /api/v1/listings/:id'],
+      my_listings: ['GET /api/v1/my/listings', 'POST /api/v1/my/listings', 'GET /api/v1/my/listings/:id', 'PUT /api/v1/my/listings/:id', 'DELETE /api/v1/my/listings/:id'],
+      categories: 'GET /api/v1/categories', countries: 'GET /api/v1/countries', suggest: 'GET /api/v1/suggest', verify: 'GET /api/v1/verify/domain/:domain', export: 'GET /api/v1/export/listings.csv',
+      webhooks: ['GET/POST /api/v1/webhooks', 'GET/PATCH/PUT/DELETE /api/v1/webhooks/:id', 'POST /api/v1/webhooks/:id/rotate-secret', 'POST /api/v1/webhooks/:id/test', 'GET /api/v1/webhooks/:id/deliveries', 'POST /api/v1/webhooks/:id/deliveries/:deliveryId/retry'],
+    },
+    scopes: apikeys.SCOPE_DEFINITIONS, webhook_events: apiwebhooks.EVENTS,
+    limits: { read_requests_per_minute: apilim.READ_RPM, write_requests_per_minute: apilim.WRITE_RPM, max_concurrent_per_key: apilim.MAX_INFLIGHT, max_webhooks_per_account: apiwebhooks.MAX_WEBHOOKS_PER_USER },
+    note: 'API access is a FirmLedger Pro feature. The browser playground uses the same v1 service layer and safety limits.',
+  } };
+  if (segs[0] === 'health' && segs.length === 1 && m === 'GET') return { status: 200, json: { ok: true, service: 'FirmLedger API', version: 'v1', time: new Date().toISOString() } };
   if (segs[0] === 'me' && segs.length === 1 && m === 'GET') {
     return { status: 200, json: { data: { id: user.id, email: user.email, name: user.name, plan: 'pro', plan_expires_at: user.plan_expires_at || null, api: { usage: apikeys.usageSummary(user.id) } } } };
   }
@@ -1055,8 +1086,16 @@ function runPlaygroundCall(user, method, path, rawBody) {
   if (segs[0] === 'webhooks' && segs.length === 2 && /^\d+$/.test(segs[1]) && m === 'GET') {
     return { status: 200, json: { data: apiwebhooks.serialize(apiwebhooks.getOwned(user.id, segs[1])) } };
   }
-  if (segs[0] === 'webhooks' && segs.length === 2 && /^\d+$/.test(segs[1]) && m === 'PATCH') {
+  if (segs[0] === 'webhooks' && segs.length === 2 && /^\d+$/.test(segs[1]) && (m === 'PATCH' || m === 'PUT')) {
     return { status: 200, json: { data: apiwebhooks.serialize(apiwebhooks.update(user.id, segs[1], body)) } };
+  }
+  if (segs[0] === 'webhooks' && segs.length === 3 && /^\d+$/.test(segs[1]) && segs[2] === 'rotate-secret' && m === 'POST') {
+    const rotated = apiwebhooks.rotateSecret(user.id, segs[1]);
+    return { status: 200, json: { data: { ...apiwebhooks.serialize(rotated.row), secret: rotated.secret }, meta: { secret_once: true } } };
+  }
+  if (segs[0] === 'webhooks' && segs.length === 2 && /^\d+$/.test(segs[1]) && m === 'DELETE') {
+    apiwebhooks.remove(user.id, segs[1]);
+    return { status: 204, json: null };
   }
   if (segs[0] === 'webhooks' && segs.length === 3 && /^\d+$/.test(segs[1]) && segs[2] === 'test' && m === 'POST') {
     const delivery = apiwebhooks.test(user.id, segs[1]);
@@ -1065,8 +1104,17 @@ function runPlaygroundCall(user, method, path, rawBody) {
   if (segs[0] === 'webhooks' && segs.length === 3 && /^\d+$/.test(segs[1]) && segs[2] === 'deliveries' && m === 'GET') {
     return { status: 200, json: { data: apiwebhooks.listDeliveries(user.id, segs[1], query.limit), meta: { events: apiwebhooks.EVENTS } } };
   }
-  // Directory + owner CRUD on /listings
-  if (segs[0] === 'listings' && segs.length === 1 && m === 'GET') return { status: 200, json: apisvc.directory(query) };
+  if (segs[0] === 'webhooks' && segs.length === 4 && /^\d+$/.test(segs[1]) && segs[2] === 'deliveries' && /^\d+$/.test(segs[3]) && m === 'POST') {
+    apiwebhooks.retryDelivery(user.id, segs[1], segs[3]);
+    return { status: 202, json: { data: { delivery_id: Number(segs[3]), status: 'pending' } } };
+  }
+  // Directory + owner CRUD on /listings. /directory is a documented legacy alias.
+  if ((segs[0] === 'listings' || segs[0] === 'directory') && segs.length === 1 && m === 'GET') return { status: 200, json: apisvc.directory(query) };
+  if (segs[0] === 'directory' && segs.length === 2 && m === 'GET') {
+    const row = apisvc.profileBySlug(segs[1]);
+    if (!row) return { status: 404, json: { error: { code: 'not_found', message: 'No approved public listing with that slug.' } } };
+    return { status: 200, json: { data: row } };
+  }
   if (segs[0] === 'listings' && segs.length === 1 && m === 'POST') { const r = apisvc.createListing(user, body); return { status: r.status, json: r.body }; }
   if (segs[0] === 'listings' && segs.length === 2 && m === 'GET') {
     const row = apisvc.profileBySlug(segs[1]);
@@ -1087,7 +1135,7 @@ function runPlaygroundCall(user, method, path, rawBody) {
   if (segs[0] === 'suggest' && segs.length === 1 && m === 'GET') return { status: 200, json: apisvc.suggest(query) };
   if (segs[0] === 'verify' && segs[1] === 'domain' && segs.length === 3 && m === 'GET') return { status: 200, json: apisvc.verifyDomain(segs[2]) };
   if (segs[0] === 'export' && segs[1] === 'listings.csv' && m === 'GET') return { status: 200, json: { data: apisvc.exportCsv(query), meta: { note: 'CSV body shown — to download it, call the endpoint and stream to a file.' } } };
-  return { status: 404, json: { error: { code: 'unknown_endpoint', message: 'The playground covers the documented v1 endpoints: /me, /listings, /listings/:slug, /my/listings, /my/listings/:id, plus /categories, /countries, /suggest, /verify/domain/:domain and /export/listings.csv.' } } };
+  return { status: 404, json: { error: { code: 'unknown_endpoint', message: 'Unknown v1 endpoint. Use the preset picker or the documented discovery surface: /, /health, /me, /usage, /listings (and /directory), /my/listings, /categories, /countries, /suggest, /verify/domain/:domain, /export/listings.csv and the complete /webhooks lifecycle.' } } };
 }
 
 router.get('/dashboard/api/playground', (req, res) => {

@@ -375,9 +375,65 @@ function unknownReply(raw, p, ctx) {
   return message(lines.join('\n'), ctx, guesses.slice(0, 4));
 }
 
+const TOPIC_ACTIONS = {
+  news: {
+    title: 'News actions',
+    lines: ['show pending news', 'refresh news', 'refresh news for <listing>', 'approve story <id>', 'reject story <id>', 'add story to <listing> titled "…" url=…', 'news moderation on / news moderation off', 'delete story <id>'],
+  },
+  settings: {
+    title: 'Settings & operations',
+    lines: ['show settings', 'auto approve on / off', 'auto moderation on / off', 'show paypal settings', 'set paypal sandbox / live', 'email settings / send a test email', 'indexing status', 'health'],
+  },
+  paypal: {
+    title: 'PayPal actions',
+    lines: ['show settings', 'set paypal sandbox', 'set paypal live', 'set paypal client_id=… client_secret=…', 'show revenue', 'show pending payments'],
+  },
+  mail: {
+    title: 'Email delivery actions',
+    lines: ['email settings', 'send a test email', 'send a test email via <provider>', 'add smtp provider=brevo host=… username=… password=…', 'set mail from noreply@example.com', 'keep alive on / off', 'run keep alive now'],
+  },
+  email: {
+    title: 'Email actions',
+    lines: ['send a test email', 'email <address> subject: "…" message: "…"', 'email pro members about "…" saying: …', 'send newsletter digest now', 'set newsletter weekly', 'email settings'],
+  },
+  indexing: {
+    title: 'Indexing & upkeep actions',
+    lines: ['indexing status', 'indexing on / off', 'ping /listing/<slug>', 'google indexing on', 'run google indexing batch', 'refresh tech for all stale', 'run upkeep now', 'clear indexing logs'],
+  },
+  moderation: {
+    title: 'Moderation actions',
+    lines: ['moderation rules', 'moderation log', 'score <listing> (no changes)', 'review <listing> now', 'approve <listing> / reject <listing>', 'set approve threshold to 80', 'block term casino / flag term crypto', 'auto moderation on / off'],
+  },
+  listing: {
+    title: 'Listing actions',
+    lines: ['show pending listings', 'show <listing>', 'approve <listing> / reject <listing>', 'feature <listing> / sponsor <listing> 30 days', 'refresh tech for <listing>', 'edit <listing> tagline="…"', 'email the owner', 'delete <listing>'],
+  },
+  user: {
+    title: 'Member actions',
+    lines: ['show users', 'show user <email>', 'suspend / unsuspend <email>', 'give <email> Pro for 30 days', 'start a 14 day trial for <email>', 'send <email> a password reset', 'email <email> subject: "…" message: "…"', 'delete user <email>'],
+  },
+};
+function topicKey(raw) {
+  const s = String(raw || '').toLowerCase().trim();
+  if (s === 'listings') return 'listing';
+  if (s === 'users') return 'user';
+  if (s === 'smtp') return 'mail';
+  return s;
+}
+function topicMenu(topic) {
+  const key = topicKey(topic);
+  const menu = TOPIC_ACTIONS[key] || TOPIC_ACTIONS.settings;
+  return [`**${menu.title}**`, 'Choose an action below, or type the full request. Reads run immediately; changes still ask for confirmation.', ...menu.lines.map((x) => `• ${x}`)].join('\\n');
+}
+
 /** Special (non-tool) intents. */
 function special(plan, ctx) {
   switch (plan.tool) {
+    case '__topic_menu': {
+      const topic = topicKey(plan.args.topic || 'settings');
+      const menu = TOPIC_ACTIONS[topic] || TOPIC_ACTIONS.settings;
+      return message(topicMenu(topic), ctx, menu.lines.slice(0, 4));
+    }
     case '__help': return message(bot.helpText(plan.args.topic || ''), ctx, ['how many pending', 'show open tickets', 'help listings', 'help users']);
     case '__hello': return message(bot.pick(bot.SAY.hello), ctx, ['how many pending', 'show open tickets', 'show revenue', 'help']);
     case '__thanks': return message(bot.pick(bot.SAY.thanks), ctx, ['how many pending', 'help']);
