@@ -1,3 +1,57 @@
+## 2026-09-10 (production audit #3) — Maintenance holding page + animated error pages
+
+**New gate: `tests/maintenance-page.test.js` (94 checks, in `npm test` / `npm run test:maintenance`).**
+A real server is booted and both ways of flipping maintenance are driven end to
+end — the admin **personally** (the real Protection form POST) and **via the AI
+assistant** in plain language (chat → proposal → confirm) — each verified against
+the database, the audit log and the served HTML.
+
+**The maintenance holding page (`views/maintenance.ejs`, rewritten).** When
+maintenance is on, every public page answers **503** with the admin's own copy —
+custom title, message and ETA chip — on a standalone full-screen page in the
+FirmLedger design language: dark navy `#0A1628` stage with a drifting ledger
+grid, two aurora glows and a scan line; the white logo inside a rotating dashed
+ring with a counter-rotating arc and a pulsing halo; a "Scheduled maintenance"
+kicker with typing dots; an indeterminate gradient progress bar ("Applying the
+update"); a "Live status →" link to `/status` (which stays up during the outage)
+and a quiet note that listings, accounts and payments are untouched. The page
+carries `noindex,nofollow`, honours `Retry-After: 3600`, and includes an
+auto-reload poller — every 20s it re-fetches the page the visitor asked for and
+reloads the tab the moment maintenance lifts (paused while the tab is hidden).
+Everything respects `prefers-reduced-motion`.
+
+**What stays reachable:** `/status`, `/robots.txt`, `/sitemap.xml`, static
+assets, the public API (mounted before the gate) and the whole admin console
+(signed-in admins pass straight through; signed-in *members* still see the
+holding page).
+
+**The AI can carry the whole custom message now.** `set_maintenance_mode`
+accepts `title`, `message` and the new **`eta`** (the "back at…" chip), and the
+rule engine pulls each out of plain language —
+`maintenance on title "Search index rebuild" message "…" eta "tonight 21:00 EAT"`
+separates the three without the ETA leaking into the message (also handles
+`eta=…`, "back at/by/in …", "expected back by …"). Two long-standing
+understanding collisions were fixed on the way: "maintenance on message: …"
+used to be swallowed by the *email* rule (the word "message" canonizes to
+"email"), and a maintenance message containing the word "search" was diverted
+to admin search. Both now resolve to the maintenance command; every "send
+email…"/"email …" phrasing still goes to email. The maintenance status read
+shows exactly what visitors see (title, message excerpt, ETA), and the
+execution receipt says so too.
+
+**The 404/500 page (`views/error.ejs`, rewritten) is animated.** Per-digit
+drop-in of the status code (the middle digit keeps floating), a red "Not found"
+stamp that slams in (404 only), a mono ledger chip — `ENTRY #000404 — no match
+in this ledger` / `ENTRY #000500 — this entry could not be read` — with a
+blinking caret, drifting background shapes, and three CTAs (Back to FirmLedger /
+Browse directory / Search instead). It keeps the full site chrome (header,
+footer, nav) unlike the standalone holding page, and `prefers-reduced-motion`
+settles it to a static layout.
+
+**Design notes.** Both pages share the site's tokens (Fraunces / Inter / JetBrains
+Mono, navy `#0A1628`, gold `#B58C2E`/`#E4B95B`, hairlines `#2C3E5C`) and live in
+one new CSS section in `public/css/app.css` (`maint-*`, `err-*` + keyframes).
+
 ## 2026-09-10 (production audit #2) — Every console area, greetings that know the time
 
 **New gate: `tests/ai-areas.test.js` (232 checks, in `npm test` / `npm run test:areas`).**

@@ -167,6 +167,8 @@ const TOOLS = [
           google_indexing_enabled: getSetting('google_indexing_enabled', '0') === '1',
           maintenance_on: getSetting('maintenance_on', '0') === '1',
           maintenance_title: getSetting('maintenance_title', "We'll be back soon"),
+          maintenance_message: getSetting('maintenance_message', ''),
+          maintenance_eta: getSetting('maintenance_eta', ''),
           news_review_auto: getSetting('news_review_auto', '0') === '1',
           status_weekly_report: getSetting('status_weekly_report', '0') === '1',
           newsletter_cadence: getSetting('newsletter_cadence', 'weekly'),

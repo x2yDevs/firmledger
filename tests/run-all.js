@@ -67,6 +67,7 @@ const suites = [
   ['AI assistant end-to-end (every admin action via chat)', 'ai-e2e.test.js'],
   ['AI assistant HTTP / production hardening', 'ai-http.test.js'],
   ['AI Playground — every console area + conversation & clock', 'ai-areas.test.js'],
+  ['Maintenance holding page + animated error pages', 'maintenance-page.test.js'],
   ['Backup round trip', 'backup.test.js'],
   ['Mail providers', 'mail-providers.test.js'],
   ['Admin pages', 'admin-pages.test.js'],

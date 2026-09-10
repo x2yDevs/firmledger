@@ -120,7 +120,7 @@ const PHRASES = [
   ['post a job', 'create career'], ['post a role', 'create career'], ['new job', 'create career'], ['new role', 'create career'], ['new vacancy', 'create career'], ['hire for', 'create career'],
   ['write a post', 'create post'], ['draft a post', 'create post'], ['new post', 'create post'], ['new article', 'create post'], ['new blog', 'create post'],
   ['new plan', 'create planoffer'], ['new offer', 'create planoffer'], ['new tier', 'create planoffer'], ['new promo', 'create promo'], ['new coupon', 'create promo'], ['new category', 'create category'], ['new package', 'create adpackage'], ['new listing', 'create listing'], ['new company', 'create listing'], ['add a company', 'create listing'], ['add a listing', 'create listing'],
-  ['maintenance message', 'maintenance on message'], ['maintenance banner', 'maintenance on message'], ['put up maintenance', 'maintenance on'], ['maintenance mode', 'maintenance'],
+  ['maintenance message', 'maintenance on message'], ['maintenance banner', 'maintenance on message'], ['maintenance eta', 'maintenance on eta'], ['maintenance page eta', 'maintenance on eta'], ['put up maintenance', 'maintenance on'], ['maintenance mode', 'maintenance'],
   ['how many', 'count'], ['number of', 'count'], ['how much', 'count'],
   ['what are the', 'show'], ['what is the', 'show'], ['whats the', 'show'], ['what is', 'show'], ['what are', 'show'],
   ['tell me', 'show'], ['give me', 'show'], ['show me', 'show'], ['let me see', 'show'], ['pull up', 'show'],
@@ -835,6 +835,7 @@ rule('get_listing', (c, b) => ((has(c, /\b(show|open)\b/) && has(c, /\blisting\b
   });
 rule('search_admin', (c, b) => {
   const raw = String(b && b.raw || '');
+  if (/\bmaintenance\s+(on|off)\b/i.test(raw)) return false; /* “maintenance on message: reindexing search…” is a holding-page command */
   const global = has(c, /\b(show|search|find|locate)\b/) && (has(c, /\b(everywhere|everything|anywhere|across|all)\b/) || /\bglobal(?:ly)?\s+search\b/i.test(raw));
   const explicit = /\b(search|find|locate|lookup|look\s+up|where\s+is|where\s+are)\b/i.test(raw)
     && !has(c, /\b(listings?|users?|members?|tickets?|claims?|removals?)\b/);
@@ -1187,7 +1188,10 @@ rule('email_all_users', (c) => has(c, /\b(email|send)\b/) && has(c, /\ball\b/) &
   if (!subject || !message) return { ask: 'What is the subject and the message? e.g. subject: "Maintenance tonight" message: "We will be offline…"', entity: 'mail', partial: { subject, message, audience: 'all' } };
   return { args: { subject, message } };
 });
-rule('email_users', (c) => has(c, /\b(email|send)\b/) && !has(c, /\b(ticket|testmail|passwordreset|reply|newsletter digest|2fa|smtp|from|backup|invoice)\b/) && !has(c, /\bnewsletter\b/), ({ slots, ctx, text, raw, c }) => {
+rule('email_users', (c) => has(c, /\b(email|send)\b/) && !has(c, /\b(ticket|testmail|passwordreset|reply|newsletter digest|2fa|smtp|from|backup|invoice)\b/) && !has(c, /\bnewsletter\b/) && !(() => { /* “maintenance on message: …” is a holding-page command, not a mailing */
+  const m = c.indexOf('maintenance'); const e = c.search(/\b(email|send)\b/);
+  return m !== -1 && e !== -1 && m < e && !has(c, /\bsend\b/) && has(c, /\bmaintenance (on|off)\b/);
+})(), ({ slots, ctx, text, raw, c }) => {
   const { subject, message } = mailParts(slots, raw);
   let audience = slots.audience;
   if (!audience) {
@@ -1218,7 +1222,27 @@ function mailParts(slots, raw) {
 }
 
 /* ---- site ops ---- */
-rule('set_maintenance_mode', (c) => has(c, /\bmaintenance\b/) && !has(c, /\b(show|count)\b/) && (has(c, /\bmaintenance (on|off)\b/) || !has(c, /\bmaintenance\s*$/)), ({ slots, c }) => ({ args: { on: has(c, /\bmaintenance on\b/) ? true : has(c, /\bmaintenance off\b/) ? false : slots.on !== false, ...(slots.said ? { message: slots.said } : {}), ...(slots.title ? { title: slots.title } : {}) } }));
+rule('set_maintenance_mode', (c) => has(c, /\bmaintenance\b/) && !has(c, /\b(show|count)\b/) && (has(c, /\bmaintenance (on|off)\b/) || !has(c, /\bmaintenance\s*$/)), ({ slots, c, raw }) => {
+  const args = { on: has(c, /\bmaintenance on\b/) ? true : has(c, /\bmaintenance off\b/) ? false : slots.on !== false };
+  let said = slots.said || '';
+  /* “eta 18:00” / “eta=…” / “expected back by …” / “back at/in …” — pulled out of the
+   * message so it lands on the holding page’s chip instead of inside the text.
+   * Matched against the raw line: freeText strips times and numbers. */
+  const etaM = String(raw || '').match(/(?:\bexpected back(?:\s+(?:at|by))?|\bback\s+(?:at|by|in)|\beta\b)\s*[:=]?\s*(?:\bto\b\s*)?"?([^"\n,;]{2,80})"?/i);
+  if (etaM) {
+    args.eta = etaM[1].trim();
+    if (said) {
+      try {
+        const seg = etaM[0].replace(/["“”]/g, ' ').replace(/\s{2,}/g, ' ').trim();
+        said = said.replace(/["“”]/g, ' ').replace(/\s{2,}/g, ' ').replace(new RegExp(seg.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'), ' ');
+      } catch { /* keep the message verbatim */ }
+      said = said.replace(/\s*\b(?:expected|eta|back)\s*$/i, '').replace(/[,;:\s]+$/, '').replace(/\s{2,}/g, ' ').trim();
+    }
+  }
+  if (said) args.message = said;
+  if (slots.title) args.title = slots.title;
+  return { args };
+});
 rule('set_auto_approve', (c) => has(c, /\bauto\b/) && has(c, /\bapprove\b/) && !has(c, /\bassistant\b|\bmoderation\b/), ({ slots }) => ({ args: { on: slots.on !== false } }));
 rule('set_ai_moderation', (c) => has(c, /\b(moderation|screener|screening)\b/) && has(c, /\b(on|off|set)\b/) && !has(c, /\bnews\b/), ({ slots }) => ({ args: { on: slots.on !== false } }));
 rule('set_google_indexing', (c) => has(c, /\bgoogleindex\b/) && has(c, /\b(on|off)\b/) && !has(c, /\b(run|start|delete|credentials)\b/), ({ slots }) => ({ args: { on: slots.on !== false } }));
@@ -1750,8 +1774,8 @@ const FORMAT = {
     if (plan && plan.focus === 'maintenance') {
       const on = Boolean(site.maintenance_on);
       return [
-        `Maintenance mode is **${on ? 'ON' : 'off'}** — ${on ? 'visitors see the “we’ll be back soon” page; the admin console stays reachable.' : 'the site is live for everyone.'}`,
-        on && site.maintenance_title ? `Page title: “${site.maintenance_title}”` : '',
+        `Maintenance mode is **${on ? 'ON' : 'off'}** — ${on ? 'visitors see the holding page; the admin console and /status stay reachable.' : 'the site is live for everyone.'}`,
+        on ? `Visitors read: “${site.maintenance_title || "We'll be back soon"}”${site.maintenance_message ? ` — “${String(site.maintenance_message).slice(0, 140)}${String(site.maintenance_message).length > 140 ? '…' : ''}”` : ''}${site.maintenance_eta ? ` · back ${site.maintenance_eta}` : ''}` : '',
         'Flip it with “maintenance on” or “maintenance off” — both always ask for confirmation first.',
       ].filter(Boolean).join('\n');
     }
@@ -1781,6 +1805,15 @@ const FORMAT = {
   get_ai_playground(r) { return [`Assistant: **rule engine, no model** · ${r.tools} console actions · auto-run: ${(r.auto_run_tools || []).join(', ') || 'none'}`, `Auto-moderation: ${r.moderation.on ? 'on' : 'off'} · email when unsure ${r.moderation.email_admin ? 'on' : 'off'} · ${r.moderation.blocklist_terms} blocked terms · approve at ≥${r.moderation.approve_at} · reject at ≤${r.moderation.reject_at}`, `Pending confirmations: ${r.pending_confirmations}`, (r.recent_audit || []).length ? 'Recent audit:\n' + list(r.recent_audit, (a) => `${fmtDate(a.created_at)} ${a.kind}/${a.action} — ${String(a.result || '').slice(0, 80)}`, 8) : ''].filter(Boolean).join('\n'); },
   export_backup(r) { return `Backup written: \`${r.path || r.file}\` (${r.size_human || r.size || '?'}) — download it from Admin → Health.`; },
   run_status_check(r) { return 'Probe finished:\n' + list(r.results || r.components || [], (x) => `${x.name || x.slug} — ${x.status_label || x.status}${x.latency_ms ? ` (${x.latency_ms} ms)` : ''}${x.error ? ' · ' + x.error : ''}`); },
+  set_maintenance_mode(r) {
+    if (!r || r.error) return generic(r);
+    if (!r.maintenance_on) return 'Maintenance mode is off — the site is live for everyone again.';
+    return [
+      `Maintenance mode is **ON** — every public page now serves the animated holding page (503 + noindex, auto-retry).`,
+      `Visitors read: “${r.title}”${r.message ? ` — “${String(r.message).slice(0, 140)}${String(r.message).length > 140 ? '…' : ''}”` : ''}${r.eta ? ` · back ${r.eta}` : ''}`,
+      'You stay signed in at the admin console; /status keeps reporting live. Say “maintenance off” when done.',
+    ].join('\n');
+  },
   refresh_listing_tech(r) { return `Technology radar refreshed for **${r.name || r.slug || r.id}**: ${(r.technologies || r.tech || []).map((t) => t.name || t).join(', ') || 'nothing detected'}${r.hiring_url ? ` · hiring link ${r.hiring_url}` : ''}.`; },
   run_news_refresh(r) { return r.found !== undefined ? `News scan finished — ${r.found} new stor${r.found === 1 ? 'y' : 'ies'}${r.pending ? ` (${r.pending} awaiting moderation)` : ''}.` : generic(r); },
   send_test_mail(r) { return r.delivered ? `Test email sent to ${r.to}${r.via ? ' via ' + r.via : ''}.` : `Test email queued for ${r.to} — ${r.note || 'no SMTP configured, so it landed in the outbox log.'}`; },
