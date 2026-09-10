@@ -1,3 +1,45 @@
+## 2026-09-10 (production audit #2) — Every console area, greetings that know the time
+
+**New gate: `tests/ai-areas.test.js` (232 checks, in `npm test` / `npm run test:areas`).**
+Every admin console area — Search, Inbox, Listings, News, Categories, Claims,
+Users, Plan offers, Pricing, Advertising, Careers, Status, Promos, Protection,
+Health, Removals, Tickets, Email, Blog, AI Playground, Settings and Maintenance —
+is driven through the real chat pipeline (chatTurn → proposal → “yes, run it”)
+and verified in the **database**, with an audit row required for every executed
+action. Includes a safety sweep (dangerous phrasings across areas always propose
+and park a confirmation; auto-run executes an opted-in write but a sensitive one
+still asks; no orphaned proposals) and a guarantee that **every command suggested
+by every area menu parses** (171 expanded lines).
+
+**Conversational layer — greetings now know the real time of day.**
+- “good morning / afternoon / evening / night”, “hello”, “hi”, “hey”, “greetings”,
+  “goodnight” are answered with a greeting grounded in the server clock
+  (morning 05–12, afternoon 12–17, evening 17–20, night otherwise) — and a
+  gentle correction when the operator greets evening at breakfast.
+- “what time is it?”, “what day is it?”, “what is the date today” answer from the
+  clock; “how are you”, “who are you”, “are you a robot / chatgpt” get honest
+  rule-engine answers; bare “thanks” is now thanked (it used to say “Hello!”).
+- One clock implementation (`assistant.js`: `now/timeOfDay/clockText`, with a
+  test-only pin `__setTestNow`) — the suites test all four day-parts and every
+  boundary hour deterministically, plus the full flow over live HTTP.
+
+**Area menus.** A bare area name (“pricing”, “plan offers”, “careers”,
+“advertising”, “promos”, “protection”, “status”, “blog”, “inbox”, “ai playground”,
+“maintenance” …) now opens a menu of real commands for that area instead of the
+generic settings fallback — 23 menus, every line verified parseable.
+
+**Bugs found and fixed by the new suite.**
+- “maintenance status” / “show maintenance” proposed flipping maintenance **ON**
+  (a status question must never mutate) — status/state/mode questions are now
+  reads that report the real flag; only explicit on/off/take/bring wording writes.
+- “resume promo CODE” failed with “Promo not found” — the verb “resume” was being
+  swallowed as the promo code. (`resume` is now vocabulary → `on`.)
+- “create blog post title=… body=… published” was hijacked by the
+  publish/unpublish toggle rule and asked “Which post?”.
+- “show plan 3” / “show package 4” listed everything instead of flipping that one
+  record — the console’s Show/Hide semantics now win for the specific-id form
+  (“show 5 plans” stays a list).
+
 ## 2026-09-10 (production audit) — Every admin action verified through chat
 
 **Route audit.** Every admin route was compared against the assistant's tool list;

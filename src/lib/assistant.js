@@ -30,11 +30,61 @@ function adminEmail() {
 }
 
 /* ------------------------------------------------------------------ */
+/* 1b. The assistant's clock                                          */
+/* ------------------------------------------------------------------ */
+/*
+ * The only place the assistant reads the wall clock. Everything time-based
+ * (part-of-day greetings, “what time is it”) flows through here so the suites
+ * can pin the clock and test morning / afternoon / evening / night
+ * deterministically. Server-local time is used and always labelled as such.
+ */
+let __testNow = null;
+function now() { return __testNow || new Date(); }
+
+/** morning 05:00–11:59 · afternoon 12:00–16:59 · evening 17:00–20:59 · night otherwise. */
+function timeOfDay(d = now()) {
+  const h = d.getHours();
+  if (h >= 5 && h < 12) return 'morning';
+  if (h >= 12 && h < 17) return 'afternoon';
+  if (h >= 17 && h < 21) return 'evening';
+  return 'night';
+}
+
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+function clockText(d = now()) {
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  const day = DAY_NAMES[d.getDay()];
+  const date = `${day}, ${d.getDate()} ${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`;
+  return { part: timeOfDay(d), time: `${hh}:${mm}`, date, full: `${hh}:${mm} on ${date}` };
+}
+
+/** Which part of day did the operator name, if any ("good evening" → evening). */
+function greetedPart(raw) {
+  const m = String(raw || '').toLowerCase().match(/\b(morning|afternoon|evening|night)\b/);
+  return m ? m[1] : '';
+}
+
+/** Test-only: pin the clock (pass null to release it back to real time). */
+function __setTestNow(d) { __testNow = d; }
+
+/* ------------------------------------------------------------------ */
 /* 1. Vocabulary                                                       */
 /* ------------------------------------------------------------------ */
 
 /* Multi-word phrases first (longest match wins), mapped to one canonical token. */
 const PHRASES = [
+  /* greetings & conversational time (time-of-day aware — see __hello/__time) */
+  ['good morning to you', 'hello'], ['good afternoon to you', 'hello'], ['good evening to you', 'hello'],
+  ['good morning', 'hello'], ['good afternoon', 'hello'], ['good evening', 'hello'], ['good night', 'hello'], ['goodnight', 'hello'], ['good day', 'hello'], ['greetings', 'hello'],
+  ['what time is it now', 'timeq'], ['what time is it', 'timeq'], ['what is the time now', 'timeq'], ['what is the time', 'timeq'], ['whats the time', 'timeq'], ['current time', 'timeq'], ['what time you got', 'timeq'],
+  ['what day is it today', 'timeq'], ['what day is it', 'timeq'], ['what day of the week', 'timeq'], ['what date is it today', 'timeq'], ['what date is it', 'timeq'], ['what is the date today', 'timeq'], ['what is the date', 'timeq'], ['what is today', 'timeq'],
+  ['how are you doing', 'smalltalk'], ['how are you today', 'smalltalk'], ['how are you', 'smalltalk'], ['how is it going', 'smalltalk'], ['how is your day', 'smalltalk'],
+  ['tell me about yourself', 'aboutyou'], ['who are you', 'aboutyou'], ['what are you', 'aboutyou'], ['what is your name', 'aboutyou'], ['whats your name', 'aboutyou'],
+  ['are you a robot', 'aboutyou'], ['are you a bot', 'aboutyou'], ['are you an ai', 'aboutyou'], ['are you a language model', 'aboutyou'], ['are you chatgpt', 'aboutyou'], ['are you real', 'aboutyou'], ['are you human', 'aboutyou'],
+  ['ai playground', 'aiplayground'],
   /* queue / review questions */
   ['anything waiting', 'count pending'], ['anything pending', 'count pending'], ['anything to review', 'count pending'], ['anything new', 'count pending'],
   ['whats pending', 'count pending'], ['what is pending', 'count pending'], ['what needs my attention', 'briefing'], ['what needs attention', 'briefing'], ['what needs doing', 'briefing'],
@@ -93,7 +143,7 @@ const PHRASES = [
   ['rate limit', 'ratelimit'], ['rate limits', 'ratelimit'],
   ['two factor', '2fa'], ['two-factor', '2fa'], ['one time code', '2fa'], ['otp inbox', '2fa'], ['otp email', '2fa'],
   ['blog post', 'post'], ['news story', 'story'], ['news stories', 'story'], ['job role', 'career'], ['careers role', 'career'],
-  ['promo code', 'promo'], ['discount code', 'promo'], ['coupon code', 'promo'], ['plan offer', 'planoffer'], ['pricing offer', 'planoffer'],
+  ['promo code', 'promo'], ['discount code', 'promo'], ['coupon code', 'promo'], ['plan offer', 'planoffer'], ['plan offers', 'planoffer'], ['pricing offer', 'planoffer'], ['pricing plans', 'planoffer'], ['pricing', 'planoffer'],
   ['ad package', 'adpackage'], ['advert package', 'adpackage'], ['advertising package', 'adpackage'], ['sponsored content', 'adpackage'],
   ['removal request', 'removal'], ['takedown request', 'removal'], ['pro transfer', 'transfer'],
   ['tech radar', 'tech'], ['technology radar', 'tech'], ['tech stack', 'tech'], ['technology stack', 'tech'],
@@ -136,7 +186,7 @@ const WORDS = {
   unfeature: 'unfeature', unspotlight: 'unfeature', unhighlight: 'unfeature', unstar: 'unfeature', unpin: 'unfeature',
   sponsor: 'sponsor', sponsored: 'sponsor', sponsorship: 'sponsor', unsponsor: 'unsponsor',
   suspend: 'suspend', suspended: 'suspend', ban: 'suspend', banned: 'suspend', kick: 'suspend', freeze: 'suspend', frozen: 'suspend', disable: 'off', deactivate: 'off',
-  unsuspend: 'unsuspend', unban: 'unsuspend', unfreeze: 'unsuspend', reinstate: 'unsuspend', reactivate: 'on', unblock: 'unblock', unlock: 'unsuspend',
+  unsuspend: 'unsuspend', unban: 'unsuspend', unfreeze: 'unsuspend', reinstate: 'unsuspend', reactivate: 'on', resume: 'on', unblock: 'unblock', unlock: 'unsuspend',
   grant: 'grant', give: 'grant', award: 'grant', gift: 'grant', upgrade: 'grant', extend: 'grant', boost: 'grant',
   revoke: 'revoke', downgrade: 'revoke', strip: 'revoke', cancel: 'cancel', end: 'revoke', stop: 'stop', abort: 'cancel', halt: 'stop',
   make: 'make', set: 'set', change: 'set', update: 'set', edit: 'set', modify: 'set', rename: 'rename', move: 'move', assign: 'assign', transfer: 'transfer', attach: 'assign', unclaim: 'unclaim',
@@ -186,12 +236,14 @@ const WORDS = {
   statuspage: 'statuspage', statusreport: 'statusreport', status: 'status', state: 'status', markread: 'markread',
   yes: 'yes', yep: 'yes', yeah: 'yes', yup: 'yes', sure: 'yes', y: 'yes', affirmative: 'yes', absolutely: 'yes', please: '', kindly: '',
   no: 'no', nope: 'no', nah: 'no', n: 'no', negative: 'no', dont: 'no',
-  hello: 'hello', hi: 'hello', hey: 'hello', morning: 'hello', afternoon: 'hello', evening: 'hello', thanks: 'thanks', thank: 'thanks', cheers: 'thanks', ta: 'thanks',
+  hello: 'hello', hi: 'hello', hey: 'hello', morning: 'hello', afternoon: 'hello', evening: 'hello', night: 'hello', thanks: 'thanks', thank: 'thanks', cheers: 'thanks', ta: 'thanks',
   urgent: 'urgent', asap: 'urgent', immediately: 'urgent', now: 'now', newest: 'newest', latest: 'newest', recent: 'newest', oldest: 'oldest', top: 'newest',
   minor: 'minor', major: 'major', critical: 'critical', investigating: 'investigating', identified: 'identified', monitoring: 'monitoring', resolved: 'solved',
   archive: 'archive', restore: 'restore', undo: 'undo', reset: 'reset',
   thisweek: 'thisweek', today: 'today', thismonth: 'thismonth',
   transfer: 'transfer', transfers: 'transfer', hiring: 'hiring', logo: 'logo', website: 'website', tagline: 'tagline', description: 'description', phone: 'phone', city: 'city', country: 'country', tags: 'tags', founded: 'founded', size: 'size', name: 'name', type: 'type', region: 'region', slug: 'slug',
+  /* conversational intents (greetings, clock, small talk) */
+  timeq: 'timeq', smalltalk: 'smalltalk', aboutyou: 'aboutyou', aiplayground: 'aiplayground',
 };
 
 const STOP = new Set(['the', 'a', 'an', 'to', 'for', 'of', 'in', 'on', 'at', 'by', 'with', 'and', 'or', 'as', 'me', 'my', 'our', 'we', 'i', 'you', 'can', 'could', 'would', 'should', 'will', 'shall', 'may', 'might', 'just', 'so', 'then', 'also', 'up', 'out', 'into', 'onto', 'from', 'be', 'been', 'was', 'were', 'am', 'its', 'there', 'here', 'right', 'quick', 'quickly', 'again', 'still', 'if', 'want', 'need', 'like', 'pls', 'plz', 'ur', 'u', 'em', 'that', 'this', 'some', 'called', 'named', 'about', 'via', 'using', 'owned', 'belonging', 'owns', 'go', 'ahead', 'get', 'him', 'her', 'them', 'they', 'it', 'is', 'are', 'do', 'does', 'did', 'has', 'have', 'had', 'let', 'lets', 'us', 'ok', 'okay', 'all', 'one', 'those', 'these', 'their', 'his', 'hers', 'whose', 'who', 'what', 'which', 'where', 'when', 'how', 'why', 'much', 'many', 'ones', 'thing', 'things', 'stuff', 'now', 'today', 'listing', 'listings', 'user', 'users', 'member', 'members', 'account', 'company', 'business', 'record', 'ticket', 'claim', 'please', 'kindly']);
@@ -622,7 +674,11 @@ const askFor = (r, entity) => (r.ok ? null : (r.none ? { none: r.none } : { ask:
 
 /* ---- conversational / meta ---- */
 rule('__help', (c) => has(c, /\bhelp\b/) || has(c, /^\s*(assistant|commands)\s*$/) || has(c, /\bwhat can (you|u|i) do\b/), ({ c, text }) => ({ args: { topic: text || (c.match(/\b(listing|user|ticket|claim|removal|post|career|promo|planoffer|adpackage|category|incident|newsletter|maintenance|indexing|tech|news|backup|inbox|health|settings|payment|ip|domain|smtp|email|moderation|modrules|modlog|auditlog|audit|protection|ratelimit|iprule|mailaccount|apikey|count)\b/) || [])[1] || '' } }));
-rule('__hello', (c) => /^\s*(hello|thanks)(\s+(assistant|there|again))?\s*$/.test(c) || /^\s*hello\b/.test(c) && c.trim().split(' ').length <= 3);
+rule('__hello', (c) => /^\s*hello(\s+(assistant|there|again))?\s*$/.test(c) || (/^\s*hello\b/.test(c) && c.trim().split(' ').length <= 3), ({ raw }) => ({ args: { said: greetedPart(raw) } }));
+/* “what time is it / what day is it” → the assistant answers from its clock. */
+rule('__time', (c) => has(c, /\btimeq\b/), () => ({ args: {} }));
+/* “how are you” / “who are you” — light conversation, still useful answers. */
+rule('__smalltalk', (c) => has(c, /\bsmalltalk\b/) || has(c, /\baboutyou\b/), ({ c }) => ({ args: { which: has(c, /\bsmalltalk\b/) ? 'how' : 'who' } }));
 rule('__thanks', (c) => /^\s*thanks\b/.test(c) && c.trim().split(' ').length <= 4);
 rule('__reset', (c) => /^\s*reset\s*$/.test(c));
 rule('__undo', (c) => has(c, /\bundo\b/));
@@ -639,6 +695,7 @@ const BARE_TOPICS = new Set([
   'claim', 'claims', 'removal', 'removals', 'status', 'inbox', 'backup',
   'protection', 'promo', 'promos', 'planoffer', 'adpackage', 'career', 'careers',
   'post', 'blog', 'category', 'categories', 'payment', 'tech',
+  'maintenance', 'aiplayground',
 ]);
 rule('__topic_menu', (c) => /^\s*paypal\s+(?:listing|listings|payment|payments|settings?)\s*$/.test(c), () => ({ args: { topic: 'paypal' } }));
 rule('__topic_menu', (c) => BARE_TOPICS.has(c.trim()), ({ c }) => ({ args: { topic: c.trim() } }));
@@ -719,6 +776,11 @@ rule('set_ticket_status', (c) => has(c, /\bcloseallsolved\b/), () => ({ none: 'T
 rule('get_health', (c) => has(c, /\bhealth\b/) && !has(c, /\b(indexing|statuspage|component)\b/));
 rule('get_payments_summary', (c) => has(c, /\bpayment\b/) && !has(c, /\b(show|count)\b.*\bpayment\b.*\b(pending|failed|list)\b/) && !has(c, /\bpaypal\b/));
 rule('get_site_overview', (c, b) => (has(c, /\boverview\b/) || has(c, /\b(show|help)\b.*\b(pages|console|sections|site)\b/) || /^\s*show (site|firmledger)\s*$/.test(c)) && !/\b(search|find|locate|lookup|look\s+up|where\s+is|where\s+are)\b/i.test(String(b && b.raw || '')));
+/* “show maintenance” / “maintenance status” / “are we in maintenance?” are
+ * READS. They must be caught before the mutating rule that flips the site in
+ * and out of maintenance — a status question must never end up as a proposal
+ * to take the site down. Explicit on/off/take/bring wording still writes. */
+rule('get_settings', (c) => has(c, /\bmaintenance\b/) && has(c, /\b(show|status|state|current|check|mode)\b/) && !has(c, /\b(take|bring|put|set|turn|enable|disable|schedule|create|start|stop|run|refresh|update|message|title|banner)\b/), () => ({ args: {}, focus: 'maintenance' }));
 rule('get_settings', (c, b) => ((has(c, /\b(show|count)?\s*settings\b/) || (has(c, /\b(show|display|view|read)\b/) && has(c, /\bpaypal\b/) && !has(c, /\blisting\b/))) && !has(c, /\b(set|on|off|save)\b.*\bsettings\b/) && !has(c, /\bassistant\b/) && !has(c, /\b(upkeep|news|smtp|ratelimit)\b/)) && !/\b(search|find|locate|lookup|look\s+up|where\s+is|where\s+are)\b/i.test(String(b && b.raw || '')));
 rule('get_ai_playground', (c) => has(c, /\bassistant\b/) && has(c, /\b(show|status|settings|state|config)\b/));
 rule('get_indexing_status', (c) => has(c, /\b(indexing|indexnow|googleindex|upkeep|sweep)\b/) && has(c, /\b(show|status|count|health|progress|quota|running)\b/) && !has(c, /\b(on|off|run|start|cancel|stop|ping|delete)\b/));
@@ -843,7 +905,11 @@ rule('list_news_queue', (c) => has(c, /\b(news|story)\b/) && has(c, /\b(show|pen
 });
 const CONTENT = [['post', 'blog'], ['career', 'careers'], ['promo', 'promos'], ['adpackage', 'ads'], ['planoffer', 'plans'], ['category', 'categories'], ['incident', 'incidents'], ['subscriber', 'subscribers']];
 for (const [tok, what] of CONTENT) {
-  rule('list_content', (c) => has(c, new RegExp(`\\b${tok}\\b`)) && (has(c, /\b(show|count|open|any|newest|all)\b/) || new RegExp(`^\\s*${tok}\\s*$`).test(c)) && !has(c, /\b(create|delete|set|rename|approve|reject|hide|unpublish|publish|toggle|solved|update|on|off|title|open incident)\b/) && !(tok === 'incident' && has(c, /\bopen\b/) && has(c, /\b X \b|\bmajor\b|\bminor\b|\bcritical\b/)),
+  /* “show plan 3” / “show package 4” name ONE record: on the console those
+   * pages say Show/Hide, so the specific-id form must fall through to the
+   * toggle rules instead of listing everything. (“show 5 plans” — number
+   * before the noun — stays a list.) */
+  rule('list_content', (c) => has(c, new RegExp(`\\b${tok}\\b`)) && (has(c, /\b(show|count|open|any|newest|all)\b/) || new RegExp(`^\\s*${tok}\\s*$`).test(c)) && !has(c, /\b(create|delete|set|rename|approve|reject|hide|unpublish|publish|toggle|solved|update|on|off|title|open incident)\b/) && !((tok === 'planoffer' || tok === 'adpackage') && new RegExp(`\\b${tok}\\s+\\d+\\b`).test(c) && has(c, /\bshow\b/)) && !(tok === 'incident' && has(c, /\bopen\b/) && has(c, /\b X \b|\bmajor\b|\bminor\b|\bcritical\b/)),
     ({ slots }) => {
       const args = { what };
       const st = (slots.statuses || [])[0];
@@ -1073,7 +1139,7 @@ rule('edit_blog_post', (c) => has(c, /\bpost\b/) && has(c, /\b(set|rename)\b/) &
   if (!Object.keys(fields).length) return { ask: 'What should change? e.g. title="…", excerpt="…", slug=…', entity: 'fields', partial: { id } };
   return { args: { id, ...fields } };
 });
-rule('toggle_blog_post', (c) => has(c, /\bpost\b/) && has(c, /\b(approve|publish|unpublish|hide|draft|toggle|published)\b/), ({ slots, text }) => { if (slots.ids.post || slots.numbers.length === 1) return { args: { id_or_slug: String(slots.ids.post || slots.numbers[0]) } }; if (slots.slugs[0]) return { args: { id_or_slug: slots.slugs[0] } }; const rows = q.postsByText(slots.quoted[0] || text); if (rows.length === 1) return { args: { id_or_slug: String(rows[0].id) } }; return { ask: 'Which post? Give me its id, slug or title.', entity: 'post', options: rows.map((p) => ({ label: `${p.title} (#${p.id}, ${p.status})`, value: String(p.id) })) }; });
+rule('toggle_blog_post', (c) => has(c, /\bpost\b/) && has(c, /\b(approve|publish|unpublish|hide|draft|toggle|published)\b/) && !has(c, /\bcreate\b/), ({ slots, text }) => { if (slots.ids.post || slots.numbers.length === 1) return { args: { id_or_slug: String(slots.ids.post || slots.numbers[0]) } }; if (slots.slugs[0]) return { args: { id_or_slug: slots.slugs[0] } }; const rows = q.postsByText(slots.quoted[0] || text); if (rows.length === 1) return { args: { id_or_slug: String(rows[0].id) } }; return { ask: 'Which post? Give me its id, slug or title.', entity: 'post', options: rows.map((p) => ({ label: `${p.title} (#${p.id}, ${p.status})`, value: String(p.id) })) }; });
 rule('create_blog_post', (c) => has(c, /\bpost\b/) && has(c, /\b(create|draft)\b/), ({ slots, c }) => {
   const kv = slots.keyval || {};
   const title = kv.title || slots.title || slots.quoted[0];
@@ -1676,11 +1742,19 @@ const FORMAT = {
   get_payments_summary(r) { return [`Captured: **USD ${(Number(r.captured_usd || 0) / 100).toFixed(2)}**`, `Active Pro: ${r.pro_users} members · ${r.pro_listings} listings`, `By status: ${(r.totals || []).map((t) => `${t.status} ${t.n} (${money(t.amount, t.currency)})`).join(' · ') || 'none'}`, r.promo_redemptions !== undefined ? `Promo redemptions: ${r.promo_redemptions}` : '', (r.recent || []).length ? 'Recent:\n' + list(r.recent, (p) => `#${p.id} ${money(p.amount, p.currency)} ${p.status} · ${p.channel} · ${fmtDate(p.created_at)}`, 8) : ''].filter(Boolean).join('\n'); },
   get_indexing_status(r) { return [`IndexNow: ${r.indexnow && r.indexnow.enabled ? 'on' : 'off'} · ${r.indexnow ? r.indexnow.log_rows : 0} log rows`, r.google ? `Google Indexing API: ${r.google.enabled ? 'on' : 'off'} · ${r.google.configured ? 'credentials set' : 'no credentials'} · quota ${JSON.stringify(r.google.quota)} · pending ${r.google.pending}` : '', r.upkeep ? `Upkeep: ${r.upkeep.on ? 'on' : 'off'} (tech ${r.upkeep.tech_on ? 'on' : 'off'}, news ${r.upkeep.news_on ? 'on' : 'off'})` : '', r.tech_refresh ? `Tech sweep: ${JSON.stringify(r.tech_refresh)}` : '', r.news_refresh ? `News sweep: ${JSON.stringify(r.news_refresh)}` : ''].filter(Boolean).join('\n'); },
   get_status_page(r) { return [`Overall: **${r.overall && (r.overall.label || r.overall)}** · uptime ${r.uptime || '—'} · ${r.subscribers ?? 0} subscribers`, list(r.components || [], (c) => `${c.name} — ${c.status_label || c.status}${c.slug ? ' (`' + c.slug + '`)' : ''}`), (r.open_incidents || []).length ? 'Open incidents:\n' + list(r.open_incidents, (i) => `#${i.id} ${i.title} — ${i.status} · ${i.severity}`) : 'No open incidents.'].join('\n'); },
-  get_settings(r) {
+  get_settings(r, plan) {
     const site = r.site || {}; const protection = r.protection || {}; const mail = r.mail || {};
     const payments = r.payments || {}; const indexing = r.indexing || {}; const google = indexing.google || {};
     const limits = protection.limits || {};
     const hops = (mail.hops || []).map((h) => `${h.label || h.provider || 'provider'} (${h.host}:${h.port}${h.last_error ? ', error' : ''})`).join(' · ') || 'none configured';
+    if (plan && plan.focus === 'maintenance') {
+      const on = Boolean(site.maintenance_on);
+      return [
+        `Maintenance mode is **${on ? 'ON' : 'off'}** — ${on ? 'visitors see the “we’ll be back soon” page; the admin console stays reachable.' : 'the site is live for everyone.'}`,
+        on && site.maintenance_title ? `Page title: “${site.maintenance_title}”` : '',
+        'Flip it with “maintenance on” or “maintenance off” — both always ask for confirmation first.',
+      ].filter(Boolean).join('\n');
+    }
     return [
       '**Site settings**',
       `auto-approve: **${site.auto_approve ? 'ON' : 'off'}** · AI moderation: **${r.assistant && r.assistant.moderation_on ? 'ON' : 'off'}** · maintenance: **${site.maintenance_on ? 'ON' : 'off'}**`,
@@ -1823,6 +1897,7 @@ function helpText(topic) {
     '',
     '**Ask me things:** how many pending · show pending listings · show user bob@x.com · open tickets · pending claims · removal requests · revenue · status page · inbox · settings · health',
     '**Tell me to act:** approve acme · reject 42 · approve all pending · feature it · sponsor acme 30 days · suspend bob@x.com · give bob pro for 90 days · reply to FL-1A2B saying: … · mark it solved · email pro members about "…" saying: … · take the site down · block ip 1.2.3.4 · open incident titled "…" · backup now',
+    '**Talk to me:** hello · good morning / good afternoon / good evening / good night (I know the real time of day) · what time is it · what day is it · how are you · who are you · thanks',
     '**Follow-ups work:** after “show acme” you can say “approve it”, “feature it”, “email the owner”. After a list, “the first one” or “#42” picks an item.',
     '',
     `Say “help listings”, “help users”, “help tickets”, “help email”, “help incidents”, “help indexing” … for that area. ${tools.TOOLS.length} console actions are wired in.`,
@@ -1833,4 +1908,5 @@ module.exports = {
   canon, extractSlots, freeText, splitCommands, parseCommand, answerAsk,
   formatResult, hasFormatter, receiptFor, suggestionsFor, helpText, SAY, pick,
   resolveListing, resolveUser, resolveTicket,
+  now, timeOfDay, clockText, greetedPart, __setTestNow,
 };

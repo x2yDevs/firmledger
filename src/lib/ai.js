@@ -412,12 +412,86 @@ const TOPIC_ACTIONS = {
     title: 'Member actions',
     lines: ['show users', 'show user <email>', 'suspend / unsuspend <email>', 'give <email> Pro for 30 days', 'start a 14 day trial for <email>', 'send <email> a password reset', 'email <email> subject: "…" message: "…"', 'delete user <email>'],
   },
+  planoffer: {
+    title: 'Plan offers & pricing actions',
+    lines: ['show plans', 'show pricing', 'create plan offer "Pro Quarter" $39 for 90 days', 'hide plan <id>', 'show plan <id>', 'delete plan <id>', 'show revenue'],
+  },
+  adpackage: {
+    title: 'Advertising actions',
+    lines: ['show ad packages', 'show advertising', 'create ad package "Homepage Spotlight" $99 for 30 days', 'hide package <id>', 'show package <id>', 'delete package <id>'],
+  },
+  career: {
+    title: 'Careers actions',
+    lines: ['show roles', 'show careers', 'post a role title="Support Engineer" location=Nairobi description="…" requirements="…" apply_email=jobs@example.com', 'close role <id>', 'reopen role <id>', 'delete role <id>'],
+  },
+  category: {
+    title: 'Category actions',
+    lines: ['show categories', 'create category Agritech', 'rename category Fintech to Financial Services', 'delete category <name>'],
+  },
+  claim: {
+    title: 'Claims actions',
+    lines: ['show pending claims', 'recheck claim <id>', 'reject claim <id>', 'show <listing>'],
+  },
+  removal: {
+    title: 'Removal actions',
+    lines: ['show removal requests', 'fulfil removal <id>', 'dismiss removal <id>'],
+  },
+  ticket: {
+    title: 'Ticket actions',
+    lines: ['show open tickets', 'open ticket <FL-…>', 'reply to <FL-…> saying: …', 'mark <FL-…> solved', 'close <FL-…>', 'reopen <FL-…>'],
+  },
+  post: {
+    title: 'Blog actions',
+    lines: ['show blog posts', 'show blog', 'create blog post title="…" body="…" published', 'publish post <id>', 'unpublish post <id>', 'edit post <id> title="…"', 'delete post <id>'],
+  },
+  promo: {
+    title: 'Promo actions',
+    lines: ['show promos', 'create promo LAUNCH25 25% off max 100 uses expires 2026-12-31', 'pause promo LAUNCH25', 'resume promo LAUNCH25', 'delete promo <code or id>'],
+  },
+  protection: {
+    title: 'Protection actions',
+    lines: ['show blocked ips', 'show spam rules', 'block ip <address>', 'allow ip <address>', 'block domain <domain>', 'unblock ip <address>', 'set rate limit login=10 register=5'],
+  },
+  status: {
+    title: 'Status page actions',
+    lines: ['status page', 'run the status check', 'open incident titled "API latency" major', 'update incident <id> saying: …', 'resolve incident <id>', 'reset component <slug>'],
+  },
+  inbox: {
+    title: 'Inbox actions',
+    lines: ['show inbox', 'mark inbox read', 'archive notification <id>', 'restore notification <id>', 'leave a note: …', 'show audit log'],
+  },
+  search: {
+    title: 'Search actions',
+    lines: ['search everywhere for <name, email or word>', 'search <term>', 'show pending listings', 'show users', 'show open tickets'],
+  },
+  payment: {
+    title: 'Payments actions',
+    lines: ['show revenue', 'show pending payments', 'show user <email>', 'show api keys', 'show settings'],
+  },
+  maintenance: {
+    title: 'Maintenance actions',
+    lines: ['maintenance status', 'maintenance on', 'maintenance off', 'show settings', 'health'],
+  },
+  ai: {
+    title: 'AI Playground actions',
+    lines: ['assistant status', 'show audit log', 'moderation rules', 'moderation log', 'auto moderation on / off', 'score <listing> (no changes)', 'set approve threshold to 80'],
+  },
 };
 function topicKey(raw) {
   const s = String(raw || '').toLowerCase().trim();
   if (s === 'listings') return 'listing';
   if (s === 'users') return 'user';
   if (s === 'smtp') return 'mail';
+  if (['pricing', 'plans', 'offers'].includes(s)) return 'planoffer';
+  if (['careers', 'jobs'].includes(s)) return 'career';
+  if (['advertising', 'ads', 'adpackages'].includes(s)) return 'adpackage';
+  if (s === 'categories') return 'category';
+  if (s === 'tickets') return 'ticket';
+  if (s === 'claims') return 'claim';
+  if (s === 'removals') return 'removal';
+  if (s === 'promos') return 'promo';
+  if (['blog', 'posts'].includes(s)) return 'post';
+  if (['aiplayground', 'playground', 'assistant', 'bot'].includes(s)) return 'ai';
   return s;
 }
 function topicMenu(topic) {
@@ -435,7 +509,29 @@ function special(plan, ctx) {
       return message(topicMenu(topic), ctx, menu.lines.slice(0, 4));
     }
     case '__help': return message(bot.helpText(plan.args.topic || ''), ctx, ['how many pending', 'show open tickets', 'help listings', 'help users']);
-    case '__hello': return message(bot.pick(bot.SAY.hello), ctx, ['how many pending', 'show open tickets', 'show revenue', 'help']);
+    case '__hello': {
+      /* Time-of-day aware greeting, grounded in the real server clock. When
+       * the operator greets a different part of day than it actually is, the
+       * clock wins — politely. */
+      const clock = bot.clockText();
+      const said = String(plan.args && plan.args.said || '').toLowerCase();
+      let head;
+      if (said && said === clock.part) head = `Good ${clock.part}!`;
+      else if (said) head = `Good ${said} to you too — though my clock says ${clock.time}, so it is ${clock.part} here.`;
+      else head = `Hello — good ${clock.part}!`;
+      return message(`${head} It is ${clock.time} on ${clock.date} (server time). What would you like to do? Try “briefing” for what needs attention, or “help” for everything I can run.`, ctx, ['briefing', 'how many pending', 'show open tickets', 'help']);
+    }
+    case '__time': {
+      const clock = bot.clockText();
+      return message(`It is **${clock.time}** — ${clock.part} — on ${clock.date} (server time). I use the clock for greetings and for “today / this week” style filters.`, ctx, ['briefing', 'show open tickets', 'help']);
+    }
+    case '__smalltalk': {
+      const clock = bot.clockText();
+      if (plan.args && plan.args.which === 'how') {
+        return message(`Running well, thank you — ${clock.time}, working the ${clock.part} shift, ${tools.TOOLS.length} console actions wired and nothing external to fail. What can I do for you?`, ctx, ['briefing', 'help']);
+      }
+      return message('I am the FirmLedger admin assistant — a deterministic rule engine, not a model. I map plain language onto the console action registry: lookups run at once, changes ask you to confirm, and every step lands in the audit log. Nothing leaves this server. Say “help” for the full command list.', ctx, ['help', 'what time is it', 'briefing']);
+    }
     case '__thanks': return message(bot.pick(bot.SAY.thanks), ctx, ['how many pending', 'help']);
     case '__reset': return message('Fresh start — context cleared. What would you like to do?', {}, ['how many pending', 'show open tickets', 'help']);
     case '__cancelword': return message(ctx.ask ? bot.pick(bot.SAY.cancelled) : 'Nothing is waiting to be cancelled — what next?', { ...ctx, ask: null, pending: null }, ['how many pending', 'show open tickets', 'help']);
@@ -838,5 +934,5 @@ module.exports = {
   chatTurn, executePending, cancelPending,
   scheduleModeration, moderateListing, isModerationOn, scoreListing, parseRules,
   settingsSnapshot, saveSettings, recentModeration, recentAudit, logsPage, logSnapshot, oldestPending,
-  deleteAuditLogEntry, deleteModerationLogEntry, stripContext,
+  deleteAuditLogEntry, deleteModerationLogEntry, stripContext, TOPIC_ACTIONS,
 };

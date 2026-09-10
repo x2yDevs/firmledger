@@ -7,6 +7,7 @@
     "dev": "node --watch server.js",
     "test": "node tests/run-all.js",
     "test:ai": "node tests/ai-tools.test.js && node tests/ai-assistant.test.js",
+    "test:areas": "node tests/ai-areas.test.js",
     "test:backup": "node tests/backup.test.js",
     "test:mail": "node tests/mail-providers.test.js",
     "test:pages": "node tests/admin-pages.test.js",
