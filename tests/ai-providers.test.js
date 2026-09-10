@@ -152,7 +152,7 @@ async function partA() {
   check('non-reasoning OpenAI-compatible models keep max_tokens', r.body.max_tokens === 50 && r.body.max_completion_tokens === undefined);
   await llm.chat({ provider: 'deepseek', model: 'deepseek-v4-flash', max_tokens: 50, tools: oneTool, tool_choice: 'auto', messages: userMsg });
   r = last();
-  check('DeepSeek V4 enables thinking and keeps its max_tokens wire field', r.body.thinking.type === 'enabled' && r.body.reasoning_effort === 'high' && r.body.max_tokens === 50 && r.body.max_completion_tokens === undefined);
+  check('DeepSeek V4 never forces deep thinking and keeps its max_tokens wire field', r.body.thinking === undefined && r.body.reasoning_effort === undefined && r.body.max_tokens === 50 && r.body.max_completion_tokens === undefined);
   check('DeepSeek V4 omits unsupported tool_choice', r.body.tool_choice === undefined);
 
   let hits = 0;
@@ -234,10 +234,75 @@ async function partA() {
   check('contents use user/model roles', r.body.contents[0].role === 'user' && r.body.contents[1].role === 'model');
   check('tools become functionDeclarations', r.body.tools[0].functionDeclarations[0].name === 'approve_listing');
   check('additionalProperties stripped from the schema', JSON.stringify(r.body.tools[0].functionDeclarations[0].parameters).indexOf('additionalProperties') === -1);
+  check('Gemini never carries a forced deep-thinking config', r.body.generationConfig === undefined || r.body.generationConfig.thinkingConfig === undefined);
   check('function responses are folded into a user turn', r.body.contents.some((c) => c.role === 'user' && c.parts.some((p) => p.functionResponse)));
   check('JSON mode requested via responseMimeType', r.body.generationConfig.responseMimeType === 'application/json');
   check('functionCall normalised to tool_calls', llm.toolCalls(data)[0].function.name === 'approve_listing');
   check('usage mapped from usageMetadata', llm.usage(data).total_tokens === 17);
+
+  /* The real-world rejection that broke the assistant on Gemini:
+     "function_declarations[N].parameters.properties[status].enum[3]: cannot
+     be empty". Empty-string enum values must never reach the wire. */
+  const enumTool = [{
+    type: 'function',
+    function: {
+      name: 'search_listings',
+      description: 'Search listings',
+      parameters: {
+        type: 'object',
+        properties: {
+          q: { type: 'string' },
+          status: { type: 'string', enum: ['pending', 'approved', 'rejected', ''] },
+          noise: { type: 'string', enum: ['', ''] },
+        },
+        required: ['q'], additionalProperties: false,
+      },
+    },
+  }];
+  await llm.chat({ provider: 'gemini', model: 'gemini-2.5-flash', tools: enumTool, messages: userMsg });
+  r = last();
+  const decl = r.body.tools[0].functionDeclarations[0];
+  check('empty-string enum values are stripped before the Gemini call',
+    JSON.stringify(decl.parameters.properties.status.enum) === JSON.stringify(['pending', 'approved', 'rejected']),
+    JSON.stringify(decl.parameters.properties.status.enum));
+  check('an enum left empty is dropped, not sent as []', decl.parameters.properties.noise.enum === undefined);
+  await llm.chat({ provider: 'gemini', model: 'gemini-3.8-flash', temperature: 0.5, max_tokens: 100, messages: userMsg });
+  r = last();
+  check('Gemini 3.x runs with default behavior — no deep-thinking config on the wire',
+    r.body.generationConfig.thinkingConfig === undefined && r.body.generationConfig.maxOutputTokens === 100,
+    JSON.stringify(r.body.generationConfig));
+
+  /* -------------------------------------------------- free-tier model lists */
+  section('Playground offers free-tier models only');
+  check('curated rows carry the free flag', llm.usableModels('gemini').every((m) => m.free === true)
+    && llm.usableModels('groq').every((m) => m.free === true)
+    && llm.usableModels('anthropic').every((m) => m.free === false));
+  check('a provider with free models lists only them in the playground',
+    llm.playgroundModels('gemini').every((m) => m.free) && llm.playgroundModels('gemini').length > 0);
+  check('a provider without any free tier keeps its full catalog',
+    llm.playgroundModels('anthropic').length === llm.usableModels('anthropic').length);
+  check('a live-discovered free Gemini model joins the playground automatically', (() => {
+    const before = llm.liveModelIds('gemini');
+    llm.markLiveModels('gemini', before.concat(['gemini-9.9-flash-fresh']));
+    const seen = llm.playgroundModels('gemini').some((m) => m.id === 'gemini-9.9-flash-fresh' && m.free === true);
+    llm.markLiveModels('gemini', before);
+    return seen;
+  })());
+  check('a live-discovered non-free id stays out of a free-only playground', (() => {
+    const before = llm.liveModelIds('openrouter');
+    llm.markLiveModels('openrouter', before.concat(['lab/paid-model', 'lab/open-model:free']));
+    const rows = llm.playgroundModels('openrouter');
+    const freeIn = rows.some((m) => m.id === 'lab/open-model:free');
+    const paidOut = !rows.some((m) => m.id === 'lab/paid-model');
+    llm.markLiveModels('openrouter', before);
+    return freeIn && paidOut;
+  })());
+  check('a non-free current pick stays visible so it can be changed', (() => {
+    llm.setModel('openai', 'gpt-4.1');
+    return llm.playgroundModels('openai').some((m) => m.id === 'gpt-4.1');
+  })());
+  check('the provider view reports the free-only flag', llm.providerView('gemini').free_only === true
+    && llm.providerView('anthropic').free_only === false);
 
   /* ---------------------------------------------------------------- Cohere */
   section('Cohere dialect');
@@ -550,6 +615,66 @@ async function partB() {
   check('the picker ships the scroll/filter toolbar, not a wall of chips',
     /id="model-filter"/.test(after) && /id="model-strip"/.test(after) && /Sync all catalogs/.test(after));
 
+  /* Email rephrase — the subject line and the body are rephrased in one
+     pass, for plain text and HTML alike. A local mock plays the LLM. */
+  const http = require('http');
+  const MOCK_PORT = PORT + 57;
+  const mockSeen = [];
+  let mockReply = '';
+  const mock = http.createServer((mreq, mres) => {
+    let raw = '';
+    mreq.on('data', (d) => { raw += d; });
+    mreq.on('end', () => {
+      try { mockSeen.push(JSON.parse(raw || '{}')); } catch { mockSeen.push({}); }
+      mres.writeHead(200, { 'content-type': 'application/json' });
+      mres.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: mockReply } }] }));
+    });
+  });
+  await new Promise((resolve) => { mock.listen(MOCK_PORT, '127.0.0.1', resolve); });
+  const customForm = new URLSearchParams({
+    _csrf: csrf,
+    llm_provider: 'custom',
+    llm_key_custom: 'gw-key',
+    llm_base_custom: `http://127.0.0.1:${MOCK_PORT}/v1`,
+    llm_model_custom: 'mock/rephrase-1',
+    ai_auto_tools_present: '1',
+  });
+  await fetch(`${BASE}/admin3119Musa/ai/settings`, {
+    method: 'POST', headers: { ...cookie, 'content-type': 'application/x-www-form-urlencoded' }, body: customForm.toString(), redirect: 'follow',
+  });
+  mockReply = 'SUBJECT: Verification is now a matter of minutes\nBODY:\nHello {{name}},\n\nGood news — claiming your listing is faster than ever, and our team checks submissions the same day.\n\nThe FirmLedger team';
+  const plain = await (await fetch(`${BASE}/admin3119Musa/email/rephrase`, {
+    method: 'POST', headers: { ...cookie, accept: 'application/json', 'content-type': 'application/json', 'X-CSRF-Token': csrf },
+    body: JSON.stringify({ subject: 'Claim your listing — verification now takes minutes', text: 'Hello {{name}}, we made claiming your listing faster and our team reviews submissions the same day. Thanks, FirmLedger team', format: 'text' }),
+  })).json();
+  check('plain-text rephrase returns a rephrased subject AND body',
+    plain.ok === true && plain.subject === 'Verification is now a matter of minutes' && /^Hello \{\{name\}\},/.test(plain.text) && plain.text.indexOf('SUBJECT:') === -1,
+    JSON.stringify({ subject: plain.subject, body: (plain.text || '').slice(0, 40) }));
+  check('the model received both the subject line and the body',
+    mockSeen.length === 1 && /Subject line:/.test(mockSeen[0].messages[1].content) && /Message body:/.test(mockSeen[0].messages[1].content),
+    mockSeen[0] && String(mockSeen[0].messages && mockSeen[0].messages[1] && mockSeen[0].messages[1].content).slice(0, 60));
+  mockReply = 'SUBJECT: Your verification just got faster\nBODY:\n<p>Hello {{name}},</p>\n<p>Claiming your listing now takes minutes — <a href="https://firmledger.co.ke">start here</a>.</p>';
+  const html = await (await fetch(`${BASE}/admin3119Musa/email/rephrase`, {
+    method: 'POST', headers: { ...cookie, accept: 'application/json', 'content-type': 'application/json', 'X-CSRF-Token': csrf },
+    body: JSON.stringify({ subject: '[FirmLedger] Claim your listing', text: 'Hello {{name}},\n\nClaiming your listing takes minutes. <a href="https://firmledger.co.ke">Start here</a>.', format: 'html' }),
+  })).json();
+  check('HTML rephrase keeps tags, links and placeholders',
+    html.ok === true && html.subject === 'Your verification just got faster'
+      && /<a href="https:\/\/firmledger\.co\.ke">/.test(html.text) && /\{\{name\}\}/.test(html.text),
+    JSON.stringify({ subject: html.subject, body: (html.text || '').slice(0, 60) }));
+  check('the "[FirmLedger]" prefix is stripped before rephrasing and never duplicated',
+    mockSeen.length === 2 && mockSeen[1].messages[1].content.indexOf('[FirmLedger] Claim your listing') === -1
+      && html.subject.indexOf('[FirmLedger]') === -1);
+  /* A model that ignores the SUBJECT:/BODY: format must not lose the draft. */
+  mockReply = 'Just a friendly rephrased body, nothing else.';
+  const noFormat = await (await fetch(`${BASE}/admin3119Musa/email/rephrase`, {
+    method: 'POST', headers: { ...cookie, accept: 'application/json', 'content-type': 'application/json', 'X-CSRF-Token': csrf },
+    body: JSON.stringify({ subject: 'Old subject', text: 'Hello {{name}}, this is the original body with enough words to matter.', format: 'text' }),
+  })).json();
+  check('a reply without the envelope still rephrases the body safely',
+    noFormat.ok === true && noFormat.text === 'Just a friendly rephrased body, nothing else.' && noFormat.subject === '',
+    JSON.stringify(noFormat.subject));
+  mock.close();
   server.kill('SIGKILL');
 }
 

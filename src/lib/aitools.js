@@ -92,7 +92,7 @@ const CORE_TOOLS = [
       type: 'object',
       properties: {
         q: { type: 'string', description: 'Search text.' },
-        status: { type: 'string', enum: ['pending', 'approved', 'rejected', ''], description: 'Optional status filter.' },
+        status: { type: 'string', enum: ['pending', 'approved', 'rejected'], description: 'Optional status filter. Omit for any status.' },
       },
       required: ['q'], additionalProperties: false,
     },

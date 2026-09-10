@@ -1955,9 +1955,14 @@ router.post('/admin3119Musa/email', async (req, res) => {
    gateway error. */
 router.post('/admin3119Musa/email/rephrase', async (req, res) => {
   const text = String((req.body && req.body.text) || '').trim().slice(0, 10000);
+  /* The subject line travels with the body so both come back rephrased in
+     one pass. The "[FirmLedger]" prefix is added at send time — it is
+     stripped here so the model never rewrites or duplicates it. */
+  const subject = String((req.body && req.body.subject) || '').trim()
+    .replace(/^\[FirmLedger\]\s*/i, '').slice(0, 200);
   const format = req.body && req.body.format === 'html' ? 'html' : 'text';
-  if (text.length < 10) {
-    return res.status(422).json({ ok: false, error: 'Write at least a sentence to rephrase.' });
+  if (text.length < 10 && subject.length < 5) {
+    return res.status(422).json({ ok: false, error: 'Write at least a sentence (or a subject line) to rephrase.' });
   }
   /* Same resolution the Playground uses for its own calls — the active
      provider, with the saved model when it is still known. */
@@ -1967,18 +1972,27 @@ router.post('/admin3119Musa/email/rephrase', async (req, res) => {
   const model = savedModel && llm.isKnownModel(savedModel, providerId)
     ? savedModel
     : (prov.defaultModel || savedModel || '');
-  const system = format === 'html'
-    ? 'You are the writing assistant in the FirmLedger admin console. The operator pasted the HTML body of a branded member email. Rephrase it so it reads more naturally, clearly and professionally while keeping the same meaning. Keep the HTML tags and structure (you may edit the text inside tags), keep every link, and keep any {{name}} placeholder exactly as written. Do not add or remove paragraphs. Output ONLY the rephrased HTML body — no markdown fences, no <html> or <body> wrappers, no explanation.'
-    : 'You are the writing assistant in the FirmLedger admin console. The operator pasted the plain-text body of a member email. Rephrase it so it reads more naturally, clearly and professionally while keeping the same meaning. Keep every fact, link and date, keep any {{name}} placeholder exactly as written, and keep the plain-text formatting (one blank line between paragraphs). Output ONLY the rephrased email text — no markdown, no quotes, no explanation.';
+  const kind = format === 'html'
+    ? 'the SUBJECT LINE and the HTML body of a branded member email'
+    : 'the SUBJECT LINE and the plain-text body of a member email';
+  const bodyRules = format === 'html'
+    ? 'In the body keep the HTML tags and structure (you may rewrite the text inside tags), keep every link and its href, keep every date and fact, and keep any {{name}} placeholder exactly as written. Do not add or remove paragraphs, and do not wrap the output in <html> or <body> tags.'
+    : 'In the body keep every fact, link and date, keep any {{name}} placeholder exactly as written, and keep the plain-text formatting with one blank line between paragraphs.';
+  const system = subject && text.length >= 10
+    ? `You are the writing assistant in the FirmLedger admin console. The operator pasted ${kind}. Rephrase BOTH the subject line and the message body so they read more naturally, clearly and professionally while keeping exactly the same meaning. The subject must stay short (under 80 characters), specific and compelling — no "[FirmLedger]" prefix, no quotation marks. ${bodyRules} Reply in EXACTLY this format, nothing else:\nSUBJECT: <the rephrased subject line>\nBODY:\n<the rephrased message body>\nNo markdown fences, no explanation before or after.`
+    : `You are the writing assistant in the FirmLedger admin console. The operator pasted the ${format === 'html' ? 'HTML body' : 'plain-text body'} of a member email. Rephrase it so it reads more naturally, clearly and professionally while keeping the same meaning. ${bodyRules} Output ONLY the rephrased body — no markdown fences, no quotes, no explanation.`;
+  const userContent = subject && text.length >= 10
+    ? `Subject line:\n${subject}\n\nMessage body:\n${text}`
+    : text;
   try {
     const data = await groq.chat({
       provider: providerId,
       model: model || undefined,
       temperature: 0.8,
-      max_tokens: 2400,
+      max_tokens: 2800,
       messages: [
         { role: 'system', content: system },
-        { role: 'user', content: text },
+        { role: 'user', content: userContent },
       ],
     });
     let out = groq.assistantText(data).trim();
@@ -1992,9 +2006,29 @@ router.post('/admin3119Musa/email/rephrase', async (req, res) => {
         code: 'empty_reply',
       });
     }
+    /* Split the SUBJECT:/BODY: envelope when both parts were rephrased.
+       If the model ignored the format, fall back gracefully: the whole
+       reply becomes the body and the original subject is kept. */
+    let newSubject = '';
+    let body = out;
+    const sm = out.match(/^[\s>]*SUBJECT:\s*(.+)\s*$/im);
+    if (sm) {
+      newSubject = sm[1].trim().replace(/^["']|["']$/g, '').replace(/^\[FirmLedger\]\s*/i, '').slice(0, 200);
+      const bm = out.match(/^[\s>]*BODY:[ \t]*(.*)$/im);
+      if (bm) {
+        body = (bm[1] ? bm[1] + '\n' : '') + out.slice(bm.index + bm[0].length);
+      } else {
+        body = out.slice(sm.index + sm[0].length);
+      }
+      body = body.trim();
+      /* A parsing accident must never lose the operator's draft. */
+      if (body.length < Math.min(10, text.length)) { body = out; newSubject = ''; }
+    }
     return res.json({
       ok: true,
-      text: out.slice(0, 10000),
+      text: body.slice(0, 10000),
+      subject: newSubject,
+      rephrased_subject: Boolean(newSubject),
       model: data._model || model,
       provider: providerId,
       provider_label: prov.label,
