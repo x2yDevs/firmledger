@@ -2925,9 +2925,11 @@ select.input::-ms-expand,
   grid-template-columns: minmax(240px, 360px) minmax(0, 1fr);
   gap: 18px;
   align-items: stretch;
-  /* Cap the two-pane inbox so the page stays on one screen; lists scroll inside. */
-  height: min(70vh, 720px);
-  min-height: 420px;
+  /* Both panes scroll inside, so the inbox takes as much of the screen as it
+     can: the conversation is the point of the page and is given the same
+     standing as the support-ticket chat, not a strip under a tall composer. */
+  height: min(80vh, 880px);
+  min-height: 460px;
 }
 @media (max-width: 900px) {
   .lead-layout {
@@ -2941,11 +2943,27 @@ select.input::-ms-expand,
   display: flex; flex-direction: column;
   height: 100%;
 }
+/* The list is ONE scrollable pane: the inquiries are entries inside it, not
+   boxes of their own, so the column reads as a list, scrolls as a list, and
+   only the conversation you selected stands out. */
+.lead-list-col {
+  border: 1px solid var(--hair); border-radius: var(--r);
+  background: var(--surface);
+  padding: 6px;
+  overflow: hidden;
+}
+/* An empty box has nothing to scroll, so the pane is only as tall as its
+   message rather than a full-height frame around one line. */
+.lead-list-col:not(:has(.lead-list-scroll)) { height: auto; align-self: start; }
+/* The empty state and the pager belong to the list — they are not boxes or
+   blocks dropped into the pane on top of it. */
+.lead-list-col .empty-state { border: 0; background: transparent; padding: 2.25rem 1rem; }
+.lead-list-col .pagination { margin: 8px 0 2px; padding-top: 8px; border-top: 1px solid var(--hair); }
 @media (max-width: 900px) {
   .lead-list-col { max-height: min(42vh, 360px); }
   .lead-detail-col { height: auto; }
 }
-.lead-list { display: grid; gap: 10px; }
+.lead-list { display: grid; gap: 0; }
 .lead-list-scroll {
   flex: 1 1 auto; min-height: 0;
   overflow-y: auto; overscroll-behavior: contain;
@@ -2954,10 +2972,12 @@ select.input::-ms-expand,
 }
 .lead-list-scroll::-webkit-scrollbar { width: 8px; }
 .lead-list-scroll::-webkit-scrollbar-thumb { background: var(--hair2); border-radius: 999px; }
-.lead-row { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; padding: 14px 16px; border: 1px solid var(--hair); border-radius: 12px; background: var(--surface); text-decoration: none; color: inherit; }
-.lead-row:hover { border-color: var(--accent); text-decoration: none; }
-.lead-row.open { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
-.lead-row.is-new { border-left: 3px solid var(--accent); }
+.lead-row { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; padding: 11px 12px; border: 0; border-bottom: 1px solid var(--hair); border-radius: 9px; background: transparent; text-decoration: none; color: inherit; }
+.lead-row:last-child { border-bottom: 0; }
+.lead-row:hover { background: var(--soft); text-decoration: none; }
+.lead-row.open { background: var(--soft); box-shadow: inset 3px 0 0 var(--accent); }
+.lead-row.open .lead-row-title b { color: var(--accent2); }
+.lead-row.is-new { box-shadow: inset 3px 0 0 var(--accent); }
 .lead-row-main { display: grid; gap: 3px; min-width: 0; }
 .lead-row-main b { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lead-row-main small { font-size: 12px; line-height: 1.5; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -2977,8 +2997,9 @@ select.input::-ms-expand,
   display: flex; flex-direction: column;
   height: 100%;
   /* The thread is the whole pane below the facts, so it takes the height the
-     retired notes block used to reserve. */
-  max-height: min(78vh, 820px);
+     retired notes block used to reserve — and the pane is allowed to use the
+     taller inbox the conversation now gets. */
+  max-height: min(86vh, 940px);
   overflow: hidden;
   margin-bottom: 0;
   min-height: 0;
@@ -2994,24 +3015,30 @@ select.input::-ms-expand,
 .lead-msg { margin: 14px 0 0; padding: 14px 16px; border: 1px solid var(--hair); border-radius: 10px; background: var(--paper); font-size: 14px; line-height: 1.7; white-space: normal; }
 .lead-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
 
-/* Two-way conversation thread — scrolls inside the detail pane. */
+/* Two-way conversation thread — scrolls inside the detail pane and is the
+   largest thing in it, the way the ticket chat treats its transcript. */
 .lead-thread {
   flex: 1 1 auto; min-height: 240px;
   overflow-y: auto; overscroll-behavior: contain;
-  margin: 14px 0 0; padding: 12px;
+  margin: 12px 0 0; padding: 14px;
   border: 1px solid var(--hair); border-radius: 12px; background: var(--paper);
   display: flex; flex-direction: column; gap: 10px;
   scrollbar-width: thin; scrollbar-color: var(--hair2) transparent;
 }
 .lead-thread::-webkit-scrollbar { width: 8px; }
 .lead-thread::-webkit-scrollbar-thumb { background: var(--hair2); border-radius: 999px; }
+/* Side by side, the messages keep at least two-fifths of the screen even with
+   the facts table, the composer and the status controls all on show. */
+@media (min-width: 901px) {
+  .lead-thread { min-height: max(240px, 40vh); }
+}
 .lead-day {
   align-self: center; font: 600 .66rem var(--fm); letter-spacing: .08em;
   text-transform: uppercase; color: var(--muted); background: var(--surface);
   border: 1px solid var(--hair); border-radius: 999px; padding: 4px 12px; margin: 2px 0;
 }
 .lead-bubble {
-  max-width: min(92%, 480px); padding: 10px 14px 8px; border-radius: 12px;
+  max-width: min(88%, 560px); padding: 10px 14px 8px; border-radius: 12px;
   border: 1px solid var(--hair); background: var(--surface); box-shadow: 0 1px 1px rgba(10,22,40,.06);
 }
 .lead-bubble.mine { align-self: flex-end; background: #E3F6EA; border-color: #C9EBD2; border-bottom-right-radius: 4px; }
@@ -3022,8 +3049,10 @@ select.input::-ms-expand,
 .lead-bubble-text { font-size: .93rem; line-height: 1.55; color: var(--ink); overflow-wrap: anywhere; }
 .lead-bubble-meta { display: flex; justify-content: flex-end; margin-top: 4px; font: 500 .66rem var(--fm); color: var(--muted); }
 
-.lead-reply-form { display: grid; gap: 10px; margin-top: 12px; flex: 0 0 auto; }
-.lead-reply-form .input { min-height: 120px; resize: vertical; }
+/* The composer is two rows tall and only grows while it is being typed in —
+   the pane belongs to the conversation above it. */
+.lead-reply-form { display: grid; gap: 8px; margin-top: 10px; flex: 0 0 auto; }
+.lead-reply-form .input { min-height: 62px; max-height: 160px; resize: vertical; padding: 10px 12px; }
 .lead-reply-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .lead-delete-btn { color: var(--bad); }
 .lead-delete-btn:hover { border-color: var(--bad); color: var(--bad); }
@@ -3038,7 +3067,7 @@ select.input::-ms-expand,
 .lead-reply-count { font: 500 11.5px var(--fm); color: var(--muted); white-space: nowrap; }
 .lead-reply-count.is-near { color: var(--warn); }
 .lead-reply-count.is-over { color: var(--bad); font-weight: 700; }
-.lead-reply-help { font-size: 12px; line-height: 1.6; margin: 0; }
+.lead-reply-help { font-size: 11.5px; line-height: 1.5; margin: 0; }
 .lead-reply-error {
   display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
   margin: 0; padding: 9px 12px;
@@ -3059,7 +3088,7 @@ select.input::-ms-expand,
   .ana-pick select { min-width: 0; width: 100%; }
   .lead-tabs { gap: 6px; }
   .lead-tab { padding: 7px 12px; font-size: 12.5px; }
-  .lead-thread { max-height: min(60vh, 460px); }
+  .lead-thread { max-height: min(64vh, 520px); }
   .lead-status-form select.input { width: 100%; min-width: 0; }
 }
 

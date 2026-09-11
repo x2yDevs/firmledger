@@ -205,7 +205,10 @@
               <input type="hidden" name="_csrf" value="<%= csrfToken %>">
               <%- ctxFields() %>
               <label class="sr-only" for="lead-reply-<%= open.id %>">Your message</label>
-              <textarea class="input" id="lead-reply-<%= open.id %>" name="body" rows="5" required
+              <% /* Two rows to start with: the box grows as the reply is typed
+                    (capped in the stylesheet), so the conversation above keeps
+                    the pane instead of the composer taking half of it. */ %>
+              <textarea class="input" id="lead-reply-<%= open.id %>" name="body" rows="2" required
                         data-min="<%= rMin %>" data-max="<%= rMax %>"
                         data-count="lead-reply-count-<%= open.id %>" data-error="lead-reply-error-<%= open.id %>"
                         aria-describedby="lead-reply-help-<%= open.id %><%= cerr ? ' lead-reply-error-' + open.id : '' %>"
@@ -316,6 +319,15 @@
       return '';
     }
 
+    /* The box starts at two rows and grows with what is typed, up to the cap
+       the stylesheet sets — the same behaviour as the support-ticket chat, so
+       a short reply never costs the conversation half the pane. */
+    function grow() {
+      if (!ta.style) return; /* nothing to measure — leave the box as it is */
+      ta.style.height = 'auto';
+      ta.style.height = Math.min(ta.scrollHeight, 160) + 'px';
+    }
+
     function paint() {
       var n = ta.value.trim().length;
       if (count) {
@@ -355,6 +367,7 @@
       touched = true;
       serverReason = '';
       paint();
+      grow();
       if (store) {
         try {
           if (ta.value.trim()) store.setItem(key, ta.value); else store.removeItem(key);
@@ -370,6 +383,7 @@
     });
     form.addEventListener('submit', function () { touched = true; paint(); });
     paint();
+    grow(); /* a draft put back into the box gets the height it needs */
     if (state === 'error') { ta.focus(); }
   });
 
