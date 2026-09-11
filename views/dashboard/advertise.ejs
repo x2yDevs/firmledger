@@ -2,8 +2,8 @@
 
 <section class="section-tight">
   <div class="container">
-    <nav class="crumb rv" aria-label="Breadcrumb">
-      <a href="/dashboard">Dashboard</a><span class="sep">›</span><span>Advertise</span>
+    <nav class="breadcrumbs" aria-label="Breadcrumb">
+      <a href="/dashboard">Dashboard</a><span aria-hidden="true">›</span><span>Advertise</span>
     </nav>
 
     <div class="section-head" style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap">
@@ -32,7 +32,7 @@
     <% if (packages.length) { %>
     <div class="side-card rv" style="margin-bottom:20px">
       <h3>Available packages</h3>
-      <div class="plan-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px">
+      <div class="plan-grid" style="grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr));gap:14px">
         <% packages.forEach(function (p, i) { %>
         <div class="plan-card" style="--d:<%= i * 50 %>ms">
           <h3 style="font-size:16px"><%= p.name %></h3>
@@ -49,29 +49,29 @@
       <h3>Your listings</h3>
       <p class="muted" style="margin-bottom:12px">Pick a listing and a package, then check out. The spot activates the moment PayPal confirms.</p>
       <div class="table-wrap">
-        <table class="table">
+        <table class="table ad-listings-table">
           <thead><tr><th>Listing</th><th>Status</th><th>Sponsored</th><th style="text-align:right">Sponsor it</th></tr></thead>
           <tbody>
             <% ownApproved.forEach(function (l) { %>
             <tr>
-              <td>
+              <td data-label="Listing">
                 <a href="/listing/<%= l.slug %>" style="font-weight:600;color:var(--ink)"><%= l.name %></a>
                 <div class="muted" style="font-size:12px"><%= l.category %><% if (l.city || l.country) { %> · <%= [l.city, l.country].filter(Boolean).join(', ') %><% } %></div>
               </td>
-              <td><span class="pill pill-approved">Live</span></td>
-              <td>
+              <td data-label="Status"><span class="pill pill-approved">Live</span></td>
+              <td data-label="Sponsored">
                 <% if (isSponsored(l)) { %>
                   <span class="pill pill-featured">Sponsored<% if (l.sponsored_expires_at && l.sponsored_expires_at >= today) { %> · until <%= l.sponsored_expires_at %><% } else if (!l.sponsored_expires_at) { %> · lifetime<% } %></span>
                 <% } else { %>
                   <span class="muted">—</span>
                 <% } %>
               </td>
-              <td style="text-align:right;white-space:nowrap">
+              <td data-label="Sponsor it" class="ad-checkout-cell">
                 <% if (packages.length) { %>
                 <form method="post" action="/dashboard/advertise/checkout" class="inline" onsubmit="return confirm('Start PayPal checkout to sponsor “<%= l.name.replace(/\"/g, '') %>”?');">
                   <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                   <input type="hidden" name="listing_id" value="<%= l.id %>">
-                  <select name="package_id" style="font-size:12px;padding:5px 8px;border:1px solid var(--hair);border-radius:8px">
+                  <select name="package_id" class="input" aria-label="Advertising package for <%= l.name %>">
                     <% packages.forEach(function (p, idx) { %>
                     <option value="<%= p.id %>" <%= (pick && pick === p.id) || (!pick && idx === 0) ? 'selected' : '' %>><%= p.name %> — $<%= (p.price_cents / 100).toFixed(2) %></option>
                     <% }); %>

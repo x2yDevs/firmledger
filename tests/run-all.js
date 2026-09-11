@@ -95,6 +95,7 @@ const suites = [
   ['Pro growth: fair rotation, analytics, leads', 'pro-growth.test.js'],
   ['Conversion funnel + weekly leads digest', 'leads-digest.test.js'],
   ['Production database upgrade', 'db-upgrade.test.js'],
+  ['User dashboard pages and interactions', 'user-area.test.js'],
 ];
 
 const results = [];

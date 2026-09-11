@@ -51,7 +51,7 @@
 <link rel="author" href="<%= meta.verifiedBadge %>">
 <% } %>
 </head>
-<body>
+<body<% if (typeof path !== 'undefined' && (path === '/dashboard' || path.startsWith('/dashboard/'))) { %> class="user-area"<% } %>>
 <a class="skip" href="#main">Skip to content</a>
 <div class="util-bar">
   <div class="container">

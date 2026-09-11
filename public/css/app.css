@@ -3045,3 +3045,33 @@ select.input::-ms-expand,
 @media (min-width: 901px) {
   .lead-detail { overflow-y: auto; }
 }
+
+/* User workspace: consistent Watchlist-style headings and resilient content. */
+.user-area .page-head, .user-area .page-head .container { text-align: left; }
+.user-area .page-head h1, .user-area .section-head h1 {
+  font-size: clamp(1.35rem, 2.4vw, 1.8rem); line-height: 1.25;
+}
+.user-area .page-head .breadcrumbs { justify-content: flex-start; }
+.user-area .section-head > div, .user-area .dash-head > div { min-width: 0; }
+.user-area .breadcrumbs, .user-area .pref-copy, .user-area .section-head h2 {
+  overflow-wrap: anywhere;
+}
+.notif-list, .notif-item, .notif-row, .notif-row-static { min-width: 0; }
+.notif-copy { overflow-wrap: anywhere; }
+.notif-panel-head { flex-wrap: wrap; }
+.job-owner-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.user-area .job-card { min-width: 0; }
+.user-area .job-head { flex-wrap: wrap; }
+.ad-checkout-cell { text-align: right; }
+.ad-checkout-cell .inline { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.ad-checkout-cell select.input { width: 100%; min-width: 0; font-size: 13px; }
+@media (max-width: 720px) {
+  /* Keep the entire checkout visible without sideways table scrolling. */
+  .ad-listings-table, .ad-listings-table tbody, .ad-listings-table tr { display: block; width: 100%; }
+  .ad-listings-table thead { display: none; }
+  .ad-listings-table tr + tr { border-top: 2px solid var(--hair2); }
+  .ad-listings-table td { display: block; width: 100%; text-align: left; white-space: normal; overflow-wrap: anywhere; }
+  .ad-listings-table td::before { content: attr(data-label); display: block; margin-bottom: 6px; font: 600 10px/1.4 var(--fm); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .ad-checkout-cell .inline { justify-content: flex-start; }
+  .ad-checkout-cell .btn { width: 100%; }
+}
