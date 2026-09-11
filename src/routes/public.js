@@ -33,6 +33,37 @@ function listingLocation(l) {
   return [l.city, l.region, l.country].filter(Boolean).join(', ');
 }
 
+/* Featured records — eligibility, not entitlement. Pro listings are ELIGIBLE
+   for Featured placement; the system rotates a fair subset onto the page on
+   every visit. Admin-pinned records (l.featured=1) always lead; the remaining
+   slots are drawn at random from the other eligible Pro listings, so every
+   eligible listing has the same probability of appearing. The count shown to
+   visitors is the eligible pool, not the cards on screen. */
+function featuredEligibleWhere() {
+  return `FROM listings l
+     LEFT JOIN users u ON u.id = l.owner_user_id
+     WHERE l.status='approved'
+       AND (l.featured=1 OR ${PRO_LISTING_SQL} OR ${PRO_USER_SQL})`;
+}
+function featuredRotation(limit = 8) {
+  const eligibleWhere = featuredEligibleWhere();
+  const pinned = db.prepare(
+    `SELECT l.*, u.plan AS owner_plan, u.plan_expires_at AS owner_plan_expires ${eligibleWhere}
+       AND l.featured=1 ORDER BY l.updated_at DESC LIMIT ?`
+  ).all(limit);
+  let featured = pinned;
+  if (pinned.length < limit) {
+    const pinnedIds = pinned.map((l) => l.id);
+    const notPinned = pinnedIds.length ? `AND l.id NOT IN (${pinnedIds.map(() => '?').join(',')})` : '';
+    const rotation = db.prepare(
+      `SELECT l.*, u.plan AS owner_plan, u.plan_expires_at AS owner_plan_expires ${eligibleWhere}
+         ${notPinned} ORDER BY RANDOM() LIMIT ?`
+    ).all(...pinnedIds, limit - pinned.length);
+    featured = pinned.concat(rotation);
+  }
+  return featured;
+}
+
 /* ---------------- Home ---------------- */
 router.get('/', (req, res) => {
   const stats = {
@@ -40,32 +71,9 @@ router.get('/', (req, res) => {
     verified: db.prepare("SELECT COUNT(*) c FROM listings WHERE status='approved' AND claimed=1").get().c,
     countries: db.prepare("SELECT COUNT(DISTINCT country) c FROM listings WHERE status='approved' AND country<>''").get().c,
   };
-  /* Homepage featured records — eligibility, not entitlement. Pro listings are
-     ELIGIBLE for Featured placement; the system rotates a fair subset onto the
-     homepage on every visit. Admin-pinned records (l.featured=1) always lead;
-     the remaining slots are drawn at random from the other eligible Pro
-     listings, so every eligible listing has the same probability of appearing.
-     The count shown is the eligible pool, not the cards on screen. */
   const FEATURED_SHOW = 8;
-  const eligibleWhere = `FROM listings l
-     LEFT JOIN users u ON u.id = l.owner_user_id
-     WHERE l.status='approved'
-       AND (l.featured=1 OR ${PRO_LISTING_SQL} OR ${PRO_USER_SQL})`;
-  const featuredCount = db.prepare(`SELECT COUNT(*) c ${eligibleWhere}`).get().c;
-  const pinned = db.prepare(
-    `SELECT l.*, u.plan AS owner_plan, u.plan_expires_at AS owner_plan_expires ${eligibleWhere}
-       AND l.featured=1 ORDER BY l.updated_at DESC LIMIT ?`
-  ).all(FEATURED_SHOW);
-  let featured = pinned;
-  if (pinned.length < FEATURED_SHOW) {
-    const pinnedIds = pinned.map((l) => l.id);
-    const notPinned = pinnedIds.length ? `AND l.id NOT IN (${pinnedIds.map(() => '?').join(',')})` : '';
-    const rotation = db.prepare(
-      `SELECT l.*, u.plan AS owner_plan, u.plan_expires_at AS owner_plan_expires ${eligibleWhere}
-         ${notPinned} ORDER BY RANDOM() LIMIT ?`
-    ).all(...pinnedIds, FEATURED_SHOW - pinned.length);
-    featured = pinned.concat(rotation);
-  }
+  const featuredCount = db.prepare(`SELECT COUNT(*) c ${featuredEligibleWhere()}`).get().c;
+  const featured = featuredRotation(FEATURED_SHOW);
   const featuredOverflow = featuredCount > featured.length;
   /* Longer strip ⇒ longer loop, so the scroll speed stays constant. */
   const featuredDur = Math.min(300, Math.max(28, Math.round(featured.length * 5.5)));
@@ -192,6 +200,17 @@ router.get('/directory', (req, res) => {
   const bits = [q && `“${q}”`, type && typeLabel(type), category, country].filter(Boolean);
   const title = bits.length ? `${bits.join(' · ')} — Directory | FirmLedger` : 'Business Directory | FirmLedger';
 
+  /* Featured records — the same fair rotation as the homepage, re-drawn every
+     visit. When there are many eligible records the strip marquees exactly like
+     the sponsored placements. Page 1 only, so pagination never re-draws it. */
+  const featured = page === 1 ? featuredRotation(8) : [];
+  const featuredCount = page === 1 ? db.prepare(`SELECT COUNT(*) c ${featuredEligibleWhere()}`).get().c : 0;
+  const featuredOverflow = featuredCount > featured.length;
+  const featuredDur = Math.min(300, Math.max(28, Math.round(featured.length * 5.5)));
+  if (featured.length) {
+    try { require('../lib/analytics').recordImpressions(featured, 'featured_impression', req); } catch { /* ignore */ }
+  }
+
   res.render('directory', {
     meta: {
       title,
@@ -201,6 +220,7 @@ router.get('/directory', (req, res) => {
     },
     listings, total, page, pages,
     sponsoredInline,
+    featured, featuredCount, featuredOverflow, featuredDur,
     filters: { q, type, category, country, verified, sort },
     view: req.query.view === 'list' ? 'list' : 'grid',
     TYPES, COUNTRIES, allCats,

@@ -1,6 +1,7 @@
-<% /* One featured record. The homepage shows a fair random subset of the
-      eligible pool (capped at 8 cards); `dup` is kept for compatibility but
-      no longer rendered. */ %>
+<% /* One featured record. The homepage and directory show a fair random subset
+      of the eligible pool (capped at 8 cards). In the marquee the same card is
+      rendered twice — the second pass (`dup`) keeps the loop seamless and is
+      hidden from assistive tech and the tab order. */ %>
 <% const isDup = typeof dup !== 'undefined' && dup; %>
 <a class="l-card featured-card<%= isDup ? ' featured-card--dup' : '' %>" href="/listing/<%= l.slug %>"<% if (isDup) { %> tabindex="-1" aria-hidden="true"<% } %>>
   <div class="l-top">

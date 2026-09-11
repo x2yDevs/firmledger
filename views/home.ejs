@@ -104,6 +104,11 @@
   </div>
 </section>
 
+<% /* A fair random subset of the eligible records, re-drawn on every visit. With
+      many eligible records the strip becomes the same seamless marquee as the
+      sponsored placements: two identical passes of the drawn cards slide exactly
+      one pass to the left. With too few cards to overflow it wraps as a grid. */ %>
+<% const _featuredMarquee = featured.length > 3; %>
 <section class="section">
   <div class="container">
     <div class="sec-head rv">
@@ -114,11 +119,20 @@
       </div>
       <div class="sec-head-actions">
         <span class="idx">03 / RECORDS</span>
+        <% if (_featuredMarquee) { %>
+        <button class="sponsor-toggle" type="button" data-rail-toggle data-rail-target=".featured-rail" data-rail-label="the featured listings scroll" aria-pressed="false" aria-label="Pause the featured listings scroll">
+          <span class="sponsor-toggle-ico" aria-hidden="true"><svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></span>
+          <span class="sponsor-toggle-txt">Pause</span>
+        </button>
+        <% } %>
       </div>
     </div>
     <% if (featured.length) { %>
-    <div class="list-grid">
-      <% featured.forEach(function(l){ %><%- include('partials/featured-card', { l: l }) %><% }); %>
+    <div class="featured-rail<%= _featuredMarquee ? ' is-marquee' : '' %>"<% if (_featuredMarquee) { %> style="--featured-dur:<%= featuredDur %>s" role="region" aria-label="Featured records — auto-scrolling"<% } %>>
+      <div class="featured-track">
+        <% featured.forEach(function(l){ %><%- include('partials/featured-card', { l: l }) %><% }); %>
+        <% if (_featuredMarquee) { featured.forEach(function(l){ %><%- include('partials/featured-card', { l: l, dup: true }) %><% }); } %>
+      </div>
     </div>
     <p class="fine-print" style="margin-top:14px"><a href="/directory">Browse the directory →</a> &nbsp;·&nbsp; <a href="/blog/how-featured-placement-works">How Featured placement works →</a></p>
     <% } else { %>

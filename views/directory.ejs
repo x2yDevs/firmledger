@@ -48,6 +48,28 @@
     </div>
   </div>
 
+  <% if (typeof featured !== 'undefined' && featured.length) { %>
+  <% const _dirFeaturedMarquee = featured.length > 3; %>
+  <div class="dir-featured" role="region" aria-label="Featured records">
+    <div class="dir-feat-head">
+      <span class="klabel">Featured records</span>
+      <% if (typeof featuredOverflow !== 'undefined' && featuredOverflow) { %><span class="muted" style="font-size:12.5px">A fair rotation — a random subset of <%= featuredCount %> eligible records, re-drawn every visit.</span><% } %>
+      <% if (_dirFeaturedMarquee) { %>
+      <button class="sponsor-toggle" type="button" data-rail-toggle data-rail-target=".featured-rail" data-rail-label="the featured listings scroll" aria-pressed="false" aria-label="Pause the featured listings scroll">
+        <span class="sponsor-toggle-ico" aria-hidden="true"><svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></span>
+        <span class="sponsor-toggle-txt">Pause</span>
+      </button>
+      <% } %>
+    </div>
+    <div class="featured-rail<%= _dirFeaturedMarquee ? ' is-marquee' : '' %>"<% if (_dirFeaturedMarquee) { %> style="--featured-dur:<%= featuredDur %>s"<% } %>>
+      <div class="featured-track">
+        <% featured.forEach(function(l){ %><%- include('partials/featured-card', { l: l }) %><% }); %>
+        <% if (_dirFeaturedMarquee) { featured.forEach(function(l){ %><%- include('partials/featured-card', { l: l, dup: true }) %><% }); } %>
+      </div>
+    </div>
+  </div>
+  <% } %>
+
   <% if (typeof sponsoredInline !== 'undefined' && sponsoredInline.length) { %>
   <div class="sponsored-inline" role="region" aria-label="Sponsored results">
     <p class="sponsored-inline-label"><span class="sponsored-chip">Sponsored</span> Paid placements matching these filters, drawn at random — every matching sponsor has the same chance of appearing.</p>
