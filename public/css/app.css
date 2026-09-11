@@ -69,7 +69,10 @@ img, svg { max-width: 100%; }
 a { color: inherit; text-decoration: none; }
 button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
 ::selection { background: var(--accent); color: #fff; }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+/* Text fields/selects use their accent border as the focus indicator. Keep the
+   offset keyboard ring on links, buttons, checkboxes and other controls. */
+:focus-visible:not(:where(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="range"]):not([type="color"]):not([type="image"]), select, textarea:not([data-raw]))) { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+select:focus { border-color: var(--accent); outline: none; }
 .container { max-width: 1200px; margin-inline: auto; padding-inline: clamp(20px, 4vw, 32px); }
 .container-narrow { max-width: 800px; margin-inline: auto; padding-inline: clamp(20px, 4vw, 32px); }
 .skip, .skip-link { position: absolute; left: 16px; top: -52px; z-index: 200; background: var(--navy); color: #fff; padding: 10px 16px; border-radius: 8px; font-weight: 600; }
@@ -1202,7 +1205,7 @@ img.logo-tile { object-fit: contain; padding: 4px; background: #fff; border: 1px
 .jobs-filters { background: var(--surface); border: 1px solid var(--hair); border-radius: var(--rl); padding: 16px; margin-bottom: 22px; box-shadow: var(--shadow-1); }
 .jf-row { display: grid; grid-template-columns: 2.2fr 1fr 1.1fr 1fr auto; gap: 10px; }
 .jf-row input, .jf-row select { height: 46px; border: 1px solid var(--hair2); border-radius: var(--rs); background: var(--paper, #fff); padding: 0 12px; font: 400 14px var(--fb); color: var(--ink); outline: none; width: 100%; }
-.jf-row input:focus, .jf-row select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.08); }
+.jf-row input:focus, .jf-row select:focus { border-color: var(--accent); box-shadow: none; }
 .jf-row .btn { height: 46px; padding-inline: 22px; }
 .jf-sub { display: flex; align-items: center; gap: 16px; margin-top: 10px; flex-wrap: wrap; }
 .jf-check { display: inline-flex; align-items: center; gap: 8px; font: 500 13px var(--fb); color: var(--ink2); cursor: pointer; }
@@ -1258,7 +1261,7 @@ img.logo-tile { object-fit: contain; padding: 4px; background: #fff; border: 1px
 .news-copy p { color: var(--ink2); }
 .news-form input[type=email] { background: var(--paper, #fff); border: 1px solid var(--hair2); color: var(--ink); }
 .news-form input[type=email]::placeholder { color: var(--muted); }
-.news-form input[type=email]:focus { border-color: var(--accent); background: var(--paper, #fff); box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.08); }
+.news-form input[type=email]:focus { border-color: var(--accent); background: var(--paper, #fff); box-shadow: none; }
 .news-subscribe-btn { height: 48px; white-space: nowrap; background: #000; border-color: #000; color: #fff; border-radius: var(--rs); padding: 0 22px; font: 600 14px var(--fb); cursor: pointer; border: 1px solid #000; }
 .news-subscribe-btn:hover { background: #1a1a1a; transform: translateY(-1px); }
 .news-ok { color: var(--ink); background: rgba(16, 185, 129, 0.09); border-color: rgba(16, 185, 129, 0.28); }
@@ -3030,3 +3033,45 @@ select.input::-ms-expand,
 .pref-chan { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
 .pref-chan label { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; font-weight: 500; color: var(--ink2); cursor: pointer; }
 .pref-chan label em { font-style: normal; font-size: 11px; color: var(--muted); }
+
+/* Intrinsic field widths and long contact details must not widen user pages. */
+.input, .form input, .form select, .form textarea, .filters-form input,
+.filters-form select { min-width: 0; max-width: 100%; }
+.lead-detail .facts, .lead-detail .panel-h-t, .lead-detail > .muted {
+  min-width: 0; overflow-wrap: anywhere;
+}
+/* On short desktop viewports (or with a resized composer), allow access to
+   controls rather than clipping them below the fixed-height detail pane. */
+@media (min-width: 901px) {
+  .lead-detail { overflow-y: auto; }
+}
+
+/* User workspace: consistent Watchlist-style headings and resilient content. */
+.user-area .page-head, .user-area .page-head .container { text-align: left; }
+.user-area .page-head h1, .user-area .section-head h1 {
+  font-size: clamp(1.35rem, 2.4vw, 1.8rem); line-height: 1.25;
+}
+.user-area .page-head .breadcrumbs { justify-content: flex-start; }
+.user-area .section-head > div, .user-area .dash-head > div { min-width: 0; }
+.user-area .breadcrumbs, .user-area .pref-copy, .user-area .section-head h2 {
+  overflow-wrap: anywhere;
+}
+.notif-list, .notif-item, .notif-row, .notif-row-static { min-width: 0; }
+.notif-copy { overflow-wrap: anywhere; }
+.notif-panel-head { flex-wrap: wrap; }
+.job-owner-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.user-area .job-card { min-width: 0; }
+.user-area .job-head { flex-wrap: wrap; }
+.ad-checkout-cell { text-align: right; }
+.ad-checkout-cell .inline { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.ad-checkout-cell select.input { width: 100%; min-width: 0; font-size: 13px; }
+@media (max-width: 720px) {
+  /* Keep the entire checkout visible without sideways table scrolling. */
+  .ad-listings-table, .ad-listings-table tbody, .ad-listings-table tr { display: block; width: 100%; }
+  .ad-listings-table thead { display: none; }
+  .ad-listings-table tr + tr { border-top: 2px solid var(--hair2); }
+  .ad-listings-table td { display: block; width: 100%; text-align: left; white-space: normal; overflow-wrap: anywhere; }
+  .ad-listings-table td::before { content: attr(data-label); display: block; margin-bottom: 6px; font: 600 10px/1.4 var(--fm); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .ad-checkout-cell .inline { justify-content: flex-start; }
+  .ad-checkout-cell .btn { width: 100%; }
+}

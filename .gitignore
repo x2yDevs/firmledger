@@ -9,3 +9,6 @@ data/
 service-account.json
 *service-account*.json
 *.pem
+
+# Local preview databases, sessions and browser audit artifacts
+.arena/

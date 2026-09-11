@@ -75,7 +75,7 @@
               </div>
               <% if (j.featured && j.status === 'open') { %><span class="job-featured">FEATURED JOB</span><% } %>
             </div>
-            <div style="display:flex;gap:8px;justify-content:flex-end">
+            <div class="job-owner-actions">
               <a class="btn btn-ghost btn-sm" href="<%= j.apply_url %>" target="_blank" rel="noopener nofollow">Preview apply link ↗</a>
               <% if (j.status === 'open') { %>
                 <form method="post" action="/dashboard/listings/<%= l.id %>/jobs/<%= j.id %>/close" style="margin:0">

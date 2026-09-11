@@ -2,7 +2,8 @@
 
 <section class="page-head">
   <div class="container">
-    <h1><%= editing ? 'Edit listing' : 'Submit a listing' %></h1>
+    <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/dashboard">Dashboard</a><span aria-hidden="true">›</span><span><%= editing ? 'Edit listing' : 'Submit a listing' %></span></nav>
+      <h1><%= editing ? 'Edit listing' : 'Submit a listing' %></h1>
     <p class="muted"><%= editing ? 'Changes to a rejected listing automatically resubmit it for review.' : 'Paste your website URL and we\'ll pre-fill the record from its public metadata. Complete profiles publish faster.' %></p>
   </div>
 </section>

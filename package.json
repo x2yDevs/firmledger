@@ -20,12 +20,14 @@
     "test:pro-growth": "node tests/pro-growth.test.js",
     "test:leads-digest": "node tests/leads-digest.test.js",
     "test:upgrade": "node tests/db-upgrade.test.js",
-    "test:scale": "node tests/scale.test.js"
+    "test:scale": "node tests/scale.test.js",
+    "test:user-area": "node tests/user-area.test.js",
+    "test:user-area:browser": "node tests/user-area.test.js --browser"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "FirmLedger — verified company intelligence and business listings.",
+  "description": "FirmLedger \u2014 verified company intelligence and business listings.",
   "engines": {
     "node": "20.x || 22.x"
   },
@@ -44,5 +46,8 @@
     "passport-linkedin-oauth2": "^2.0.0",
     "qrcode": "^1.5.4",
     "sharp": "^0.35.3"
+  },
+  "devDependencies": {
+    "playwright": "^1.63.0"
   }
 }

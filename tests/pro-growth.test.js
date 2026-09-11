@@ -262,6 +262,16 @@ section('Leads — validation + create');
   const after = leads.messagesFor(ok.id, ownerId);
   check('thread has both sides', after.length === 2 && after[1].sender === 'owner');
   check('owner reply flips status to contacted', leads.getOwned(ok.id, ownerId).status === 'contacted');
+  check('inquirer can reply to the owner', leads.addMessage(ok.id, inquirerId, 'Thank you, when can we start?').ok);
+  const conversation = leads.messagesFor(ok.id, ownerId);
+  check('both users see the same complete conversation', conversation.length === 3 &&
+    conversation[2].sender === 'inquirer' && conversation[2].body === 'Thank you, when can we start?' &&
+    JSON.stringify(conversation) === JSON.stringify(leads.messagesFor(ok.id, inquirerId)));
+  check('unrelated user cannot read the conversation', leads.messagesFor(ok.id, otherId).length === 0);
+  check('unrelated user cannot send a message', !leads.addMessage(ok.id, otherId, 'Unauthorized').ok);
+  check('empty replies are rejected', !leads.addMessage(ok.id, inquirerId, '  ').ok);
+  check('rejected replies leave the thread unchanged', leads.messagesFor(ok.id, ownerId).length === 3);
+
 }
 
 section('Leads — inbox, statuses, notes, ownership');
