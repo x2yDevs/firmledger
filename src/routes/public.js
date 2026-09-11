@@ -525,6 +525,9 @@ router.post('/listing/:slug/leads', spam.gate('lead', { checkEmail: true }), (re
     const util2 = require('../lib/util');
     const { sendBranded } = require('../lib/mailer');
     const esc = util2.escHtml;
+    /* The opening inquiry is the owner's ONE email for this conversation —
+       every later reply reaches them as an in-app notification instead. */
+    leads.markEmailed(r.id, 'owner');
     sendBranded(owner.email, `New inquiry for ${l.name} — ${r.fields.name}`, {
       alias: 'support',
       replyTo: `${r.fields.name} <${r.fields.email}>`,

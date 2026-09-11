@@ -1441,6 +1441,31 @@ router.post('/dashboard/leads/:id/archive', (req, res) => {
     : '?err=' + encodeURIComponent(r.error || 'Could not move that lead.')));
 });
 
+/* Permanent delete — a conversation can be removed for good, not just archived.
+ *   owner    → deletes the lead, its messages and its notes for BOTH sides (Pro)
+ *   inquirer → removes the conversation from their own Sent box only; the
+ *              business keeps its record of the inquiry */
+router.post('/dashboard/leads/:id/delete', (req, res) => {
+  const leads = require('../lib/leads');
+  const acc = leads.getAccessible(req.params.id, req.user.id);
+  if (!acc) {
+    return res.redirect('/dashboard/leads?err=' + encodeURIComponent('Conversation not found.'));
+  }
+  if (acc.role === 'owner') {
+    if (!hasProAccess(req.user)) {
+      return res.redirect('/dashboard/leads?err=' + encodeURIComponent('The Leads inbox is a FirmLedger Pro feature — upgrade to manage your inquiries.'));
+    }
+    const r = leads.permanentDelete(req.params.id, req.user.id);
+    return res.redirect('/dashboard/leads' + (r.ok
+      ? '?ok=' + encodeURIComponent('Conversation permanently deleted.')
+      : '?err=' + encodeURIComponent(r.error || 'Could not delete that conversation.')));
+  }
+  const r = leads.detachInquirer(req.params.id, req.user.id);
+  res.redirect('/dashboard/leads?box=sent' + (r.ok
+    ? '&ok=' + encodeURIComponent('Conversation deleted from your Sent box.')
+    : '&err=' + encodeURIComponent(r.error || 'Could not delete that conversation.')));
+});
+
 /* Two-way reply — owner or inquirer, both sides of the same thread. */
 router.post('/dashboard/leads/:id/reply', (req, res) => {
   const leads = require('../lib/leads');
@@ -1464,6 +1489,9 @@ router.post('/dashboard/leads/:id/reply', (req, res) => {
   const util2 = require('../lib/util');
   const esc = util2.escHtml;
   const preview = String(r.body || '').slice(0, 140);
+  /* One email per conversation, per side: the FIRST response to a party is
+     emailed; every response after that is an in-app notification only. The
+     opening inquiry already used the owner's email (see public.js). */
   if (r.sender === 'owner') {
     /* Business replied → ping the inquirer. */
     if (acc.inquirer_user_id) {
@@ -1473,17 +1501,18 @@ router.post('/dashboard/leads/:id/reply', (req, res) => {
         body: preview,
         url: `/dashboard/leads?box=sent&open=${acc.id}`,
       });
-    }
-    if (acc.email) {
-      sendBranded(acc.email, `Reply from ${acc.listing_name} on FirmLedger`, {
-        alias: 'support',
-        kicker: 'Lead reply',
-        title: `${esc(acc.listing_name)} replied to your inquiry`,
-        preheader: `${acc.listing_name} sent you a message on FirmLedger.`,
-        paragraphs: [esc(r.body).replace(/\n/g, '<br>')],
-        cta: { label: 'Continue the conversation', url: util2.siteUrl(`/dashboard/leads?box=sent&open=${acc.id}`) },
-        note: 'You are talking through FirmLedger Leads — the business email stays private.',
-      }).catch(() => {});
+      if (!acc.inquirer_emailed && acc.email) {
+        leads.markEmailed(acc.id, 'inquirer');
+        sendBranded(acc.email, `Reply from ${acc.listing_name} on FirmLedger`, {
+          alias: 'support',
+          kicker: 'Lead reply',
+          title: `${esc(acc.listing_name)} replied to your inquiry`,
+          preheader: `${acc.listing_name} sent you a message on FirmLedger.`,
+          paragraphs: [esc(r.body).replace(/\n/g, '<br>')],
+          cta: { label: 'Continue the conversation', url: util2.siteUrl(`/dashboard/leads?box=sent&open=${acc.id}`) },
+          note: 'You are talking through FirmLedger Leads — the business email stays private. Later replies arrive as FirmLedger notifications.',
+        }).catch(() => {});
+      }
     }
   } else {
     /* Inquirer replied → ping the owner. */
@@ -1493,18 +1522,21 @@ router.post('/dashboard/leads/:id/reply', (req, res) => {
       body: preview,
       url: `/dashboard/leads?open=${acc.id}`,
     });
-    const owner = db.prepare('SELECT email, name FROM users WHERE id=?').get(acc.owner_user_id);
-    if (owner && owner.email) {
-      sendBranded(owner.email, `Reply on ${acc.listing_name} — ${acc.name}`, {
-        alias: 'support',
-        replyTo: `${acc.name} <${acc.email}>`,
-        kicker: 'Lead reply',
-        title: `${esc(acc.name)} replied about ${esc(acc.listing_name)}`,
-        preheader: `A follow-up on your lead from ${acc.name}.`,
-        paragraphs: [esc(r.body).replace(/\n/g, '<br>')],
-        cta: { label: 'Open conversation', url: util2.siteUrl(`/dashboard/leads?open=${acc.id}`) },
-        note: 'Reply in your Leads inbox to keep talking — both of you stay on FirmLedger.',
-      }).catch(() => {});
+    if (!acc.owner_emailed) {
+      const owner = db.prepare('SELECT email, name FROM users WHERE id=?').get(acc.owner_user_id);
+      if (owner && owner.email) {
+        leads.markEmailed(acc.id, 'owner');
+        sendBranded(owner.email, `Reply on ${acc.listing_name} — ${acc.name}`, {
+          alias: 'support',
+          replyTo: `${acc.name} <${acc.email}>`,
+          kicker: 'Lead reply',
+          title: `${esc(acc.name)} replied about ${esc(acc.listing_name)}`,
+          preheader: `A follow-up on your lead from ${acc.name}.`,
+          paragraphs: [esc(r.body).replace(/\n/g, '<br>')],
+          cta: { label: 'Open conversation', url: util2.siteUrl(`/dashboard/leads?open=${acc.id}`) },
+          note: 'Reply in your Leads inbox to keep talking — both of you stay on FirmLedger. Later replies arrive as FirmLedger notifications.',
+        }).catch(() => {});
+      }
     }
   }
   res.redirect(back + '&ok=' + encodeURIComponent('Message sent.'));

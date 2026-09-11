@@ -188,7 +188,7 @@
   function applySnapshot(snap) {
     if (!snap) return;
     var overall = snap.status || 'operational';
-    setStatus('st-hero', 'st-' + overall);
+    setStatus('st-hero', overall);
     setText('st-hero-title', LABELS[overall] || overall);
 
     var sub = document.getElementById('st-hero-sub');

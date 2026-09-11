@@ -95,6 +95,8 @@ const suites = [
   ['Pro growth: fair rotation, analytics, leads', 'pro-growth.test.js'],
   ['Conversion funnel + weekly leads digest', 'leads-digest.test.js'],
   ['Leads messaging — two-user conversation over HTTP', 'leads-messaging.test.js'],
+  ['Leads housekeeping — permanent delete + email-first policy', 'leads-housekeeping.test.js'],
+  ['Blog content — accuracy, stale refresh, 2026 guide', 'blog-content.test.js'],
   ['Focus hygiene — no rings on inputs & dropdowns', 'focus-hygiene.test.js'],
   ['Production database upgrade', 'db-upgrade.test.js'],
   ['User dashboard pages and interactions', 'user-area.test.js'],

@@ -1747,8 +1747,10 @@ body:has(.admin-bar) #main .scroll-table .table-wrap {
 .careers-requirements { list-style: disc; padding-left: 20px; margin: 0; display: flex; flex-direction: column; gap: 6px; color: var(--ink2); font-size: 14.5px; line-height: 1.6; }
 
 /* ===== Public status page ===== */
+/* The status page uses the same container rhythm as every other public page
+   (1200px, 1340px on very wide screens) so it fills the screen like its
+   siblings instead of floating in a narrower column. */
 .st-section { padding: clamp(2rem, 4vw, 3.5rem) 0 clamp(3rem, 6vw, 4.5rem); }
-.st-container { max-width: 1040px; }
 .st-container > .rv { margin-bottom: clamp(22px, 3.5vw, 34px); }
 /* Auto-refresh control — a quiet toolbar above the hero, so the page stays
    readable while still showing the latest status. */
@@ -2964,6 +2966,8 @@ select.input::-ms-expand,
 .lead-reply-form { display: grid; gap: 10px; margin-top: 12px; flex: 0 0 auto; }
 .lead-reply-form .input { min-height: 72px; resize: vertical; }
 .lead-reply-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.lead-delete-btn { color: var(--bad); }
+.lead-delete-btn:hover { border-color: var(--bad); color: var(--bad); }
 
 .lead-status-form { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--hair); flex: 0 0 auto; }
 .lead-status-form label { display: grid; gap: 6px; font-size: 12.5px; font-weight: 600; min-width: min(180px, 100%); }
@@ -3030,6 +3034,16 @@ select.input::-ms-expand,
 .funnel-step small { display: block; font-size: 11.5px; color: var(--muted); line-height: 1.5; }
 .funnel-rate { margin-top: 2px; }
 .funnel-rate b { color: var(--ink); }
+/* Notification settings — same full-bleed container as the other dashboard
+   pages; the preference card and the shortcuts card sit side by side on wide
+   screens and stack on narrow ones, so the page fills the frame instead of
+   floating in a thin 820px column. */
+.settings-grid { display: grid; grid-template-columns: 1fr; gap: 18px; align-items: start; }
+@media (min-width: 1000px) {
+  .settings-grid { grid-template-columns: minmax(0, 1fr) minmax(260px, 340px); }
+}
+.settings-grid .form-card { margin: 0; min-width: 0; }
+.settings-grid .pref-desc { max-width: 78ch; }
 .pref-chan { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
 .pref-chan label { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; font-weight: 500; color: var(--ink2); cursor: pointer; }
 .pref-chan label em { font-style: normal; font-size: 11px; color: var(--muted); }
