@@ -930,7 +930,9 @@ CREATE INDEX IF NOT EXISTS idx_lead_msgs ON lead_messages(lead_id, id);
 
 /* Existing deployments: add the inquirer column if the leads table pre-dates it. */
 try { db.exec('ALTER TABLE leads ADD COLUMN inquirer_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL'); } catch { /* column exists */ }
-try { db.exec('CREATE INDEX IF NOT EXISTS idx_leads_inquirer ON leads(inquirer_user_id, updated_at DESC)'); } catch { /* ignore */ }
+// Keep index creation AFTER the column migration; IF NOT EXISTS makes repeat boots safe.
+// Do not swallow index failures: a successful boot must have the complete schema.
+db.exec('CREATE INDEX IF NOT EXISTS idx_leads_inquirer ON leads(inquirer_user_id, updated_at DESC)');
 
 /* Settings helpers */
 function getSetting(key, fallback = '') {

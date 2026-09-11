@@ -14,7 +14,7 @@
  * `SqliteError: no such column: inquirer_user_id` — the process crash-looped
  * and the site answered 502 on every path. IF NOT EXISTS only guards the
  * index name, never the columns. Any future index on a migrated column must
- * be created after its ALTER (or inside try/catch) — this suite boots an old
+ * be created after its ALTER — this suite boots an old
  * database on purpose so that ordering mistake fails loudly here instead of
  * in production.
  */
@@ -126,6 +126,27 @@ if (booted) {
   check('listing submitter backfilled from owner', out.submitter === 1);
   check('categories/plans seeded on old database', out.counts.categories >= 20 && out.counts.plans >= 2);
 }
+
+// Use new processes so require() actually reruns the schema, not its module cache.
+const freshDir = fs.mkdtempSync(path.join(os.tmpdir(), 'firmledger-fresh-'));
+for (const [label, dir] of [['migrated database', oldDir], ['fresh database', freshDir], ['fresh database on second boot', freshDir]]) {
+  try {
+    execFileSync(process.execPath, ['-e', `
+      process.env.FIRMLEDGER_DATA_DIR = ${JSON.stringify(dir)};
+      const assert = require('assert/strict');
+      const { db } = require(${JSON.stringify(path.join(ROOT, 'src/db.js'))});
+      assert.equal(db.prepare('PRAGMA table_info(leads)').all().filter(c => c.name === 'inquirer_user_id').length, 1);
+      assert.deepEqual(db.prepare('PRAGMA index_info(idx_leads_inquirer)').all().map(c => c.name), ['inquirer_user_id', 'updated_at']);
+      assert.equal(db.prepare('PRAGMA foreign_key_list(leads)').all().find(c => c.from === 'inquirer_user_id').on_delete, 'SET NULL');
+      assert.equal(db.prepare('SELECT COUNT(*) AS n FROM leads').get().n, ${dir === oldDir ? 1 : 0});
+      db.close();
+    `], { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'] });
+    check(label + ' boots with column and correct index', true);
+  } catch (e) {
+    check(label + ' boots with column and correct index', false, String(e.stderr || e.message));
+  }
+}
+fs.rmSync(freshDir, { recursive: true, force: true });
 
 console.log(`\n${'='.repeat(64)}`);
 console.log(`checks passed: ${passed}   failed: ${failures.length}`);
