@@ -8,7 +8,8 @@
  * never exposed to the inquirer.
  *
  * Both sides can talk in-thread: the owner in the received inbox, the inquirer
- * under “Sent” (listings they contacted). Private owner notes stay owner-only.
+ * under “Sent” (listings they contacted). The conversation is the workspace —
+ * nothing else is stacked under it.
  *
  * Reading and managing the business-side inbox is a FirmLedger Pro feature:
  * leads are collected for every claimed listing, but the full inbox unlocks
@@ -21,6 +22,11 @@
  *   • honest length limits — a submission over the cap is rejected with a
  *     message, never silently truncated (LIMITS is the single source of truth
  *     for both the form attributes and the validator);
+ *   • a refusal always names the reason and the numbers — empty, too short,
+ *     too long, a thread that is no longer theirs, or the store refusing the
+ *     write — so the inbox can say what to fix instead of “could not send”
+ *     (validateReply returns { code, length, min, max, over } alongside the
+ *     human sentence, and the composer reads the same LIMITS.reply);
  *   • double-submit safety — an identical inquiry or reply posted twice in a
  *     short window is folded into the first one instead of duplicating;
  *   • nothing a member typed is lost — a rejected inquiry is stashed as a draft
@@ -38,14 +44,15 @@ const STATUS_LABELS = {
   lost: 'Lost',
 };
 
-/** Field ceilings — the form's maxlength attributes and the validator agree. */
+/** Field ceilings — the form hints and the validators read these, nothing else. */
 const LIMITS = {
   name: { max: 120 },
   phone: { max: 40 },
   looking_for: { max: 140 },
   message: { min: 10, max: 4000 },
-  reply: { min: 1, max: 4000 },
-  note: { min: 2, max: 2000 },
+  /* A one-keystroke reply is always a mis-click, and a 4,000-character wall of
+     text never arrives as an email — so both ends are refused, out loud. */
+  reply: { min: 2, max: 4000 },
 };
 
 /** An identical inquiry posted again inside this window is a double submit. */
@@ -275,8 +282,8 @@ function threadsFor(userId, listingId, limit = 4) {
  * An inquiry belongs to whoever owns the business NOW: without this the
  * previous owner could keep reading (and answering) a member's inquiry for a
  * business that is no longer theirs, and the new owner would inherit a live
- * conversation with no history. Messages and private notes travel with the
- * lead, because they are the business's record of that conversation.
+ * conversation with no history. The whole timeline travels with the lead,
+ * because it is the business's record of that conversation.
  *
  * Pass a falsy owner (the listing became unclaimed) and nothing moves: leads
  * require an owner, and the honest record is that the account which received
@@ -416,18 +423,26 @@ function getOwned(leadId, ownerId) {
   ).get(Number(leadId) || 0, ownerId) || null;
 }
 
+/**
+ * Move a lead along the pipeline. A status is a fixed set, so anything else is
+ * refused by name — a stale tab posting a status the product no longer has must
+ * tell the owner what happened instead of silently doing nothing.
+ */
 function setStatus(leadId, ownerId, status) {
-  if (!STATUSES.includes(status)) return { ok: false, error: 'Unknown status.' };
+  if (!STATUSES.includes(status)) {
+    return { ok: false, error: `“${clean(status, 40) || 'That'}” is not a lead status — choose New, Contacted, Qualified, Won or Lost.` };
+  }
   const lead = getOwned(leadId, ownerId);
-  if (!lead) return { ok: false, error: 'Lead not found.' };
+  if (!lead) return { ok: false, error: 'That conversation is no longer in your inbox, so its status was not changed. Reload the page to see what is there now.' };
   db.prepare(`UPDATE leads SET status=?, updated_at=datetime('now') WHERE id=?`).run(status, lead.id);
   return { ok: true, lead: { ...lead, status } };
 }
 
 /**
  * Permanently delete a conversation (owner-side). Removes the lead together
- * with its messages and notes for BOTH parties — there is no trash for leads,
- * so this cannot be undone. Only the owning business may do this.
+ * with its messages — and any note rows left by the retired private-notes
+ * feature — for BOTH parties: there is no trash for leads, so this cannot be
+ * undone. Only the owning business may do this.
  */
 function permanentDelete(leadId, ownerId) {
   const lead = getOwned(leadId, ownerId);
@@ -462,44 +477,58 @@ function markEmailed(leadId, role) {
 
 function setArchived(leadId, ownerId, archived) {
   const lead = getOwned(leadId, ownerId);
-  if (!lead) return { ok: false, error: 'Lead not found.' };
+  if (!lead) return { ok: false, error: 'That conversation is no longer in your inbox, so it was not moved. Reload the page to see what is there now.' };
   db.prepare(`UPDATE leads SET archived=?, updated_at=datetime('now') WHERE id=?`).run(archived ? 1 : 0, lead.id);
   return { ok: true };
 }
 
-function addNote(leadId, ownerId, note) {
-  const lead = getOwned(leadId, ownerId);
-  if (!lead) return { ok: false, error: 'Lead not found.' };
-  const n = String(note || '').trim();
-  if (n.length < LIMITS.note.min) return { ok: false, error: 'Write a note first.' };
-  if (n.length > LIMITS.note.max) {
-    return { ok: false, error: `Notes are limited to ${LIMITS.note.max.toLocaleString('en-US')} characters.` };
+/**
+ * Reply validation for the inbox composer — the ONE place that decides whether
+ * a message may be sent, and the reason when it may not.
+ *
+ * Every refusal states the rule and the numbers behind it (`code`, `length`,
+ * `min`, `max`, `over`) because "could not send" is not guidance: a member who
+ * pasted 5,000 characters needs to know they are 1,000 over the cap, and a
+ * member who hit Send with a stray "a" needs to know a reply has to be a word.
+ * Text is measured trimmed, so trailing whitespace never eats the ceiling.
+ */
+function validateReply(body) {
+  const text = String(body == null ? '' : body).trim();
+  const min = LIMITS.reply.min;
+  const max = LIMITS.reply.max;
+  const length = text.length;
+  const over = Math.max(0, length - max);
+  const out = { text, length, min, max, over };
+  if (!length) {
+    return { ...out, ok: false, code: 'empty', error: 'Nothing to send yet — the message box is empty. Write your reply and Send will work again.' };
   }
-  db.prepare('INSERT INTO lead_notes (lead_id, user_id, note) VALUES (?,?,?)').run(lead.id, ownerId, n);
-  db.prepare(`UPDATE leads SET updated_at=datetime('now') WHERE id=?`).run(lead.id);
-  return { ok: true };
-}
-
-function notesFor(leadId, ownerId) {
-  const lead = getOwned(leadId, ownerId);
-  if (!lead) return [];
-  return db.prepare('SELECT * FROM lead_notes WHERE lead_id=? ORDER BY id ASC').all(lead.id);
+  if (length < min) {
+    return { ...out, ok: false, code: 'too_short', error: `Too short to send — a reply needs at least ${min} characters and yours is ${length}. A word or two is enough.` };
+  }
+  if (length > max) {
+    return { ...out, ok: false, code: 'too_long', error: `Too long to send — your reply is ${length.toLocaleString('en-US')} characters and the limit is ${max.toLocaleString('en-US')}. Trim ${over.toLocaleString('en-US')} of them and it goes through.` };
+  }
+  return { ...out, ok: true };
 }
 
 /**
  * Add a chat message on a lead thread. `sender` is 'owner' or 'inquirer'.
- * Only the matching party may post. Over-long messages are refused (never
- * silently cut), and the same text posted twice within a minute is treated as
- * one message — a double click must not send the business two identical lines.
+ * Only the matching party may post. A reply outside the LIMITS.reply window is
+ * refused with the exact reason (never silently cut, never silently accepted),
+ * and the same text posted twice within a minute is treated as one message — a
+ * double click must not send the business two identical lines.
  */
 function addMessage(leadId, userId, body) {
   const lead = getAccessible(leadId, userId);
-  if (!lead) return { ok: false, error: 'Conversation not found.' };
-  const text = String(body || '').trim();
-  if (text.length < LIMITS.reply.min) return { ok: false, error: 'Write a message first.' };
-  if (text.length > LIMITS.reply.max) {
-    return { ok: false, error: `Messages are limited to ${LIMITS.reply.max.toLocaleString('en-US')} characters — please shorten yours.` };
+  if (!lead) {
+    return {
+      ok: false, code: 'not_found',
+      error: 'That conversation is not yours to answer any more — it may have been deleted, so nothing was sent.',
+    };
   }
+  const v = validateReply(body);
+  if (!v.ok) return { ok: false, code: v.code, error: v.error, length: v.length, min: v.min, max: v.max, over: v.over };
+  const text = v.text;
   const sender = lead.role; // 'owner' | 'inquirer'
 
   if (messagesReady()) {
@@ -522,7 +551,10 @@ function addMessage(leadId, userId, body) {
     ).run(lead.id, sender, text);
   } catch (e) {
     console.error('[leads] could not store reply:', lead.id, e && e.message);
-    return { ok: false, error: 'Could not send that message. Please try again in a moment.' };
+    return {
+      ok: false, code: 'store_failed',
+      error: 'FirmLedger could not store your reply just now — it was not sent, and your text is still in the box. Try again in a moment.',
+    };
   }
   /* Bump the lead and flip status when the business replies for the first time. */
   if (sender === 'owner' && lead.status === 'new') {
@@ -571,9 +603,9 @@ function newCount(ownerId) {
 module.exports = {
   STATUSES, STATUS_LABELS, LIMITS,
   DUPLICATE_WINDOW_MIN, REPLY_DUPLICATE_SEC, DRAFT_TTL_MIN,
-  validate, create, contactState, countsForOwner, countsForInquirer,
+  validate, validateReply, create, contactState, countsForOwner, countsForInquirer,
   listForOwner, listForInquirer, getOwned, getAccessible,
-  setStatus, setArchived, addNote, notesFor,
+  setStatus, setArchived,
   addMessage, messagesFor, newCount,
   threadsFor, saveDraft, takeDraft, clearDraft, transferListing,
   permanentDelete, detachInquirer, markEmailed,

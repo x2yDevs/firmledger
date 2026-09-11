@@ -1,7 +1,12 @@
 <%- include('../partials/top') %>
 
 <%
-  /* Keep the current filters on every link inside the inbox. */
+  /* ── Inbox URLs ──────────────────────────────────────────────────────────
+     Every link and every form carries the current view with it: which box,
+     which status filter, which listing, which page. Acting inside a thread —
+     replying, setting a status, archiving — returns you to the same list with
+     the same pills and counts instead of dropping you on page one of
+     “Received” while you were working through “Won”. */
   const _fq = [];
   if (filters.box === 'sent') _fq.push('box=sent');
   else {
@@ -9,9 +14,32 @@
     if (filters.listingId) _fq.push('listing=' + encodeURIComponent(filters.listingId));
     if (filters.archived) _fq.push('box=archived');
   }
-  const _fqs = _fq.length ? _fq.join('&') + '&' : '';
+  const _page = Number(box.page) > 1 ? ['page=' + Number(box.page)] : [];
+  const leadUrl = function (extra) {
+    const parts = _fq.concat(_page, extra || []);
+    return '/dashboard/leads' + (parts.length ? '?' + parts.join('&') : '');
+  };
+  /* Pagination sets its own page, so it takes the filters only. */
+  const pageUrl = function (n) {
+    return '/dashboard/leads?' + _fq.concat('page=' + n).join('&');
+  };
+  const _attr = function (v) {
+    return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  };
+  /* Read back by the POST routes so a redirect lands on this exact view. */
+  const ctxFields = function () {
+    return '<input type="hidden" name="ctx_box" value="' + _attr(filters.box) + '">'
+      + '<input type="hidden" name="ctx_status" value="' + _attr(STATUSES.indexOf(filters.status) > -1 ? filters.status : '') + '">'
+      + '<input type="hidden" name="ctx_listing" value="' + _attr(filters.listingId || '') + '">'
+      + '<input type="hidden" name="ctx_page" value="' + _attr(Number(box.page) || 1) + '">';
+  };
   const isSent = filters.box === 'sent';
   const isArchived = filters.archived;
+  /* The composer's rules are the server's rules — same numbers, one source. */
+  const rMin = Number(REPLY_MIN) || 2;
+  const rMax = Number(REPLY_MAX) || 4000;
+  const nf = function (n) { return Number(n).toLocaleString('en-US'); };
 %>
 <section class="page-head">
   <div class="container dash-head">
@@ -41,7 +69,7 @@
     <% if (typeof err !== 'undefined' && err) { %><div class="alert alert-err"><%= err %></div><% } %>
 
     <div class="lead-tabs" role="tablist" aria-label="Lead boxes">
-      <a role="tab" aria-selected="<%= !isSent && !isArchived && !filters.status %>" class="lead-tab<%= !isSent && !isArchived && !filters.status ? ' on' : '' %>" href="/dashboard/leads<%= filters.listingId ? '?listing=' + filters.listingId : '' %>">Received <span class="lead-n"><%= counts.total %></span></a>
+      <a role="tab" aria-selected="<%= !isSent && !isArchived && !filters.status %>" class="lead-tab<%= !isSent && !isArchived && !filters.status ? ' on' : '' %>" href="/dashboard/leads<%= filters.listingId ? '?listing=' + encodeURIComponent(filters.listingId) : '' %>">Received <span class="lead-n"><%= counts.total %></span></a>
       <a role="tab" aria-selected="<%= isSent %>" class="lead-tab<%= isSent ? ' on' : '' %>" href="/dashboard/leads?box=sent">Sent <span class="lead-n"><%= sentCounts.total %></span><% if (sentCounts.waiting) { %> <span class="lead-wait"><%= sentCounts.waiting %> new <%= sentCounts.waiting === 1 ? 'reply' : 'replies' %></span><% } %></a>
       <% if (pro && !isSent) { %>
         <% STATUSES.forEach(function (s) { %>
@@ -67,7 +95,7 @@
               <% if (counts.total) { %>
                 You have <b><%= counts.total %> waiting <%= counts.total === 1 ? 'inquiry' : 'inquiries' %></b><%= counts.new ? ` — ${counts.new} new` : '' %>. Inquiries keep arriving while you're on Free; reading, replying and managing them unlocks with Pro.
               <% } else { %>
-                Every claimed listing carries a “Contact this business” button for signed-in members. Inquiries land here with statuses, live chat and notes. Nothing waiting yet — claim a listing and share it.
+                Every claimed listing carries a “Contact this business” button for signed-in members. Inquiries land here with statuses and a live chat thread. Nothing waiting yet — claim a listing and share it.
               <% } %>
             </p>
             <% if (sentCounts.total) { %>
@@ -96,7 +124,7 @@
           <% } else { %>
             <div class="lead-list lead-list-scroll">
               <% box.rows.forEach(function (ld) { %>
-              <a class="lead-row<%= open && open.id === ld.id ? ' open' : '' %><%= !isSent && ld.status === 'new' ? ' is-new' : '' %>" href="/dashboard/leads?<%= _fqs %>open=<%= ld.id %>">
+              <a class="lead-row<%= open && open.id === ld.id ? ' open' : '' %><%= !isSent && ld.status === 'new' ? ' is-new' : '' %>" href="<%= leadUrl(['open=' + ld.id]) %>">
                 <span class="lead-row-main">
                   <b><%= isSent ? ld.listing_name : ld.name %></b>
                   <small class="muted"><%= ld.looking_for || (ld.message || '').slice(0, 80) %></small>
@@ -108,9 +136,9 @@
             </div>
             <% if (box.pages > 1) { %>
             <nav class="pagination" aria-label="Leads pages">
-              <% if (box.page > 1) { %><a class="btn btn-ghost btn-sm" href="/dashboard/leads?<%= _fqs %>page=<%= box.page - 1 %>">← Newer</a><% } %>
+              <% if (box.page > 1) { %><a class="btn btn-ghost btn-sm" href="<%= pageUrl(box.page - 1) %>">← Newer</a><% } %>
               <span class="results-line" style="margin:0">Page <%= box.page %> of <%= box.pages %></span>
-              <% if (box.page < box.pages) { %><a class="btn btn-ghost btn-sm" href="/dashboard/leads?<%= _fqs %>page=<%= box.page + 1 %>">Older →</a><% } %>
+              <% if (box.page < box.pages) { %><a class="btn btn-ghost btn-sm" href="<%= pageUrl(box.page + 1) %>">Older →</a><% } %>
             </nav>
             <% } %>
           <% } %>
@@ -119,9 +147,12 @@
         <div class="lead-detail-col">
           <% if (open) { %>
           <div class="panel lead-detail">
+            <% /* The status the owner last set is stated where it was set, so a
+                  change is confirmed in the pane it came from — not only in the
+                  list to the left after the chat is closed. */ %>
             <div class="panel-h-t">
-              <h3><%= openRole === 'inquirer' ? open.listing_name : open.name %></h3>
-              <a class="muted" style="font-size:.8rem" href="/dashboard/leads<%= _fqs ? '?' + _fqs.replace(/&$/, '') : '' %>">Close ✕</a>
+              <h3><%= openRole === 'inquirer' ? open.listing_name : open.name %><% if (openRole === 'owner') { %> <span class="pill pill-lead-<%= open.status %>" data-lead-pill-current><%= STATUS_LABELS[open.status] %></span><% } %></h3>
+              <a class="muted" style="font-size:.8rem" href="<%= leadUrl([]) %>">Close ✕</a>
             </div>
             <p class="muted" style="font-size:13px;margin-top:-4px">
               <% if (openRole === 'inquirer') { %>
@@ -157,28 +188,44 @@
                   </div>
                 <% }) %>
               <% } else { %>
-                <p class="muted" style="font-size:13px;text-align:center;padding:18px 0">No messages yet.</p>
+                <p class="muted" style="font-size:13px;text-align:center;padding:18px 0">No messages yet — say hello below.</p>
               <% } %>
             </div>
 
-            <form class="lead-reply-form" method="post" action="/dashboard/leads/<%= open.id %>/reply">
+            <% /* The composer carries its own explanation: a refused reply is
+                  stated beside the Send button, in the box the member is
+                  looking at, with the exact reason and the numbers. */ %>
+            <form class="lead-reply-form<%= cerr ? ' has-error' : '' %>" method="post" action="/dashboard/leads/<%= open.id %>/reply"
+                  data-draft-key="lead-<%= open.id %>-<%= openRole %>"
+                  data-reply-state="<%= cerr ? 'error' : (typeof replySent !== 'undefined' && replySent ? 'sent' : 'idle') %>"
+                  data-reason="<%= _attr(cerr) %>">
               <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+              <%- ctxFields() %>
               <label class="sr-only" for="lead-reply-<%= open.id %>">Your message</label>
-              <textarea class="input" id="lead-reply-<%= open.id %>" name="body" rows="3" maxlength="4000" required placeholder="<%= openRole === 'owner' ? 'Reply to ' + open.name + '…' : 'Write a follow-up to ' + open.listing_name + '…' %>" data-lead-count="lead-reply-count-<%= open.id %>"></textarea>
+              <textarea class="input" id="lead-reply-<%= open.id %>" name="body" rows="3" required
+                        data-min="<%= rMin %>" data-max="<%= rMax %>"
+                        data-count="lead-reply-count-<%= open.id %>" data-error="lead-reply-error-<%= open.id %>"
+                        aria-describedby="lead-reply-help-<%= open.id %><%= cerr ? ' lead-reply-error-' + open.id : '' %>"
+                        placeholder="<%= openRole === 'owner' ? 'Reply to ' + open.name + '…' : 'Write a follow-up to ' + open.listing_name + '…' %>"></textarea>
               <div class="lead-reply-actions">
                 <button class="btn btn-primary btn-sm" type="submit">Send message</button>
-                <span class="muted" id="lead-reply-count-<%= open.id %>" style="font:500 11.5px var(--fm)">0/4000</span>
+                <span class="lead-reply-count" id="lead-reply-count-<%= open.id %>">0/<%= nf(rMax) %></span>
                 <% if (openRole === 'owner') { %>
                 <a class="btn btn-ghost btn-sm" href="mailto:<%= open.email %>?subject=<%= encodeURIComponent('Re: your inquiry to ' + open.listing_name + (open.looking_for ? ' — ' + open.looking_for : '')) %>">Email instead</a>
                 <% if (open.phone) { %><a class="btn btn-ghost btn-sm" href="tel:<%= String(open.phone).replace(/\s/g, '') %>">Call</a><% } %>
                 <% } %>
               </div>
-              <p class="muted" style="font-size:12px;margin:8px 0 0">The first message of a conversation goes by email; every reply after that arrives as a FirmLedger notification.</p>
+              <p class="lead-reply-help muted" id="lead-reply-help-<%= open.id %>">
+                Between <%= nf(rMin) %> and <%= nf(rMax) %> characters. The counter turns amber near the limit and red past it — nothing you type is cleared if a send is refused.
+              </p>
+              <p class="lead-reply-error" id="lead-reply-error-<%= open.id %>" role="alert"<%= cerr ? '' : ' hidden' %>><% if (cerr) { %><span class="lre-text"><%= cerr %></span><% if (cerr.indexOf('Pro feature') > -1) { %> <a class="btn btn-accent btn-sm" href="/dashboard/upgrade">Upgrade to Pro</a><% } %><% } %></p>
+              <p class="muted" style="font-size:12px;margin:0">The first message of a conversation goes by email; every reply after that arrives as a FirmLedger notification.</p>
             </form>
 
             <% if (openRole === 'inquirer') { %>
             <form method="post" action="/dashboard/leads/<%= open.id %>/delete" style="margin-top:10px" onsubmit="return confirm('Delete this conversation from your Sent box? The business keeps its own record of the inquiry. This cannot be undone.');">
               <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+              <%- ctxFields() %>
               <button class="btn btn-ghost btn-sm lead-delete-btn" type="submit">Delete conversation</button>
             </form>
             <% } %>
@@ -186,6 +233,7 @@
             <% if (openRole === 'owner') { %>
             <form class="lead-status-form" method="post" action="/dashboard/leads/<%= open.id %>/status">
               <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+              <%- ctxFields() %>
               <label><span>Status</span>
                 <select class="input" name="status">
                   <% STATUSES.forEach(function (s) { %><option value="<%= s %>"<%= open.status === s ? ' selected' : '' %>><%= STATUS_LABELS[s] %></option><% }) %>
@@ -195,38 +243,20 @@
             </form>
             <form method="post" action="/dashboard/leads/<%= open.id %>/archive" style="margin-top:10px">
               <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+              <%- ctxFields() %>
               <input type="hidden" name="archived" value="<%= open.archived ? '0' : '1' %>">
               <button class="btn btn-ghost btn-sm" type="submit"><%= open.archived ? 'Restore to inbox' : 'Archive' %></button>
             </form>
-            <form method="post" action="/dashboard/leads/<%= open.id %>/delete" style="margin-top:10px" onsubmit="return confirm('Permanently delete this conversation, its messages and notes for both sides? This cannot be undone.');">
+            <form method="post" action="/dashboard/leads/<%= open.id %>/delete" style="margin-top:10px" onsubmit="return confirm('Permanently delete this conversation and its whole thread for both sides? This cannot be undone.');">
               <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+              <%- ctxFields() %>
               <button class="btn btn-ghost btn-sm lead-delete-btn" type="submit">Delete permanently</button>
             </form>
-
-            <div class="lead-notes-block">
-              <h4 class="h-section">Private notes <span class="muted" style="font-weight:400">· only you see these</span></h4>
-              <div class="lead-notes-area">
-                <% if (openNotes.length) { %>
-                <ul class="lead-notes">
-                  <% openNotes.forEach(function (n) { %>
-                  <li><p><%= n.note %></p><small class="muted"><%= fmtDate(n.created_at) %></small></li>
-                  <% }) %>
-                </ul>
-                <% } else { %>
-                <p class="muted" style="font-size:13px">No notes yet — record calls, quotes and follow-ups here.</p>
-                <% } %>
-              </div>
-              <form class="lead-note-form" method="post" action="/dashboard/leads/<%= open.id %>/note">
-                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                <label><span class="sr-only">Add a note</span><textarea class="input" name="note" rows="2" maxlength="2000" required placeholder="Add a private note…"></textarea></label>
-                <button class="btn btn-ghost btn-sm" type="submit">Add note</button>
-              </form>
-            </div>
             <% } %>
           </div>
           <% } else if (box.rows.length) { %>
           <div class="panel lead-detail lead-detail-empty">
-            <p class="muted"><%= isSent ? 'Select a conversation to keep talking with the business.' : 'Select an inquiry to read it, reply, set its status and add notes.' %></p>
+            <p class="muted"><%= isSent ? 'Select a conversation to keep talking with the business.' : 'Select an inquiry to read it, reply and set its status.' %></p>
           </div>
           <% } %>
         </div>
@@ -239,6 +269,119 @@
 (function () {
   var t = document.getElementById('leadThread');
   if (t) t.scrollTop = t.scrollHeight;
+
+  var store = (function () {
+    try { window.sessionStorage.setItem('__fl', '1'); window.sessionStorage.removeItem('__fl'); return window.sessionStorage; }
+    catch (e) { return null; }
+  })();
+  var nf = function (n) { return Number(n).toLocaleString('en-US'); };
+
+  Array.prototype.forEach.call(document.querySelectorAll('.lead-reply-form'), function (form) {
+    var ta = form.querySelector('textarea[name="body"]');
+    if (!ta) return;
+    var min = parseInt(ta.getAttribute('data-min'), 10) || 1;
+    var max = parseInt(ta.getAttribute('data-max'), 10) || 4000;
+    var count = document.getElementById(ta.getAttribute('data-count'));
+    var errEl = document.getElementById(ta.getAttribute('data-error'));
+    var key = 'fl.leadReply.' + (form.getAttribute('data-draft-key') || 'x');
+    var state = form.getAttribute('data-reply-state') || 'idle';
+    var serverReason = form.getAttribute('data-reason') || '';
+
+    /* A refused send must never cost a member their text: the draft lives in
+       this tab for the round trip and is dropped once the message is stored. */
+    var saved = null;
+    if (store) {
+      try { saved = store.getItem(key); } catch (e) { saved = null; }
+      if (state === 'sent') { try { store.removeItem(key); } catch (e) {} }
+      else if (saved && !ta.value.trim()) ta.value = saved;
+    }
+
+    /* A restored draft that now satisfies the rule needs no explanation left
+       on screen — the box below is the only place a refusal is ever shown. */
+    if (ta.value.trim().length >= min && ta.value.trim().length <= max) serverReason = '';
+
+    /* An empty box is not a mistake until the member tries to send from it, so
+       the warning only appears once something has actually been refused. */
+    var touched = state === 'error' || !!ta.value.trim();
+
+    /** The exact reason the message would not send — '' means it will. */
+    function reason() {
+      var n = ta.value.trim().length;
+      if (!n) return 'Nothing to send yet — the message box is empty. Write your reply and Send will work again.';
+      if (n < min) return 'Too short to send — a reply needs at least ' + min + ' characters and yours is ' + n + '. A word or two is enough.';
+      if (n > max) return 'Too long to send — your reply is ' + nf(n) + ' characters and the limit is ' + nf(max) + '. Trim ' + nf(n - max) + ' of them and it goes through.';
+      return '';
+    }
+
+    function paint() {
+      var n = ta.value.trim().length;
+      if (count) {
+        count.textContent = nf(n) + '/' + nf(max);
+        count.classList.toggle('is-over', n > max);
+        count.classList.toggle('is-near', n <= max && n > Math.floor(max * 0.9));
+      }
+      var msg = reason();
+      /* The browser would block the send with its own generic tooltip; stating
+         the same rule here keeps the two from ever disagreeing. */
+      try { ta.setCustomValidity(msg); } catch (e) {}
+      /* The server's reason outranks the local guess: it knows what the POST
+         actually tripped over (a deleted thread, the Pro gate, the cap). */
+      var shown = serverReason || (touched ? msg : '');
+      if (errEl) {
+        errEl.innerHTML = '';
+        if (shown) {
+          var span = document.createElement('span');
+          span.className = 'lre-text';
+          span.textContent = shown;
+          errEl.appendChild(span);
+          if (/Pro feature/.test(shown)) {
+            var up = document.createElement('a');
+            up.className = 'btn btn-accent btn-sm';
+            up.href = '/dashboard/upgrade';
+            up.textContent = 'Upgrade to Pro';
+            errEl.appendChild(up);
+          }
+        }
+        errEl.hidden = !shown;
+      }
+      form.classList.toggle('has-error', !!shown);
+      ta.setAttribute('aria-invalid', shown ? 'true' : 'false');
+    }
+
+    ta.addEventListener('input', function () {
+      touched = true;
+      serverReason = '';
+      paint();
+      if (store) {
+        try {
+          if (ta.value.trim()) store.setItem(key, ta.value); else store.removeItem(key);
+        } catch (e) { /* a full or blocked storage must not stop the send */ }
+      }
+    });
+    ta.addEventListener('invalid', function (e) {
+      /* Keep the explanation inline under the box — one message, not two. */
+      e.preventDefault();
+      touched = true;
+      paint();
+      ta.focus();
+    });
+    form.addEventListener('submit', function () { touched = true; paint(); });
+    paint();
+    if (state === 'error') { ta.focus(); }
+  });
+
+  /* Status is one change, not a change plus a button press. The Update button
+     stays for keyboards, taps and scripts that never load. */
+  Array.prototype.forEach.call(document.querySelectorAll('.lead-status-form'), function (f) {
+    var sel = f.querySelector('select[name="status"]');
+    if (!sel) return;
+    sel.addEventListener('change', function () {
+      f.classList.add('is-saving');
+      var b = f.querySelector('button[type="submit"]');
+      if (b) b.textContent = 'Saving…';
+      f.submit();
+    });
+  });
 })();
 </script>
 

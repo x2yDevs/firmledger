@@ -2974,7 +2974,9 @@ select.input::-ms-expand,
   position: sticky; top: 90px;
   display: flex; flex-direction: column;
   height: 100%;
-  max-height: min(70vh, 720px);
+  /* The thread is the whole pane below the facts, so it takes the height the
+     retired notes block used to reserve. */
+  max-height: min(78vh, 820px);
   overflow: hidden;
   margin-bottom: 0;
   min-height: 0;
@@ -2992,7 +2994,7 @@ select.input::-ms-expand,
 
 /* Two-way conversation thread — scrolls inside the detail pane. */
 .lead-thread {
-  flex: 1 1 auto; min-height: 140px;
+  flex: 1 1 auto; min-height: 240px;
   overflow-y: auto; overscroll-behavior: contain;
   margin: 14px 0 0; padding: 12px;
   border: 1px solid var(--hair); border-radius: 12px; background: var(--paper);
@@ -3029,19 +3031,25 @@ select.input::-ms-expand,
 .lead-status-form select.input,
 .lead-status-form select { width: auto; min-width: 160px; }
 
-/* Notes block scrolls independently so status/dropdown stay put. */
-.lead-notes-block { flex: 0 1 auto; min-height: 0; max-height: min(26vh, 240px); display: flex; flex-direction: column; margin-top: .4rem; }
-.lead-notes-block .h-section { flex: 0 0 auto; margin-top: 1rem; }
-.lead-notes-area {
-  flex: 1 1 auto; min-height: 0;
-  overflow-y: auto; overscroll-behavior: contain;
-  scrollbar-width: thin; scrollbar-color: var(--hair2) transparent;
-  padding-right: 2px;
+/* Composer guidance: a reply that will not send says why, in the box it was
+   refused from — never in a banner the member has already scrolled past. */
+.lead-reply-count { font: 500 11.5px var(--fm); color: var(--muted); white-space: nowrap; }
+.lead-reply-count.is-near { color: var(--warn); }
+.lead-reply-count.is-over { color: var(--bad); font-weight: 700; }
+.lead-reply-help { font-size: 12px; line-height: 1.6; margin: 0; }
+.lead-reply-error {
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  margin: 0; padding: 9px 12px;
+  border: 1px solid #F2D2CF; border-left: 3px solid var(--bad);
+  border-radius: 10px; background: var(--bad-soft); color: #8C1F19;
+  font-size: 12.8px; line-height: 1.55;
 }
-.lead-notes { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 10px; }
-.lead-notes li { border: 1px solid var(--hair); border-radius: 10px; padding: 10px 14px; background: var(--paper); }
-.lead-notes p { margin: 0; font-size: 13.5px; line-height: 1.65; overflow-wrap: anywhere; }
-.lead-note-form { display: grid; gap: 10px; margin-top: 12px; flex: 0 0 auto; }
+.lead-reply-error[hidden] { display: none; }
+.lead-reply-error .lre-text { min-width: 0; overflow-wrap: anywhere; }
+.lead-reply-form.has-error .input { border-color: var(--bad); }
+.lead-detail .panel-h-t .pill { flex: 0 0 auto; }
+.lead-status-form.is-saving { opacity: .6; }
+.lead-status-form.is-saving select { pointer-events: none; }
 
 @media (max-width: 640px) {
   .dash-head { align-items: stretch; }
@@ -3049,7 +3057,7 @@ select.input::-ms-expand,
   .ana-pick select { min-width: 0; width: 100%; }
   .lead-tabs { gap: 6px; }
   .lead-tab { padding: 7px 12px; font-size: 12.5px; }
-  .lead-thread { max-height: min(48vh, 360px); }
+  .lead-thread { max-height: min(60vh, 460px); }
   .lead-status-form select.input { width: 100%; min-width: 0; }
 }
 

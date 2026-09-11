@@ -11,9 +11,12 @@
  *   3. Both rendered inboxes show the identical, ordered timeline with the
  *      right "You" side, statuses auto-flip new → contacted on the owner's
  *      first reply, and lead counts stay true.
- *   4. Guards: CSRF, strangers locked out, empty replies rejected, private
- *      notes never reach the inquirer, Pro gating for the owner's tools while
- *      the conversation itself stays open to both sides.
+ *   4. Guards: CSRF, strangers locked out, Pro gating for the owner's tools
+ *      while the conversation itself stays open to both sides — and every
+ *      refused reply says WHY, in the composer it was refused from, with the
+ *      numbers that fix it (nothing is silently truncated, nothing is lost).
+ *   5. The composer's own script, run here against a stub DOM, refuses exactly
+ *      the same text the server refuses, in the same words.
  */
 const assert = require('assert/strict');
 const fs = require('fs');
@@ -205,22 +208,46 @@ const qs = (o) => Object.entries(o).map(([k, v]) => `${k}=${encodeURIComponent(v
   const strangerSent = await (await call(`/dashboard/leads?box=sent&open=${lead.id}`, 'stranger')).text();
   check('stranger sent box shows nothing of the thread', !strangerSent.includes('28,000'));
 
-  /* --- empty replies are rejected, thread untouched --- */
+  /* --- every refused reply states the reason, in the composer, and sends nothing --- */
+  const replyLimits = require('../src/lib/leads').LIMITS.reply;
+  const loc = (res) => decodeURIComponent(res.headers.get('location') || '');
+
   const empty = await call(`/dashboard/leads/${lead.id}/reply`, 'owner', { _csrf: s.owner.csrf, body: '   ' });
-  check('empty reply bounces with an error', empty.status === 302 && decodeURIComponent(empty.headers.get('location')).includes('Write a message'));
+  check('empty reply is refused with the reason', empty.status === 302 && loc(empty).includes('Nothing to send'), loc(empty));
+  check('the refusal is addressed to the composer (cerr, not a page banner)', loc(empty).includes('cerr=') && !/[?&]err=/.test(loc(empty)), loc(empty));
   check('thread still has 5 messages', db.prepare('SELECT COUNT(*) c FROM lead_messages WHERE lead_id=?').get(lead.id).c === 5);
+
+  const tiny = await call(`/dashboard/leads/${lead.id}/reply`, 'owner', { _csrf: s.owner.csrf, body: 'a' });
+  check('a one-keystroke reply is refused as too short', tiny.status === 302 && loc(tiny).includes('at least ' + replyLimits.min + ' characters'), loc(tiny));
+
+  const huge = await call(`/dashboard/leads/${lead.id}/reply`, 'owner', { _csrf: s.owner.csrf, body: 'x'.repeat(replyLimits.max + 500) });
+  check('an over-long reply is refused with the exact numbers', huge.status === 302
+    && loc(huge).includes('4,500 characters') && loc(huge).includes('limit is 4,000') && loc(huge).includes('Trim 500'), loc(huge));
+  check('nothing was truncated into the thread instead', db.prepare('SELECT COUNT(*) c FROM lead_messages WHERE lead_id=?').get(lead.id).c === 5);
+
+  const refusedPage = await (await call(loc(huge).replace(/^\/dashboard\/leads/, '/dashboard/leads'), 'owner')).text();
+  check('the reason renders inside the composer, beside Send', /class="lead-reply-form has-error"/.test(refusedPage) && /lead-reply-error-\d+" role="alert">[\s\S]*?Too long to send/.test(refusedPage));
+  check('the composer advertises the server limits', refusedPage.includes(`data-min="${replyLimits.min}"`) && refusedPage.includes(`data-max="${replyLimits.max}"`));
+  check('the box is not capped by maxlength, so a long paste is explained not cut', !/name="body"[^>]*maxlength/.test(refusedPage));
 
   /* --- nonexistent lead --- */
   const ghost = await call('/dashboard/leads/999999/reply', 'owner', { _csrf: s.owner.csrf, body: 'Hello ghost thread.' });
-  check('replying to a missing lead says not found', ghost.status === 302 && decodeURIComponent(ghost.headers.get('location')).includes('Conversation not found'));
+  check('replying to a missing lead says not found', ghost.status === 302 && loc(ghost).includes('Conversation not found'));
 
-  /* --- private notes never reach the inquirer --- */
-  const note = await call(`/dashboard/leads/${lead.id}/note`, 'owner', { _csrf: s.owner.csrf, note: 'Called Jane — prefers early mornings.' });
-  check('owner note saved', note.status === 302 && db.prepare('SELECT COUNT(*) c FROM lead_notes WHERE lead_id=?').get(lead.id).c === 1);
+  /* --- the private-notes block is gone: the thread is the whole pane --- */
   const ownerAgain = await (await call(`/dashboard/leads?open=${lead.id}`, 'owner')).text();
-  check('owner sees the private note', ownerAgain.includes('prefers early mornings'));
   const janeAgain = await (await call(`/dashboard/leads?box=sent&open=${lead.id}`, 'inquirer')).text();
-  check('inquirer never sees the private note', !janeAgain.includes('prefers early mornings') && !janeAgain.includes('lead-note-form'));
+  check('owner sees no notes block', !ownerAgain.includes('Private notes') && !ownerAgain.includes('lead-note-form') && !ownerAgain.includes('lead-notes-block'));
+  check('inquirer sees no notes block', !janeAgain.includes('Private notes') && !janeAgain.includes('lead-note-form'));
+  check('nothing invites the owner to add notes', !ownerAgain.includes('add notes') && !ownerAgain.includes('Add note'));
+  check('the note route is retired', (await call(`/dashboard/leads/${lead.id}/note`, 'owner', { _csrf: s.owner.csrf, note: 'Should not be accepted anywhere.' })).status === 404);
+  check('retiring it stored nothing', db.prepare('SELECT COUNT(*) c FROM lead_notes WHERE lead_id=?').get(lead.id).c === 0);
+
+  /* --- tabs and links keep their own meaning while the inbox remembers place --- */
+  const sentView = await (await call('/dashboard/leads?box=sent', 'inquirer')).text();
+  check('the Sent view still offers a Received tab that leaves the Sent box', /class="lead-tab[^"]*" href="\/dashboard\/leads">Received/.test(sentView));
+  const farPage = await (await call('/dashboard/leads?box=sent&page=99', 'inquirer')).text();
+  check('an out-of-range page still shows the list, not a false empty state', farPage.includes('Office cleaning quote') && !farPage.includes('No conversations yet'));
 
   console.log('Leads messaging — inbox management');
   /* --- status + archive via the dashboard --- */
@@ -228,6 +255,19 @@ const qs = (o) => Object.entries(o).map(([k, v]) => `${k}=${encodeURIComponent(v
   check('status update to Won accepted', st.status === 302 && db.prepare('SELECT status FROM leads WHERE id=?').get(lead.id).status === 'won');
   const wonHtml = await (await call('/dashboard/leads?status=won', 'owner')).text();
   check('Won filter lists the lead', wonHtml.includes('Jane Wanjiku') && wonHtml.includes('pill-lead-won'));
+
+  /* Marking a lead while a status filter is on must not throw the owner out of
+     the list they were working through, and must say where the lead went. */
+  await call(`/dashboard/leads/${lead.id}/status`, 'owner', { _csrf: s.owner.csrf, status: 'new', ctx_status: 'won' });
+  const inNew = await call(`/dashboard/leads/${lead.id}/status`, 'owner', {
+    _csrf: s.owner.csrf, status: 'won', ctx_status: 'new', ctx_box: 'received', ctx_page: '1',
+  });
+  check('status change returns to the same filtered view, still open', /\?status=new&open=\d+&ok=/.test(inNew.headers.get('location') || ''), loc(inNew));
+  check('the message explains it leaves that filter', /leaves your .New. list now/.test(loc(inNew)), loc(inNew));
+  check('the Won tab count and the row pill now agree with the status', (await (await call('/dashboard/leads?status=won', 'owner')).text()).includes('pill-lead-won'));
+  check('status is confirmed where it was set, in the chat header', (await (await call(`/dashboard/leads?open=${lead.id}`, 'owner')).text()).includes('data-lead-pill-current>Won<'));
+  await call(`/dashboard/leads/${lead.id}/status`, 'owner', { _csrf: s.owner.csrf, status: 'won' });
+  check('a bogus status is refused by name', /is not a lead status/.test(loc(await call(`/dashboard/leads/${lead.id}/status`, 'owner', { _csrf: s.owner.csrf, status: 'shipped' }))));
   const arch = await call(`/dashboard/leads/${lead.id}/archive`, 'owner', { _csrf: s.owner.csrf, archived: '1' });
   check('archive accepted', arch.status === 302 && db.prepare('SELECT archived FROM leads WHERE id=?').get(lead.id).archived === 1);
   const recvAfter = await (await call('/dashboard/leads', 'owner')).text();
@@ -248,10 +288,9 @@ const qs = (o) => Object.entries(o).map(([k, v]) => `${k}=${encodeURIComponent(v
   /* --- downgrade the owner to Free: the thread must keep working, tools must not --- */
   db.prepare("UPDATE users SET plan='', plan_expires_at='' WHERE id=?").run(owner);
   const blockedReply = await call(`/dashboard/leads/${lead.id}/reply`, 'owner', { _csrf: s.owner.csrf, body: 'Trying to reply while on Free.' });
-  check('free owner reply is gated with the upgrade notice', blockedReply.status === 302 && decodeURIComponent(blockedReply.headers.get('location')).includes('Pro feature'));
+  check('free owner reply is gated with the upgrade notice', blockedReply.status === 302 && loc(blockedReply).includes('Pro feature'));
+  check('the gate is stated in the composer, with an upgrade path', (await (await call(loc(blockedReply).startsWith('/dashboard/leads') ? loc(blockedReply) : '/dashboard/leads', 'owner')).text()).includes('Upgrade to Pro'));
   check('gated reply created no message', db.prepare('SELECT COUNT(*) c FROM lead_messages WHERE lead_id=?').get(lead.id).c === 5);
-  const freeNote = await call(`/dashboard/leads/${lead.id}/note`, 'owner', { _csrf: s.owner.csrf, note: 'Note while on Free plan.' });
-  check('free owner note gated', decodeURIComponent(freeNote.headers.get('location')).includes('Pro feature'));
   const freeInq = await call(`/dashboard/leads/${lead.id}/reply`, 'inquirer', { _csrf: s.inquirer.csrf, body: 'Free-plan owners should still receive my follow-up here.' });
   check('inquirer (free) can still send messages', freeInq.status === 302 && decodeURIComponent(freeInq.headers.get('location')).includes('Message sent'));
   check('inquirer message stored', db.prepare('SELECT COUNT(*) c FROM lead_messages WHERE lead_id=?').get(lead.id).c === 6);
@@ -271,6 +310,66 @@ const qs = (o) => Object.entries(o).map(([k, v]) => `${k}=${encodeURIComponent(v
   check('received inbox shows both leads, newest first', inbox2.includes('Car wash bay') && inbox2.indexOf('Car wash bay') < inbox2.indexOf('Office cleaning quote'));
   const sent2 = await (await call('/dashboard/leads?box=sent', 'inquirer')).text();
   check('sent inbox lists both conversations', sent2.includes('Car wash bay') && sent2.includes('Office cleaning quote'));
+
+  console.log('Leads messaging — the composer speaks with the server\u2019s voice');
+  {
+    /* The composer script is the first line of defence: it must refuse the same
+       text the server refuses, in the same words, and hand the member back what
+       they typed. Run against a stub DOM so it is checked with no browser. */
+    const view = fs.readFileSync(path.join(__dirname, '..', 'views', 'dashboard', 'leads.ejs'), 'utf8');
+    const script = (view.match(/<script>([\s\S]*?)<\/script>/) || [])[1] || '';
+    check('the inbox ships a composer script', script.includes('.lead-reply-form') && script.includes('setCustomValidity'));
+
+    function node(attrs) {
+      return {
+        attrs: attrs || {}, value: '', textContent: '', href: '', hidden: true, validity: '',
+        children: [], handlers: {},
+        classList: { set: new Set(), toggle(c, on) { if (on) this.set.add(c); else this.set.delete(c); }, contains(c) { return this.set.has(c); } },
+        getAttribute(k) { return this.attrs[k] === undefined ? null : this.attrs[k]; },
+        setAttribute(k, v) { this.attrs[k] = String(v); },
+        appendChild(c) { this.children.push(c); },
+        focus() {}, setCustomValidity(v) { this.validity = v; },
+        querySelector() { return null; },
+        addEventListener(t, fn) { (this.handlers[t] = this.handlers[t] || []).push(fn); },
+        fire(t, ev) { (this.handlers[t] || []).forEach((fn) => fn(ev || { preventDefault() {} })); },
+        said() { return this.children.map((c) => c.textContent).join(' '); },
+      };
+    }
+    function compose({ state = 'idle', reason = '', draft = null, typed = null } = {}) {
+      const ta = node({ 'data-min': '2', 'data-max': '4000', 'data-count': 'cnt', 'data-error': 'err' });
+      const counter = node({}); counter.hidden = false;
+      const errEl = node({}); errEl.hidden = false;
+      const form = node({ 'data-draft-key': 'lead-4-owner', 'data-reply-state': state, 'data-reason': reason });
+      form.querySelector = () => ta;
+      const mem = draft === null ? {} : { 'fl.leadReply.lead-4-owner': draft };
+      const store = {
+        getItem: (k) => (k in mem ? mem[k] : null),
+        setItem: (k, v) => { mem[k] = String(v); },
+        removeItem: (k) => { delete mem[k]; },
+      };
+      const document = {
+        getElementById: (id) => (id === 'cnt' ? counter : id === 'err' ? errEl : null),
+        querySelectorAll: (sel) => (sel === '.lead-reply-form' ? [form] : []),
+        createElement: () => node({}),
+      };
+      new Function('document', 'window', script)(document, { sessionStorage: store });
+      if (typed !== null) { ta.value = typed; ta.fire('input'); }
+      return { ta, counter, errEl, form, mem };
+    }
+
+    check('an untouched box does not scold the member', compose().errEl.hidden && !compose().form.classList.contains('has-error'));
+    check('a blank send is refused before the network is touched', /Nothing to send yet/.test(compose({ typed: '   ' }).errEl.said()));
+    check('one keystroke is named as too short', /needs at least 2 characters and yours is 1/.test(compose({ typed: 'a' }).errEl.said()));
+    check('a two-character reply is enough', compose({ typed: 'Ok' }).errEl.hidden);
+    check('over the cap says how much to trim', /4,500 characters and the limit is 4,000\. Trim 500/.test(compose({ typed: 'x'.repeat(4500) }).errEl.said()));
+    { const c = compose({ typed: 'x'.repeat(4500) }); check('the counter counts and turns red', c.counter.textContent === '4,500/4,000' && c.counter.classList.contains('is-over'), c.counter.textContent); }
+    check('the native tooltip is told the same words', /Too short/.test(compose({ typed: 'z' }).ta.validity));
+    check('the browser\u2019s own block is replaced by the inline line', /aria-invalid/.test(script) && script.includes("e.preventDefault()"));
+    check('the server\u2019s reason outranks the local guess', /Trim 500 of them/.test(compose({ state: 'error', reason: 'Too long to send \u2014 your reply is 4,500 characters and the limit is 4,000. Trim 500 of them and it goes through.' }).errEl.said()));
+    check('a refused draft is put back in the box', compose({ state: 'error', reason: 'Too short', draft: 'a' }).ta.value === 'a');
+    check('a sent message drops the kept draft', !('fl.leadReply.lead-4-owner' in compose({ state: 'sent', draft: 'sent already' }).mem));
+    check('typing saves as they go, so a refusal cannot cost the text', compose({ typed: 'Saved as typed' }).mem['fl.leadReply.lead-4-owner'] === 'Saved as typed');
+  }
 })().catch((e) => { console.error(e); process.exitCode = 1; }).finally(async () => {
   server.kill();
   try { require('../src/db').db.close(); } catch {}

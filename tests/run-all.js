@@ -109,7 +109,7 @@ const suites = [
   ['Leads messaging — two-user conversation over HTTP', 'leads-messaging.test.js'],
   ['Leads inbox — member → claimed owner → chat round trip', 'leads-inbox-e2e.test.js'],
   ['Leads housekeeping — permanent delete + email-first policy', 'leads-housekeeping.test.js'],
-  ['Leads + blog fit — notes, honest Sent, article rhythm', 'leads-blog-fit.test.js'],
+  ['Leads + blog fit — composer guidance, honest Sent, article rhythm', 'leads-blog-fit.test.js'],
   ['Blog content — accuracy, stale refresh, 2026 guide', 'blog-content.test.js'],
   ['Focus hygiene — no rings on inputs & dropdowns', 'focus-hygiene.test.js'],
   ['Production database upgrade', 'db-upgrade.test.js'],

@@ -9,7 +9,7 @@
  *   • analytics: bot/owner/admin/non-approved skips, view + website_click
  *     recording, summary / topLocations / locationDetail / totals / perListing,
  *   • leads: validation, create (claimed-only), inbox counts/list/filters,
- *     status transitions, notes, archive, ownership isolation,
+ *     status transitions, archive, ownership isolation,
  *   • spam: the `lead` rate-limit bucket exists (20/hour default),
  *   • mailer: lead alerts send with a reply-to for the inquirer,
  *   • wording: "eligible for Featured placement" copy in place, no "sandbox"
@@ -274,7 +274,7 @@ section('Leads — validation + create');
 
 }
 
-section('Leads — inbox, statuses, notes, ownership');
+section('Leads — inbox, statuses, ownership');
 {
   const mine = getListing(db.prepare('SELECT id FROM listings WHERE slug=?').get('lead-co').id);
   const other = getListing(addListing({ slug: 'lead-other', name: 'Lead Other', claimed: 1, owner_user_id: otherId }));
@@ -310,12 +310,17 @@ section('Leads — inbox, statuses, notes, ownership');
   const st = leads.setStatus(id2, ownerId, 'qualified');
   check('setStatus moves new → qualified', st.ok && st.lead.status === 'qualified');
 
-  check('addNote rejects empty notes', !leads.addNote(id2, ownerId, ' ').ok);
-  check('addNote rejects foreign leads', !leads.addNote(id2, otherId, 'snoop').ok);
-  leads.addNote(id2, ownerId, 'Called — wants a quote by Friday.');
-  const notes = leads.notesFor(id2, ownerId);
-  check('notes round-trip privately', notes.length === 1 && /Friday/.test(notes[0].note));
-  check('foreign owners see no notes', leads.notesFor(id2, otherId).length === 0);
+  /* The private-notes block was retired so the conversation owns the pane —
+     the module must not hand the API back to anything that still calls it. */
+  check('the leads module exposes no note API', leads.addNote === undefined && leads.notesFor === undefined);
+  check('an empty reply is refused, with a code', leads.addMessage(id2, ownerId, '   ').code === 'empty');
+  check('a one-keystroke reply is refused as too short', leads.addMessage(id2, ownerId, 'a').code === 'too_short');
+  check('an over-long reply states exactly how far over it is', (() => {
+    const r = leads.addMessage(id2, ownerId, 'x'.repeat(leads.LIMITS.reply.max + 7));
+    return !r.ok && r.code === 'too_long' && r.over === 7 && /Trim 7 of them/.test(r.error);
+  })());
+  check('a foreign reply is refused by name, not silently', leads.addMessage(id2, otherId, 'snooping in a thread that is not mine').code === 'not_found');
+  check('the reply limit is quoted in the message', /limit is 4,000/.test(leads.addMessage(id2, ownerId, 'x'.repeat(4001)).error));
 
   leads.setArchived(id4, ownerId, true);
   const c2 = leads.countsForOwner(ownerId);
