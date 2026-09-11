@@ -2961,7 +2961,9 @@ select.input::-ms-expand,
 .lead-row-main { display: grid; gap: 3px; min-width: 0; }
 .lead-row-main b { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lead-row-main small { font-size: 12px; line-height: 1.5; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* The status pill keeps its shape on narrow rows — the name/preview shrink, never the pill. */
+/* Keep the status beside the inquiry name — the name/preview shrink, never the pill. */
+.lead-row-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.lead-row-title b { min-width: 0; flex: 1 1 auto; }
 .lead-row .pill { flex: 0 0 auto; align-self: center; white-space: nowrap; }
 
 .pill-lead-new { background: #E3ECFD; color: #1D4ED8; }
@@ -3021,7 +3023,7 @@ select.input::-ms-expand,
 .lead-bubble-meta { display: flex; justify-content: flex-end; margin-top: 4px; font: 500 .66rem var(--fm); color: var(--muted); }
 
 .lead-reply-form { display: grid; gap: 10px; margin-top: 12px; flex: 0 0 auto; }
-.lead-reply-form .input { min-height: 72px; resize: vertical; }
+.lead-reply-form .input { min-height: 120px; resize: vertical; }
 .lead-reply-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .lead-delete-btn { color: var(--bad); }
 .lead-delete-btn:hover { border-color: var(--bad); color: var(--bad); }

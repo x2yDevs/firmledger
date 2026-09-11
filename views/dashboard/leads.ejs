@@ -126,11 +126,14 @@
               <% box.rows.forEach(function (ld) { %>
               <a class="lead-row<%= open && open.id === ld.id ? ' open' : '' %><%= !isSent && ld.status === 'new' ? ' is-new' : '' %>" href="<%= leadUrl(['open=' + ld.id]) %>">
                 <span class="lead-row-main">
-                  <b><%= isSent ? ld.listing_name : ld.name %></b>
+                  <span class="lead-row-title">
+                    <b><%= isSent ? ld.listing_name : ld.name %></b>
+                    <% if (!isSent) { %><span class="pill pill-lead-<%= ld.status %>"><%= STATUS_LABELS[ld.status] %></span><% } %>
+                  </span>
                   <small class="muted"><%= ld.looking_for || (ld.message || '').slice(0, 80) %></small>
                   <small class="muted"><%= isSent ? ld.name : ld.listing_name %> · <%= fmtDate(ld.updated_at || ld.created_at) %></small>
                 </span>
-                <% if (!isSent) { %><span class="pill pill-lead-<%= ld.status %>"><%= STATUS_LABELS[ld.status] %></span><% } else if (ld.last_sender === 'owner') { %><span class="lead-wait">New reply</span><% } %>
+                <% if (isSent && ld.last_sender === 'owner') { %><span class="lead-wait">New reply</span><% } %>
               </a>
               <% }) %>
             </div>
@@ -202,7 +205,7 @@
               <input type="hidden" name="_csrf" value="<%= csrfToken %>">
               <%- ctxFields() %>
               <label class="sr-only" for="lead-reply-<%= open.id %>">Your message</label>
-              <textarea class="input" id="lead-reply-<%= open.id %>" name="body" rows="3" required
+              <textarea class="input" id="lead-reply-<%= open.id %>" name="body" rows="5" required
                         data-min="<%= rMin %>" data-max="<%= rMax %>"
                         data-count="lead-reply-count-<%= open.id %>" data-error="lead-reply-error-<%= open.id %>"
                         aria-describedby="lead-reply-help-<%= open.id %><%= cerr ? ' lead-reply-error-' + open.id : '' %>"
