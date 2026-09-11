@@ -17,6 +17,7 @@ const careers = require('../lib/careers');
 
 const spam = require('../lib/spam');
 const newsLib = require('../lib/news');
+const leads = require('../lib/leads');
 const { requireUser } = require('../lib/session');
 
 const router = express.Router();
@@ -350,6 +351,9 @@ router.get('/listing/:slug', (req, res, next) => {
   if (!l) return next();
   const isOwner = req.user && l.owner_user_id === req.user.id;
   if (l.status !== 'approved' && !isOwner && !req.admin) return next();
+  /* Can a member contact this business right now? One rule, used by the panel
+     below and by the POST route, so the two can never disagree. */
+  const contact = leads.contactState(l);
 
   const events = db.prepare('SELECT * FROM listing_events WHERE listing_id = ? ORDER BY event_date ASC').all(l.id);
   const related = db.prepare(
@@ -484,11 +488,21 @@ router.get('/listing/:slug', (req, res, next) => {
     hiringUrl: l.hiring_url || '',
     techCheckedAt: l.tech_checked_at || '',
     news: newsLib.approvedFor(l.id, 6),
-    /* Leads: “Contact this business” lives on claimed profiles only. The form
-       posts to /listing/:slug/leads; flash state rides the query string. */
+    /* Leads: “Contact this business” lives on profiles that can actually
+       receive an inquiry — claimed, published, with a live owner account. The
+       rule is computed once here (leads.contactState) and enforced again by
+       POST /listing/:slug/leads, so the form is never rendered for a listing
+       that would refuse it. Flash state rides the query string; a rejected
+       submission is re-filled from the member's stashed draft (one-shot). */
+    canReceive: contact.ok,
+    contactReason: contact.ok ? '' : contact.reason,
+    LEAD_LIMITS: leads.LIMITS,
     leadOk: req.query.lead_ok || '',
     leadErr: req.query.lead_err || '',
     leadSent: req.query.lead_sent === '1',
+    leadNewId: Number(req.query.lead_id) || 0,
+    leadThreads: (req.user && !isOwner && contact.ok) ? leads.threadsFor(req.user.id, l.id) : [],
+    leadOld: (req.user && !isOwner && req.query.lead_err) ? leads.takeDraft(req.user.id, l.id) : null,
   });
 });
 
@@ -498,6 +512,13 @@ router.get('/listing/:slug', (req, res, next) => {
  * VERIFIED OWNER's inbox (Dashboard → Leads) + email. Both sides can keep
  * talking in the Leads thread. The owner's email is never exposed.
  * Rate-limited, honeypot-guarded and domain-checked like every other form.
+ *
+ * Contract kept deliberately:
+ *   • every answer is a 302 back to the profile with the outcome on the query
+ *     string (lead_sent / lead_ok / lead_err / lead_id) — no JSON, no re-render;
+ *   • a rejected submission stashes what the member typed (leads.saveDraft) so
+ *     the form comes back filled in instead of empty;
+ *   • a double submit folds into the conversation already open.
  */
 router.post('/listing/:slug/leads', spam.gate('lead', { checkEmail: true }), (req, res, next) => {
   const l = db.prepare('SELECT * FROM listings WHERE slug = ?').get(req.params.slug);
@@ -507,39 +528,53 @@ router.post('/listing/:slug/leads', spam.gate('lead', { checkEmail: true }), (re
   if (!req.user) {
     return res.redirect('/login?next=' + encodeURIComponent(`/listing/${l.slug}#contact-business`));
   }
-  if (l.status !== 'approved' || !l.claimed || !l.owner_user_id) {
-    return back('?lead_err=' + encodeURIComponent('This business cannot receive inquiries yet.'));
-  }
   if (l.owner_user_id === req.user.id) {
     return back('?lead_err=' + encodeURIComponent('This is your own listing — inquiries from visitors land in your Leads inbox.'));
   }
-  const leads = require('../lib/leads');
+  /* Same rule that decides whether the panel is rendered at all. */
+  const contact = leads.contactState(l);
+  if (!contact.ok) {
+    return back('?lead_err=' + encodeURIComponent(contact.reason));
+  }
   const analytics = require('../lib/analytics');
   const loc = analytics.locate(req);
   /* Email always comes from the FirmLedger account — never freehand input. */
+  const submitted = {
+    name: req.body.name || req.user.name,
+    email: req.user.email,
+    phone: req.body.phone,
+    looking_for: req.body.subject || req.body.looking_for,
+    message: req.body.message,
+  };
   const r = leads.create({
     listing: l,
-    fields: {
-      name: req.user.name || req.body.name,
-      email: req.user.email,
-      phone: req.body.phone,
-      looking_for: req.body.subject || req.body.looking_for,
-      message: req.body.message,
-    },
+    fields: submitted,
     city: loc.city, country: loc.country,
     inquirerUserId: req.user.id,
   });
   if (!r.ok) {
+    /* Never lose what the member typed: stash it and re-fill the form. */
+    leads.saveDraft(req.user.id, l.id, submitted);
     return back('?lead_err=' + encodeURIComponent(r.errors ? r.errors.join(' ') : (r.error || 'That inquiry could not be sent.')));
   }
-  /* Owner inbox + email. The inquirer never sees the owner's address. */
-  const notify = require('../lib/notify');
-  notify.notifyUser(l.owner_user_id, {
-    kind: 'lead',
-    title: `New inquiry for ${l.name} — ${r.fields.name}`,
-    body: `${r.fields.looking_for ? `${r.fields.looking_for} · ` : ''}${r.fields.message.slice(0, 140)}`,
-    url: `/dashboard/leads?open=${r.id}`,
-  });
+  if (r.duplicate) {
+    return back(`?lead_sent=1&lead_id=${r.id}&lead_ok=` + encodeURIComponent(
+      `You already sent that inquiry to ${l.name} — it is waiting for them. Follow the conversation in Dashboard → Leads → Sent.`));
+  }
+  /* Owner inbox + email. The inquirer never sees the owner's address. A failure
+     here must never swallow the member's confirmation: the lead is stored, so
+     the conversation exists even if the ping does not go out. */
+  try {
+    const notify = require('../lib/notify');
+    notify.notifyUser(l.owner_user_id, {
+      kind: 'lead',
+      title: `New inquiry for ${l.name} — ${r.fields.name}`,
+      body: `${r.fields.looking_for ? `${r.fields.looking_for} · ` : ''}${r.fields.message.slice(0, 140)}`,
+      url: `/dashboard/leads?open=${r.id}`,
+    });
+  } catch (e) {
+    console.error('[leads] owner notification failed:', l.id, r.id, e && e.message);
+  }
   const owner = db.prepare('SELECT email, name FROM users WHERE id=?').get(l.owner_user_id);
   if (owner && owner.email) {
     const util2 = require('../lib/util');
@@ -562,9 +597,9 @@ router.post('/listing/:slug/leads', spam.gate('lead', { checkEmail: true }), (re
       ],
       cta: { label: 'Open conversation', url: util2.siteUrl(`/dashboard/leads?open=${r.id}`) },
       note: `Listing: <b>${esc(l.name)}</b> · received ${new Date().toISOString().slice(0, 10)}. You can also reply by email to <a href="mailto:${esc(r.fields.email)}" style="color:#1D4ED8;">${esc(r.fields.email)}</a>.`,
-    }).catch(() => {});
+    }).catch((e) => console.error('[leads] owner alert email failed:', owner.email, e && e.message));
   }
-  return back('?lead_sent=1&lead_ok=' + encodeURIComponent(
+  return back(`?lead_sent=1&lead_id=${r.id}&lead_ok=` + encodeURIComponent(
     `Your inquiry was sent to ${l.name}. Follow the conversation in Dashboard → Leads → Sent.`));
 });
 

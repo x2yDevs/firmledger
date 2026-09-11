@@ -2332,14 +2332,23 @@ router.post('/admin3119Musa/listings/:id/owner', (req, res) => {
   db.prepare('UPDATE listings SET owner_user_id = ? WHERE id = ?').run(userId || null, l.id);
   // If we removed the owner, drop the claimed flag too — ownership is what carries it.
   if (!userId) db.prepare('UPDATE listings SET claimed = 0 WHERE id = ?').run(l.id);
+  /* Leads travel with the business: the new owner inherits every conversation
+     on the record, and the previous owner stops seeing inquiries for a listing
+     that is no longer theirs. Removing the owner moves nothing (leads need an
+     owner, and the account that received them did so legitimately). */
+  const movedLeads = userId > 0 ? require('../lib/leads').transferListing(l.id, userId) : 0;
   const msg = userId
     ? `Ownership of “${l.name}” transferred to ${ownerName}.`
+      + (movedLeads ? ` ${movedLeads} lead conversation${movedLeads === 1 ? '' : 's'} moved with it.` : '')
     : `Owner removed from “${l.name}” — it is now unclaimed.`;
   if (userId > 0) {
     notify.notifyUser(userId, {
       kind: 'listing',
       title: `You now own “${l.name}”`,
-      body: 'An administrator transferred ownership of this listing to you. It appears in your dashboard.',
+      body: 'An administrator transferred ownership of this listing to you. It appears in your dashboard.'
+        + (movedLeads
+          ? ` ${movedLeads} lead conversation${movedLeads === 1 ? '' : 's'} moved with it and are waiting in your Leads inbox.`
+          : ''),
       url: `/dashboard/listings/${l.id}/edit`,
     });
   }

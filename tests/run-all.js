@@ -65,6 +65,17 @@
                 headline sentence, and the weekly digest: per-owner channels
                 (both/email/notification/none), quiet-week silence, Pro full
                 report vs Free teaser, and once-per-week idempotency.
+   leads-contact the "Contact this business" conversion path end to end over
+                real HTTP: the panel appears exactly when an inquiry would be
+                accepted (never as a dead form on unclaimed, owner-deleted,
+                pending or suspended records), the account email always wins,
+                a refused submission comes back filled in, a sent inquiry
+                stores the lead + opening message + notification + email and
+                deep-links the member into the thread, repeat contact lists the
+                open conversation, double submits fold instead of duplicating,
+                length caps are enforced rather than applied silently, the
+                Sent/Received boxes say who is waiting, and both write routes
+                are really rate limited.
    db-upgrade   the current schema code boots against a simulated OLD
                 production database (pre-migration tables with real rows):
                 migrations apply without throwing, the inquirer index lands
@@ -94,6 +105,7 @@ const suites = [
   ['Status monitor accuracy', 'status-monitor.test.js'],
   ['Pro growth: fair rotation, analytics, leads', 'pro-growth.test.js'],
   ['Conversion funnel + weekly leads digest', 'leads-digest.test.js'],
+  ['Leads contact flow — member → verified business', 'leads-contact.test.js'],
   ['Leads messaging — two-user conversation over HTTP', 'leads-messaging.test.js'],
   ['Leads housekeeping — permanent delete + email-first policy', 'leads-housekeeping.test.js'],
   ['Leads + blog fit — notes, honest Sent, article rhythm', 'leads-blog-fit.test.js'],

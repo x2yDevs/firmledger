@@ -42,7 +42,7 @@
 
     <div class="lead-tabs" role="tablist" aria-label="Lead boxes">
       <a role="tab" aria-selected="<%= !isSent && !isArchived && !filters.status %>" class="lead-tab<%= !isSent && !isArchived && !filters.status ? ' on' : '' %>" href="/dashboard/leads<%= filters.listingId ? '?listing=' + filters.listingId : '' %>">Received <span class="lead-n"><%= counts.total %></span></a>
-      <a role="tab" aria-selected="<%= isSent %>" class="lead-tab<%= isSent ? ' on' : '' %>" href="/dashboard/leads?box=sent">Sent <span class="lead-n"><%= sentCounts.total %></span></a>
+      <a role="tab" aria-selected="<%= isSent %>" class="lead-tab<%= isSent ? ' on' : '' %>" href="/dashboard/leads?box=sent">Sent <span class="lead-n"><%= sentCounts.total %></span><% if (sentCounts.waiting) { %> <span class="lead-wait"><%= sentCounts.waiting %> new <%= sentCounts.waiting === 1 ? 'reply' : 'replies' %></span><% } %></a>
       <% if (pro && !isSent) { %>
         <% STATUSES.forEach(function (s) { %>
         <a role="tab" aria-selected="<%= filters.status === s && !isArchived %>" class="lead-tab<%= filters.status === s && !isArchived ? ' on' : '' %>" href="/dashboard/leads?status=<%= s %><%= filters.listingId ? '&listing=' + filters.listingId : '' %>"><%= STATUS_LABELS[s] %> <span class="lead-n"><%= counts[s] || 0 %></span></a>
@@ -50,6 +50,12 @@
         <a role="tab" aria-selected="<%= isArchived %>" class="lead-tab<%= isArchived ? ' on' : '' %>" href="/dashboard/leads?box=archived<%= filters.listingId ? '&listing=' + filters.listingId : '' %>">Archived <span class="lead-n"><%= counts.archived %></span></a>
       <% } %>
     </div>
+
+    <% if (isSent && sentCounts.waiting) { %>
+      <p class="lead-waiting-line"><b><%= sentCounts.waiting %></b> conversation<%= sentCounts.waiting === 1 ? '' : 's' %> with a reply from the business waiting for you.</p>
+    <% } else if (!isSent && pro && counts.waiting) { %>
+      <p class="lead-waiting-line"><b><%= counts.waiting %></b> inquiry<%= counts.waiting === 1 ? '' : 'ies' %> waiting for your reply.</p>
+    <% } %>
 
     <% if (!isSent && !pro) { %>
       <div class="panel pro-locked" style="max-width:720px">
@@ -96,7 +102,7 @@
                   <small class="muted"><%= ld.looking_for || (ld.message || '').slice(0, 80) %></small>
                   <small class="muted"><%= isSent ? ld.name : ld.listing_name %> · <%= fmtDate(ld.updated_at || ld.created_at) %></small>
                 </span>
-                <% if (!isSent) { %><span class="pill pill-lead-<%= ld.status %>"><%= STATUS_LABELS[ld.status] %></span><% } %>
+                <% if (!isSent) { %><span class="pill pill-lead-<%= ld.status %>"><%= STATUS_LABELS[ld.status] %></span><% } else if (ld.last_sender === 'owner') { %><span class="lead-wait">New reply</span><% } %>
               </a>
               <% }) %>
             </div>
@@ -158,9 +164,10 @@
             <form class="lead-reply-form" method="post" action="/dashboard/leads/<%= open.id %>/reply">
               <input type="hidden" name="_csrf" value="<%= csrfToken %>">
               <label class="sr-only" for="lead-reply-<%= open.id %>">Your message</label>
-              <textarea class="input" id="lead-reply-<%= open.id %>" name="body" rows="3" maxlength="4000" required placeholder="<%= openRole === 'owner' ? 'Reply to ' + open.name + '…' : 'Write a follow-up to ' + open.listing_name + '…' %>"></textarea>
+              <textarea class="input" id="lead-reply-<%= open.id %>" name="body" rows="3" maxlength="4000" required placeholder="<%= openRole === 'owner' ? 'Reply to ' + open.name + '…' : 'Write a follow-up to ' + open.listing_name + '…' %>" data-lead-count="lead-reply-count-<%= open.id %>"></textarea>
               <div class="lead-reply-actions">
                 <button class="btn btn-primary btn-sm" type="submit">Send message</button>
+                <span class="muted" id="lead-reply-count-<%= open.id %>" style="font:500 11.5px var(--fm)">0/4000</span>
                 <% if (openRole === 'owner') { %>
                 <a class="btn btn-ghost btn-sm" href="mailto:<%= open.email %>?subject=<%= encodeURIComponent('Re: your inquiry to ' + open.listing_name + (open.looking_for ? ' — ' + open.looking_for : '')) %>">Email instead</a>
                 <% if (open.phone) { %><a class="btn btn-ghost btn-sm" href="tel:<%= String(open.phone).replace(/\s/g, '') %>">Call</a><% } %>

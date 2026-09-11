@@ -415,8 +415,8 @@
     });
   });
 
-  // Contact form: prevent double-submits and scroll the result into view.
-  document.querySelectorAll('form.lead-form').forEach(function (form) {
+  // Lead forms (first contact + thread replies): prevent double-submits.
+  document.querySelectorAll('form.lead-form, form.lead-reply-form').forEach(function (form) {
     form.addEventListener('submit', function () {
       var btn = form.querySelector('button[type="submit"]');
       if (!btn || btn.disabled) return;
@@ -426,6 +426,20 @@
       btn.textContent = 'Sending…';
     });
   });
+  // Live character count beside the lead message box. Purely informational —
+  // the ceiling is enforced by maxlength and again by the server.
+  document.querySelectorAll('[data-lead-count]').forEach(function (field) {
+    var out = document.getElementById(field.getAttribute('data-lead-count'));
+    if (!out) return;
+    var max = field.getAttribute('maxlength');
+    var paint = function () {
+      out.textContent = max ? field.value.length + '/' + max : String(field.value.length);
+    };
+    field.addEventListener('input', paint);
+    field.addEventListener('blur', paint);
+    paint();
+  });
+
   if (location.hash === '#contact-business') {
     var panel = document.getElementById('contact-business');
     if (panel) {

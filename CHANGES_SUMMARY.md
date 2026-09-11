@@ -1,3 +1,96 @@
+## 2026-09-11 — Leads: the member → business contact flow, made real end to end
+
+**One rule decides whether a business can be contacted, and the page obeys it.**
+`leads.contactState(listing)` is now the single source of truth for "can a
+member reach this business right now" — claimed, published, owner account alive
+and not suspended. The profile template renders the contact panel only when that
+returns ok, and `POST /listing/:slug/leads` enforces the same call, so a member
+is never shown a form that would bounce, and a stale form post (owner account
+deleted between page load and submit) is refused with the real reason instead of
+silently dropping the message. Every refusal names the honest cause and leaks
+nothing private; the profile still points unclaimed records at "Claim this
+listing".
+
+**The inquiry itself is a conversation from the first message.** The member's
+account name and email are attached automatically (never freehand input, so the
+business always replies to a real FirmLedger account), the owner's address is
+never exposed to either side, and the opening message is seeded into
+`lead_messages` inside the same transaction as the lead — a stored inquiry can
+no longer show an empty thread. The owner gets one email plus an in-app
+notification deep-linking `Dashboard → Leads?open=<id>`; the member gets a
+confirmation that links straight into their own copy under **Sent**, which is
+free for everyone (unchanged product rule: receiving is free, reading and
+managing the business inbox is Pro).
+
+**Nothing a member types is lost.** A rejected submission is stashed as a
+one-shot draft (new `lead_drafts` table, 60-minute TTL, older rows swept on every
+write) and re-fills the form on the way back — subject, phone and message
+included, account email excepted because it is read from the account. Drafts are
+excluded from backups (`src/lib/backup.js`): transient, single-use personal text
+that a restore must never resurrect.
+
+**Double submits fold; real second inquiries do not.** An identical inquiry from
+the same member inside ten minutes returns the conversation already open
+(`{ ok: true, duplicate: true }`) and sends the member to it, so a refresh or a
+double click never gives the business two copies of one question. An identical
+*reply* inside sixty seconds folds the same way. A second, differently worded
+inquiry still opens a second conversation — that semantic is deliberate and is
+asserted by `tests/leads-messaging.test.js`, so it was preserved exactly.
+
+**Limits are honest and shared.** `leads.LIMITS` drives both the form's
+`minlength`/`maxlength` attributes and the validator, so the browser and the
+server can never disagree: over-long input is refused with a message naming the
+ceiling instead of being silently truncated, phone numbers are checked for
+dialability (E.164 digit range) rather than accepted as free text, and the
+character counters and double-submit guards ship in `public/js/main.js` for
+every lead form (asset cache-buster bumped, `ASSET_V` → 58).
+
+**Both sides can keep talking, safely.** The reply route got its own rate-limit
+bucket — `spam_rl_lead_reply`, 60/hour by default, tunable in Admin → Protection
+next to the inquiry bucket (20/hour) — so a runaway script cannot flood a
+business or a member while a normal conversation stays untouched. Notification
+and mail failures are now caught and logged rather than thrown: the message is
+already stored, so a failed ping can never swallow the member's confirmation.
+The Sent box tells the member which threads have an answer waiting ("New reply"
+marker, waiting count on the tab, and a line saying how many conversations the
+business has replied to), and the business inbox reports how many inquiries are
+waiting for its reply.
+
+**Inquiries follow the business when ownership changes.** New
+`leads.transferListing(listingId, newOwnerId)` moves every conversation on a
+record to whoever owns it now — messages and private notes travel with the lead.
+It is wired into all three ownership paths: `finalizeVerifiedClaim` (a verified
+claim displacing a previous owner), the console's listing-owner transfer, and the
+console assistant's `set_listing_owner` tool — which also tells the new owner how
+many conversations arrived with the record. Without
+it, the previous owner could keep reading and answering inquiries for a business
+that is no longer theirs while the new owner inherited a live conversation with
+no history. Transfer is silent (no new notifications — the new owner simply sees
+the threads in their inbox), removing an owner moves nothing (a lead requires an
+owner, and the honest record is that the account which received it did so while
+it owned the business), and the member's Sent copy is untouched either way.
+
+**The cascade asymmetry is now documented instead of incidental.** The business
+owns the record: deleting an owner account cascades its conversations away,
+while a member deleting theirs only detaches the link (`inquirer_user_id`
+SET NULL) so the business keeps the inquiry it received. `ERD.md` section 4 was
+rewritten around the real schema (`leads` with `inquirer_user_id`,
+`owner_emailed`, `inquirer_emailed`; `lead_messages`, `lead_notes`,
+`lead_drafts`; counts corrected to 52 tables / 58 indexes), and `README.md`,
+`README_OVERVIEW.md` §7 and the pricing FAQ were corrected wherever they still
+promised guest inquiries — the shipped copy now describes the shipped product.
+
+**New gate: `tests/leads-contact.test.js` (142 checks, in `npm test` /
+`npm run test:leads-contact`).** Drives the real server over HTTP as five
+different identities (member, owner, a second owner, signed-out visitor, admin):
+panel gating and every refusal reason, draft re-fill, duplicate fold for
+inquiries and replies, exactly one email per side, notification-failure
+isolation, 429 + `Retry-After` with the console override applied live, privacy
+(strangers, other businesses, the member's own Sent copy), ownership transfer
+driven through the real assistant tool, owner-account deletion, and a closing block asserting that the
+README, the overview, the pricing FAQ and the Protection console still match
+what the code does. Full suite: 29/29 suites pass.
+
 ## 2026-09-11 (blog) — leads guide corrected, stale seeds refresh, new 2026 listing guide
 
 **The leads guide now matches the shipped product.** `turning-your-listing-into-leads`

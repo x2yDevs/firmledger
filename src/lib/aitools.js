@@ -36,6 +36,7 @@ const nl = require('./newsletter');
 const health = require('./health');
 const { runCheck } = require('./verify');
 const { finalizeVerifiedClaim } = require('./claimflow');
+const leads = require('./leads');
 const listingEvents = require('./listingevents');
 const techrefresh = require('./techrefresh');
 const news = require('./news');
@@ -453,19 +454,28 @@ const CORE_TOOLS = [
       if (!l) return { error: 'No listing matches that id or slug.' };
       const q = String(args.user || '').trim();
       if (!q) {
+        /* Unclaiming moves no leads: a conversation needs an owner, and the
+           account that received it did so while it owned the business. */
         db.prepare('UPDATE listings SET owner_user_id=NULL, claimed=0 WHERE id=?').run(l.id);
         return { ok: true, listing: l.name, owner: null, claimed: false };
       }
       const u = findUser(q);
       if (!u) return { error: 'No user matches that email or id.' };
       db.prepare('UPDATE listings SET owner_user_id=? WHERE id=?').run(u.id, l.id);
+      /* Inquiries follow the business — the same rule the console transfer and a
+         verified claim that displaces a previous owner both apply, so the new
+         owner inherits the history and the old one stops seeing it. */
+      const movedLeads = leads.transferListing(l.id, u.id);
       notify.notifyUser(u.id, {
         kind: 'listing',
         title: `You now own “${l.name}”`,
-        body: 'An administrator transferred ownership of this listing to you.',
+        body: 'An administrator transferred ownership of this listing to you.'
+          + (movedLeads
+            ? ` ${movedLeads} lead conversation${movedLeads === 1 ? '' : 's'} moved with it and are waiting in your Leads inbox.`
+            : ''),
         url: `/dashboard/listings/${l.id}/edit`,
       });
-      return { ok: true, listing: l.name, owner: u.email, user_id: u.id };
+      return { ok: true, listing: l.name, owner: u.email, user_id: u.id, moved_leads: movedLeads };
     },
   },
   {

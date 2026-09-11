@@ -54,7 +54,7 @@
         </button>
       </form>
       <% if (l.website && viewFull) { %><a class="btn btn-ghost" href="<%= l.website %>" rel="noopener nofollow" target="_blank" data-track-website="<%= l.slug %>">Visit website ↗</a><% } %>
-      <% if (l.claimed && !isOwner) { %><a class="btn btn-primary" href="<%= user ? '#contact-business' : '/login?next=' + encodeURIComponent('/listing/' + l.slug + '#contact-business') %>"><%= user ? 'Contact this business' : 'Sign in to contact' %></a><% } %>
+      <% if (canReceive && !isOwner) { %><a class="btn btn-primary" href="<%= user ? '#contact-business' : '/login?next=' + encodeURIComponent('/listing/' + l.slug + '#contact-business') %>"><%= user ? 'Contact this business' : 'Sign in to contact' %></a><% } %>
       <% if (!l.claimed) { %><a class="btn btn-accent" href="/claim/<%= l.slug %>">Claim this listing</a><% } %>
     </div>
     <div class="share-row" aria-label="Share this listing">
@@ -338,32 +338,56 @@
         </table>
       </div>
 
-      <% if (l.claimed) { %>
+      <% if (canReceive || isOwner) { %>
       <div class="panel rv lead-panel" style="--d:100ms" id="contact-business">
         <h3>Contact this business</h3>
         <% if (isOwner) { %>
         <p style="font-size:13.5px">This is your listing — inquiries from FirmLedger members land in your <b>Leads inbox</b>.</p>
+        <% if (!canReceive && contactReason) { %><p class="form-note" style="color:var(--bad)"><%= contactReason %> Members see the form again as soon as that changes.</p><% } %>
         <a class="btn btn-primary btn-block" style="margin-top:12px" href="/dashboard/leads">Open your Leads inbox</a>
         <% } else if (!user) { %>
         <p style="font-size:13.5px">Only FirmLedger members can contact verified businesses. Sign in — your account email is used automatically so the owner can reply.</p>
         <a class="btn btn-primary btn-block" style="margin-top:12px" href="/login?next=<%= encodeURIComponent('/listing/' + l.slug + '#contact-business') %>">Sign in to contact</a>
         <a class="btn btn-ghost btn-block" style="margin-top:8px" href="/register?next=<%= encodeURIComponent('/listing/' + l.slug + '#contact-business') %>">Create a free account</a>
         <% } else if (leadSent) { %>
+        <% const threadHref = '/dashboard/leads?box=sent' + (leadNewId ? '&open=' + leadNewId : ''); %>
         <div class="alert alert-ok" role="status"><%= leadOk || 'Your message was sent to the verified owner.' %></div>
-        <p class="form-note">Follow the conversation and keep talking in <a href="/dashboard/leads?box=sent">Dashboard → Leads → Sent</a>.</p>
-        <a class="btn btn-primary btn-block" style="margin-top:12px" href="/dashboard/leads?box=sent">Open conversation</a>
+        <p class="form-note">Follow the conversation and keep talking in <a href="<%= threadHref %>">Dashboard → Leads → Sent</a>. The business replies there and by email.</p>
+        <a class="btn btn-primary btn-block" style="margin-top:12px" href="<%= threadHref %>">Open conversation</a>
+        <a class="btn btn-ghost btn-block" style="margin-top:8px" href="/listing/<%= l.slug %>#contact-business">Send another inquiry</a>
         <% } else { %>
         <% if (leadErr) { %><div class="alert alert-err" role="alert"><%= leadErr %></div><% } %>
         <% if (leadOk) { %><div class="alert alert-ok" role="status"><%= leadOk %></div><% } %>
+        <% if (leadThreads && leadThreads.length) { %>
+        <div class="lead-open-threads">
+          <h4>Your conversations with <%= l.name %></h4>
+          <ul>
+            <% leadThreads.forEach(function (t) { %>
+            <li>
+              <a href="/dashboard/leads?box=sent&open=<%= t.id %>">
+                <b><%= t.looking_for || String(t.message || '').slice(0, 60) || 'Your inquiry' %></b>
+                <small class="muted"><%= fmtDate(t.updated_at || t.created_at) %> · <%= t.last_sender === 'owner' ? l.name + ' replied' : 'waiting for ' + l.name %></small>
+              </a>
+            </li>
+            <% }) %>
+          </ul>
+          <p class="form-note">Carry on in an open conversation — or use the form below for a different request.</p>
+        </div>
+        <% } %>
+        <% const old = leadOld || {}; %>
         <form class="form lead-form" method="post" action="/listing/<%= l.slug %>/leads">
           <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-          <label><span>Your name</span><input class="input" type="text" name="name" maxlength="80" required autocomplete="name" placeholder="Jane Wanjiku" value="<%= user.name || '' %>"></label>
+          <label><span>Your name</span><input class="input" type="text" name="name" maxlength="<%= LEAD_LIMITS.name.max %>" minlength="2" required autocomplete="name" placeholder="Jane Wanjiku" value="<%= old.name || user.name || '' %>"></label>
           <label><span>Your FirmLedger email</span>
             <input class="input" type="email" name="email" value="<%= user.email %>" readonly aria-readonly="true" tabindex="-1">
+            <em class="form-note">Taken from your account so <%= l.name %> can reply to a real address — it is never shown publicly.</em>
           </label>
-          <label><span>Phone <em class="opt">(optional)</em></span><input class="input" type="tel" name="phone" maxlength="40" autocomplete="tel" placeholder="+254 …"></label>
-          <label><span>What are you looking for?</span><input class="input" type="text" name="subject" maxlength="140" required placeholder="e.g. A quote for office cleaning"></label>
-          <label><span>Message</span><textarea class="input" name="message" rows="4" maxlength="4000" required placeholder="Tell <%= l.name %> what you need…"></textarea></label>
+          <label><span>Phone <em class="opt">(optional)</em></span><input class="input" type="tel" name="phone" maxlength="<%= LEAD_LIMITS.phone.max %>" autocomplete="tel" placeholder="+254 7…" value="<%= old.phone || '' %>"></label>
+          <label><span>What are you looking for?</span><input class="input" type="text" name="subject" maxlength="<%= LEAD_LIMITS.looking_for.max %>" required placeholder="e.g. A quote for office cleaning" value="<%= old.looking_for || '' %>"></label>
+          <label><span>Message</span>
+            <textarea class="input" name="message" rows="4" minlength="<%= LEAD_LIMITS.message.min %>" maxlength="<%= LEAD_LIMITS.message.max %>" required placeholder="Tell <%= l.name %> what you need…" data-lead-count="lead-msg-count"><%= old.message || '' %></textarea>
+            <em class="form-note">At least <%= LEAD_LIMITS.message.min %> characters · <span id="lead-msg-count">0/<%= LEAD_LIMITS.message.max %></span></em>
+          </label>
           <input type="text" name="company_site" value="" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;opacity:0;height:0">
           <button class="btn btn-primary btn-block" type="submit">Send inquiry</button>
           <p class="form-note">Goes straight to the verified owner. Your FirmLedger email is shared with them so you can talk in the Leads inbox — their email stays private.</p>

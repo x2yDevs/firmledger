@@ -7,12 +7,13 @@ the file that enforces it.
 
 > **Companion diagram:** `ERD.svg` in the repo root predates this regeneration and
 > only covers the original ~20 tables — it is stale. This document is the accurate
-> reference for all 50 tables until the diagram is redrawn.
+> reference for all 52 tables until the diagram is redrawn.
 
 ## Global conventions (verified in `src/db.js`)
 
-- **50 tables**, 56 explicit `CREATE INDEX` statements plus auto-indexes backing
-  every `UNIQUE` / `PRIMARY KEY` constraint.
+- **52 tables** and **58 explicit indexes** in a fresh-boot database (counted from
+  `sqlite_master`), plus auto-indexes backing every `UNIQUE` / `PRIMARY KEY`
+  constraint.
 - `PRAGMA journal_mode = WAL`, `PRAGMA foreign_keys = ON`
   (`src/db.js:17-18`) — declared `REFERENCES … ON DELETE …` clauses **are
   enforced**, except inside the two legacy table-rebuild migrations, which toggle
@@ -140,14 +141,27 @@ the file that enforces it.
 
 ## 4 · Leads & analytics 📊
 
-### `leads` — visitor inquiries sent to businesses
-- `id` INTEGER PK · `listing_id` ➡ FK `listings(id)` CASCADE · `owner_user_id` ➡ FK `users(id)` CASCADE — composite index `idx_leads_owner(owner_user_id, archived, status, created_at DESC)` serves the inbox; `idx_leads_listing(listing_id, created_at DESC)` serves per-listing counts
-- `name`, `email`, `phone`, `looking_for`, `message`, `city`, `country` TEXT NOT NULL DEFAULT `''`
-- `status` TEXT NOT NULL DEFAULT `'new'` — enum `'new' | 'contacted' | 'qualified' | 'won' | 'lost'` (`src/lib/leads.js:15`)
-- `archived` INTEGER NOT NULL DEFAULT `0` · `created_at`, `updated_at` (`src/lib/leads.js`)
+### `leads` — inquiries a signed-in member sends a verified business
+- `id` INTEGER PK · `listing_id` ➡ FK `listings(id)` CASCADE · `owner_user_id` ➡ FK `users(id)` CASCADE — composite index `idx_leads_owner(owner_user_id, archived, status, created_at DESC)` serves the received inbox; `idx_leads_listing(listing_id, created_at DESC)` serves per-listing counts
+- `inquirer_user_id` ➡ FK `users(id)` SET NULL — the member who opened the thread; `idx_leads_inquirer(inquirer_user_id, updated_at DESC)` serves their **Sent** box. Set to NULL when the member deletes the conversation from their own side (the business keeps its record) — guarded `ALTER` for databases that pre-date the column
+- **Deliberate cascade asymmetry:** the business owns the record, so deleting an owner account cascades its leads away, while a member deleting theirs only drops the link. When ownership of a *listing* changes (a verified claim displacing a previous owner, or a console transfer) the leads move with it — `leads.transferListing(listingId, newOwnerId)` (`src/lib/leads.js`, called from `src/lib/claimflow.js`, `src/routes/admin.js` and the `set_listing_owner` console tool in `src/lib/aitools.js`)
+- `name`, `email`, `phone`, `looking_for`, `message`, `city`, `country` TEXT NOT NULL DEFAULT `''` — `email` is always the member's **account** address (never freehand input), capped by `leads.LIMITS` (name 120 · phone 40 · looking_for 140 · message 10–4000)
+- `status` TEXT NOT NULL DEFAULT `'new'` — enum `'new' | 'contacted' | 'qualified' | 'won' | 'lost'`; flips to `contacted` on the business's first reply (`src/lib/leads.js`)
+- `archived` INTEGER NOT NULL DEFAULT `0` — owner-side inbox tidying; the member's Sent copy stays readable
+- `owner_emailed`, `inquirer_emailed` INTEGER NOT NULL DEFAULT `0` — one email per side per conversation, then in-app notifications only (guarded `ALTER`s for older databases)
+- `created_at`, `updated_at` — `updated_at` is bumped by every message, note and status change, which is what orders both inboxes
+
+### `lead_messages` — the two-way conversation on a lead
+- `id` INTEGER PK · `lead_id` ➡ FK `leads(id)` CASCADE (indexed with `id`) · `sender` TEXT NOT NULL DEFAULT `'inquirer'` — enum `'owner' | 'inquirer'`, derived from the session (never from the request body) · `body` TEXT NOT NULL DEFAULT `''` (≤4000) · `created_at`
+- The opening inquiry is seeded here in the same transaction as the lead, so both sides share one timeline; the sender of the newest row is what drives the "waiting for you" / "New reply" markers
 
 ### `lead_notes` — owner notes on a lead
-- `id` INTEGER PK · `lead_id` ➡ FK `leads(id)` CASCADE (indexed with `id`) · `user_id` ➡ FK `users(id)` CASCADE · `note` TEXT NOT NULL DEFAULT `''` · `created_at`
+- `id` INTEGER PK · `lead_id` ➡ FK `leads(id)` CASCADE (indexed with `id`) · `user_id` ➡ FK `users(id)` CASCADE · `note` TEXT NOT NULL DEFAULT `''` (2–2000) · `created_at` — private to the business, never shown to the member
+
+### `lead_drafts` — one unfinished contact form per member per listing
+- `user_id` ➡ FK `users(id)` CASCADE + `listing_id` ➡ FK `listings(id)` CASCADE — composite PK
+- `name`, `phone`, `looking_for`, `message` TEXT NOT NULL DEFAULT `''` · `created_at`
+- Written when a submission is refused (validation, length) so the member's typed text comes back into the form; read **once** and deleted, TTL 60 minutes, older rows swept on every write. The account email is never stashed.
 
 ### `listing_stat_events` 📊 — raw analytics events (views, clicks, impressions)
 - `id` INTEGER PK · `listing_id` INTEGER NOT NULL ➡ FK `listings(id)` CASCADE

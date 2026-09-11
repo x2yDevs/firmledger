@@ -15,6 +15,7 @@ const DEFAULTS = {
   spam_rl_status: 10,       // / hour (status page subscribe / unsubscribe)
   spam_rl_search: 60,       // / minute
   spam_rl_lead: 20,         // / hour (contact-this-business inquiries)
+  spam_rl_lead_reply: 60,   // / hour (replies inside an existing Leads thread)
   spam_rl_scrape: 180,      // / minute (directory, listing pages)
   api_read_rpm: 60,
   api_write_rpm: 20,
@@ -29,6 +30,7 @@ const WINDOWS = {
   status: 60 * 60 * 1000,
   search: 60 * 1000,
   lead: 60 * 60 * 1000,
+  lead_reply: 60 * 60 * 1000,
   scrape: 60 * 1000,
 };
 
@@ -108,6 +110,7 @@ function limits() {
     status: numSetting('spam_rl_status'),
     search: numSetting('spam_rl_search'),
     lead: numSetting('spam_rl_lead'),
+    lead_reply: numSetting('spam_rl_lead_reply'),
     scrape: numSetting('spam_rl_scrape'),
     api_read_rpm: numSetting('api_read_rpm'),
     api_write_rpm: numSetting('api_write_rpm'),

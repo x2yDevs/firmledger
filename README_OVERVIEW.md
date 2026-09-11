@@ -99,7 +99,7 @@ and the site measures every step of it:
                                             ▼
    ATTENTION        Profile views + clicks through to the company website
                                             ▼
-   CONTACT          A visitor sends an inquiry from the profile → a LEAD
+   CONTACT          A signed-in member sends an inquiry from the profile → a LEAD
                                             ▼
    QUALIFICATION    The owner works the lead: contacted → qualified → won/lost
                                             ▼
@@ -109,7 +109,7 @@ and the site measures every step of it:
 
 The owner never has to set any of this up. Impressions and views are recorded
 automatically (bots, admins and the owner's own views are excluded), the inquiry
-form appears on every claimed listing, and the funnel panel on
+form appears on every claimed listing that can actually receive one, and the funnel panel on
 `/dashboard/analytics` turns the raw events into a plain-English headline such as
 *"Your FirmLedger listings generated 37 leads this month, including 6 qualified
 leads and 2 won opportunities."*
@@ -133,7 +133,7 @@ leads and 2 won opportunities."*
 | **Hiring signal** | A careers link found on the homepage | Detected during the technology scan |
 | **Jobs** | Openings posted by Pro owners | Owner's dashboard |
 | **FAQs** | Answers generated from the record's *own* fields | Computed per listing — never hand-written boilerplate |
-| **Contact form** | "Contact this business" → sends the owner a lead | The visitor, at that moment |
+| **Contact panel** | "Contact this business" → a signed-in member sends the owner a lead, then both keep talking in one thread | The member, at that moment — their account name and email are attached automatically |
 | **Freshness marker** | How recently the record was touched | `updated_at` |
 
 Every public profile also carries: a watchlist star (logged in), an add-to-compare
@@ -150,7 +150,7 @@ control, a removal request link, a claim link, and structured data
 | **Directory** (`/directory`) | Filter by category, country, type, Pro status; sort by newest, confidence, name; paginated; relevance-matched sponsored cards inline |
 | **Search** (`/search`) | Global search across companies, blog posts and docs, with query-matched sponsored hits on top |
 | **Category pages** (`/directory/c/…`) | One landing page per category (and per category × location), each with matching sponsored cards |
-| **Profiles** (`/listing/:slug`) | Everything in §4 that is public — identity, sources, score, graph, radar, news, FAQs — plus the contact form |
+| **Profiles** (`/listing/:slug`) | Everything in §4 that is public — identity, sources, score, graph, radar, news, FAQs — plus the contact panel (sign in to use it) |
 | **Compare** (`/compare`) | Put up to four companies side by side |
 | **Jobs board** (`/jobs`) | Openings posted by Pro companies |
 | **Docs** (`/docs`) | Plain-language explanations of scoring, claiming, the radar, indexing, removal, the API |
@@ -159,11 +159,13 @@ control, a removal request link, a claim link, and structured data
 | **Business pages** | Pricing, advertise, careers, about, privacy, terms |
 | **Machine-readable** | `/sitemap.xml` (+ child sitemaps), `/feed.xml`, `/robots.txt`, `/api/docs` |
 
-**Free vs Pro on the public site:** browsing the directory, reading profiles,
-searching — and contacting any business — are free and always will be.
-FirmLedger Pro unlocks the *full* record for viewing (public contact details,
-social links, the events timeline and the relationship graph), plus API keys, job
-posting, and reading and managing the leads a business receives.
+**Free vs Pro on the public site:** browsing the directory, reading profiles and
+searching are free and always will be. Contacting a verified business is free for
+any **signed-in member** — a free account is enough, and the conversations a
+member starts stay readable under **Sent** forever. FirmLedger Pro unlocks the
+*full* record for viewing (public contact details, social links, the events
+timeline and the relationship graph), plus API keys, job posting, and reading and
+managing the leads a business receives.
 
 ---
 
@@ -180,7 +182,7 @@ rate-limited per bucket (login, register, listing, claim, lead, newsletter, sear
 |---|---|
 | **Overview** | Your listings, their status, and shortcuts |
 | **Add / edit a listing** | The full submission form, with duplicate guards and an optional "fetch from Wikipedia" |
-| **Leads** | Inquiries sent to your listings — reply, set status (new → contacted → qualified → won/lost), add notes (Pro to read/manage) |
+| **Leads** | Two boxes on one page: **Received** — inquiries on your listings, with reply, status (new → contacted → qualified → won/lost), private notes, archive and permanent delete (Pro to read/manage) — and **Sent** — every conversation you started with a business, always free |
 | **Analytics** | Views, website clicks, top locations, per-listing totals — and the conversion funnel with its plain-English headline |
 | **Refresh technology** | Re-scan your homepage and refresh the radar on demand |
 | **Timeline & relations** | Add events and relationships on listings you own |
@@ -202,25 +204,48 @@ to you. The original submitter is remembered on the record.
 
 ## 7 · Leads: from inquiry to won deal
 
-Any visitor can contact any claimed business straight from its profile — no
-account needed, no Pro needed on either side. That inquiry becomes a **lead** in
-the owner's dashboard, and the owner works it through a simple pipeline:
+Any **signed-in FirmLedger member** can contact any claimed (verified-owner)
+business straight from its profile — a free account is enough, and no Pro is
+needed on either side to start or continue a conversation. The member's account
+name and email are attached automatically, so the business is always replying to
+a real account. That inquiry becomes a **lead** in the owner's dashboard, and the
+owner works it through a simple pipeline:
 
 ```
-visitor fills the contact form → owner is notified instantly (in-app + email)
+member fills the contact form → owner is notified instantly (in-app + email)
 → lead lands in the Leads inbox as "new"
+→ both sides keep talking in ONE thread (owner: Received · member: Sent)
 → contacted → qualified → won (or lost)
 ```
 
+- **The panel only appears when an inquiry would be accepted.** One rule
+  (`leads.contactState`) decides both: claimed, published, and a live owner
+  account. Unclaimed records, records still in review, records whose owner deleted
+  their account, and suspended owners show no form at all — nobody ever types a
+  message into a dead end.
 - **Receiving is free, reading is Pro.** A Free owner never misses business: every
-  inquiry is stored and notified. But opening the inbox, reading messages and
-  managing statuses requires FirmLedger Pro — the upgrade incentive that never
-  blocks a customer from reaching a business.
+  inquiry is stored, counted and notified. But opening the inbox, reading messages
+  and managing statuses requires FirmLedger Pro — the upgrade incentive that never
+  blocks a customer from reaching a business. The member's own **Sent** box is
+  always free, so the person who asked is never locked out of the answer.
 - **The owner's address stays private.** Inquiries arrive through FirmLedger; the
-  inquirer never sees the owner's email. Replies go straight back to the visitor.
-- **Spam is stopped at the door.** Honeypot field, per-IP rate limits, email-domain
-  screening, and validation — a bad post bounces back to the form with an error,
-  never into the inbox.
+  inquirer never sees the owner's email. The owner sees the member's address and
+  can also reply by email — the alert carries it as the reply-to.
+- **One email per side, then notifications.** The opening inquiry emails the
+  business; the business's first reply emails the member. Everything after that is
+  an in-app notification, so long threads cannot flood anybody's inbox.
+- **Nothing typed is ever lost, and nothing is silently cut.** The limits in the
+  HTML are the limits on the server (message 10–4,000 characters, subject 140): an
+  over-long submission is refused with the limit named, and a refused submission
+  comes back with every field re-filled — once.
+- **Double submits fold instead of duplicating.** The same inquiry posted twice in
+  ten minutes returns the member to the conversation already open; the same reply
+  posted twice in a minute is stored once. Submit buttons lock after a valid post
+  as well.
+- **Spam is stopped at the door.** Honeypot field, per-IP rate limits on both
+  writes (new inquiries *and* thread replies, both tunable in Admin → Protection),
+  email-domain screening, CSRF and validation — a bad post bounces back to the
+  form with an error, never into the inbox.
 - **Every lead feeds the funnel.** Status changes flow into the conversion funnel
   (§8) and the weekly report (§10), so "qualified" and "won" actually mean
   something measurable.
@@ -330,7 +355,7 @@ unreviewed.
 | | Free | Pro |
 |---|---|---|
 | Browse directory, profiles, search | ✓ | ✓ |
-| Contact any business / receive inquiries | ✓ | ✓ |
+| Contact a verified business (signed in) / receive inquiries | ✓ | ✓ |
 | Submit listings | ✓ | ✓ |
 | Claim and verify a business | ✓ | ✓ |
 | **Full record**: contact details, socials, timeline, relationship graph | — | ✓ |
@@ -594,7 +619,7 @@ Knobs: `SCALE_SPONSORED` (400) · `SCALE_FEATURED` (300) · `SCALE_ORGANIC` (200
 3. **One business, one record.** Duplicates are refused at the door, so sources, timelines and verification never scatter.
 4. **Ownership is proven, not claimed.** Control of a domain, checked live — not an email address.
 5. **Humans decide what the public sees.** Automation proposes; a moderator disposes.
-6. **Contact is never paywalled.** Receiving inquiries is free; Pro pays for reading and working them — the business of the customer is never the hostage.
+6. **Contact is never paywalled.** Any signed-in member can reach a verified business, and receiving inquiries is free; Pro pays for reading and working them — the customer's business is never the hostage.
 7. **Promotion is labelled, relevant and fair.** Sponsored cards say so, match the context, and rotate without favouritism.
 8. **Every surface writes through the same door.** Console, dashboard, API, assistant and AI all land on one event boundary, so nothing silently skips the record.
 
@@ -607,7 +632,7 @@ Knobs: `SCALE_SPONSORED` (400) · `SCALE_FEATURED` (300) · `SCALE_ORGANIC` (200
 | **Confidence score** | How strongly a record's facts are corroborated (sources, verification, review) |
 | **FirmLedger Score** | 0–100 profile health: completeness, sources, ownership, freshness, coverage |
 | **Claim** | Proving control of a company's domain to take over its record |
-| **Lead** | An inquiry a visitor sends a business; worked new → contacted → qualified → won/lost |
+| **Lead** | An inquiry a signed-in member sends a verified business; one shared thread, worked new → contacted → qualified → won/lost |
 | **Funnel** | Exposure → views → contact → lead → qualified → won, with rates and a headline |
 | **Impression** | One recorded view of a sponsored or Featured card (humans only) |
 | **Weekly leads report** | The per-owner funnel summary, on notification/email/both/none channels |

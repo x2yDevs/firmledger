@@ -1466,8 +1466,12 @@ router.post('/dashboard/leads/:id/delete', (req, res) => {
     : '&err=' + encodeURIComponent(r.error || 'Could not delete that conversation.')));
 });
 
-/* Two-way reply — owner or inquirer, both sides of the same thread. */
-router.post('/dashboard/leads/:id/reply', (req, res) => {
+/* Two-way reply — owner or inquirer, both sides of the same thread.
+   Rate-limited in its own bucket (Admin → Protection → “Lead reply / hour”):
+   a thread is a conversation, so the ceiling is far above the one for opening
+   an inquiry, but a runaway script must not be able to flood a business or a
+   member with messages and notifications. */
+router.post('/dashboard/leads/:id/reply', spam.gate('lead_reply'), (req, res) => {
   const leads = require('../lib/leads');
   const acc = leads.getAccessible(req.params.id, req.user.id);
   if (!acc) {
@@ -1483,7 +1487,12 @@ router.post('/dashboard/leads/:id/reply', (req, res) => {
   if (!r.ok) {
     return res.redirect(back + '&err=' + encodeURIComponent(r.error || 'Could not send that message.'));
   }
-  /* Notify the other party. */
+  /* Same text posted twice inside a minute = one message, one notification. */
+  if (r.duplicate) {
+    return res.redirect(back + '&ok=' + encodeURIComponent('Message sent.'));
+  }
+  /* Notify the other party. The message is already stored, so a failure here
+     is logged and the member still gets their confirmation. */
   const notify = require('../lib/notify');
   const { sendBranded } = require('../lib/mailer');
   const util2 = require('../lib/util');
@@ -1495,12 +1504,14 @@ router.post('/dashboard/leads/:id/reply', (req, res) => {
   if (r.sender === 'owner') {
     /* Business replied → ping the inquirer. */
     if (acc.inquirer_user_id) {
-      notify.notifyUser(acc.inquirer_user_id, {
-        kind: 'lead',
-        title: `Reply from ${acc.listing_name}`,
-        body: preview,
-        url: `/dashboard/leads?box=sent&open=${acc.id}`,
-      });
+      try {
+        notify.notifyUser(acc.inquirer_user_id, {
+          kind: 'lead',
+          title: `Reply from ${acc.listing_name}`,
+          body: preview,
+          url: `/dashboard/leads?box=sent&open=${acc.id}`,
+        });
+      } catch (e) { console.error('[leads] inquirer notification failed:', acc.id, e && e.message); }
       if (!acc.inquirer_emailed && acc.email) {
         leads.markEmailed(acc.id, 'inquirer');
         sendBranded(acc.email, `Reply from ${acc.listing_name} on FirmLedger`, {
@@ -1511,17 +1522,19 @@ router.post('/dashboard/leads/:id/reply', (req, res) => {
           paragraphs: [esc(r.body).replace(/\n/g, '<br>')],
           cta: { label: 'Continue the conversation', url: util2.siteUrl(`/dashboard/leads?box=sent&open=${acc.id}`) },
           note: 'You are talking through FirmLedger Leads — the business email stays private. Later replies arrive as FirmLedger notifications.',
-        }).catch(() => {});
+        }).catch((e) => console.error('[leads] reply email to the inquirer failed:', acc.id, e && e.message));
       }
     }
   } else {
     /* Inquirer replied → ping the owner. */
-    notify.notifyUser(acc.owner_user_id, {
-      kind: 'lead',
-      title: `Reply from ${acc.name} — ${acc.listing_name}`,
-      body: preview,
-      url: `/dashboard/leads?open=${acc.id}`,
-    });
+    try {
+      notify.notifyUser(acc.owner_user_id, {
+        kind: 'lead',
+        title: `Reply from ${acc.name} — ${acc.listing_name}`,
+        body: preview,
+        url: `/dashboard/leads?open=${acc.id}`,
+      });
+    } catch (e) { console.error('[leads] owner notification failed:', acc.id, e && e.message); }
     if (!acc.owner_emailed) {
       const owner = db.prepare('SELECT email, name FROM users WHERE id=?').get(acc.owner_user_id);
       if (owner && owner.email) {
@@ -1535,7 +1548,7 @@ router.post('/dashboard/leads/:id/reply', (req, res) => {
           paragraphs: [esc(r.body).replace(/\n/g, '<br>')],
           cta: { label: 'Open conversation', url: util2.siteUrl(`/dashboard/leads?open=${acc.id}`) },
           note: 'Reply in your Leads inbox to keep talking — both of you stay on FirmLedger. Later replies arrive as FirmLedger notifications.',
-        }).catch(() => {});
+        }).catch((e) => console.error('[leads] reply email to the business failed:', acc.id, e && e.message));
       }
     }
   }
