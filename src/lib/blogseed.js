@@ -17,7 +17,7 @@ const POSTS = [
 <h2>Layer 4 — Verify</h2>
 <p>Review happens at two levels. Every submission is moderated by a human before publication. Separately, the actual owner of a business can cryptographically claim its record: add a DNS TXT record, one meta tag line, or our badge snippet to the official domain, and our servers check for it live. Verified ownership both raises the profile's confidence score and transfers editorial control to the owner — they can edit fields, post timeline events and record relationships, subject to continued moderation of structural changes.</p>
 <h2>Layer 5 — Refresh</h2>
-<p>Publication is not the end of the pipeline. Approved records are added to the sitemap index automatically and pinged to search engines via IndexNow the moment they go live — with a re-ping thirty minutes later — so new profiles are typically picked up within a few hours. A freshness marker on each profile tells visitors how recently the record was touched; technology snapshots are re-detectable on demand by the owner; and anyone can file a removal or correction request from the profile itself, which lands in the same human moderation queue.</p>
+<p>Publication is not the end of the pipeline. Approved records are added to the sitemap index automatically and pinged to search engines via IndexNow the moment they go live, so new profiles are indexed. A freshness marker on each profile tells visitors how recently the record was touched; technology snapshots are re-detectable on demand by the owner; and anyone can file a removal or correction request from the profile itself, which lands in the same human moderation queue.</p>
 <h2>Why one Wikipedia source is worth more than ten anonymous ones</h2>
 <p>It would be trivial to scrape ten aggregators and report a median headcount. We do not, because reproducibility beats volume: a fact a third party can re-check beats five facts nobody can. Every field we import is traceable to an article a skeptic can open, and when the article changes, the citation on the profile tells a reviewer exactly where to look. That is what "source-backed" means on this site — not a badge, a trail.</p>`,
   },
@@ -294,7 +294,7 @@ curl "https://firmledger.co.ke/api/v1/listings?category=Fintech&amp;country=Keny
    left alone, exactly like the insert-if-absent rule above. */
 const STALE_MARKERS = {
   'turning-your-listing-into-leads': ['guests can inquire as easily as members'],
-  'how-firmledger-builds-a-trustworthy-record': ['within about ten hours'],
+  'how-firmledger-builds-a-trustworthy-record': ['within about ten hours', 'typically picked up within a few hours'],
 };
 
 function seedBlog(db) {

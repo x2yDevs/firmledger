@@ -87,7 +87,8 @@ const get = (p) => fetch(base + p).then((r) => ({ status: r.status, text: () => 
   db.prepare("UPDATE blog_posts SET body = 'OLD seed copy — pushed to search engines via IndexNow within about ten hours.' WHERE slug='how-firmledger-builds-a-trustworthy-record'").run();
   seedBlog(db);
   const record = db.prepare("SELECT body FROM blog_posts WHERE slug='how-firmledger-builds-a-trustworthy-record'").get();
-  check('stale IndexNow timing is refreshed on boot', !record.body.includes('within about ten hours') && record.body.includes('re-ping thirty minutes later'));
+  check('stale IndexNow timing is refreshed on boot', !record.body.includes('within about ten hours') && !record.body.includes('within a few hours'));
+  check('indexing copy promises indexed, no timings', /pinged to search engines via IndexNow the moment they go live, so new profiles are indexed\./.test(record.body));
 
   /* An admin-reworded copy (marker gone) must NOT be clobbered. */
   db.prepare("UPDATE blog_posts SET body='Edited by a human editor — custom copy about leads.' WHERE slug='turning-your-listing-into-leads'").run();
