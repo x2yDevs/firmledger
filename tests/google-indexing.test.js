@@ -13,7 +13,8 @@
  *   B. HTTP level — the real server boots (same stub preloaded), an admin
  *      session uploads a service-account key through Admin → Settings, hits
  *      "Submit first 200 listings", clears the indexing log, deletes an incident
- *      and checks the homepage featured rail scrolls past 8 records.
+ *      and checks the homepage Featured rotation: 8 cards drawn fairly from
+ *      the eligible pool, with the pool size disclosed.
  */
 const fs = require('fs');
 const os = require('os');
@@ -214,11 +215,14 @@ async function partB() {
 process.env.FIRMLEDGER_DATA_DIR = ${JSON.stringify(dataDir)};
 const { db, setSetting } = require(${JSON.stringify(path.join(ROOT, 'src/db.js'))});
 const run = (sql, ...p) => db.prepare(sql).run(...p);
+// One Pro owner → its listings are ELIGIBLE for Featured placement (featured=0
+// everywhere, so the homepage must draw from the eligible pool at random).
+const proId = run("INSERT INTO users (email,password_hash,name,plan,plan_expires_at) VALUES ('pro@gi.test','x','Pro Owner','pro',date('now','+30 days'))").lastInsertRowid;
 for (let i = 1; i <= 12; i++) {
-  run(\`INSERT INTO listings (slug,name,tagline,description,type,category,website,email,country,status,featured,confidence)
-       VALUES (?,?,?,?,'company','Technology',?,?,'Kenya','approved',1,70)\`,
-    'web-co-' + i, 'Web Co ' + i, 'Tagline ' + i, 'Seeded listing ' + i + ' for the featured rail.',
-    'https://web' + i + '.example', 'hi@web' + i + '.example');
+  run(\`INSERT INTO listings (slug,name,tagline,description,type,category,website,email,country,status,featured,confidence,owner_user_id)
+       VALUES (?,?,?,?,'company','Technology',?,?,'Kenya','approved',0,70,?)\`,
+    'web-co-' + i, 'Web Co ' + i, 'Tagline ' + i, 'Seeded listing ' + i + ' for the featured rotation.',
+    'https://web' + i + '.example', 'hi@web' + i + '.example', proId);
 }
 run(\`INSERT INTO listings (slug,name,tagline,description,type,category,website,email,country,status,confidence)
      VALUES ('awaiting-co','Awaiting Co','Waiting','A pending listing waiting for moderation.','company','Technology','https://awaiting.example','a@example.com','Kenya','pending',55)\`);
@@ -260,27 +264,37 @@ run("INSERT INTO sessions (token,user_id,csrf,kind,expires_at) VALUES (?,NULL,?,
   });
 
   try {
-    /* --- homepage featured rail ------------------------------------- */
+    /* --- homepage Featured rotation ----------------------------------- */
     const home = await (await fetch(BASE + '/')).text();
     check('homepage renders', /Featured records/.test(home));
-    check('more than 8 featured records scroll horizontally', /class="featured-rail is-marquee"/.test(home));
-    check('the rail renders two passes of every card',
-      (home.match(/featured-card"/g) || []).length === 24 || (home.match(/class="l-card featured-card/g) || []).length === 24,
-    String((home.match(/class="l-card featured-card/g) || []).length));
-    check('the rail has a pause control', /data-rail-toggle[^>]*data-rail-target="\.featured-rail"/.test(home));
+    check('12 eligible listings render as a capped 8-card grid',
+      (home.match(/class="l-card featured-card/g) || []).length === 8 && !/featured-rail is-marquee/.test(home),
+      String((home.match(/class="l-card featured-card/g) || []).length));
+    check('the eligible pool size is disclosed', /random subset of the 12 eligible records/.test(home));
+    // Fair rotation: repeated visits must surface more than one fixed 8-set.
+    // (Scoped to featured-card anchors — other homepage sections link the
+    // same listings and must not inflate the count.)
+    const featSlugs = (html) => [...html.matchAll(/l-card featured-card" href="\/listing\/([^"]+)"/g)].map((m) => m[1]);
+    const seenSlugs = new Set(featSlugs(home));
+    for (let i = 0; i < 3; i++) {
+      const h = await (await fetch(BASE + '/')).text();
+      for (const s of featSlugs(h)) seenSlugs.add(s);
+    }
+    check('repeated visits rotate the cards shown', seenSlugs.size > 8, `${seenSlugs.size} distinct of 12`);
 
-    // Drop back to 8 or fewer featured records → the plain grid returns.
+    // Drop back to 8 eligible records → the whole pool shows, no rotation note.
     const trim = `
 process.env.FIRMLEDGER_DATA_DIR = ${JSON.stringify(dataDir)};
 const { db } = require(${JSON.stringify(path.join(ROOT, 'src/db.js'))});
-db.prepare("UPDATE listings SET featured=0 WHERE slug IN ('web-co-9','web-co-10','web-co-11','web-co-12')").run();
+db.prepare("UPDATE listings SET owner_user_id=NULL WHERE slug IN ('web-co-9','web-co-10','web-co-11','web-co-12')").run();
 `;
     spawnSync(process.execPath, ['-e', trim], { cwd: ROOT, env });
     const home2 = await (await fetch(BASE + '/')).text();
-    check('8 or fewer featured records render as the normal grid',
+    check('a pool of 8 renders the normal grid',
       /class="list-grid"/.test(home2) && !/featured-rail is-marquee/.test(home2));
-    check('the grid shows at most 8 cards', (home2.match(/class="l-card featured-card/g) || []).length === 8,
+    check('the grid shows all 8 cards', (home2.match(/class="l-card featured-card/g) || []).length === 8,
       String((home2.match(/class="l-card featured-card/g) || []).length));
+    check('no rotation note when the whole pool shows', !/fair rotation/.test(home2));
 
     /* --- settings page ------------------------------------------------ */
     const settings = await (await admin('/admin3119Musa/settings')).text();

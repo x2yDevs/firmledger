@@ -151,9 +151,12 @@ router.get('/dashboard', (req, res) => {
   }
   const plans = {};
   for (const l of listings) plans[l.id] = { perks: perksActive(l) };
+  // Leads teaser for the header badge + Leads card (cheap aggregate).
+  let leadCounts = { total: 0, new: 0, active: 0 };
+  try { leadCounts = require('../lib/leads').countsForOwner(req.user.id); } catch { /* table missing pre-migration */ }
   res.render('dashboard/index', {
     meta: { title: 'Dashboard — FirmLedger', description: '', robots: 'noindex' },
-    listings, claims, claimable, former, scores, plans,
+    listings, claims, claimable, former, scores, plans, leadCounts,
     accountPro: hasProAccess(req.user),
     accountExpires: req.user.plan_expires_at || '',
     paypalReady: paypal.configured(),
@@ -757,11 +760,25 @@ router.get('/dashboard/support/:id/poll', requireUser, loadMyTicket, (req, res) 
 /* ================= User settings — email preferences ================= */
 router.get('/dashboard/settings', (req, res) => {
   const sub = db.prepare('SELECT * FROM newsletter_subscribers WHERE email = ?').get(req.user.email);
+  const pref = db.prepare('SELECT leads_digest FROM users WHERE id=?').get(req.user.id) || {};
+  const owns = db.prepare('SELECT COUNT(*) c FROM listings WHERE owner_user_id=?').get(req.user.id).c;
   res.render('dashboard/settings', {
     meta: { title: 'Notification settings — FirmLedger', description: '', robots: 'noindex' },
     sub, active: Boolean(sub && sub.active),
+    leadsDigest: ['both', 'email', 'notification', 'none'].includes(pref.leads_digest) ? pref.leads_digest : 'both',
+    ownsListings: owns > 0,
     ok: req.query.ok || '', err: req.query.err || '',
   });
+});
+
+router.post('/dashboard/settings/leads-digest', (req, res) => {
+  const v = String(req.body.leads_digest || '').trim();
+  if (!['both', 'email', 'notification', 'none'].includes(v)) {
+    return res.redirect('/dashboard/settings?err=' + encodeURIComponent('Choose how you want the weekly leads report: both, email, notifications, or off.'));
+  }
+  db.prepare('UPDATE users SET leads_digest=? WHERE id=?').run(v, req.user.id);
+  const label = { both: 'email + in-app notifications', email: 'email only', notification: 'in-app notifications only', none: 'off' }[v];
+  res.redirect('/dashboard/settings?ok=' + encodeURIComponent(`Weekly leads report set to ${label}.`));
 });
 
 router.post('/dashboard/settings/digest', (req, res) => {
@@ -1271,6 +1288,105 @@ router.post('/dashboard/advertise/checkout', (req, res) => {
     db.prepare("UPDATE payments SET status='failed' WHERE reference=?").run(reference);
     return res.redirect('/dashboard/advertise?err=' + encodeURIComponent('Could not reach PayPal — try again shortly.'));
   });
+});
+
+/* ================= Audience analytics (FirmLedger Pro) =================
+ * Who is viewing your listings, where they come from, and what they do next.
+ * Free accounts see the upsell; Pro unlocks the numbers + location drill-down. */
+router.get('/dashboard/analytics', (req, res) => {
+  const analytics = require('../lib/analytics');
+  const pro = hasProAccess(req.user);
+  const listings = db.prepare(
+    'SELECT id, slug, name FROM listings WHERE owner_user_id=? ORDER BY name ASC'
+  ).all(req.user.id);
+  const selId = Number(req.query.listing) || 0;
+  const selected = listings.find((l) => l.id === selId) || null;
+  const ids = selected ? [selected.id] : listings.map((l) => l.id);
+  const locCity = String(req.query.city || '').slice(0, 80);
+  const locCountry = String(req.query.country || '').slice(0, 80);
+  /* Any ?city=/country= params (even empty) mean “drill into the Unknown
+     location group” — presence of the keys is the intent, not their values. */
+  const drilled = Boolean(pro && ('city' in req.query || 'country' in req.query));
+  const monthFunnel = pro ? analytics.funnel(ids, 30) : null;
+  res.render('dashboard/analytics', {
+    meta: { title: 'Audience analytics — FirmLedger', description: '', robots: 'noindex' },
+    pro, listings, selected, ids,
+    counts: pro ? analytics.summary(ids) : { today: 0, week: 0, month: 0, total: 0 },
+    totals: pro ? analytics.totals(ids) : { views: 0, uniques: 0, profileClicks: 0, websiteClicks: 0, leads: 0 },
+    topLocations: pro ? analytics.topLocations(ids, 10) : [],
+    perListing: pro ? analytics.perListing(ids) : {},
+    funnel: monthFunnel,
+    funnelHeadline: monthFunnel ? analytics.funnelHeadline(monthFunnel, selected ? 1 : Math.max(1, listings.length)) : '',
+    drill: drilled ? {
+      city: locCity, country: locCountry,
+      ...analytics.locationDetail(ids, locCity, locCountry),
+    } : null,
+  });
+});
+
+/* ================= Leads inbox (FirmLedger Pro) =================
+ * Inquiries sent through “Contact this business” on the owner's claimed
+ * listings. Collected for every claimed listing; reading + managing them is
+ * Pro. Free owners see how many are waiting, locked behind the upgrade. */
+router.get('/dashboard/leads', (req, res) => {
+  const leads = require('../lib/leads');
+  const pro = hasProAccess(req.user);
+  const counts = leads.countsForOwner(req.user.id);
+  const status = String(req.query.status || '');
+  const listingId = Number(req.query.listing) || 0;
+  const archived = req.query.box === 'archived';
+  const openId = Number(req.query.open) || 0;
+  const listings = db.prepare(
+    'SELECT id, name FROM listings WHERE owner_user_id=? ORDER BY name ASC'
+  ).all(req.user.id);
+  const box = pro
+    ? leads.listForOwner(req.user.id, { status, archived, listingId, page: req.query.page })
+    : { rows: [], total: 0, page: 1, pages: 1 };
+  const open = pro && openId ? leads.getOwned(openId, req.user.id) : null;
+  res.render('dashboard/leads', {
+    meta: { title: 'Leads — FirmLedger', description: '', robots: 'noindex' },
+    pro, counts, box, listings, open,
+    openNotes: pro && open ? leads.notesFor(open.id, req.user.id) : [],
+    filters: { status, listingId, archived },
+    ok: req.query.ok || '', err: req.query.err || '',
+    STATUS_LABELS: leads.STATUS_LABELS, STATUSES: leads.STATUSES,
+  });
+});
+
+router.post('/dashboard/leads/:id/status', (req, res) => {
+  if (!hasProAccess(req.user)) {
+    return res.redirect('/dashboard/leads?err=' + encodeURIComponent('The Leads inbox is a FirmLedger Pro feature — upgrade to manage your inquiries.'));
+  }
+  const leads = require('../lib/leads');
+  const r = leads.setStatus(req.params.id, req.user.id, String(req.body.status || ''));
+  const back = `/dashboard/leads?open=${encodeURIComponent(req.params.id)}`;
+  res.redirect(back + (r.ok
+    ? '&ok=' + encodeURIComponent(`Marked as ${leads.STATUS_LABELS[r.lead.status]}.`)
+    : '&err=' + encodeURIComponent(r.error || 'Could not update that lead.')));
+});
+
+router.post('/dashboard/leads/:id/note', (req, res) => {
+  if (!hasProAccess(req.user)) {
+    return res.redirect('/dashboard/leads?err=' + encodeURIComponent('The Leads inbox is a FirmLedger Pro feature — upgrade to manage your inquiries.'));
+  }
+  const leads = require('../lib/leads');
+  const r = leads.addNote(req.params.id, req.user.id, req.body.note);
+  const back = `/dashboard/leads?open=${encodeURIComponent(req.params.id)}`;
+  res.redirect(back + (r.ok
+    ? '&ok=' + encodeURIComponent('Note added.')
+    : '&err=' + encodeURIComponent(r.error || 'Could not add that note.')));
+});
+
+router.post('/dashboard/leads/:id/archive', (req, res) => {
+  if (!hasProAccess(req.user)) {
+    return res.redirect('/dashboard/leads?err=' + encodeURIComponent('The Leads inbox is a FirmLedger Pro feature — upgrade to manage your inquiries.'));
+  }
+  const leads = require('../lib/leads');
+  const toArchived = String(req.body.archived || '1') !== '0';
+  const r = leads.setArchived(req.params.id, req.user.id, toArchived);
+  res.redirect('/dashboard/leads' + (r.ok
+    ? '?ok=' + encodeURIComponent(toArchived ? 'Lead archived.' : 'Lead restored to your inbox.')
+    : '?err=' + encodeURIComponent(r.error || 'Could not move that lead.')));
 });
 
 /* ================= Claimable search (JSON) ================= */

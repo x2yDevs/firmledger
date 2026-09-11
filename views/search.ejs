@@ -20,8 +20,18 @@
 
   <div class="search-groups">
     <section class="search-group rv">
-      <h3>Business profiles <span class="sg-n"><%= providers.length %></span></h3>
-      <% if (!providers.length) { %><p class="muted">No matching profiles.</p><% } %>
+      <h3>Business profiles <span class="sg-n"><%= providers.length + (typeof sponsoredHits !== 'undefined' ? sponsoredHits.length : 0) %></span></h3>
+      <% if (typeof sponsoredHits !== 'undefined' && sponsoredHits.length) { %>
+      <p class="sponsored-inline-label" style="margin:0 0 8px"><span class="sponsored-chip">Sponsored</span> Paid matches, drawn at random — every matching sponsor has the same chance of appearing.</p>
+      <% sponsoredHits.forEach(function(l){ %>
+      <a class="search-row search-row--sponsored" href="/listing/<%= l.slug %>">
+        <% if (l.logo_url) { %><img src="<%= l.logo_url %>" alt="<%= l.name %> logo" width="34" height="34" loading="lazy"><% } else { %><span class="ph"><%= initials(l.name) %></span><% } %>
+        <span class="sr-t"><b><%= l.name %><span class="sponsored-chip">Sponsored</span></b><small><%= l.category %> · <%= l.type %> · <%= [l.city,l.country].filter(Boolean).join(', ') || '—' %></small></span>
+        <span class="sr-arrow">&rsaquo;</span>
+      </a>
+      <% }); %>
+      <% } %>
+      <% if (!providers.length && !(typeof sponsoredHits !== 'undefined' && sponsoredHits.length)) { %><p class="muted">No matching profiles.</p><% } %>
       <% providers.forEach(function(l){ %>
       <a class="search-row" href="/listing/<%= l.slug %>">
         <% if (l.logo_url) { %><img src="<%= l.logo_url %>" alt="<%= l.name %> logo" width="34" height="34" loading="lazy"><% } else { %><span class="ph"><%= initials(l.name) %></span><% } %>

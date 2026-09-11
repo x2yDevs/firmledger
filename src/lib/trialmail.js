@@ -22,7 +22,7 @@ function sendTrialInvite(user) {
     alert: `Your account comes with a <b>${TRIAL_SIGNUP_DAYS}-day free trial of FirmLedger Pro</b> — full access, no payment details needed. You switch it on yourself whenever you're ready.`,
     alertTone: 'info',
     paragraphs: [
-      `While the trial runs you get everything Pro includes: <b>every listing's full details</b> (websites, emails, phones, events timeline and relationship graph), the <b>blue verified tick</b>, homepage <b>Featured placement</b> and the <b>gold badge</b> on listings you own, plus full <b>developer API access</b> with keys, docs and the playground.`,
+      `While the trial runs you get everything Pro includes: <b>every listing's full details</b> (websites, emails, phones, events timeline and relationship graph), the <b>blue verified tick</b>, eligibility for <b>Featured placement</b>, <b>Audience Analytics</b>, the <b>Leads inbox</b> and the <b>gold badge</b> on listings you own, plus full <b>developer API access</b> with keys, docs and the playground.`,
       `To start it, open the pricing page and press <b>“Start my free trial”</b>. The countdown only begins when you activate it.`,
     ],
     cta: { label: `Activate my ${TRIAL_SIGNUP_DAYS}-day free trial`, url: util.siteUrl('/pricing#free-trial') },
@@ -41,7 +41,7 @@ function sendTrialActivated(user, { days, expiresAt }) {
     alert: `<b>Trial length:</b> ${days} days &nbsp;·&nbsp; <b>Full Pro access until:</b> ${till}`,
     alertTone: 'ok',
     paragraphs: [
-      `Your free trial is on and it is the real thing: you can now view <b>every listing's full details</b>, your own listings carry the <b>blue tick</b>, homepage <b>Featured placement</b> and the <b>gold badge</b>, and the <b>developer API</b> area in your dashboard is unlocked.`,
+      `Your free trial is on and it is the real thing: you can now view <b>every listing's full details</b>, your own listings carry the <b>blue tick</b>, eligibility for <b>Featured placement</b>, <b>Audience Analytics</b>, the <b>Leads inbox</b> and the <b>gold badge</b>, and the <b>developer API</b> area in your dashboard is unlocked.`,
       `When the trial ends on <b>${till}</b> your account returns to Free automatically — nothing is deleted and nothing is charged. Upgrade any time to keep Pro running.`,
     ],
     cta: { label: 'Open your dashboard', url: util.siteUrl('/dashboard') },
@@ -72,7 +72,7 @@ function sendTrialReminder(user, { slot, remaining }) {
     preheader = `${days} of FirmLedger Pro left on your free trial.`;
     alert = `<b>${days} of Pro remaining</b> &nbsp;·&nbsp; full access until <b>${till}</b>`;
     paragraphs = [
-      `Your free trial is past its midpoint — <b>${remaining} ${remaining === 1 ? 'day' : 'days'}</b> of full FirmLedger Pro remain. You can keep viewing every listing's complete details, and any listings you own carry the verified tick, Featured placement and gold badge.`,
+      `Your free trial is past its midpoint — <b>${remaining} ${remaining === 1 ? 'day' : 'days'}</b> of full FirmLedger Pro remain. You can keep viewing every listing's complete details, and any listings you own carry the verified tick, Featured eligibility, Analytics, Leads and the gold badge.`,
       `When the trial ends on <b>${till}</b> your account returns to the Free plan automatically — nothing is deleted, nothing is charged. If Pro is earning its keep, upgrade before then and nothing changes.`,
     ];
     note = `You are receiving this because your ${user.trial_days || ''}-day free trial is running. Questions? <a href="mailto:support@firmledger.co.ke" style="color:#1D4ED8;">support@firmledger.co.ke</a>`;
@@ -84,7 +84,7 @@ function sendTrialReminder(user, { slot, remaining }) {
     alert = `<b>1 day left</b> &nbsp;·&nbsp; full Pro access ends <b>${till}</b>`;
     paragraphs = [
       `Your FirmLedger Pro trial ends <b>${till}</b> — under 24 hours of full access remain. After that your account returns to the Free plan: listings stay, nothing is deleted, no card is charged.`,
-      `Keep the unlocked details, the verified tick, Featured placement and the developer API by upgrading now — it takes about a minute.`,
+      `Keep the unlocked details, the verified tick, Featured eligibility, Analytics, Leads and the developer API by upgrading now — it takes about a minute.`,
     ];
     note = 'This is the final countdown email for your free trial. When it ends your account simply returns to Free.';
   } else {
@@ -95,7 +95,7 @@ function sendTrialReminder(user, { slot, remaining }) {
     alert = `<b>${days} remaining</b> &nbsp;·&nbsp; full Pro access until <b>${till}</b>`;
     paragraphs = [
       `Your free trial of FirmLedger Pro is almost over — <b>${remaining} ${remaining === 1 ? 'day' : 'days'}</b> of full access remain, ending on <b>${till}</b>.`,
-      `After the trial your account goes back to the Free plan automatically. To keep viewing every listing's full details — and keep the blue verified tick, homepage Featured placement and the gold badge on listings you own — upgrade to Pro before the countdown hits zero.`,
+      `After the trial your account goes back to the Free plan automatically. To keep viewing every listing's full details — and keep the blue verified tick, Featured eligibility, Analytics, Leads and the gold badge on listings you own — upgrade to Pro before the countdown hits zero.`,
     ];
     note = `You are receiving this because your ${user.trial_days || ''}-day free trial is running out. No action needed if you're happy on Free.`;
   }
@@ -125,7 +125,7 @@ function sendTrialEnded(user) {
     alert: `Your <b>${user.trial_days || ''}-day free trial ended on ${ended}</b> and your account is back on the <b>Free plan</b>.`,
     alertTone: 'info',
     paragraphs: [
-      'Nothing was deleted and nothing was charged. Your account, your listings and their public data are all exactly where you left them — only the Pro extras (full listing details, verified tick, Featured placement, gold badge, developer API) are paused.',
+      'Nothing was deleted and nothing was charged. Your account, your listings and their public data are all exactly where you left them — only the Pro extras (full listing details, verified tick, Featured eligibility, Analytics, Leads, gold badge, developer API) are paused.',
       'Upgrade to FirmLedger Pro any time to switch those extras back on for as long as you need them.',
     ],
     cta: { label: 'Upgrade to FirmLedger Pro', url: util.siteUrl('/dashboard/upgrade') },

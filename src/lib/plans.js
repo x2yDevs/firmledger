@@ -82,7 +82,8 @@ function revokeUserPro(userId) {
  *
  * While trial_expires_at is in the future the account has FULL Pro access:
  * hasProAccess() is true, canViewFull() opens every listing, PRO_USER_SQL
- * matches (tick / Featured / gold badge on owned listings) and the developer
+ * matches (tick / Featured eligibility / Analytics / Leads / gold badge on
+ * owned listings) and the developer
  * API accepts the account's keys. Nothing about it is a demo.
  *
  * Columns (migrations/2026-09-01-user-trials.sql):

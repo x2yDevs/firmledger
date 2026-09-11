@@ -500,7 +500,10 @@ async function sendBranded(to, subject, opts = {}, viaKey) {
   // From resolution: explicit `from` wins, then a named alias (billing,
   // security, noreply, …), then the global From address.
   const from = opts.from || (opts.alias ? aliasFrom(opts.alias) : undefined);
-  return deliver(to, { subject, text: opts.text || brandedText(opts), html: brandedHtml(opts), from }, viaKey);
+  // replyTo (optional) rides through to the transport — used by lead alerts so
+  // the owner's one-click reply goes to the inquirer, not to FirmLedger.
+  const replyTo = opts.replyTo || undefined;
+  return deliver(to, { subject, text: opts.text || brandedText(opts), html: brandedHtml(opts), from, replyTo }, viaKey);
 }
 
 async function sendTest(to) {

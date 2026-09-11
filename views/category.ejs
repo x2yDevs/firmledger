@@ -24,6 +24,14 @@
 
 <section class="section-tight" style="padding-top:26px">
   <div class="container container-wide">
+    <% if (typeof sponsoredInline !== 'undefined' && sponsoredInline.length) { %>
+    <div class="sponsored-inline" role="region" aria-label="Sponsored results">
+      <p class="sponsored-inline-label"><span class="sponsored-chip">Sponsored</span> Paid placements from this category, drawn at random — every matching sponsor has the same chance of appearing.</p>
+      <div class="list-grid">
+        <% sponsoredInline.forEach(function(l){ %><%- include('partials/sponsor-card', { l: l }) %><% }); %>
+      </div>
+    </div>
+    <% } %>
     <% if (listings.length) { %>
     <div class="list-grid">
       <% listings.forEach(function(l){ %>

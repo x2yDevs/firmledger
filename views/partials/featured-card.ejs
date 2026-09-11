@@ -1,6 +1,6 @@
-<% /* One featured record. Used twice when the strip overflows 8 cards: the
-      second pass is a duplicate for the seamless marquee, hidden from assistive
-      tech and skipped by the keyboard. */ %>
+<% /* One featured record. The homepage shows a fair random subset of the
+      eligible pool (capped at 8 cards); `dup` is kept for compatibility but
+      no longer rendered. */ %>
 <% const isDup = typeof dup !== 'undefined' && dup; %>
 <a class="l-card featured-card<%= isDup ? ' featured-card--dup' : '' %>" href="/listing/<%= l.slug %>"<% if (isDup) { %> tabindex="-1" aria-hidden="true"<% } %>>
   <div class="l-top">

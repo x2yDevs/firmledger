@@ -891,7 +891,7 @@ router.post('/admin3119Musa/users/:id/plan', (req, res) => {
       alertTone: 'ok',
       paragraphs: [
         'Every listing in the directory is now fully unlocked for you — business email, phone, website, events timeline and relationship graph included.',
-        'Any listings you own gain the blue verified tick next to the company name, Featured placement on the homepage, the premium gold badge, and priority admin verification & trust review.',
+        'Any listings you own gain the blue verified tick next to the company name, eligibility for Featured placement on the homepage, Audience Analytics, the Leads inbox, the premium gold badge, and priority admin verification & trust review.',
       ],
       cta: { label: 'Explore the directory', url: su8('/directory') },
       note: `Access details: ${expiry ? `Pro renews until <b>${expiry}</b>` : '<b>Lifetime access</b> — no renewal required'}.`,
@@ -909,7 +909,7 @@ router.post('/admin3119Musa/users/:id/plan', (req, res) => {
       alert: `FirmLedger Pro access on <b>${eh9(u.email)}</b> has ended. Your account is back on the Free plan.`,
       alertTone: 'info',
       paragraphs: [
-        'You can still browse the directory, submit listings and manage your records. Upgrade again at any time to unlock full listing details, verified ticks and Featured placement.',
+        'You can still browse the directory, submit listings and manage your records. Upgrade again at any time to unlock full listing details, verified ticks, Featured eligibility, Analytics and Leads.',
       ],
       cta: { label: 'Upgrade to Pro', url: su9('/dashboard/upgrade') },
       note: 'This change was made by FirmLedger support. If you believe this is an error, reply to this email.',

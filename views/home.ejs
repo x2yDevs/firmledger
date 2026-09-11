@@ -110,36 +110,17 @@
       <div class="l">
         <p class="klabel">Featured records</p>
         <h2>Recently verified listings</h2>
-        <% if (featuredOverflow) { %><p>Every featured record, on a continuous scroll — hover or press Pause to read one in place.</p><% } %>
+        <% if (featured.length && featuredOverflow) { %><p>A fair rotation — Pro listings are <b>eligible</b> for Featured placement, and every visit shows a random subset of the <%= featuredCount %> eligible records, each with the same chance of appearing.</p><% } %>
       </div>
       <div class="sec-head-actions">
         <span class="idx">03 / RECORDS</span>
-        <% if (featuredOverflow) { %>
-        <button class="sponsor-toggle" type="button" data-rail-toggle data-rail-target=".featured-rail" data-rail-label="the featured records scroll" aria-pressed="false" aria-label="Pause the featured records scroll">
-          <span class="sponsor-toggle-ico" aria-hidden="true"><svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></span>
-          <span class="sponsor-toggle-txt">Pause</span>
-        </button>
-        <% } %>
       </div>
     </div>
     <% if (featured.length) { %>
-    <% if (featuredOverflow) { %>
-    <% /* More than 8 featured records: the same horizontal marquee the promoted
-          (sponsored) strip uses. The track holds two identical passes of the
-          cards and slides exactly one pass to the left, so the loop is seamless
-          and every record gets its turn on screen. */ %>
-    <div class="featured-rail is-marquee" style="--featured-dur:<%= featuredDur %>s" role="region" aria-label="Featured records — auto-scrolling">
-      <div class="featured-track">
-        <% featured.forEach(function(l){ %><%- include('partials/featured-card', { l: l }) %><% }); %>
-        <% featured.forEach(function(l){ %><%- include('partials/featured-card', { l: l, dup: true }) %><% }); %>
-      </div>
-    </div>
-    <p class="fine-print" style="margin-top:14px"><a href="/directory">Browse all <%= featuredCount %> featured records →</a></p>
-    <% } else { %>
     <div class="list-grid">
       <% featured.forEach(function(l){ %><%- include('partials/featured-card', { l: l }) %><% }); %>
     </div>
-    <% } %>
+    <p class="fine-print" style="margin-top:14px"><a href="/directory">Browse the directory →</a> &nbsp;·&nbsp; <a href="/blog/how-featured-placement-works">How Featured placement works →</a></p>
     <% } else { %>
     <div class="empty-state">
       <h3>The ledger is open</h3>
@@ -151,10 +132,10 @@
 </section>
 
 <% if (hasActiveSponsors) { %>
-<% /* Every active placement is shown, on a seamless marquee — the strip holds two
-      identical passes of the same cards and slides exactly one pass to the left, so
-      nothing is ever cut off and the loop has no seam. With too few sponsors to
-      overflow the row it renders as a plain wrapped grid instead. */ %>
+<% /* A fair random subset of the active sponsors, re-drawn on every visit — never
+      the whole book. The strip holds two identical passes of the drawn cards and
+      slides exactly one pass to the left, so the loop has no seam. With too few
+      sponsors to overflow the row it renders as a plain wrapped grid instead. */ %>
 <% const _sponsorMarquee = sponsored.length > 3; %>
 <% const _sponsorDur = Math.min(240, Math.max(22, Math.round(sponsored.length * 5.7))); %>
 <section class="section section-sponsored">
@@ -163,7 +144,7 @@
       <div class="l">
         <p class="klabel">Sponsored Content</p>
         <h2>Promoted on the ledger</h2>
-        <p>These verified listings are advertising on FirmLedger. Each is clearly labelled <b>Sponsored</b> — it's paid placement, not an editorial pick.</p>
+        <p>These verified listings are advertising on FirmLedger. Each is clearly labelled <b>Sponsored</b> — it's paid placement, not an editorial pick.<% if (typeof sponsoredCount !== 'undefined' && sponsoredCount > sponsored.length) { %> Showing <%= sponsored.length %> of <%= sponsoredCount %> active sponsors, drawn at random — every sponsor has the same chance of appearing.<% } %></p>
       </div>
       <div class="sec-head-actions">
         <span class="idx">AD / SPONSORED</span>
@@ -185,7 +166,7 @@
         <% }); } %>
       </div>
     </div>
-    <p class="fine-print" style="margin-top:14px"><a href="/advertise">Advertise your listing here →</a></p>
+    <p class="fine-print" style="margin-top:14px"><a href="/advertise">Advertise your listing here →</a> &nbsp;·&nbsp; <a href="/blog/how-advertising-works-on-firmledger">How advertising works →</a></p>
   </div>
 </section>
 <% } %>

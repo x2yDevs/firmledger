@@ -7,6 +7,8 @@
       <p class="muted">Welcome back, <%= user.name %> · <%= user.email %></p>
     </div>
     <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <a href="/dashboard/leads" class="btn btn-ghost">Leads<% if (typeof leadCounts !== 'undefined' && leadCounts.new) { %> <span class="count-badge"><%= leadCounts.new %> new</span><% } %></a>
+      <a href="/dashboard/analytics" class="btn btn-ghost">Analytics</a>
       <a href="/dashboard/notifications" class="btn btn-ghost">Notifications<% if (typeof userUnread !== 'undefined' && userUnread) { %> (<%= userUnread %>)<% } %></a>
       <a href="/dashboard/listings/new" class="btn btn-primary">+ Add listing</a>
     </div>
@@ -59,7 +61,7 @@
                 </td>
                 <td>
                   <% if (hasPerks) { %>
-                    <span class="pill pill-pro" title="Blue tick, homepage Featured slot, premium badge…">PRO perks</span>
+                    <span class="pill pill-pro" title="Blue tick, Featured eligibility, Analytics, Leads, premium badge…">PRO perks</span>
                   <% } else { %>
                     <span class="pill pill-free">FREE</span>
                   <% } %>
@@ -248,7 +250,7 @@
             <% if (typeof isTrialUser !== 'undefined' && isTrialUser && !isProUser(user)) { %>Free trial — <b><%= trialDaysRemaining %> day<%= trialDaysRemaining === 1 ? '' : 's' %> left</b> (until <%= String(trialExpiresAt).slice(0, 10) %>). Upgrade to keep Pro when it ends.<% } %>
             <% if (accountPro && isProUser(user) && accountExpires) { %>Active until <b><%= accountExpires %></b> · paying again extends it.<% } %>
             <% if (accountPro && isProUser(user) && !accountExpires) { %>Lifetime — admin-granted.<% } %>
-            <% if (!accountPro) { %>Upgrade to unlock every listing's full details — and give your own listings the blue tick, homepage Featured slot and premium badge.<% } %>
+            <% if (!accountPro) { %>Upgrade to unlock every listing's full details — plus the blue tick, Featured eligibility, Analytics and Leads for your own listings.<% } %>
           </span>
         </div>
       </div>
@@ -339,6 +341,22 @@
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <a class="btn btn-primary btn-sm" href="/dashboard/advertise">Advertise a listing</a>
           <a class="btn btn-ghost btn-sm" href="/advertise">See packages</a>
+        </div>
+      </div>
+      <div class="side-card">
+        <h3 style="margin:0 0 10px">Audience Analytics <% if (accountPro) { %><span class="pill pill-pro" style="margin-left:6px">PRO</span><% } %></h3>
+        <p class="muted" style="margin-bottom:14px">Who views your listings — views today / this week / this month, top locations with drill-downs, profile &amp; website clicks.<% if (!accountPro) { %> <b>Included with Pro.</b><% } %></p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <a class="btn <%= accountPro ? 'btn-primary' : 'btn-ghost' %> btn-sm" href="/dashboard/analytics">Open analytics</a>
+          <% if (!accountPro) { %><a class="btn btn-ghost btn-sm" href="/dashboard/upgrade">Upgrade</a><% } %>
+        </div>
+      </div>
+      <div class="side-card">
+        <h3 style="margin:0 0 10px">Leads inbox <% if (accountPro) { %><span class="pill pill-pro" style="margin-left:6px">PRO</span><% } %><% if (typeof leadCounts !== 'undefined' && leadCounts.new) { %> <span class="count-badge"><%= leadCounts.new %> new</span><% } %></h3>
+        <p class="muted" style="margin-bottom:14px"><% if (typeof leadCounts !== 'undefined' && leadCounts.total) { %>You have <b><%= leadCounts.total %> <%= leadCounts.total === 1 ? 'inquiry' : 'inquiries' %></b> from your claimed listings<% if (leadCounts.new) { %> — <b><%= leadCounts.new %> new</b><% } %>.<% } else { %>Inquiries from the “Contact this business” button on your claimed listings land here.<% } %><% if (!accountPro) { %> <b>Managing leads is Pro.</b><% } %></p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <a class="btn <%= accountPro ? 'btn-primary' : 'btn-ghost' %> btn-sm" href="/dashboard/leads">Open inbox</a>
+          <% if (!accountPro) { %><a class="btn btn-ghost btn-sm" href="/dashboard/upgrade">Upgrade</a><% } %>
         </div>
       </div>
       <div class="side-card">

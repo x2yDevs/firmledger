@@ -1,0 +1,150 @@
+<%- include('../partials/top') %>
+
+<section class="page-head">
+  <div class="container dash-head">
+    <div>
+      <p class="crumb"><a href="/dashboard">Dashboard</a> → Analytics</p>
+      <h1>Audience analytics</h1>
+      <p class="muted">Who is viewing your listings, where they come from, and what they do next. Bots, your own views and admin views are never counted.</p>
+    </div>
+    <% if (listings.length > 1) { %>
+    <form class="ana-pick" method="get" action="/dashboard/analytics">
+      <label><span class="muted" style="font-size:12.5px">Listing</span>
+        <select name="listing" onchange="this.form.submit()">
+          <option value="">All my listings (<%= listings.length %>)</option>
+          <% listings.forEach(function (gl) { %><option value="<%= gl.id %>"<%= selected && selected.id === gl.id ? ' selected' : '' %>><%= gl.name %></option><% }) %>
+        </select>
+      </label>
+    </form>
+    <% } %>
+  </div>
+</section>
+
+<section class="section-tight">
+  <div class="container">
+    <% if (!pro) { %>
+      <div class="panel pro-locked" style="max-width:720px">
+        <div class="plc-left">
+          <span class="plc-lock" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></span>
+          <div>
+            <h3 style="margin:0">Audience analytics ✦ FirmLedger Pro</h3>
+            <p style="font-size:13.5px;color:var(--muted);margin:.35rem 0 0">Views today, this week and this month — the top locations your audience comes from, with a drill-down per location: views, unique visitors, profile clicks, website clicks and leads.<% if (listings.length) { %> Your views are already being counted<% } else { %> Add a listing to start collecting<% } %><% if (listings.length) { %>, and the numbers unlock the moment you go Pro<% } %>.</p>
+          </div>
+        </div>
+        <div class="plc-actions">
+          <a class="btn btn-accent btn-sm" href="/dashboard/upgrade">Upgrade to Pro</a>
+          <a class="btn btn-ghost btn-sm" href="/pricing">See pricing</a>
+        </div>
+      </div>
+    <% } else if (!listings.length) { %>
+      <div class="empty-state">
+        <h3>No listings yet</h3>
+        <p>Add your first business to the ledger — analytics start collecting from its first human view.</p>
+        <a href="/dashboard/listings/new" class="btn btn-primary">Submit a listing</a>
+      </div>
+    <% } else { %>
+      <div class="stat-cards ana-cards">
+        <div class="stat-card"><span class="stat-label">Views today</span><span class="stat-num"><%= counts.today %></span><span class="muted" style="font-size:12px">human views</span></div>
+        <div class="stat-card"><span class="stat-label">This week</span><span class="stat-num"><%= counts.week %></span><span class="muted" style="font-size:12px">last 7 days</span></div>
+        <div class="stat-card"><span class="stat-label">This month</span><span class="stat-num"><%= counts.month %></span><span class="muted" style="font-size:12px">last 30 days</span></div>
+        <div class="stat-card"><span class="stat-label">All time</span><span class="stat-num"><%= counts.total %></span><span class="muted" style="font-size:12px">views, all time</span></div>
+        <div class="stat-card"><span class="stat-label">Unique visitors</span><span class="stat-num"><%= totals.uniques %></span><span class="muted" style="font-size:12px">distinct devices</span></div>
+        <div class="stat-card"><span class="stat-label">Website clicks</span><span class="stat-num"><%= totals.websiteClicks %></span><span class="muted" style="font-size:12px">outbound clicks</span></div>
+      </div>
+
+      <div class="panel funnel-panel" style="margin-top:1.8rem">
+        <div class="panel-h-t">
+          <h3>Conversion funnel · last 30 days</h3>
+          <a class="muted" style="font-size:.8rem" href="/dashboard/leads">Open Leads inbox →</a>
+        </div>
+        <p class="funnel-headline"><%= funnelHeadline %></p>
+        <%
+          const _steps = [
+            { label: 'Exposure', hint: 'Sponsored + Featured impressions', n: funnel.impressions },
+            { label: 'Profile views', hint: 'opened the profile', n: funnel.views },
+            { label: 'Website clicks', hint: 'clicked through to your site', n: funnel.websiteClicks },
+            { label: 'Leads', hint: 'inquiries received', n: funnel.leads },
+            { label: 'Qualified', hint: 'status Qualified or Won', n: funnel.byStatus.qualified + funnel.byStatus.won },
+            { label: 'Won', hint: 'status Won', n: funnel.byStatus.won },
+          ];
+          const _max = Math.max(1, ..._steps.map((s) => s.n));
+        %>
+        <div class="funnel">
+          <% _steps.forEach(function (s, i) { %>
+          <div class="funnel-step">
+            <div class="funnel-top"><b><%= s.label %></b><span><%= s.n.toLocaleString('en-US') %></span></div>
+            <div class="funnel-bar"><i style="width:<%= Math.max(s.n > 0 ? 3 : 0, Math.round(s.n / _max * 100)) %>%"></i></div>
+            <small><%= s.hint %></small>
+            <% if (i === 3) { %><small class="funnel-rate">view → inquiry: <b><%= funnel.contactRate === null ? '—' : funnel.contactRate + '%' %></b></small><% } %>
+            <% if (i === 5) { %><small class="funnel-rate">inquiry → won: <b><%= funnel.winRate === null ? '—' : funnel.winRate + '%' %></b></small><% } %>
+          </div>
+          <% }) %>
+        </div>
+        <p class="form-note">This same report lands automatically every week — on your chosen channels — whenever there's activity. <a href="/dashboard/settings">Notification settings →</a></p>
+      </div>
+
+      <div class="section-head" style="margin-top:2.4rem"><h2>Top locations</h2><% if (selected) { %><a class="btn btn-ghost btn-sm" href="/dashboard/analytics">All listings</a><% } %></div>
+      <% if (!topLocations.length) { %>
+        <div class="empty-state">
+          <h3>No audience yet</h3>
+          <p><% if (selected) { %>No human views recorded for <b><%= selected.name %></b> yet.<% } else { %>No human views recorded across your listings yet.<% } %> Share your profiles — every genuine visit shows up here.</p>
+        </div>
+      <% } else { %>
+        <div class="table-wrap">
+          <table class="table ana-table">
+            <thead><tr><th>Location</th><th class="ta-right">Views</th><th class="ta-right">Unique</th><th class="ta-right"></th></tr></thead>
+            <tbody>
+              <% topLocations.forEach(function (t) { %>
+              <% const label = [t.city, t.country].filter(Boolean).join(', ') || 'Unknown location'; %>
+              <tr<%= drill && drill.city === (t.city || '') && drill.country === (t.country || '') ? ' class="ana-active"' : '' %>>
+                <td><strong><%= label %></strong></td>
+                <td class="ta-right"><%= t.views %></td>
+                <td class="ta-right"><%= t.uniques %></td>
+                <td class="ta-right"><a class="btn btn-ghost btn-xs" href="/dashboard/analytics?<%= selected ? 'listing=' + selected.id + '&' : '' %>city=<%= encodeURIComponent(t.city || '') %>&country=<%= encodeURIComponent(t.country || '') %>">Drill down</a></td>
+              </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+      <% } %>
+
+      <% if (drill) { %>
+      <div class="panel ana-drill" style="margin-top:1.6rem">
+        <div class="panel-h-t">
+          <h3><%= [drill.city, drill.country].filter(Boolean).join(', ') || 'Unknown location' %></h3>
+          <a class="muted" style="font-size:.8rem" href="/dashboard/analytics<%= selected ? '?listing=' + selected.id : '' %>">Clear drill-down ✕</a>
+        </div>
+        <div class="ana-drill-grid">
+          <div><span class="stat-label">Views</span><b><%= drill.views %></b></div>
+          <div><span class="stat-label">Unique visitors</span><b><%= drill.uniques %></b></div>
+          <div><span class="stat-label">Profile clicks</span><b><%= drill.profileClicks %></b><small>found on FirmLedger, opened the profile</small></div>
+          <div><span class="stat-label">Website clicks</span><b><%= drill.websiteClicks %></b><small>clicked through to the business site</small></div>
+          <div><span class="stat-label">Leads</span><b><%= drill.leads %></b><small>inquiries from this location</small></div>
+        </div>
+      </div>
+      <% } %>
+
+      <% if (!selected && listings.length > 1) { %>
+      <div class="section-head" style="margin-top:2.4rem"><h2>Per listing</h2></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Listing</th><th class="ta-right">Views (7d)</th><th class="ta-right">Views (all)</th><th class="ta-right"></th></tr></thead>
+          <tbody>
+            <% listings.forEach(function (gl) { const pl = perListing[gl.id] || { views: 0, week: 0 }; %>
+            <tr>
+              <td><a href="/listing/<%= gl.slug %>"><strong><%= gl.name %></strong></a></td>
+              <td class="ta-right"><%= pl.week %></td>
+              <td class="ta-right"><%= pl.views %></td>
+              <td class="ta-right"><a class="btn btn-ghost btn-xs" href="/dashboard/analytics?listing=<%= gl.id %>">View</a></td>
+            </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+      <% } %>
+      <p class="form-note" style="margin-top:1.4rem">Locations come from coarse network signals and are only shown when genuinely known — hence “Unknown location” for the rest. Unique visitors are distinct devices per listing, counted without cookies or accounts.</p>
+    <% } %>
+  </div>
+</section>
+
+<%- include('../partials/bottom') %>
