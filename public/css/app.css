@@ -2959,13 +2959,19 @@ select.input::-ms-expand,
 }
 .lead-list-scroll::-webkit-scrollbar { width: 8px; }
 .lead-list-scroll::-webkit-scrollbar-thumb { background: var(--hair2); border-radius: 999px; }
+/* The pager sits under the frame inside the same 84vh column, so it keeps a
+   tight margin: every row it does not spend is a row the list gets to show. */
+.lead-list-col .pagination { margin-top: 10px; }
 .lead-row { display: flex; flex: 0 0 auto; gap: 12px; align-items: flex-start; justify-content: space-between; padding: 11px 14px; border: 0; border-bottom: 1px solid var(--hair); border-radius: 0; background: transparent; text-decoration: none; color: inherit; }
 .lead-row:last-child { border-bottom: 0; }
 .lead-row:hover { background: var(--paper); text-decoration: none; }
 /* The row that owns the thread, and the unread one, are marked by an inset
-   bar — inside the row, so nothing shifts as a lead is opened or read. */
+   bar — inside the row, so nothing shifts as a lead is opened or read. The
+   open row also names itself in the accent, so "this is the chat on the right"
+   and "this one is unread" stay two different signals in one flat list. */
 .lead-row.is-new { box-shadow: inset 3px 0 0 var(--accent); }
 .lead-row.open { background: var(--soft); box-shadow: inset 3px 0 0 var(--accent); }
+.lead-row.open .lead-row-title b { color: var(--accent2); }
 .lead-row-main { display: grid; gap: 3px; min-width: 0; }
 .lead-row-main b { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lead-row-main small { font-size: 12px; line-height: 1.5; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -3003,7 +3009,13 @@ select.input::-ms-expand,
 .lead-detail .panel-h-t h3 { margin-bottom: 6px; }
 /* Contact facts keep their place, one notch tighter than a page table. */
 .lead-detail .facts th, .lead-detail .facts td { padding: 7px 2px; font-size: 13px; }
-.lead-detail-empty { color: var(--muted); font-size: 13.5px; }
+/* Nothing selected yet: the pane is chat-height now, so its one line sits in
+   the middle of it instead of stranded at the top of an empty box. */
+.lead-detail-empty {
+  color: var(--muted); font-size: 13.5px;
+  align-items: center; justify-content: center; text-align: center;
+}
+.lead-detail-empty p { max-width: 46ch; }
 .lead-msg { margin: 14px 0 0; padding: 14px 16px; border: 1px solid var(--hair); border-radius: 10px; background: var(--paper); font-size: 14px; line-height: 1.7; white-space: normal; }
 .lead-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
 
