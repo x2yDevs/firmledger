@@ -115,7 +115,7 @@
           <div class="panel lead-detail">
             <div class="panel-h-t">
               <h3><%= openRole === 'inquirer' ? open.listing_name : open.name %></h3>
-              <a class="muted" style="font-size:.8rem" href="/dashboard/leads?<%= _fqs.replace(/&$/, '') %>">Close ✕</a>
+              <a class="muted" style="font-size:.8rem" href="/dashboard/leads<%= _fqs ? '?' + _fqs.replace(/&$/, '') : '' %>">Close ✕</a>
             </div>
             <p class="muted" style="font-size:13px;margin-top:-4px">
               <% if (openRole === 'inquirer') { %>
@@ -211,7 +211,7 @@
               </div>
               <form class="lead-note-form" method="post" action="/dashboard/leads/<%= open.id %>/note">
                 <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                <label><span class="sr-only">Add a note</span><textarea class="input" name="note" rows="2" maxlength="2000" placeholder="Add a private note…"></textarea></label>
+                <label><span class="sr-only">Add a note</span><textarea class="input" name="note" rows="2" maxlength="2000" required placeholder="Add a private note…"></textarea></label>
                 <button class="btn btn-ghost btn-sm" type="submit">Add note</button>
               </form>
             </div>
