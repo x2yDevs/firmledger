@@ -47,7 +47,7 @@ const session = require('./src/lib/session');
 const util = require('./src/lib/util');
 
 /* Bumped on every deploy that changes public/ assets — defeats the 7-day static cache. */
-const ASSET_V = '53';
+const ASSET_V = '54';
 
 const app = express();
 app.set('trust proxy', true);

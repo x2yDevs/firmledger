@@ -94,6 +94,8 @@ const suites = [
   ['Status monitor accuracy', 'status-monitor.test.js'],
   ['Pro growth: fair rotation, analytics, leads', 'pro-growth.test.js'],
   ['Conversion funnel + weekly leads digest', 'leads-digest.test.js'],
+  ['Leads messaging — two-user conversation over HTTP', 'leads-messaging.test.js'],
+  ['Focus hygiene — no rings on inputs & dropdowns', 'focus-hygiene.test.js'],
   ['Production database upgrade', 'db-upgrade.test.js'],
   ['User dashboard pages and interactions', 'user-area.test.js'],
 ];
