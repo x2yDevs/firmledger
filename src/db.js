@@ -930,6 +930,23 @@ CREATE TABLE IF NOT EXISTS lead_messages (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_lead_msgs ON lead_messages(lead_id, id);
+
+/* One unfinished "Contact this business" form per member per listing.
+   A rejected inquiry (too short, bad phone, rate-limited…) must never cost the
+   member the message they typed: the route stashes the fields here, redirects
+   back to the profile, and the form is re-filled once — then the row is gone.
+   Cascades away with the member or the listing; expired rows are swept on
+   write, so the table never grows. */
+CREATE TABLE IF NOT EXISTS lead_drafts (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  listing_id INTEGER NOT NULL REFERENCES listings(id) ON DELETE CASCADE,
+  name TEXT NOT NULL DEFAULT '',
+  phone TEXT NOT NULL DEFAULT '',
+  looking_for TEXT NOT NULL DEFAULT '',
+  message TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (user_id, listing_id)
+);
 `);
 
 /* Existing deployments: add the inquirer column if the leads table pre-dates it. */

@@ -30,6 +30,10 @@ const BACKUP_EXCLUDED_TABLES = new Set([
   // API credentials, encrypted webhook signing material and high-volume usage
   // aggregates never belong in a downloadable account/admin backup.
   'api_keys', 'api_usage_daily', 'api_usage_endpoint_daily', 'api_webhooks', 'api_webhook_deliveries',
+  // Unfinished "Contact this business" forms: one-shot, self-expiring, and pure
+  // personal data a restore would never need. The leads themselves (and their
+  // messages and notes) ARE backed up.
+  'lead_drafts',
 ]);
 function databaseSnapshot() {
   const tables = db.prepare("SELECT name, sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all();

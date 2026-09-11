@@ -21,6 +21,12 @@ function finalizeVerifiedClaim(c, l, newUser) {
     "UPDATE listings SET claimed=1, owner_user_id=?, last_verified_at=?, confidence=MIN(97, confidence + 13), updated_at=datetime('now') WHERE id=?"
   ).run(newUser.id, now, l.id);
   db.prepare("UPDATE claims SET status='rejected' WHERE listing_id=? AND id<>? AND status='pending'").run(l.id, c.id);
+  /* Inquiries follow the business. A verified claim can displace a previous
+     owner, and the conversations members already opened belong to whoever owns
+     the record now — not to the account that lost it. */
+  try { require('./leads').transferListing(l.id, newUser.id); } catch (e) {
+    console.error('[claim] lead transfer failed:', l.id, e && e.message);
+  }
   const claimedListing = db.prepare('SELECT * FROM listings WHERE id=?').get(l.id);
   webhooks.dispatch('claim.verified', {
     listing: claimedListing || l,

@@ -20,6 +20,7 @@
     "test:pro-growth": "node tests/pro-growth.test.js",
     "test:leads-digest": "node tests/leads-digest.test.js",
     "test:leads-chat": "node tests/leads-messaging.test.js",
+    "test:leads-contact": "node tests/leads-contact.test.js",
     "test:leads-house": "node tests/leads-housekeeping.test.js",
     "test:leads-fit": "node tests/leads-blog-fit.test.js",
     "test:blog": "node tests/blog-content.test.js",
