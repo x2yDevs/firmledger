@@ -8,9 +8,9 @@
       <p class="muted">Who is viewing your listings, where they come from, and what they do next. Bots, your own views and admin views are never counted.</p>
     </div>
     <% if (listings.length > 1) { %>
-    <form class="ana-pick" method="get" action="/dashboard/analytics">
+    <form class="ana-pick fl-select" method="get" action="/dashboard/analytics">
       <label><span class="muted" style="font-size:12.5px">Listing</span>
-        <select name="listing" onchange="this.form.submit()">
+        <select class="input" name="listing" onchange="this.form.submit()">
           <option value="">All my listings (<%= listings.length %>)</option>
           <% listings.forEach(function (gl) { %><option value="<%= gl.id %>"<%= selected && selected.id === gl.id ? ' selected' : '' %>><%= gl.name %></option><% }) %>
         </select>
@@ -90,7 +90,7 @@
           <p><% if (selected) { %>No human views recorded for <b><%= selected.name %></b> yet.<% } else { %>No human views recorded across your listings yet.<% } %> Share your profiles — every genuine visit shows up here.</p>
         </div>
       <% } else { %>
-        <div class="table-wrap">
+        <div class="table-wrap ana-table-wrap">
           <table class="table ana-table">
             <thead><tr><th>Location</th><th class="ta-right">Views</th><th class="ta-right">Unique</th><th class="ta-right"></th></tr></thead>
             <tbody>
@@ -126,7 +126,7 @@
 
       <% if (!selected && listings.length > 1) { %>
       <div class="section-head" style="margin-top:2.4rem"><h2>Per listing</h2></div>
-      <div class="table-wrap">
+      <div class="table-wrap ana-table-wrap">
         <table class="table">
           <thead><tr><th>Listing</th><th class="ta-right">Views (7d)</th><th class="ta-right">Views (all)</th><th class="ta-right"></th></tr></thead>
           <tbody>

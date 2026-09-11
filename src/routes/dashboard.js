@@ -1324,30 +1324,69 @@ router.get('/dashboard/analytics', (req, res) => {
   });
 });
 
-/* ================= Leads inbox (FirmLedger Pro) =================
- * Inquiries sent through “Contact this business” on the owner's claimed
- * listings. Collected for every claimed listing; reading + managing them is
- * Pro. Free owners see how many are waiting, locked behind the upgrade. */
+/* ================= Leads inbox =================
+ * Two sides share one page:
+ *   Received  — inquiries on the owner's claimed listings (Pro to manage)
+ *   Sent      — listings this member contacted (always available)
+ * Both sides talk in-thread; private notes stay owner-only. */
 router.get('/dashboard/leads', (req, res) => {
   const leads = require('../lib/leads');
   const pro = hasProAccess(req.user);
   const counts = leads.countsForOwner(req.user.id);
+  const sentCounts = leads.countsForInquirer(req.user.id);
   const status = String(req.query.status || '');
   const listingId = Number(req.query.listing) || 0;
-  const archived = req.query.box === 'archived';
+  const boxKind = req.query.box === 'archived' ? 'archived'
+    : req.query.box === 'sent' ? 'sent'
+    : 'received';
+  const archived = boxKind === 'archived';
   const openId = Number(req.query.open) || 0;
   const listings = db.prepare(
     'SELECT id, name FROM listings WHERE owner_user_id=? ORDER BY name ASC'
   ).all(req.user.id);
-  const box = pro
-    ? leads.listForOwner(req.user.id, { status, archived, listingId, page: req.query.page })
-    : { rows: [], total: 0, page: 1, pages: 1 };
-  const open = pro && openId ? leads.getOwned(openId, req.user.id) : null;
+
+  let box = { rows: [], total: 0, page: 1, pages: 1 };
+  let open = null;
+  let openRole = null;
+  let openMessages = [];
+  let openNotes = [];
+
+  if (boxKind === 'sent') {
+    box = leads.listForInquirer(req.user.id, { page: req.query.page });
+    if (openId) {
+      const acc = leads.getAccessible(openId, req.user.id);
+      if (acc && acc.role === 'inquirer') {
+        open = acc;
+        openRole = 'inquirer';
+        openMessages = leads.messagesFor(open.id, req.user.id);
+      }
+    }
+  } else if (pro) {
+    box = leads.listForOwner(req.user.id, { status, archived, listingId, page: req.query.page });
+    if (openId) {
+      const acc = leads.getAccessible(openId, req.user.id);
+      if (acc && acc.role === 'owner') {
+        open = acc;
+        openRole = 'owner';
+        openMessages = leads.messagesFor(open.id, req.user.id);
+        openNotes = leads.notesFor(open.id, req.user.id);
+      }
+    }
+  } else if (openId) {
+    /* Free owners can still open a sent thread if they were the inquirer. */
+    const acc = leads.getAccessible(openId, req.user.id);
+    if (acc && acc.role === 'inquirer') {
+      open = acc;
+      openRole = 'inquirer';
+      openMessages = leads.messagesFor(open.id, req.user.id);
+    }
+  }
+
   res.render('dashboard/leads', {
     meta: { title: 'Leads — FirmLedger', description: '', robots: 'noindex' },
-    pro, counts, box, listings, open,
-    openNotes: pro && open ? leads.notesFor(open.id, req.user.id) : [],
-    filters: { status, listingId, archived },
+    pro, counts, sentCounts, box, listings, open, openRole,
+    openMessages, openNotes,
+    filters: { status, listingId, archived, box: boxKind },
     ok: req.query.ok || '', err: req.query.err || '',
     STATUS_LABELS: leads.STATUS_LABELS, STATUSES: leads.STATUSES,
   });
@@ -1387,6 +1426,75 @@ router.post('/dashboard/leads/:id/archive', (req, res) => {
   res.redirect('/dashboard/leads' + (r.ok
     ? '?ok=' + encodeURIComponent(toArchived ? 'Lead archived.' : 'Lead restored to your inbox.')
     : '?err=' + encodeURIComponent(r.error || 'Could not move that lead.')));
+});
+
+/* Two-way reply — owner or inquirer, both sides of the same thread. */
+router.post('/dashboard/leads/:id/reply', (req, res) => {
+  const leads = require('../lib/leads');
+  const acc = leads.getAccessible(req.params.id, req.user.id);
+  if (!acc) {
+    return res.redirect('/dashboard/leads?err=' + encodeURIComponent('Conversation not found.'));
+  }
+  /* Owners need Pro to reply from the business inbox; inquirers always can. */
+  if (acc.role === 'owner' && !hasProAccess(req.user)) {
+    return res.redirect('/dashboard/leads?err=' + encodeURIComponent('Replying from the business inbox is a FirmLedger Pro feature — upgrade to talk with inquirers.'));
+  }
+  const r = leads.addMessage(req.params.id, req.user.id, req.body.body || req.body.message);
+  const boxQ = acc.role === 'inquirer' ? 'box=sent&' : '';
+  const back = `/dashboard/leads?${boxQ}open=${encodeURIComponent(req.params.id)}`;
+  if (!r.ok) {
+    return res.redirect(back + '&err=' + encodeURIComponent(r.error || 'Could not send that message.'));
+  }
+  /* Notify the other party. */
+  const notify = require('../lib/notify');
+  const { sendBranded } = require('../lib/mailer');
+  const util2 = require('../lib/util');
+  const esc = util2.escHtml;
+  const preview = String(r.body || '').slice(0, 140);
+  if (r.sender === 'owner') {
+    /* Business replied → ping the inquirer. */
+    if (acc.inquirer_user_id) {
+      notify.notifyUser(acc.inquirer_user_id, {
+        kind: 'lead',
+        title: `Reply from ${acc.listing_name}`,
+        body: preview,
+        url: `/dashboard/leads?box=sent&open=${acc.id}`,
+      });
+    }
+    if (acc.email) {
+      sendBranded(acc.email, `Reply from ${acc.listing_name} on FirmLedger`, {
+        alias: 'support',
+        kicker: 'Lead reply',
+        title: `${esc(acc.listing_name)} replied to your inquiry`,
+        preheader: `${acc.listing_name} sent you a message on FirmLedger.`,
+        paragraphs: [esc(r.body).replace(/\n/g, '<br>')],
+        cta: { label: 'Continue the conversation', url: util2.siteUrl(`/dashboard/leads?box=sent&open=${acc.id}`) },
+        note: 'You are talking through FirmLedger Leads — the business email stays private.',
+      }).catch(() => {});
+    }
+  } else {
+    /* Inquirer replied → ping the owner. */
+    notify.notifyUser(acc.owner_user_id, {
+      kind: 'lead',
+      title: `Reply from ${acc.name} — ${acc.listing_name}`,
+      body: preview,
+      url: `/dashboard/leads?open=${acc.id}`,
+    });
+    const owner = db.prepare('SELECT email, name FROM users WHERE id=?').get(acc.owner_user_id);
+    if (owner && owner.email) {
+      sendBranded(owner.email, `Reply on ${acc.listing_name} — ${acc.name}`, {
+        alias: 'support',
+        replyTo: `${acc.name} <${acc.email}>`,
+        kicker: 'Lead reply',
+        title: `${esc(acc.name)} replied about ${esc(acc.listing_name)}`,
+        preheader: `A follow-up on your lead from ${acc.name}.`,
+        paragraphs: [esc(r.body).replace(/\n/g, '<br>')],
+        cta: { label: 'Open conversation', url: util2.siteUrl(`/dashboard/leads?open=${acc.id}`) },
+        note: 'Reply in your Leads inbox to keep talking — both of you stay on FirmLedger.',
+      }).catch(() => {});
+    }
+  }
+  res.redirect(back + '&ok=' + encodeURIComponent('Message sent.'));
 });
 
 /* ================= Claimable search (JSON) ================= */

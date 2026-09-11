@@ -225,22 +225,43 @@ section('Leads — validation + create');
   const claimed = getListing(addListing({ slug: 'lead-co', name: 'Lead Co', claimed: 1, owner_user_id: ownerId }));
   const unclaimed = getListing(addListing({ slug: 'lead-plain', name: 'Lead Plain' }));
 
-  const bad = leads.create({ listing: claimed, fields: { name: 'J', email: 'nope', message: 'hi' } });
-  check('create rejects bad fields', !bad.ok && bad.errors.length === 3, bad.ok ? 'accepted!' : bad.errors.join(' | '));
+  const inquirerId = addUser('inquirer@test.dev', 'free');
+  const noAuth = leads.create({
+    listing: claimed,
+    fields: { name: 'Jane Wanjiku', email: 'jane@example.com', message: 'Please send a quote for ten desks.' },
+  });
+  check('create requires a signed-in FirmLedger member', !noAuth.ok);
+  const bad = leads.create({ listing: claimed, fields: { name: 'J', email: 'nope', message: 'hi' }, inquirerUserId: inquirerId });
+  check('create rejects bad fields', !bad.ok && bad.errors && bad.errors.length >= 2, bad.ok ? 'accepted!' : (bad.errors || [bad.error]).join(' | '));
   const un = leads.create({
     listing: unclaimed,
     fields: { name: 'Jane Wanjiku', email: 'jane@example.com', message: 'Please send a quote for ten desks.' },
+    inquirerUserId: inquirerId,
   });
   check('create rejects unclaimed listings', !un.ok);
+  const self = leads.create({
+    listing: claimed,
+    fields: { name: 'Owner Self', email: 'owner-pro@test.dev', message: 'Please send a quote for ten desks.' },
+    inquirerUserId: ownerId,
+  });
+  check('create rejects the listing owner contacting themselves', !self.ok);
   const ok = leads.create({
     listing: claimed,
     fields: { name: 'Jane Wanjiku', email: 'jane@example.com', phone: '+254700000000', looking_for: 'Ten desks', message: 'Please send a quote for ten desks.' },
     city: 'Nairobi', country: 'Kenya',
+    inquirerUserId: inquirerId,
   });
   check('create stores a valid lead', ok.ok && ok.id > 0);
   const row = db.prepare('SELECT * FROM leads WHERE id=?').get(ok.id);
-  check('stored lead carries city + looking_for',
-    row.city === 'Nairobi' && row.looking_for === 'Ten desks' && row.status === 'new' && row.archived === 0);
+  check('stored lead carries city + looking_for + inquirer',
+    row.city === 'Nairobi' && row.looking_for === 'Ten desks' && row.status === 'new' && row.archived === 0 && row.inquirer_user_id === inquirerId);
+  const msgs = leads.messagesFor(ok.id, inquirerId);
+  check('opening message seeds the thread', msgs.length === 1 && msgs[0].sender === 'inquirer');
+  const reply = leads.addMessage(ok.id, ownerId, 'Thanks Jane — quote attached.');
+  check('owner can reply in-thread', reply.ok);
+  const after = leads.messagesFor(ok.id, ownerId);
+  check('thread has both sides', after.length === 2 && after[1].sender === 'owner');
+  check('owner reply flips status to contacted', leads.getOwned(ok.id, ownerId).status === 'contacted');
 }
 
 section('Leads — inbox, statuses, notes, ownership');
@@ -248,7 +269,12 @@ section('Leads — inbox, statuses, notes, ownership');
   const mine = getListing(db.prepare('SELECT id FROM listings WHERE slug=?').get('lead-co').id);
   const other = getListing(addListing({ slug: 'lead-other', name: 'Lead Other', claimed: 1, owner_user_id: otherId }));
   const mk = (listing, name, status) => {
-    const r = leads.create({ listing, fields: { name, email: `${name.replace(/\s/g, '').toLowerCase()}@example.com`, message: 'A proper inquiry message here.' } });
+    const inq = addUser(`${name.replace(/\s/g, '').toLowerCase()}@inq.test`, 'free');
+    const r = leads.create({
+      listing,
+      fields: { name, email: `${name.replace(/\s/g, '').toLowerCase()}@example.com`, message: 'A proper inquiry message here.' },
+      inquirerUserId: inq,
+    });
     if (status) leads.setStatus(r.id, listing.owner_user_id, status);
     return r.id;
   };
@@ -258,13 +284,14 @@ section('Leads — inbox, statuses, notes, ownership');
   mk(other, 'Eve Stranger');
 
   const c = leads.countsForOwner(ownerId);
-  check('counts split by status', c.new === 2 && c.contacted === 1 && c.won === 1 && c.total === 4 && c.archived === 0, JSON.stringify(c));
+  /* Jane (first section, owner-replied → contacted) + Brian (new) + Cynthia (contacted) + David (won). */
+  check('counts split by status', c.new === 1 && c.contacted === 2 && c.won === 1 && c.total === 4 && c.archived === 0, JSON.stringify(c));
   check("another owner's lead is invisible", leads.countsForOwner(otherId).total === 1);
 
   const all = leads.listForOwner(ownerId, {});
   check('list newest-first', all.total === 4 && all.rows.length === 4);
   const news = leads.listForOwner(ownerId, { status: 'new' });
-  check('list filters by status', news.total === 2 && news.rows.every((r) => r.status === 'new'));
+  check('list filters by status', news.total === 1 && news.rows.every((r) => r.status === 'new'));
   const paged = leads.listForOwner(ownerId, { page: 2, perPage: 3 });
   check('list paginates', paged.total === 4 && paged.rows.length === 1 && paged.pages === 2, JSON.stringify({ n: paged.rows.length, pages: paged.pages }));
 

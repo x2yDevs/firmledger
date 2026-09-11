@@ -3,24 +3,29 @@
 <%
   /* Keep the current filters on every link inside the inbox. */
   const _fq = [];
-  if (filters.status) _fq.push('status=' + encodeURIComponent(filters.status));
-  if (filters.listingId) _fq.push('listing=' + encodeURIComponent(filters.listingId));
-  if (filters.archived) _fq.push('box=archived');
+  if (filters.box === 'sent') _fq.push('box=sent');
+  else {
+    if (filters.status) _fq.push('status=' + encodeURIComponent(filters.status));
+    if (filters.listingId) _fq.push('listing=' + encodeURIComponent(filters.listingId));
+    if (filters.archived) _fq.push('box=archived');
+  }
   const _fqs = _fq.length ? _fq.join('&') + '&' : '';
+  const isSent = filters.box === 'sent';
+  const isArchived = filters.archived;
 %>
 <section class="page-head">
   <div class="container dash-head">
     <div>
       <p class="crumb"><a href="/dashboard">Dashboard</a> → Leads</p>
       <h1>Leads inbox</h1>
-      <p class="muted">Inquiries from the “Contact this business” button on your claimed listings — your email address is never shown to inquirers.</p>
+      <p class="muted">Talk with verified businesses you contacted — and manage inquiries on listings you own. Your FirmLedger email is used automatically; the business email stays private.</p>
     </div>
-    <% if (pro) { %>
-    <form class="ana-pick" method="get" action="/dashboard/leads">
+    <% if (pro && !isSent) { %>
+    <form class="ana-pick fl-select" method="get" action="/dashboard/leads">
       <% if (filters.status) { %><input type="hidden" name="status" value="<%= filters.status %>"><% } %>
       <% if (filters.archived) { %><input type="hidden" name="box" value="archived"><% } %>
       <label><span class="muted" style="font-size:12.5px">Listing</span>
-        <select name="listing" onchange="this.form.submit()">
+        <select class="input" name="listing" onchange="this.form.submit()">
           <option value="">All listings</option>
           <% listings.forEach(function (gl) { %><option value="<%= gl.id %>"<%= Number(filters.listingId) === gl.id ? ' selected' : '' %>><%= gl.name %></option><% }) %>
         </select>
@@ -35,19 +40,33 @@
     <% if (typeof ok !== 'undefined' && ok) { %><div class="alert alert-ok"><%= ok %></div><% } %>
     <% if (typeof err !== 'undefined' && err) { %><div class="alert alert-err"><%= err %></div><% } %>
 
-    <% if (!pro) { %>
+    <div class="lead-tabs" role="tablist" aria-label="Lead boxes">
+      <a role="tab" aria-selected="<%= !isSent && !isArchived && !filters.status %>" class="lead-tab<%= !isSent && !isArchived && !filters.status ? ' on' : '' %>" href="/dashboard/leads<%= filters.listingId ? '?listing=' + filters.listingId : '' %>">Received <span class="lead-n"><%= counts.total %></span></a>
+      <a role="tab" aria-selected="<%= isSent %>" class="lead-tab<%= isSent ? ' on' : '' %>" href="/dashboard/leads?box=sent">Sent <span class="lead-n"><%= sentCounts.total %></span></a>
+      <% if (pro && !isSent) { %>
+        <% STATUSES.forEach(function (s) { %>
+        <a role="tab" aria-selected="<%= filters.status === s && !isArchived %>" class="lead-tab<%= filters.status === s && !isArchived ? ' on' : '' %>" href="/dashboard/leads?status=<%= s %><%= filters.listingId ? '&listing=' + filters.listingId : '' %>"><%= STATUS_LABELS[s] %> <span class="lead-n"><%= counts[s] || 0 %></span></a>
+        <% }) %>
+        <a role="tab" aria-selected="<%= isArchived %>" class="lead-tab<%= isArchived ? ' on' : '' %>" href="/dashboard/leads?box=archived<%= filters.listingId ? '&listing=' + filters.listingId : '' %>">Archived <span class="lead-n"><%= counts.archived %></span></a>
+      <% } %>
+    </div>
+
+    <% if (!isSent && !pro) { %>
       <div class="panel pro-locked" style="max-width:720px">
         <div class="plc-left">
           <span class="plc-lock" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></span>
           <div>
-            <h3 style="margin:0">Leads inbox ✦ FirmLedger Pro</h3>
+            <h3 style="margin:0">Business inbox ✦ FirmLedger Pro</h3>
             <p style="font-size:13.5px;color:var(--muted);margin:.35rem 0 0">
               <% if (counts.total) { %>
-                You have <b><%= counts.total %> waiting <%= counts.total === 1 ? 'inquiry' : 'inquiries' %></b><%= counts.new ? ` — ${counts.new} new` : '' %>. Inquiries keep arriving while you're on Free; reading and managing them unlocks with Pro.
+                You have <b><%= counts.total %> waiting <%= counts.total === 1 ? 'inquiry' : 'inquiries' %></b><%= counts.new ? ` — ${counts.new} new` : '' %>. Inquiries keep arriving while you're on Free; reading, replying and managing them unlocks with Pro.
               <% } else { %>
-                Every claimed listing carries a “Contact this business” button, and inquiries land here with statuses, notes and archiving. Nothing waiting yet — claim a listing and share it.
+                Every claimed listing carries a “Contact this business” button for signed-in members. Inquiries land here with statuses, live chat and notes. Nothing waiting yet — claim a listing and share it.
               <% } %>
             </p>
+            <% if (sentCounts.total) { %>
+            <p style="font-size:13.5px;color:var(--muted);margin:.5rem 0 0">You already have <b><%= sentCounts.total %></b> conversation<%= sentCounts.total === 1 ? '' : 's' %> you started — open the <a href="/dashboard/leads?box=sent">Sent</a> tab anytime.</p>
+            <% } %>
           </div>
         </div>
         <div class="plc-actions">
@@ -56,32 +75,28 @@
         </div>
       </div>
     <% } else { %>
-      <div class="lead-tabs" role="tablist" aria-label="Lead filters">
-        <a role="tab" aria-selected="<%= !filters.status && !filters.archived %>" class="lead-tab<%= !filters.status && !filters.archived ? ' on' : '' %>" href="/dashboard/leads<%= filters.listingId ? '?listing=' + filters.listingId : '' %>">All <span class="lead-n"><%= counts.total %></span></a>
-        <% STATUSES.forEach(function (s) { %>
-        <a role="tab" aria-selected="<%= filters.status === s && !filters.archived %>" class="lead-tab<%= filters.status === s && !filters.archived ? ' on' : '' %>" href="/dashboard/leads?status=<%= s %><%= filters.listingId ? '&listing=' + filters.listingId : '' %>"><%= STATUS_LABELS[s] %> <span class="lead-n"><%= counts[s] || 0 %></span></a>
-        <% }) %>
-        <a role="tab" aria-selected="<%= filters.archived %>" class="lead-tab<%= filters.archived ? ' on' : '' %>" href="/dashboard/leads?box=archived<%= filters.listingId ? '&listing=' + filters.listingId : '' %>">Archived <span class="lead-n"><%= counts.archived %></span></a>
-      </div>
-
       <div class="lead-layout">
         <div class="lead-list-col">
           <% if (!box.rows.length) { %>
             <div class="empty-state">
-              <h3><%= filters.archived ? 'Nothing archived' : filters.status ? 'No ' + STATUS_LABELS[filters.status].toLowerCase() + ' leads' : 'No inquiries yet' %></h3>
-              <p><%= filters.archived || filters.status ? 'Try another filter — or clear it to see everything.' : 'When a visitor contacts one of your claimed listings, the inquiry appears here and in your email.' %></p>
-              <% if (filters.archived || filters.status) { %><a class="btn btn-ghost btn-sm" href="/dashboard/leads">Clear filters</a><% } %>
+              <h3><%= isSent ? 'No conversations yet' : isArchived ? 'Nothing archived' : filters.status ? 'No ' + STATUS_LABELS[filters.status].toLowerCase() + ' leads' : 'No inquiries yet' %></h3>
+              <p><%= isSent
+                ? 'When you contact a verified business from its listing page, the conversation appears here so you can keep talking.'
+                : isArchived || filters.status
+                  ? 'Try another filter — or clear it to see everything.'
+                  : 'When a FirmLedger member contacts one of your claimed listings, the inquiry appears here.' %></p>
+              <% if (!isSent && (isArchived || filters.status)) { %><a class="btn btn-ghost btn-sm" href="/dashboard/leads">Clear filters</a><% } %>
             </div>
           <% } else { %>
-            <div class="lead-list">
+            <div class="lead-list lead-list-scroll">
               <% box.rows.forEach(function (ld) { %>
-              <a class="lead-row<%= open && open.id === ld.id ? ' open' : '' %><%= ld.status === 'new' ? ' is-new' : '' %>" href="/dashboard/leads?<%= _fqs %>open=<%= ld.id %>">
+              <a class="lead-row<%= open && open.id === ld.id ? ' open' : '' %><%= !isSent && ld.status === 'new' ? ' is-new' : '' %>" href="/dashboard/leads?<%= _fqs %>open=<%= ld.id %>">
                 <span class="lead-row-main">
-                  <b><%= ld.name %></b>
-                  <small class="muted"><%= ld.looking_for || ld.message.slice(0, 80) %></small>
-                  <small class="muted"><%= ld.listing_name %> · <%= fmtDate(ld.created_at) %></small>
+                  <b><%= isSent ? ld.listing_name : ld.name %></b>
+                  <small class="muted"><%= ld.looking_for || (ld.message || '').slice(0, 80) %></small>
+                  <small class="muted"><%= isSent ? ld.name : ld.listing_name %> · <%= fmtDate(ld.updated_at || ld.created_at) %></small>
                 </span>
-                <span class="pill pill-lead-<%= ld.status %>"><%= STATUS_LABELS[ld.status] %></span>
+                <% if (!isSent) { %><span class="pill pill-lead-<%= ld.status %>"><%= STATUS_LABELS[ld.status] %></span><% } %>
               </a>
               <% }) %>
             </div>
@@ -99,24 +114,65 @@
           <% if (open) { %>
           <div class="panel lead-detail">
             <div class="panel-h-t">
-              <h3><%= open.name %></h3>
+              <h3><%= openRole === 'inquirer' ? open.listing_name : open.name %></h3>
               <a class="muted" style="font-size:.8rem" href="/dashboard/leads?<%= _fqs.replace(/&$/, '') %>">Close ✕</a>
             </div>
-            <p class="muted" style="font-size:13px;margin-top:-4px">For <a href="/listing/<%= open.listing_slug %>"><%= open.listing_name %></a> · <%= fmtDate(open.created_at) %><% if (open.city || open.country) { %> · <%= [open.city, open.country].filter(Boolean).join(', ') %><% } %></p>
+            <p class="muted" style="font-size:13px;margin-top:-4px">
+              <% if (openRole === 'inquirer') { %>
+                Conversation with <a href="/listing/<%= open.listing_slug %>"><%= open.listing_name %></a> · started <%= fmtDate(open.created_at) %>
+              <% } else { %>
+                For <a href="/listing/<%= open.listing_slug %>"><%= open.listing_name %></a> · <%= fmtDate(open.created_at) %><% if (open.city || open.country) { %> · <%= [open.city, open.country].filter(Boolean).join(', ') %><% } %>
+              <% } %>
+            </p>
+
+            <% if (openRole === 'owner') { %>
             <table class="facts">
               <tr><th>Email</th><td><a href="mailto:<%= open.email %>" style="color:var(--accent2)"><%= open.email %></a></td></tr>
               <% if (open.phone) { %><tr><th>Phone</th><td><a href="tel:<%= String(open.phone).replace(/\s/g, '') %>" style="color:var(--accent2)"><%= open.phone %></a></td></tr><% } %>
               <% if (open.looking_for) { %><tr><th>Looking for</th><td><%= open.looking_for %></td></tr><% } %>
             </table>
-            <div class="lead-msg"><%- String(open.message).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\n/g, '<br>') %></div>
-            <div class="lead-actions">
-              <a class="btn btn-primary btn-sm" href="mailto:<%= open.email %>?subject=<%= encodeURIComponent('Re: your inquiry to ' + open.listing_name + (open.looking_for ? ' — ' + open.looking_for : '')) %>">Reply by email</a>
-              <% if (open.phone) { %><a class="btn btn-ghost btn-sm" href="tel:<%= String(open.phone).replace(/\s/g, '') %>">Call</a><% } %>
+            <% } else if (open.looking_for) { %>
+            <p style="font-size:13.5px;margin:8px 0 0"><span class="muted">Looking for:</span> <b><%= open.looking_for %></b></p>
+            <% } %>
+
+            <div class="lead-thread" id="leadThread">
+              <% if (openMessages && openMessages.length) { %>
+                <% let lastDay = ''; %>
+                <% openMessages.forEach(function (m) { %>
+                  <% const day = String(m.created_at || '').slice(0, 10); %>
+                  <% if (day && day !== lastDay) { lastDay = day; %>
+                    <div class="lead-day"><%= fmtDate(day) %></div>
+                  <% } %>
+                  <% const mine = (openRole === 'owner' && m.sender === 'owner') || (openRole === 'inquirer' && m.sender === 'inquirer'); %>
+                  <div class="lead-bubble<%= mine ? ' mine' : ' theirs' %>">
+                    <div class="lead-bubble-who"><%= mine ? 'You' : (m.sender === 'owner' ? open.listing_name : open.name) %></div>
+                    <div class="lead-bubble-text"><%- String(m.body || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\n/g, '<br>') %></div>
+                    <div class="lead-bubble-meta"><%= String(m.created_at || '').slice(11, 16) || fmtDate(m.created_at) %></div>
+                  </div>
+                <% }) %>
+              <% } else { %>
+                <p class="muted" style="font-size:13px;text-align:center;padding:18px 0">No messages yet.</p>
+              <% } %>
             </div>
+
+            <form class="lead-reply-form" method="post" action="/dashboard/leads/<%= open.id %>/reply">
+              <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+              <label class="sr-only" for="lead-reply-<%= open.id %>">Your message</label>
+              <textarea class="input" id="lead-reply-<%= open.id %>" name="body" rows="3" maxlength="4000" required placeholder="<%= openRole === 'owner' ? 'Reply to ' + open.name + '…' : 'Write a follow-up to ' + open.listing_name + '…' %>"></textarea>
+              <div class="lead-reply-actions">
+                <button class="btn btn-primary btn-sm" type="submit">Send message</button>
+                <% if (openRole === 'owner') { %>
+                <a class="btn btn-ghost btn-sm" href="mailto:<%= open.email %>?subject=<%= encodeURIComponent('Re: your inquiry to ' + open.listing_name + (open.looking_for ? ' — ' + open.looking_for : '')) %>">Email instead</a>
+                <% if (open.phone) { %><a class="btn btn-ghost btn-sm" href="tel:<%= String(open.phone).replace(/\s/g, '') %>">Call</a><% } %>
+                <% } %>
+              </div>
+            </form>
+
+            <% if (openRole === 'owner') { %>
             <form class="lead-status-form" method="post" action="/dashboard/leads/<%= open.id %>/status">
               <input type="hidden" name="_csrf" value="<%= csrfToken %>">
               <label><span>Status</span>
-                <select name="status">
+                <select class="input" name="status">
                   <% STATUSES.forEach(function (s) { %><option value="<%= s %>"<%= open.status === s ? ' selected' : '' %>><%= STATUS_LABELS[s] %></option><% }) %>
                 </select>
               </label>
@@ -127,25 +183,31 @@
               <input type="hidden" name="archived" value="<%= open.archived ? '0' : '1' %>">
               <button class="btn btn-ghost btn-sm" type="submit"><%= open.archived ? 'Restore to inbox' : 'Archive' %></button>
             </form>
-            <h4 class="h-section" style="margin-top:1.6rem">Notes <span class="muted" style="font-weight:400">· only you see these</span></h4>
-            <% if (openNotes.length) { %>
-            <ul class="lead-notes">
-              <% openNotes.forEach(function (n) { %>
-              <li><p><%= n.note %></p><small class="muted"><%= fmtDate(n.created_at) %></small></li>
-              <% }) %>
-            </ul>
-            <% } else { %>
-            <p class="muted" style="font-size:13px">No notes yet — record calls, quotes and follow-ups here.</p>
+
+            <div class="lead-notes-block">
+              <h4 class="h-section">Private notes <span class="muted" style="font-weight:400">· only you see these</span></h4>
+              <div class="lead-notes-area">
+                <% if (openNotes.length) { %>
+                <ul class="lead-notes">
+                  <% openNotes.forEach(function (n) { %>
+                  <li><p><%= n.note %></p><small class="muted"><%= fmtDate(n.created_at) %></small></li>
+                  <% }) %>
+                </ul>
+                <% } else { %>
+                <p class="muted" style="font-size:13px">No notes yet — record calls, quotes and follow-ups here.</p>
+                <% } %>
+              </div>
+              <form class="lead-note-form" method="post" action="/dashboard/leads/<%= open.id %>/note">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                <label><span class="sr-only">Add a note</span><textarea class="input" name="note" rows="2" maxlength="2000" placeholder="Add a private note…"></textarea></label>
+                <button class="btn btn-ghost btn-sm" type="submit">Add note</button>
+              </form>
+            </div>
             <% } %>
-            <form class="lead-note-form" method="post" action="/dashboard/leads/<%= open.id %>/note">
-              <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-              <label><span class="sr-only">Add a note</span><textarea class="input" name="note" rows="2" maxlength="2000" placeholder="Add a private note…"></textarea></label>
-              <button class="btn btn-ghost btn-sm" type="submit">Add note</button>
-            </form>
           </div>
           <% } else if (box.rows.length) { %>
           <div class="panel lead-detail lead-detail-empty">
-            <p class="muted">Select an inquiry to read it, reply, set its status and add notes.</p>
+            <p class="muted"><%= isSent ? 'Select a conversation to keep talking with the business.' : 'Select an inquiry to read it, reply, set its status and add notes.' %></p>
           </div>
           <% } %>
         </div>
@@ -153,5 +215,12 @@
     <% } %>
   </div>
 </section>
+
+<script>
+(function () {
+  var t = document.getElementById('leadThread');
+  if (t) t.scrollTop = t.scrollHeight;
+})();
+</script>
 
 <%- include('../partials/bottom') %>
