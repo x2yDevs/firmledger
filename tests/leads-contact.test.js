@@ -407,10 +407,11 @@ const LONG_MESSAGE = 'Hello, we need a steel gate fabricated for our Nakuru plot
     check('a double-clicked identical reply is folded in', again.status === 302 && msgCount(repliedLeadId) === before);
 
     const huge = await call(`/dashboard/leads/${repliedLeadId}/reply`, 'biz', { _csrf: bizToken, body: 'x'.repeat(leads.LIMITS.reply.max + 500) });
-    check('an over-long reply is refused, not truncated', loc(huge).includes('limited to 4,000 characters') && msgCount(repliedLeadId) === before);
+    check('an over-long reply is refused, not truncated', loc(huge).includes('Too long to send') && loc(huge).includes('4,500 characters') && loc(huge).includes('limit is 4,000') && msgCount(repliedLeadId) === before);
 
     const empty = await call(`/dashboard/leads/${repliedLeadId}/reply`, 'biz', { _csrf: bizToken, body: '   ' });
-    check('an empty reply is refused', loc(empty).includes('Write a message first'));
+    check('an empty reply is refused', loc(empty).includes('Nothing to send yet'));
+    check('and the reason is aimed at the composer', loc(empty).includes('cerr=') && loc(empty).includes('Send will work again'));
 
     check('a reply without CSRF is rejected', (await call(`/dashboard/leads/${repliedLeadId}/reply`, 'biz', { body: 'No token here.' })).status === 403);
 
@@ -460,10 +461,10 @@ const LONG_MESSAGE = 'Hello, we need a steel gate fabricated for our Nakuru plot
     /* An unclaimed record moves nothing: a lead needs an owner. */
     check('removing the owner moves no leads', leads.transferListing(claimedId, null) === 0
       && leads.listForOwner(otherBizId, {}).rows.length === before.length);
-    /* Private notes travel with the conversation they describe. */
-    leads.addNote(repliedLeadId, otherBizId, 'Inherited this conversation with the record.');
-    check('the new owner can note on an inherited conversation', leads.notesFor(repliedLeadId, otherBizId).length === 1);
-    check('notes stay private from the member', leads.notesFor(repliedLeadId, memberId).length === 0);
+    /* Notes were retired with the inbox block that held them: what travels with
+       a transferred conversation is the timeline itself, and nothing else. */
+    check('no note API survives on the leads module', leads.addNote === undefined && leads.notesFor === undefined);
+    check('the inherited timeline is intact for the new owner', leads.messagesFor(repliedLeadId, otherBizId).length === leads.messagesFor(repliedLeadId, memberId).length);
     /* The console assistant is a third ownership path — drive the real tool on a
        second record so the thread above stays with otherBizId untouched. */
     const aiBizId = addUser('console-transfer@contact.example', 'Console Transfer Holdings', 'pro');

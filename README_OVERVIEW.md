@@ -182,7 +182,7 @@ rate-limited per bucket (login, register, listing, claim, lead, newsletter, sear
 |---|---|
 | **Overview** | Your listings, their status, and shortcuts |
 | **Add / edit a listing** | The full submission form, with duplicate guards and an optional "fetch from Wikipedia" |
-| **Leads** | Two boxes on one page: **Received** — inquiries on your listings, with reply, status (new → contacted → qualified → won/lost), private notes, archive and permanent delete (Pro to read/manage) — and **Sent** — every conversation you started with a business, always free |
+| **Leads** | Two boxes on one page: **Received** — inquiries on your listings, with reply, status (new → contacted → qualified → won/lost), archive and permanent delete (Pro to read/manage) — and **Sent** — every conversation you started with a business, always free |
 | **Analytics** | Views, website clicks, top locations, per-listing totals — and the conversion funnel with its plain-English headline |
 | **Refresh technology** | Re-scan your homepage and refresh the radar on demand |
 | **Timeline & relations** | Add events and relationships on listings you own |

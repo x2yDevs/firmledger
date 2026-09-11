@@ -1341,7 +1341,40 @@ router.get('/dashboard/analytics', (req, res) => {
  * Two sides share one page:
  *   Received  — inquiries on the owner's claimed listings (Pro to manage)
  *   Sent      — listings this member contacted (always available)
- * Both sides talk in-thread; private notes stay owner-only. */
+ * The thread is the whole right-hand pane: read it, answer it, set its status.
+ *
+ * Every inbox action posts its own context back (box / status filter / listing /
+ * page) and redirects into exactly that view, so changing a status or being
+ * refused a reply can never dump a member onto a different list mid-task — the
+ * lead you just updated is still in front of you, with its new pill. The
+ * context is read field by field against the same allow-lists the GET uses
+ * (never as a URL to bounce to), so a hand-edited form cannot smuggle a
+ * redirect out of the inbox. */
+function leadsReturnTo(req, openId = 0, boxOverride = null) {
+  const leads = require('../lib/leads');
+  const ctxBox = req.body.ctx_box === 'sent' ? 'sent'
+    : req.body.ctx_box === 'archived' ? 'archived' : 'received';
+  const box = boxOverride === null ? ctxBox : boxOverride;
+  const status = leads.STATUSES.includes(String(req.body.ctx_status || '')) ? String(req.body.ctx_status) : '';
+  const listing = Number(req.body.ctx_listing) || 0;
+  const page = Math.max(1, Number(req.body.ctx_page) || 1);
+  const q = [];
+  if (box === 'sent') q.push('box=sent');
+  else if (box === 'archived') q.push('box=archived');
+  if (status) q.push('status=' + encodeURIComponent(status));
+  if (listing) q.push('listing=' + encodeURIComponent(String(listing)));
+  if (page > 1) q.push('page=' + page);
+  if (openId) q.push('open=' + encodeURIComponent(String(Number(openId) || openId)));
+  return '/dashboard/leads' + (q.length ? '?' + q.join('&') : '');
+}
+
+/** Append message params to an inbox URL without ever leaving the inbox. */
+function withMsg(url, params) {
+  const q = [];
+  for (const [k, v] of Object.entries(params)) if (v) q.push(encodeURIComponent(k) + '=' + encodeURIComponent(String(v)));
+  return q.length ? url + (url.includes('?') ? '&' : '?') + q.join('&') : url;
+}
+
 router.get('/dashboard/leads', (req, res) => {
   const leads = require('../lib/leads');
   const pro = hasProAccess(req.user);
@@ -1362,10 +1395,14 @@ router.get('/dashboard/leads', (req, res) => {
   let open = null;
   let openRole = null;
   let openMessages = [];
-  let openNotes = [];
 
+  /* A redirect can come back to a page the list has since shrunk past (the lead
+     on it was the last one there). Clamping keeps the inbox on a page that
+     exists instead of showing an empty list with “Page 4 of 2”. */
+  const fitPage = (r) => (r.page > r.pages ? r.pages : 0);
   if (boxKind === 'sent') {
     box = leads.listForInquirer(req.user.id, { page: req.query.page });
+    if (fitPage(box)) box = leads.listForInquirer(req.user.id, { page: fitPage(box) });
     if (openId) {
       const acc = leads.getAccessible(openId, req.user.id);
       if (acc && acc.role === 'inquirer') {
@@ -1376,13 +1413,13 @@ router.get('/dashboard/leads', (req, res) => {
     }
   } else if (pro) {
     box = leads.listForOwner(req.user.id, { status, archived, listingId, page: req.query.page });
+    if (fitPage(box)) box = leads.listForOwner(req.user.id, { status, archived, listingId, page: fitPage(box) });
     if (openId) {
       const acc = leads.getAccessible(openId, req.user.id);
       if (acc && acc.role === 'owner') {
         open = acc;
         openRole = 'owner';
         openMessages = leads.messagesFor(open.id, req.user.id);
-        openNotes = leads.notesFor(open.id, req.user.id);
       }
     }
   } else if (openId) {
@@ -1398,50 +1435,56 @@ router.get('/dashboard/leads', (req, res) => {
   res.render('dashboard/leads', {
     meta: { title: 'Leads — FirmLedger', description: '', robots: 'noindex' },
     pro, counts, sentCounts, box, listings, open, openRole,
-    openMessages, openNotes,
+    openMessages,
     filters: { status, listingId, archived, box: boxKind },
     ok: req.query.ok || '', err: req.query.err || '',
+    /* A refused reply is explained inside the composer it belongs to, not in a
+       banner above the tabs the member has already scrolled past. */
+    cerr: req.query.cerr || '', replySent: req.query.sent === '1',
+    REPLY_MIN: leads.LIMITS.reply.min, REPLY_MAX: leads.LIMITS.reply.max,
     STATUS_LABELS: leads.STATUS_LABELS, STATUSES: leads.STATUSES,
   });
 });
 
 router.post('/dashboard/leads/:id/status', (req, res) => {
-  if (!validCsrf(req)) return res.status(403).redirect('/dashboard/leads?err=' + encodeURIComponent('Security check failed — reload the page and try again.'));
+  if (!validCsrf(req)) {
+    return res.status(403).redirect(withMsg(leadsReturnTo(req, req.params.id), { err: 'Security check failed — reload the page and try again.' }));
+  }
   if (!hasProAccess(req.user)) {
-    return res.redirect('/dashboard/leads?err=' + encodeURIComponent('The Leads inbox is a FirmLedger Pro feature — upgrade to manage your inquiries.'));
+    return res.redirect(withMsg(leadsReturnTo(req, req.params.id), { err: 'The Leads inbox is a FirmLedger Pro feature — upgrade to manage your inquiries.' }));
   }
   const leads = require('../lib/leads');
   const r = leads.setStatus(req.params.id, req.user.id, String(req.body.status || ''));
-  const back = `/dashboard/leads?open=${encodeURIComponent(req.params.id)}`;
-  res.redirect(back + (r.ok
-    ? '&ok=' + encodeURIComponent(`Marked as ${leads.STATUS_LABELS[r.lead.status]}.`)
-    : '&err=' + encodeURIComponent(r.error || 'Could not update that lead.')));
-});
-
-router.post('/dashboard/leads/:id/note', (req, res) => {
-  if (!validCsrf(req)) return res.status(403).redirect('/dashboard/leads?err=' + encodeURIComponent('Security check failed — reload the page and try again.'));
-  if (!hasProAccess(req.user)) {
-    return res.redirect('/dashboard/leads?err=' + encodeURIComponent('The Leads inbox is a FirmLedger Pro feature — upgrade to manage your inquiries.'));
+  if (!r.ok) {
+    return res.redirect(withMsg(leadsReturnTo(req, req.params.id), { err: r.error || 'Could not update that lead.' }));
   }
-  const leads = require('../lib/leads');
-  const r = leads.addNote(req.params.id, req.user.id, req.body.note);
-  const back = `/dashboard/leads?open=${encodeURIComponent(req.params.id)}`;
-  res.redirect(back + (r.ok
-    ? '&ok=' + encodeURIComponent('Note added.')
-    : '&err=' + encodeURIComponent(r.error || 'Could not add that note.')));
+  /* A filtered inbox is a queue, and this change can take the lead out of it —
+     saying so is the difference between “the inbox lost my lead” and knowing
+     exactly which tab it moved to. */
+  const filter = String(req.body.ctx_status || '');
+  const moved = leads.STATUSES.includes(filter) && filter !== r.lead.status;
+  const ok = `Marked as ${leads.STATUS_LABELS[r.lead.status]}.`
+    + (moved ? ` It leaves your “${leads.STATUS_LABELS[filter]}” list now — open the ${leads.STATUS_LABELS[r.lead.status]} tab to keep it in view.` : '');
+  res.redirect(withMsg(leadsReturnTo(req, req.params.id), { ok }));
 });
 
 router.post('/dashboard/leads/:id/archive', (req, res) => {
-  if (!validCsrf(req)) return res.status(403).redirect('/dashboard/leads?err=' + encodeURIComponent('Security check failed — reload the page and try again.'));
+  if (!validCsrf(req)) {
+    return res.status(403).redirect(withMsg(leadsReturnTo(req), { err: 'Security check failed — reload the page and try again.' }));
+  }
   if (!hasProAccess(req.user)) {
-    return res.redirect('/dashboard/leads?err=' + encodeURIComponent('The Leads inbox is a FirmLedger Pro feature — upgrade to manage your inquiries.'));
+    return res.redirect(withMsg(leadsReturnTo(req), { err: 'The Leads inbox is a FirmLedger Pro feature — upgrade to manage your inquiries.' }));
   }
   const leads = require('../lib/leads');
   const toArchived = String(req.body.archived || '1') !== '0';
   const r = leads.setArchived(req.params.id, req.user.id, toArchived);
-  res.redirect('/dashboard/leads' + (r.ok
-    ? '?ok=' + encodeURIComponent(toArchived ? 'Lead archived.' : 'Lead restored to your inbox.')
-    : '?err=' + encodeURIComponent(r.error || 'Could not move that lead.')));
+  /* The conversation leaves the list you are looking at either way, so the
+     thread closes and the same filtered inbox is re-rendered with fresh pills
+     and tab counts. */
+  const back = leadsReturnTo(req, 0, toArchived ? 'received' : 'archived');
+  res.redirect(withMsg(back, r.ok
+    ? { ok: toArchived ? 'Lead archived — it is under Archived now.' : 'Lead restored to your inbox.' }
+    : { err: r.error || 'Could not move that lead.' }));
 });
 
 /* Permanent delete — a conversation can be removed for good, not just archived.
@@ -1453,21 +1496,22 @@ router.post('/dashboard/leads/:id/delete', (req, res) => {
   const leads = require('../lib/leads');
   const acc = leads.getAccessible(req.params.id, req.user.id);
   if (!acc) {
-    return res.redirect('/dashboard/leads?err=' + encodeURIComponent('Conversation not found.'));
+    return res.redirect(withMsg(leadsReturnTo(req), { err: 'Conversation not found — it was already deleted, so nothing more was removed.' }));
   }
+  const back = leadsReturnTo(req, 0, acc.role === 'inquirer' ? 'sent' : 'received');
   if (acc.role === 'owner') {
     if (!hasProAccess(req.user)) {
-      return res.redirect('/dashboard/leads?err=' + encodeURIComponent('The Leads inbox is a FirmLedger Pro feature — upgrade to manage your inquiries.'));
+      return res.redirect(withMsg(back, { err: 'The Leads inbox is a FirmLedger Pro feature — upgrade to manage your inquiries.' }));
     }
     const r = leads.permanentDelete(req.params.id, req.user.id);
-    return res.redirect('/dashboard/leads' + (r.ok
-      ? '?ok=' + encodeURIComponent('Conversation permanently deleted.')
-      : '?err=' + encodeURIComponent(r.error || 'Could not delete that conversation.')));
+    return res.redirect(withMsg(back, r.ok
+      ? { ok: 'Conversation permanently deleted — the thread is gone from both inboxes.' }
+      : { err: r.error || 'Could not delete that conversation.' }));
   }
   const r = leads.detachInquirer(req.params.id, req.user.id);
-  res.redirect('/dashboard/leads?box=sent' + (r.ok
-    ? '&ok=' + encodeURIComponent('Conversation deleted from your Sent box.')
-    : '&err=' + encodeURIComponent(r.error || 'Could not delete that conversation.')));
+  res.redirect(withMsg(back, r.ok
+    ? { ok: 'Conversation deleted from your Sent box.' }
+    : { err: r.error || 'Could not delete that conversation.' }));
 });
 
 /* Two-way reply — owner or inquirer, both sides of the same thread.
@@ -1476,25 +1520,30 @@ router.post('/dashboard/leads/:id/delete', (req, res) => {
    an inquiry, but a runaway script must not be able to flood a business or a
    member with messages and notifications. */
 router.post('/dashboard/leads/:id/reply', spam.gate('lead_reply'), (req, res) => {
-  if (!validCsrf(req)) return res.status(403).redirect('/dashboard/leads?err=' + encodeURIComponent('Security check failed — reload the page and try again.'));
+  if (!validCsrf(req)) {
+    return res.status(403).redirect(withMsg(leadsReturnTo(req, req.params.id), { cerr: 'Security check failed — your reply was NOT sent. Reload the page and try again.' }));
+  }
   const leads = require('../lib/leads');
   const acc = leads.getAccessible(req.params.id, req.user.id);
   if (!acc) {
-    return res.redirect('/dashboard/leads?err=' + encodeURIComponent('Conversation not found.'));
+    return res.redirect(withMsg(leadsReturnTo(req, req.params.id), { cerr: 'Conversation not found — the business deleted this thread, so your reply was not sent.' }));
   }
+  /* Back to the same tab, page and open thread, whoever is talking. */
+  const back = leadsReturnTo(req, req.params.id, acc.role === 'inquirer'
+    ? 'sent' : (req.body.ctx_box === 'archived' ? 'archived' : 'received'));
   /* Owners need Pro to reply from the business inbox; inquirers always can. */
   if (acc.role === 'owner' && !hasProAccess(req.user)) {
-    return res.redirect('/dashboard/leads?err=' + encodeURIComponent('Replying from the business inbox is a FirmLedger Pro feature — upgrade to talk with inquirers.'));
+    return res.redirect(withMsg(back, { cerr: 'Replying from the business inbox is a FirmLedger Pro feature — upgrade to talk with inquirers. Your inquiry is safe; nothing was sent.' }));
   }
   const r = leads.addMessage(req.params.id, req.user.id, req.body.body || req.body.message);
-  const boxQ = acc.role === 'inquirer' ? 'box=sent&' : '';
-  const back = `/dashboard/leads?${boxQ}open=${encodeURIComponent(req.params.id)}`;
+  /* The reason goes straight into the composer, beside the Send button, so the
+     member never has to work out which of the page's banners was about them. */
   if (!r.ok) {
-    return res.redirect(back + '&err=' + encodeURIComponent(r.error || 'Could not send that message.'));
+    return res.redirect(withMsg(back, { cerr: r.error || 'Could not send that message — nothing was sent, so please try again.' }));
   }
   /* Same text posted twice inside a minute = one message, one notification. */
   if (r.duplicate) {
-    return res.redirect(back + '&ok=' + encodeURIComponent('Message sent.'));
+    return res.redirect(withMsg(back, { ok: 'Message sent.', sent: 1 }));
   }
   /* Notify the other party. The message is already stored, so a failure here
      is logged and the member still gets their confirmation. */
@@ -1557,7 +1606,7 @@ router.post('/dashboard/leads/:id/reply', spam.gate('lead_reply'), (req, res) =>
       }
     }
   }
-  res.redirect(back + '&ok=' + encodeURIComponent('Message sent.'));
+  res.redirect(withMsg(back, { ok: 'Message sent.', sent: 1 }));
 });
 
 /* ================= Claimable search (JSON) ================= */

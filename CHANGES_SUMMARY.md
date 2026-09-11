@@ -1,3 +1,46 @@
+## 2026-09-11 (leads inbox) — a refused reply says why, and the thread owns the pane
+
+**A reply that will not send states the reason in the box it was refused from.**
+`leads.addMessage` now answers with a code and the numbers behind it — `empty`,
+`too_short`, `too_long`, `not_found`, `store_failed`, each with `length`/`min`/
+`max`/`over` — and `POST /dashboard/leads/:id/reply` passes that sentence back as
+`cerr` so it renders inside the composer instead of as a banner above the tabs.
+The box checks the same limits before the request is made (`data-min`/`data-max`
+are the server's `LIMITS.reply`, nothing is duplicated), so the member reads
+"Too long to send — your reply is 4,500 characters and the limit is 4,000. Trim
+500 of them and it goes through." or "Too short to send — a reply needs at least
+2 characters and yours is 1." the moment it applies; the counter turns amber near
+the cap and red past it, and a Pro refusal is stated beside Send with an upgrade
+link. `maxlength` was removed from the reply box: a long paste is explained,
+never silently cut. Nothing is lost on the way back — the draft lives in
+`sessionStorage` per thread, is restored after a refusal and dropped once the
+message is stored. The floor moved from 1 to 2 characters, because a one-keystroke
+reply is always a mis-click; `validateReply` is the single source of truth for
+both sides.
+
+**The private-notes block is retired, so the conversation is the whole pane.**
+`POST /dashboard/leads/:id/note`, `leads.addNote`/`notesFor` and the
+`.lead-notes*` styles are gone (the `lead_notes` table stays, so no saved note
+is destroyed), the thread grows into the freed height (`min-height: 240px`, a
+taller detail pane, a taller thread on phones), and every line of copy that
+promised notes — the locked-inbox panel, the empty-selection hint, the delete
+confirmation, the pricing answer and the Pro feature card — was corrected with
+it. A "Won" is now confirmed where it was set: the current status rides in the
+chat header, the select submits itself (the Update button stays for keyboards
+and no-JS), and an unknown status is refused by name rather than ignored.
+
+**Nothing in the inbox throws you out of the inbox.** Every inbox form posts its
+own context (`ctx_box`, `ctx_status`, `ctx_listing`, `ctx_page`, each re-checked
+against the same allow-lists the GET uses — never a URL to bounce to) and
+redirects back into exactly that view with the thread still open, so the lead
+whose status you just changed is still in front of you with its new pill, and
+archiving from the Archived box lands you in the Archived box. When a status
+change moves a lead out of the filter being worked through, the confirmation
+says so and names the tab it went to. Covered by `npm run test:leads-chat`
+(103 checks, including the composer script run against a stub DOM),
+`test:leads-inbox`, `test:leads-contact`, `test:leads-housekeeping` and
+`test:leads-fit`.
+
 ## 2026-09-11 — Leads: the member → business contact flow, made real end to end
 
 **One rule decides whether a business can be contacted, and the page obeys it.**

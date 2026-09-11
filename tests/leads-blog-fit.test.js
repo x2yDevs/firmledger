@@ -3,8 +3,8 @@
  * npm run test:leads-fit
  *
  * Locks in the fixes, without touching existing behaviour:
- *   1. Notes: the owner form requires text client-side too, saves through the
- *      real route, shows for the owner, and never leaks to the inquirer.
+ *   1. The composer: it requires text client-side, states the real limits,
+ *      keeps its explanation inline, and owns a pane with no notes block.
  *   2. Sent honesty: a thread the business archived stays in the inquirer's
  *      Sent box AND in the Sent tab count, still readable and replyable.
  *   3. Inbox links carry no stray trailing "?" when no filter is active.
@@ -76,7 +76,7 @@ async function call(route, who = null, form = null) {
     });
   });
 
-  console.log('Leads fit — notes round trip, owner-only');
+  console.log('Leads fit — the composer explains itself, and the thread owns the pane');
   await call('/listing/fit-cleaners/leads', 'inquirer', {
     _csrf: s.inquirer.csrf, name: 'Fit Buyer', subject: 'Quote please',
     message: 'Hello, please quote a full office clean for twelve desks in Westlands.',
@@ -85,19 +85,23 @@ async function call(route, who = null, form = null) {
   check('seed inquiry created', !!lead);
 
   const openHtml = await (await call(`/dashboard/leads?open=${lead.id}`, 'owner')).text();
-  check('note form requires text before submit', /name="note"[^>]*required/.test(openHtml));
-  check('note form caps length at 2000', /name="note"[^>]*maxlength="2000"/.test(openHtml));
   check('reply box requires a message', /name="body"[^>]*required/.test(openHtml));
+  check('the reply box carries the server limits, not a hard maxlength', /name="body"[^>]*data-max="4000"/.test(openHtml) && !/name="body"[^>]*maxlength/.test(openHtml));
+  check('the composer explains the window it accepts', /Between 2 and 4,000 characters/.test(openHtml));
+  check('a hidden reason block is present for a refused send', /class="lead-reply-error"[^>]*role="alert"[^>]*hidden/.test(openHtml));
 
-  const note = await call(`/dashboard/leads/${lead.id}/note`, 'owner', { _csrf: s.owner.csrf, note: 'Prefers morning slots, M-Pesa on completion.' });
-  check('note saves with confirmation', note.status === 302 && decodeURIComponent(note.headers.get('location')).includes('Note added'));
-  const ownerAgain = await (await call(`/dashboard/leads?open=${lead.id}`, 'owner')).text();
-  check('owner reads the private note', ownerAgain.includes('M-Pesa on completion'));
+  /* Nothing but the conversation sits under the thread: the private-notes block
+     was retired so the chat owns the pane, on both sides and in the stylesheet. */
+  const inboxCss = fs.readFileSync(path.join(__dirname, '..', 'public', 'css', 'app.css'), 'utf8');
+  check('no notes UI is rendered for the owner', !openHtml.includes('Private notes') && !openHtml.includes('lead-note-form'));
   const buyerView = await (await call(`/dashboard/leads?box=sent&open=${lead.id}`, 'inquirer')).text();
-  check('inquirer never sees note text or form', !buyerView.includes('M-Pesa on completion') && !buyerView.includes('lead-note-form'));
+  check('no notes UI is rendered for the inquirer', !buyerView.includes('Private notes') && !buyerView.includes('lead-note-form'));
+  check('no notes styles are left behind', !/\.lead-notes|\.lead-note-form/.test(inboxCss));
+  check('the thread is given the freed height', /\.lead-thread \{\s*flex: 1 1 auto; min-height: 240px/.test(inboxCss));
+  check('refusals are styled inline under the box', /\.lead-reply-error \{[^}]*var\(--bad-soft\)/.test(inboxCss));
+  check('the counter warns before the limit is hit', /\.lead-reply-count\.is-near \{ color: var\(--warn\)/.test(inboxCss));
 
-  const empty = await call(`/dashboard/leads/${lead.id}/note`, 'owner', { _csrf: s.owner.csrf, note: '   ' });
-  check('blank note rejected server-side', empty.status === 302 && decodeURIComponent(empty.headers.get('location')).includes('Write a note'));
+  const ownerAgain = openHtml;
 
   console.log('Leads fit — Sent stays honest after the business archives');
   await call(`/dashboard/leads/${lead.id}/archive`, 'owner', { _csrf: s.owner.csrf, archived: '1' });
