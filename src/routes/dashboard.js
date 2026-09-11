@@ -1406,6 +1406,7 @@ router.get('/dashboard/leads', (req, res) => {
 });
 
 router.post('/dashboard/leads/:id/status', (req, res) => {
+  if (!validCsrf(req)) return res.status(403).redirect('/dashboard/leads?err=' + encodeURIComponent('Security check failed — reload the page and try again.'));
   if (!hasProAccess(req.user)) {
     return res.redirect('/dashboard/leads?err=' + encodeURIComponent('The Leads inbox is a FirmLedger Pro feature — upgrade to manage your inquiries.'));
   }
@@ -1418,6 +1419,7 @@ router.post('/dashboard/leads/:id/status', (req, res) => {
 });
 
 router.post('/dashboard/leads/:id/note', (req, res) => {
+  if (!validCsrf(req)) return res.status(403).redirect('/dashboard/leads?err=' + encodeURIComponent('Security check failed — reload the page and try again.'));
   if (!hasProAccess(req.user)) {
     return res.redirect('/dashboard/leads?err=' + encodeURIComponent('The Leads inbox is a FirmLedger Pro feature — upgrade to manage your inquiries.'));
   }
@@ -1430,6 +1432,7 @@ router.post('/dashboard/leads/:id/note', (req, res) => {
 });
 
 router.post('/dashboard/leads/:id/archive', (req, res) => {
+  if (!validCsrf(req)) return res.status(403).redirect('/dashboard/leads?err=' + encodeURIComponent('Security check failed — reload the page and try again.'));
   if (!hasProAccess(req.user)) {
     return res.redirect('/dashboard/leads?err=' + encodeURIComponent('The Leads inbox is a FirmLedger Pro feature — upgrade to manage your inquiries.'));
   }
@@ -1446,6 +1449,7 @@ router.post('/dashboard/leads/:id/archive', (req, res) => {
  *   inquirer → removes the conversation from their own Sent box only; the
  *              business keeps its record of the inquiry */
 router.post('/dashboard/leads/:id/delete', (req, res) => {
+  if (!validCsrf(req)) return res.status(403).redirect('/dashboard/leads?err=' + encodeURIComponent('Security check failed — reload the page and try again.'));
   const leads = require('../lib/leads');
   const acc = leads.getAccessible(req.params.id, req.user.id);
   if (!acc) {
@@ -1472,6 +1476,7 @@ router.post('/dashboard/leads/:id/delete', (req, res) => {
    an inquiry, but a runaway script must not be able to flood a business or a
    member with messages and notifications. */
 router.post('/dashboard/leads/:id/reply', spam.gate('lead_reply'), (req, res) => {
+  if (!validCsrf(req)) return res.status(403).redirect('/dashboard/leads?err=' + encodeURIComponent('Security check failed — reload the page and try again.'));
   const leads = require('../lib/leads');
   const acc = leads.getAccessible(req.params.id, req.user.id);
   if (!acc) {

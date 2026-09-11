@@ -516,9 +516,14 @@ function addMessage(leadId, userId, body) {
     } catch { /* fall through and store the message */ }
   }
 
-  db.prepare(
-    `INSERT INTO lead_messages (lead_id, sender, body) VALUES (?,?,?)`
-  ).run(lead.id, sender, text);
+  try {
+    db.prepare(
+      `INSERT INTO lead_messages (lead_id, sender, body) VALUES (?,?,?)`
+    ).run(lead.id, sender, text);
+  } catch (e) {
+    console.error('[leads] could not store reply:', lead.id, e && e.message);
+    return { ok: false, error: 'Could not send that message. Please try again in a moment.' };
+  }
   /* Bump the lead and flip status when the business replies for the first time. */
   if (sender === 'owner' && lead.status === 'new') {
     db.prepare(`UPDATE leads SET status='contacted', updated_at=datetime('now') WHERE id=?`).run(lead.id);
