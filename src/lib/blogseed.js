@@ -17,7 +17,7 @@ const POSTS = [
 <h2>Layer 4 — Verify</h2>
 <p>Review happens at two levels. Every submission is moderated by a human before publication. Separately, the actual owner of a business can cryptographically claim its record: add a DNS TXT record, one meta tag line, or our badge snippet to the official domain, and our servers check for it live. Verified ownership both raises the profile's confidence score and transfers editorial control to the owner — they can edit fields, post timeline events and record relationships, subject to continued moderation of structural changes.</p>
 <h2>Layer 5 — Refresh</h2>
-<p>Publication is not the end of the pipeline. Approved records are added to the sitemap index automatically and pushed to search engines via IndexNow within about ten hours. A freshness marker on each profile tells visitors how recently the record was touched; technology snapshots are re-detectable on demand by the owner; and anyone can file a removal or correction request from the profile itself, which lands in the same human moderation queue.</p>
+<p>Publication is not the end of the pipeline. Approved records are added to the sitemap index automatically and pinged to search engines via IndexNow the moment they go live — with a re-ping thirty minutes later — so new profiles are typically picked up within a few hours. A freshness marker on each profile tells visitors how recently the record was touched; technology snapshots are re-detectable on demand by the owner; and anyone can file a removal or correction request from the profile itself, which lands in the same human moderation queue.</p>
 <h2>Why one Wikipedia source is worth more than ten anonymous ones</h2>
 <p>It would be trivial to scrape ten aggregators and report a median headcount. We do not, because reproducibility beats volume: a fact a third party can re-check beats five facts nobody can. Every field we import is traceable to an article a skeptic can open, and when the article changes, the citation on the profile tells a reviewer exactly where to look. That is what "source-backed" means on this site — not a badge, a trail.</p>`,
   },
@@ -251,21 +251,51 @@ curl "https://firmledger.co.ke/api/v1/listings?category=Fintech&amp;country=Keny
   {
     slug: 'turning-your-listing-into-leads',
     title: 'Turning your FirmLedger listing into leads',
-    excerpt: 'Every claimed listing carries a Contact this business button. How inquiries reach you, what the Leads inbox does, and how to convert them.',
-    body: `<p class="lead">Every claimed listing on FirmLedger carries a <strong>Contact this business</strong> button. Visitors who find your profile can send an inquiry in under a minute — and it lands in your Leads inbox without your email address ever being shown. This guide walks through the whole loop.</p>
-<h2>What the visitor sees</h2>
-<p>On any claimed (verified-owner) profile, a <strong>Contact this business</strong> button sits with the profile actions. The form asks for exactly what you need to reply: name, email, phone (optional), what they are looking for, and a message. No account required — guests can inquire as easily as members — and spam-grade rate limiting plus honeypot checks keep the inbox clean.</p>
+    excerpt: 'Every claimed listing carries a Contact this business button for signed-in FirmLedger members. How inquiries reach you, the one-email-per-conversation rule, and how to convert them.',
+    body: `<p class="lead">Every claimed listing on FirmLedger carries a <strong>Contact this business</strong> button. When a signed-in FirmLedger member finds your profile, they can send an inquiry in under a minute — it lands in your Leads inbox, and your email address is never shown on the profile. This guide walks through the whole loop as it works today.</p>
+<h2>What the member sees</h2>
+<p>On any claimed (verified-owner) profile, <strong>Contact this business</strong> sits with the profile actions. Inquiries are a member feature by design: the person writing to you is signed in to a FirmLedger account, and their account name and email travel with the message automatically — never typed freehand, never spoofable. The form itself asks only for what you need to reply: phone (optional), what they are looking for, and a message. Spam-grade rate limiting plus honeypot checks keep the inbox clean.</p>
 <h2>What you receive</h2>
-<p>Each inquiry arrives twice: as an in-app notification and as an email to your account address, with the inquirer's details and message. Your email address is never exposed on the profile — the conversation starts through the ledger, and you choose when to take it direct. Hitting reply on the email answers the inquirer; their address is the reply-to.</p>
+<p>The opening inquiry reaches you twice: as an in-app notification and as an email to your account address, carrying the member's details and message, with their address as the reply-to. From there the conversation lives on-platform: each side gets exactly one email per conversation, and every later reply arrives as a site notification instead — so a ten-message negotiation produces one email, not ten. Your address is never exposed on the profile; you choose when to take it direct.</p>
 <h2>The Leads inbox</h2>
-<p><strong>Dashboard → Leads</strong> is where inquiries live. Reading and managing them is a FirmLedger Pro feature (inquiries keep arriving either way — upgrading unlocks the backlog). Every lead carries a status pipeline — <strong>New, Contacted, Qualified, Won, Lost</strong> — plus private notes only you can see, filtering by status and listing, and archiving for the done-and-dusted. A badge on your dashboard counts what's new.</p>
+<p><strong>Dashboard → Leads</strong> is where inquiries live. Reading and managing them is a FirmLedger Pro feature (inquiries keep arriving either way — upgrading unlocks the backlog). Every lead carries a status pipeline — <strong>New, Contacted, Qualified, Won, Lost</strong> — plus private notes only you can see, filtering by status and listing, archiving, and a permanent delete for conversations that are truly done. The member you are talking with sees the same thread under their Sent box, so both sides share one timeline.</p>
 <h2>Closing the loop with Analytics</h2>
 <p>Leads pair naturally with <strong>Audience Analytics</strong>, also Pro: views today, this week and this month, the top locations your audience comes from, and a drill-down per location showing views, unique visitors, profile clicks, website clicks and leads. If a city sends views but no inquiries, your profile — not your traffic — is the problem, and now you can see it.</p>
 <h2>Three habits of listings that convert</h2>
-<p><strong>Claim first.</strong> Only claimed listings receive inquiries — verification is free and takes minutes. <strong>Reply fast.</strong> The email lands instantly; same-day replies win. <strong>Work the pipeline.</strong> Move every lead out of New within a day, even if only to Lost — an honest pipeline is what turns a directory profile into a sales channel.</p>
-<p>Claim your listing, then see <a href="/pricing">what Pro unlocks</a>: the Leads inbox, Audience Analytics, Featured eligibility and more.</p>`,
+<p><strong>Claim first.</strong> Only claimed listings receive inquiries — verification is free and takes minutes. <strong>Reply fast.</strong> The opening inquiry lands as an email instantly, and your first reply is the member's one email for the whole thread — same-day replies win. <strong>Work the pipeline.</strong> Move every lead out of New within a day, even if only to Lost — an honest pipeline is what turns a directory profile into a sales channel.</p>
+<p>Claim your listing from <a href="/claim">the claim page</a>, then see <a href="/pricing">what Pro unlocks</a>: the Leads inbox, Audience Analytics, Featured eligibility and more.</p>`,
+  },
+  {
+    slug: 'where-to-list-your-startup-in-2026',
+    title: 'Where to List Your Startup in 2026 for Instant Verification & SEO',
+    excerpt: 'Google Business Profile, Crunchbase, Product Hunt, review sites and verification-first ledgers each earn you a different kind of trust. A plain-English map of where to list, what verification means on each, and where the SEO value actually comes from.',
+    body: `<p class="lead">A startup in 2026 does not have a visibility problem; it has a trust problem. Anyone can publish a landing page in an afternoon, which is exactly why buyers, partners and investors cross-check you against third-party records before they reply. The platforms below are the ones that matter — not because they are the loudest, but because each one answers a different question about your company, and each one hands you a different kind of search-engine value.</p>
+<h2>What a listing should actually do for you</h2>
+<p>Two things. First, <strong>verification</strong>: a third party confirms you are a real business with a real domain, so strangers can trust the record without emailing you first. Second, <strong>SEO</strong>: a crawlable profile on an established domain — a stable canonical URL, structured data, and a backlink from a site search engines already trust. A directory that blocks crawlers or mints a new URL every redesign gives you neither. Judge every platform on those two axes before you spend an afternoon filling in forms.</p>
+<h2>Google Business Profile — local intent</h2>
+<p>If customers visit, call or drive to you, Google Business Profile is non-negotiable: it is the record behind the map pack and the "near me" results. Verification usually means a postcard, a phone code or a video walkthrough of the premises, and the payoff is local search — queries made five minutes from your door. Pure software companies with no footprint to visit get less from it; a headquarters card is fine, but it is not where your story lives.</p>
+<h2>Crunchbase — the investor's cross-check</h2>
+<p>Crunchbase is where funding history, founders and company milestones get checked by analysts, journalists and sales teams. You can create and edit your own profile, and its data is syndicated widely enough that keeping it current is basic hygiene before a raise. Treat it as your financial biography: accurate rounds, accurate people, accurate dates — because the audience is doing diligence, not shopping.</p>
+<h2>Product Hunt — a launch, not a listing</h2>
+<p>Product Hunt is a moment, not a record. A well-timed launch day brings early adopters, feedback and a spike of traffic that can mint your first thousand users — and then it fades. The permanent residue is small but real: a canonical launch page that ranks for your product's launch and gets cited in round-ups. Ship one good launch, keep the page live, and move on.</p>
+<h2>Review-led profiles — G2 and category sites</h2>
+<p>If you sell software, review platforms like G2 add the strand nobody else can: what customers say, in public, on the record. Reviews age quickly, so the profile rewards companies that keep asking. Its SEO value is category-page visibility — ranking for the "tools for …" searches your own site will not win directly for years.</p>
+<h2>FirmLedger — the verifiable company record</h2>
+<p>FirmLedger occupies a different slot from all of the above: a verification-first business ledger. One canonical profile per company — the ledger refuses duplicates by name and by domain — so every source, relationship and update attaches to a single stable URL instead of scattering across near-duplicates. Ownership is proven the way domain control is proven everywhere else: a DNS TXT record, a meta tag or a badge on your official site, checked live at the moment you press verify. And every field carries its citation trail, distilled into a public confidence score that tells a reader how much of the record is sourced, claimed and verified.</p>
+<p>For SEO specifically, a FirmLedger profile is built to be crawled: a canonical URL per company, structured data on every profile, inclusion in the sitemap index, and search-engine pings when the record changes. If you want to see what a finished record reads like, <a href="/directory">explore the business intelligence data</a> in the public directory; when you are ready to own yours, <a href="/claim">claim your verified business profile</a> and editorial control comes with it.</p>
+<h2>Using them together</h2>
+<p>The platforms compound when they agree. Use the same legal name, the same domain and the same founding facts everywhere, and let each record link back to the same canonical website. A buyer who finds matching facts on Google, Crunchbase and a verification-led ledger has no reason to doubt you — and that, not any single badge, is what a 2026 listing strategy is actually for.</p>`,
   },
 ];
+
+/* Content fixes for posts that were seeded before a product change. A stored
+   post is rewritten only while it still contains one of its stale markers —
+   i.e. it is still the old seed version. Anything an admin has reworded is
+   left alone, exactly like the insert-if-absent rule above. */
+const STALE_MARKERS = {
+  'turning-your-listing-into-leads': ['guests can inquire as easily as members'],
+  'how-firmledger-builds-a-trustworthy-record': ['within about ten hours'],
+};
 
 function seedBlog(db) {
   // Idempotent per-slug: insert every seed post that doesn't already exist, so a
@@ -277,6 +307,10 @@ function seedBlog(db) {
      SELECT ?,?,?,?,'published', ?
       WHERE NOT EXISTS (SELECT 1 FROM blog_posts WHERE slug = ?)`
   );
+  const upd = db.prepare(
+    `UPDATE blog_posts SET title = ?, excerpt = ?, body = ?, updated_at = datetime('now')
+      WHERE id = ?`
+  );
   // Space the seed dates out so the array order == blog order (newest last), and
   // the lead post (the newest guide) sits at the top of /blog.
   const now = Date.now();
@@ -286,6 +320,13 @@ function seedBlog(db) {
     ins.run(p.slug, p.title, p.excerpt, p.body,
       new Date(now - daysAgo * 86400000).toISOString().slice(0, 19).replace('T', ' '),
       p.slug);
+    const markers = STALE_MARKERS[p.slug];
+    if (markers) {
+      const row = db.prepare('SELECT id, body FROM blog_posts WHERE slug = ?').get(p.slug);
+      if (row && markers.some((m) => row.body.includes(m))) {
+        upd.run(p.title, p.excerpt, p.body, row.id);
+      }
+    }
   }
 }
 
