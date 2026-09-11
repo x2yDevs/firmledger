@@ -3075,3 +3075,60 @@ select.input::-ms-expand,
   .ad-checkout-cell .inline { justify-content: flex-start; }
   .ad-checkout-cell .btn { width: 100%; }
 }
+
+/* ============================================================
+   Focus hygiene — nothing may ever paint a ring OVER a form field
+   ============================================================
+   Text inputs, textareas and every dropdown show exactly one focus
+   indicator: their hairline border turning accent while focused
+   (see the global input baseline and the FirmLedger select block).
+   These are the final, load-bearing guards: whatever any other rule
+   or browser default does, no outline, glow or shadow ring may
+   appear on top of a form field — clicked, tapped, typed in or
+   tabbed into, in any focus state. Keyboard focus stays clearly
+   visible where it belongs: links, buttons, checkboxes and radios
+   keep their offset ring (excluded below). */
+html { -webkit-tap-highlight-color: transparent; } /* no translucent overlay when tapping a control */
+
+input:where(:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="range"]):not([type="color"]):not([type="image"])):is(:focus, :focus-visible, :active),
+select:is(:focus, :focus-visible, :active),
+textarea:is(:focus, :focus-visible, :active) {
+  outline: none !important;
+  outline-offset: 0 !important;
+  box-shadow: none !important;
+}
+
+/* Chrome/Edge/Safari paint autofilled fields with a pale-blue wash the moment
+   they are completed — the same "blue overlay on my input" complaint. Hold the
+   design-system surface instead; the text and caret keep the site ink. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-text-fill-color: var(--ink);
+  -webkit-box-shadow: 0 0 0 1000px var(--surface) inset !important;
+  caret-color: var(--ink);
+  transition: background-color 9999s ease-out 0s;
+  border-color: var(--hair2);
+}
+input:-webkit-autofill:focus { border-color: var(--accent); }
+
+/* ============================================================
+   FirmLedger dropdowns — every <select>, site-wide
+   ============================================================
+   Extends the one-hairline + custom chevron treatment (previously only
+   select.input, .fl-select, .ana-pick, .lead-status-form) to ALL selects so
+   no dropdown anywhere falls back to the OS widget and its focus chrome.
+   Deliberately narrow: appearance, chevron and right padding only — each
+   context keeps its own size, colors and border. The dark console picker
+   keeps its own white chevron. */
+select:not(:where(.chat-model-pick select)) {
+  -webkit-appearance: none; appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2364748B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 13px center;
+  background-size: 14px;
+  padding-right: 38px;
+  cursor: pointer;
+}
+select:not(:where(.chat-model-pick select))::-ms-expand { display: none; }

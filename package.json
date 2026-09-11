@@ -19,6 +19,8 @@
     "test:status": "node tests/status-monitor.test.js",
     "test:pro-growth": "node tests/pro-growth.test.js",
     "test:leads-digest": "node tests/leads-digest.test.js",
+    "test:leads-chat": "node tests/leads-messaging.test.js",
+    "test:focus": "node tests/focus-hygiene.test.js",
     "test:upgrade": "node tests/db-upgrade.test.js",
     "test:scale": "node tests/scale.test.js",
     "test:user-area": "node tests/user-area.test.js",
