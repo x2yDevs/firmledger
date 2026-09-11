@@ -107,6 +107,7 @@ const suites = [
   ['Conversion funnel + weekly leads digest', 'leads-digest.test.js'],
   ['Leads contact flow — member → verified business', 'leads-contact.test.js'],
   ['Leads messaging — two-user conversation over HTTP', 'leads-messaging.test.js'],
+  ['Leads inbox — member → claimed owner → chat round trip', 'leads-inbox-e2e.test.js'],
   ['Leads housekeeping — permanent delete + email-first policy', 'leads-housekeeping.test.js'],
   ['Leads + blog fit — notes, honest Sent, article rhythm', 'leads-blog-fit.test.js'],
   ['Blog content — accuracy, stale refresh, 2026 guide', 'blog-content.test.js'],
