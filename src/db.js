@@ -896,6 +896,10 @@ CREATE TABLE IF NOT EXISTS leads (
   country TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT 'new',
   archived INTEGER NOT NULL DEFAULT 0,
+  /* One email per conversation per side: the first message to a party is
+     emailed, every later response is an in-app notification only. */
+  owner_emailed INTEGER NOT NULL DEFAULT 0,
+  inquirer_emailed INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -930,6 +934,9 @@ CREATE INDEX IF NOT EXISTS idx_lead_msgs ON lead_messages(lead_id, id);
 
 /* Existing deployments: add the inquirer column if the leads table pre-dates it. */
 try { db.exec('ALTER TABLE leads ADD COLUMN inquirer_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL'); } catch { /* column exists */ }
+/* One-email-per-conversation flags for tables that pre-date them. */
+try { db.exec('ALTER TABLE leads ADD COLUMN owner_emailed INTEGER NOT NULL DEFAULT 0'); } catch { /* column exists */ }
+try { db.exec('ALTER TABLE leads ADD COLUMN inquirer_emailed INTEGER NOT NULL DEFAULT 0'); } catch { /* column exists */ }
 // Keep index creation AFTER the column migration; IF NOT EXISTS makes repeat boots safe.
 // Do not swallow index failures: a successful boot must have the complete schema.
 db.exec('CREATE INDEX IF NOT EXISTS idx_leads_inquirer ON leads(inquirer_user_id, updated_at DESC)');

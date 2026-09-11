@@ -166,7 +166,15 @@
                 <% if (open.phone) { %><a class="btn btn-ghost btn-sm" href="tel:<%= String(open.phone).replace(/\s/g, '') %>">Call</a><% } %>
                 <% } %>
               </div>
+              <p class="muted" style="font-size:12px;margin:8px 0 0">The first message of a conversation goes by email; every reply after that arrives as a FirmLedger notification.</p>
             </form>
+
+            <% if (openRole === 'inquirer') { %>
+            <form method="post" action="/dashboard/leads/<%= open.id %>/delete" style="margin-top:10px" onsubmit="return confirm('Delete this conversation from your Sent box? The business keeps its own record of the inquiry. This cannot be undone.');">
+              <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+              <button class="btn btn-ghost btn-sm lead-delete-btn" type="submit">Delete conversation</button>
+            </form>
+            <% } %>
 
             <% if (openRole === 'owner') { %>
             <form class="lead-status-form" method="post" action="/dashboard/leads/<%= open.id %>/status">
@@ -182,6 +190,10 @@
               <input type="hidden" name="_csrf" value="<%= csrfToken %>">
               <input type="hidden" name="archived" value="<%= open.archived ? '0' : '1' %>">
               <button class="btn btn-ghost btn-sm" type="submit"><%= open.archived ? 'Restore to inbox' : 'Archive' %></button>
+            </form>
+            <form method="post" action="/dashboard/leads/<%= open.id %>/delete" style="margin-top:10px" onsubmit="return confirm('Permanently delete this conversation, its messages and notes for both sides? This cannot be undone.');">
+              <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+              <button class="btn btn-ghost btn-sm lead-delete-btn" type="submit">Delete permanently</button>
             </form>
 
             <div class="lead-notes-block">

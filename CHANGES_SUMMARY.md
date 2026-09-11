@@ -1,3 +1,45 @@
+## 2026-09-11 — Leads housekeeping + status & notification-settings screen fit
+
+**Status page fits the screen like every other page.** The public `/status`
+page floated in its own 1040px column; it now uses the same container rhythm
+as all other public pages (1200px, 1340px on very wide screens) so its cards
+fill the frame instead of looking narrow beside siblings. A second, real bug
+fixed while verifying in a headless browser: the auto-refresh script applied
+the class `st-st-operational` (double prefix) on every snapshot, so after the
+first refresh the hero lost its status colour and the pulse dot went grey —
+it now keeps `st-<status>` and stays green/amber/red.
+
+**Notification settings fits like the other dashboard pages.** The page was a
+thin 820px column under the site header; it now uses the shared dashboard
+`page-head` header plus the full container, with the preference card and the
+"More settings" card side by side on wide screens and stacked on phones
+(`.settings-grid`). A new "Leads conversation replies" preference row
+documents the email policy below. Asset cache-buster bumped (`ASSET_V` 54→55)
+so browsers pick the new CSS.
+
+**One email per Leads conversation, then site notifications.** Each side of a
+conversation is emailed exactly once — the owner for the opening inquiry, the
+inquirer for the first reply — and every response after that lands as an
+in-app notification only (`owner_emailed` / `inquirer_emailed` flags on
+`leads`, guarded migrations for old databases). Long threads can no longer
+flood anyone's inbox; the reply form and the notification settings page both
+say so.
+
+**Permanent delete under Leads.** A conversation can now be deleted for good,
+not just archived: the business owner (Pro, like the other inbox tools) gets
+"Delete permanently" which removes the lead, its messages and its notes for
+both sides; the inquirer gets "Delete conversation" which removes the thread
+from their own Sent box while the business keeps its record of the inquiry
+(the inquirer link is dropped, so no further pings reach them). Both ask for
+confirmation; strangers and free owners are refused.
+
+**New gate: `tests/leads-housekeeping.test.js` (33 checks, in `npm test` /
+`npm run test:leads-house`).** Drives the real server over HTTP: exactly one
+email per side measured in the mail outbox with notifications counted per
+reply, detach semantics, permanent delete cascading messages away, Pro
+gating, stranger lock-out, and the settings/status pages rendering the new
+layout.
+
 ## 2026-09-10 (production audit #3) — Maintenance holding page + animated error pages
 
 **New gate: `tests/maintenance-page.test.js` (94 checks, in `npm test` / `npm run test:maintenance`).**

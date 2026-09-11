@@ -167,6 +167,42 @@ function setStatus(leadId, ownerId, status) {
   return { ok: true, lead: { ...lead, status } };
 }
 
+/**
+ * Permanently delete a conversation (owner-side). Removes the lead together
+ * with its messages and notes for BOTH parties — there is no trash for leads,
+ * so this cannot be undone. Only the owning business may do this.
+ */
+function permanentDelete(leadId, ownerId) {
+  const lead = getOwned(leadId, ownerId);
+  if (!lead) return { ok: false, error: 'Conversation not found.' };
+  db.prepare('DELETE FROM leads WHERE id=? AND owner_user_id=?').run(lead.id, ownerId);
+  return { ok: true };
+}
+
+/**
+ * Inquirer-side permanent delete: removes the conversation from THIS member's
+ * Sent box by dropping the inquirer link. The business keeps its own record of
+ * the inquiry (name + message) — only the shared account link is removed, so
+ * no further replies or notifications reach the inquirer.
+ */
+function detachInquirer(leadId, userId) {
+  const info = db.prepare(
+    `UPDATE leads SET inquirer_user_id = NULL, updated_at = datetime('now')
+      WHERE id = ? AND inquirer_user_id = ?`
+  ).run(Number(leadId) || 0, Number(userId) || 0);
+  return Boolean(info.changes)
+    ? { ok: true }
+    : { ok: false, error: 'Conversation not found.' };
+}
+
+/** Mark that the given party has received their one email for this lead. */
+function markEmailed(leadId, role) {
+  const col = role === 'owner' ? 'owner_emailed' : role === 'inquirer' ? 'inquirer_emailed' : null;
+  if (!col) return false;
+  db.prepare(`UPDATE leads SET ${col} = 1 WHERE id = ?`).run(Number(leadId) || 0);
+  return true;
+}
+
 function setArchived(leadId, ownerId, archived) {
   const lead = getOwned(leadId, ownerId);
   if (!lead) return { ok: false, error: 'Lead not found.' };
@@ -249,4 +285,5 @@ module.exports = {
   listForOwner, listForInquirer, getOwned, getAccessible,
   setStatus, setArchived, addNote, notesFor,
   addMessage, messagesFor, newCount,
+  permanentDelete, detachInquirer, markEmailed,
 };
