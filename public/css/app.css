@@ -3100,7 +3100,7 @@ select.input::-ms-expand,
 
 @media (max-width: 900px) {
   /* Stacked: the list scrolls inside its own frame, the chat gets ticket height. */
-  .lead-detail .lead-thread { min-height: 420px; max-height: min(78vh, 740px); }
+  .lead-detail .lead-thread { min-height: 420px; max-height: min(80vh, 740px); }
   .lead-reply-form .input { min-height: 76px; }
 }
 @media (max-width: 640px) {
@@ -3109,7 +3109,7 @@ select.input::-ms-expand,
   .ana-pick select { min-width: 0; width: 100%; }
   .lead-tabs { gap: 6px; }
   .lead-tab { padding: 7px 12px; font-size: 12.5px; }
-  .lead-detail .lead-thread { min-height: 400px; max-height: min(74vh, 660px); }
+  .lead-detail .lead-thread { min-height: 400px; max-height: min(76vh, 660px); }
   .lead-status-form label { flex-direction: column; align-items: stretch; }
   .lead-status-form select.input { width: 100%; min-width: 0; }
 }
