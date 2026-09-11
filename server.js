@@ -15,6 +15,34 @@ const express = require('express');
 const compression = require('compression');
 const cookieParser = require('cookie-parser');
 
+/* Last-resort process guards — one stray throw must never take the whole site
+   down. Express 4 answers sync handler errors with the 500 page itself, but a
+   rejected promise (or a throw inside a timer/socket callback) would otherwise
+   exit the process and drop every visitor until the host restarts us. Log it
+   loudly for the ops trail and keep serving — each request is independent and
+   better-sqlite3 is synchronous, so there is no half-written async state to
+   fear. `listening` flips once the HTTP server is up: a crash before that is
+   a boot failure, so the guards exit non-zero and let the host report a
+   failed start instead of leaving a zombie process that holds no port. */
+let listening = false;
+function bootFailed(where, err) {
+  console.error(`[fatal] ${where} before the server started listening:`,
+    err && err.stack ? err.stack : err);
+  process.exitCode = 1;
+  try { require('./src/db').db.close(); } catch {}
+  process.exit(1);
+}
+process.on('unhandledRejection', (reason) => {
+  if (!listening) return bootFailed('unhandledRejection', reason);
+  console.error('[guard] unhandledRejection — request dropped, server kept alive:',
+    reason && reason.stack ? reason.stack : reason);
+});
+process.on('uncaughtException', (err) => {
+  if (!listening) return bootFailed('uncaughtException', err);
+  console.error('[guard] uncaughtException — server kept alive:',
+    err && err.stack ? err.stack : err);
+});
+
 const session = require('./src/lib/session');
 const util = require('./src/lib/util');
 
@@ -23,6 +51,22 @@ const ASSET_V = '53';
 
 const app = express();
 app.set('trust proxy', true);
+
+/* Public liveness probe — deliberately FIRST, before the canonical-host and
+   trailing-slash redirects, so it answers 200 on every host (apex, www and
+   the raw onrender.com origin) without sessions, CSRF or page rendering.
+   Point Render's Health Check Path (Dashboard → Settings) at /healthz: a 200
+   here proves the process is up AND the database answers. Anything else can
+   stay exactly as it is — this endpoint changes no existing behaviour. */
+app.get('/healthz', (req, res) => {
+  try {
+    require('./src/db').db.prepare('SELECT 1 AS ok').get();
+    res.status(200).json({ ok: true, service: 'firmledger', time: new Date().toISOString() });
+  } catch (e) {
+    console.error('[healthz] database check failed:', e && e.message);
+    res.status(503).json({ ok: false, error: 'Database unavailable.' });
+  }
+});
 
 // ===== Canonical host: onrender.com and www → firmledger.co.ke =====
 app.use((req, res, next) => {
@@ -228,6 +272,7 @@ const newsletter = require('./src/lib/newsletter');
 const supportLib = require('./src/lib/support');
 const notificationsLib = require('./src/lib/notifications');
 function hourlyJobs() {
+  try {
   /* Automated upkeep — refreshes stale technology snapshots and looks for fresh
      news coverage, capped per hour and switched in Admin → Settings. */
   require('./src/lib/upkeep').runSweep().catch((e) => console.error('[upkeep] sweep failed:', e && e.message));
@@ -257,11 +302,17 @@ function hourlyJobs() {
      custom) that has been idle past the window pings admin@firmledger.co.ke
      automatically, so vendors never close the account for inactivity. */
   try { require('./src/lib/mailer').keepAliveSweep().catch((e) => console.error('[mail-keepalive]', e && e.message)); } catch (e) { console.error('[mail-keepalive]', e.message); }
+  } catch (e) {
+    /* The per-job guards above should have caught everything; this outer net
+       only exists so a future job can never crash the hourly tick itself. */
+    console.error('[hourly] unexpected failure (each job is guarded individually):', e && e.message);
+  }
 }
 setInterval(hourlyJobs, 3600e3);
 setTimeout(hourlyJobs, 90e3);
 
-app.listen(PORT, '0.0.0.0', () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
+  listening = true;
   console.log(`FirmLedger running on http://0.0.0.0:${PORT} — public base: ${util.siteUrl('/')}`);
   /* Start the public status monitor once we're listening, so the first
      self-probe against our own origin succeeds. */
@@ -275,3 +326,39 @@ app.listen(PORT, '0.0.0.0', () => {
     console.warn('   Before launch set BASE_URL=https://your-domain (no trailing slash) in .env and restart. Set FORCE_INDEXABLE=1 to override.');
   }
 });
+
+/* A listen failure (port already in use, no permission) means we can never
+   serve — say so plainly and exit non-zero so the host (Render/systemd) shows
+   a failed deploy instead of a silent 502 with no logs. */
+server.on('error', (err) => {
+  console.error(`[fatal] cannot listen on port ${PORT}:`, err && err.message);
+  console.error('   Fix: make sure PORT is free (or set PORT to another value) and restart.');
+  process.exitCode = 1;
+  try { require('./src/lib/statusMonitor').stopMonitoring(); } catch {}
+  try { require('./src/db').db.close(); } catch {}
+  process.exit(1);
+});
+
+/* Graceful shutdown — Render and systemd send SIGTERM before every restart or
+   redeploy. Draining in-flight requests and checkpointing/closing SQLite
+   (WAL) beats an abrupt kill: no dropped checkouts mid-capture, no WAL file
+   left for the next boot to recover. Forced exit after 10s so a stuck socket
+   can never wedge a deploy. */
+function shutdown(signal) {
+  console.log(`[shutdown] ${signal} received — draining…`);
+  try { require('./src/lib/statusMonitor').stopMonitoring(); } catch {}
+  const force = setTimeout(() => {
+    console.error('[shutdown] drain timed out — exiting.');
+    process.exit(1);
+  }, 10_000);
+  if (force.unref) force.unref();
+  server.close(() => {
+    try { require('./src/db').db.close(); } catch (e) {
+      console.error('[shutdown] db close:', e && e.message);
+    }
+    console.log('[shutdown] clean exit.');
+    process.exit(0);
+  });
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));

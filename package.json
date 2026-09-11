@@ -19,12 +19,16 @@
     "test:status": "node tests/status-monitor.test.js",
     "test:pro-growth": "node tests/pro-growth.test.js",
     "test:leads-digest": "node tests/leads-digest.test.js",
+    "test:upgrade": "node tests/db-upgrade.test.js",
     "test:scale": "node tests/scale.test.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "FirmLedger — verified company intelligence and business listings.",
+  "engines": {
+    "node": "20.x || 22.x"
+  },
   "dependencies": {
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.11.1",

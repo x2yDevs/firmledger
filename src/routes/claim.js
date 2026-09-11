@@ -107,9 +107,26 @@ router.post('/claim/verify/:id', async (req, res) => {
 
   if (c.status === 'verified') return res.redirect('/dashboard');
 
-  const result = await runCheck(c.method, c.domain, c.token);
+  /* runCheck is network I/O — a failure here must re-render the verify page
+     with an explanation, never escape as an unhandled rejection. */
+  let result;
+  try {
+    result = await runCheck(c.method, c.domain, c.token);
+  } catch (e) {
+    console.error('[claim] verification check failed:', e && e.message);
+    result = { ok: false, detail: 'The verification check hit a temporary error — please try again in a moment.' };
+  }
   if (result.ok) {
-    finalizeVerifiedClaim(c, l, req.user);
+    try {
+      finalizeVerifiedClaim(c, l, req.user);
+    } catch (e) {
+      console.error('[claim] finalize failed:', e && e.message);
+      result = { ok: false, detail: 'Ownership is verified but saving hit a temporary error — please try again.' };
+      return res.render('claim/verify', {
+        meta: { title: `Verify ${l.name} — FirmLedger`, description: '', robots: 'noindex' },
+        c, l, result, badgeUrl: siteUrl(`/badge/${l.slug}.svg`), profileUrl: siteUrl(`/listing/${l.slug}`),
+      });
+    }
     return res.redirect('/dashboard?ok=' + encodeURIComponent(`Ownership verified — ${l.name} is now yours to manage.`));
   }
 

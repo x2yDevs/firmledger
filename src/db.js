@@ -901,7 +901,12 @@ CREATE TABLE IF NOT EXISTS leads (
 );
 CREATE INDEX IF NOT EXISTS idx_leads_owner ON leads(owner_user_id, archived, status, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_leads_listing ON leads(listing_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_leads_inquirer ON leads(inquirer_user_id, updated_at DESC);
+/* NOTE: idx_leads_inquirer is created by the guarded migration below, AFTER
+   the ALTER that adds inquirer_user_id. It must never live in this unguarded
+   block: on a database whose leads table pre-dates the column, CREATE INDEX
+   throws SQLITE_ERROR ("no such column") at require time and the whole
+   process crash-loops (IF NOT EXISTS only guards the index name, not the
+   columns). That exact ordering crashed every boot of PR #55 on production. */
 
 CREATE TABLE IF NOT EXISTS lead_notes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

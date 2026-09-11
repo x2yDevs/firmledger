@@ -808,7 +808,15 @@ router.post('/admin3119Musa/settings/upkeep', (req, res) => {
 });
 
 router.post('/admin3119Musa/settings/upkeep/run', async (req, res) => {
-  const r = await upkeep.runSweep({ force: true });
+  /* A sweep failure must land on the settings page as a message, never escape
+     as an unhandled rejection (which would drop the whole process). */
+  let r;
+  try {
+    r = await upkeep.runSweep({ force: true });
+  } catch (e) {
+    console.error('[admin] upkeep run failed:', e && e.message);
+    return res.redirect('/admin3119Musa/settings?err=' + encodeURIComponent('Upkeep hit a temporary error — please try again.'));
+  }
   if (!r.ok) {
     return res.redirect('/admin3119Musa/settings?err=' + encodeURIComponent(
       r.skipped === 'already-running' ? 'An upkeep sweep is already running.' : 'Upkeep is switched off.'));
@@ -1089,7 +1097,13 @@ router.get('/admin3119Musa/claims', (req, res) => {
 router.post('/admin3119Musa/claims/:id/recheck', async (req, res) => {
   const c = db.prepare('SELECT * FROM claims WHERE id=?').get(req.params.id);
   if (c && c.status === 'pending') {
-    const result = await runCheck(c.method, c.domain, c.token);
+    let result;
+    try {
+      result = await runCheck(c.method, c.domain, c.token);
+    } catch (e) {
+      console.error('[admin] claim recheck failed:', e && e.message);
+      return res.redirect('/admin3119Musa/claims?err=' + encodeURIComponent('The re-check hit a temporary error — please try again.'));
+    }
     if (result.ok) {
       const l = db.prepare('SELECT * FROM listings WHERE id=?').get(c.listing_id);
       const u = db.prepare('SELECT * FROM users WHERE id=?').get(c.user_id);
@@ -1472,7 +1486,13 @@ router.post('/admin3119Musa/settings/test-mail', async (req, res) => {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(to)) {
     return res.redirect('/admin3119Musa/settings?err=' + encodeURIComponent('Enter a valid address for the test email.'));
   }
-  const r = await sendTest(to);
+  let r;
+  try {
+    r = await sendTest(to);
+  } catch (e) {
+    console.error('[admin] test-mail failed:', e && e.message);
+    return res.redirect('/admin3119Musa/settings?err=' + encodeURIComponent('Test failed: temporary mail error — please try again.'));
+  }
   if (r.ok) return res.redirect('/admin3119Musa/settings?ok=' + encodeURIComponent(`Test email sent to ${to} — check the inbox (and spam folder).`));
   return res.redirect('/admin3119Musa/settings?err=' + encodeURIComponent(`Test failed: ${r.error}`));
 });

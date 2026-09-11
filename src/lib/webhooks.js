@@ -434,9 +434,18 @@ function scheduleDelivery(id) {
 }
 
 function drain() {
-  const rows = db.prepare(`SELECT id FROM api_webhook_deliveries
-    WHERE status='pending' AND (next_attempt_at IS NULL OR datetime(next_attempt_at) <= datetime('now'))
-    ORDER BY id ASC LIMIT 20`).all();
+  /* Runs on boot + every 30s outside any request: a synchronous throw here
+     (e.g. the database briefly unavailable) would otherwise escape as an
+     uncaught exception and kill the whole process. Log and retry next tick. */
+  let rows = [];
+  try {
+    rows = db.prepare(`SELECT id FROM api_webhook_deliveries
+      WHERE status='pending' AND (next_attempt_at IS NULL OR datetime(next_attempt_at) <= datetime('now'))
+      ORDER BY id ASC LIMIT 20`).all();
+  } catch (e) {
+    console.error('[webhooks] queue drain skipped:', e && e.message);
+    return;
+  }
   rows.forEach((r) => scheduleDelivery(r.id));
 }
 

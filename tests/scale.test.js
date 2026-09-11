@@ -23,6 +23,11 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn, spawnSync } = require('child_process');
+const crypto = require('crypto');
+/* Contacting a business is members-only: the inquiry post below goes out
+   as this seeded member (session cookie + CSRF), never as a guest. */
+const inqToken = 'scaleinq' + crypto.randomBytes(16).toString('hex');
+const inqCsrf = crypto.randomBytes(12).toString('hex');
 
 const ROOT = path.join(__dirname, '..');
 const N_SPON = Math.max(50, parseInt(process.env.SCALE_SPONSORED || '400', 10));
@@ -81,6 +86,8 @@ process.env.FIRMLEDGER_DATA_DIR = ${JSON.stringify(dataDir)};
 const { db } = require(${JSON.stringify(path.join(ROOT, 'src/db.js'))});
 const proId = db.prepare("INSERT INTO users (email,password_hash,name,plan,plan_expires_at) VALUES ('scale-pro@test.dev','x','Scale Pro','pro',date('now','+30 days'))").run().lastInsertRowid;
 const ownId = db.prepare("INSERT INTO users (email,password_hash,name) VALUES ('scale-own@test.dev','x','Scale Owner')").run().lastInsertRowid;
+const inqId = db.prepare("INSERT INTO users (email,password_hash,name) VALUES ('scale-inq@test.dev','x','Scale Inquirer')").run().lastInsertRowid;
+db.prepare("INSERT INTO sessions (token,user_id,csrf,kind,expires_at) VALUES (?,?,?,'user',datetime('now','+1 day'))").run(${JSON.stringify(inqToken)}, inqId, ${JSON.stringify(inqCsrf)});
 const ins = db.prepare(\`INSERT INTO listings (slug,name,tagline,description,type,category,country,city,status,claimed,confidence,owner_user_id,sponsored,sponsored_expires_at)
   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)\`);
 const CATS = ${JSON.stringify(CATS)};
@@ -233,7 +240,10 @@ console.log('seeded');
       check('25 refreshes record 25 views', after.views - before.views === 25, `+${after.views - before.views}`);
       const post = await fetch(BASE + '/listing/spon-2/leads', {
         method: 'POST',
-        headers: { 'content-type': 'application/x-www-form-urlencoded', 'user-agent': 'Mozilla/5.0 ScaleTest/1.0' },
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded', 'user-agent': 'Mozilla/5.0 ScaleTest/1.0',
+          cookie: `fl_session=${inqToken}`, 'x-csrf-token': inqCsrf,
+        },
         body: new URLSearchParams({
           name: 'Scale Prospect', email: 'prospect-scale@test.dev', subject: 'Bulk order',
           message: 'We would like a bulk quotation for five hundred units, please.',

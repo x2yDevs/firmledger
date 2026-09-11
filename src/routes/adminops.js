@@ -229,7 +229,13 @@ router.post('/admin3119Musa/mail/test-provider', async (req, res) => {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(to)) {
     return back(res, '/admin3119Musa/settings', 'err', 'Enter a valid address for the provider test.');
   }
-  const r = await sendTestVia(key, to);
+  let r;
+  try {
+    r = await sendTestVia(key, to);
+  } catch (e) {
+    console.error('[admin] provider test failed:', e && e.message);
+    return back(res, '/admin3119Musa/settings', 'err', 'Provider test failed — temporary mail error, please try again.');
+  }
   if (r.ok) return back(res, '/admin3119Musa/settings', 'ok', `Provider test sent via ${r.label} (${r.via}) to ${to} — check inbox and spam.`);
   return back(res, '/admin3119Musa/settings', 'err', `Provider test failed — ${r.error}`);
 });

@@ -112,8 +112,13 @@ function findDuplicate(f, excludeId = null) {
 
 /* ---------------- Auto-fill from website ---------------- */
 router.post('/dashboard/fetch-details', async (req, res) => {
-  const result = await fetchSiteDetails(req.body.website || '');
-  res.json(result);
+  try {
+    const result = await fetchSiteDetails(req.body.website || '');
+    res.json(result);
+  } catch (e) {
+    console.error('[dashboard] fetch-details failed:', e && e.message);
+    res.json({ ok: false, error: 'Could not fetch details right now — please fill the record in manually.' });
+  }
 });
 
 /* ---------------- Dashboard home ---------------- */
@@ -461,9 +466,17 @@ router.post('/dashboard/listings/:id/refresh-tech', ownListing, async (req, res)
 
   const l = req.listing;
   if (!l.website) return res.redirect('/dashboard?err=' + encodeURIComponent('Add a website first.'));
-  const snap = await detectTech(l.website);
-  db.prepare('UPDATE listings SET tech = ?, tech_checked_at = ?, hiring_url = ? WHERE id = ?')
-    .run(JSON.stringify(snap.tech), new Date().toISOString().slice(0, 10), (snap.hiring && snap.hiring.url) || '', l.id);
+  /* Network + DB in one step — a failure redirects with an explanation rather
+     than escaping as an unhandled rejection. */
+  let snap;
+  try {
+    snap = await detectTech(l.website);
+    db.prepare('UPDATE listings SET tech = ?, tech_checked_at = ?, hiring_url = ? WHERE id = ?')
+      .run(JSON.stringify(snap.tech), new Date().toISOString().slice(0, 10), (snap.hiring && snap.hiring.url) || '', l.id);
+  } catch (e) {
+    console.error('[dashboard] refresh-tech failed:', e && e.message);
+    return res.redirect('/dashboard?err=' + encodeURIComponent('Could not scan the website right now — please try again in a moment.'));
+  }
   listingEvents.updated(db.prepare('SELECT * FROM listings WHERE id=?').get(l.id), { change: 'technology_snapshot' });
   if (JSON.stringify(snap.tech) !== _oldTech && snap.tech.length) {
     nl.notifyWatchers(l.id, [`Technology stack refreshed — <b>${snap.tech.length}</b> technologies now detected (${snap.tech.slice(0, 6).map(escHtml).join(', ')}${snap.tech.length > 6 ? '…' : ''})`]).catch(() => {});
