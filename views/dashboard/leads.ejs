@@ -41,8 +41,8 @@
     <% if (typeof err !== 'undefined' && err) { %><div class="alert alert-err"><%= err %></div><% } %>
 
     <div class="lead-tabs" role="tablist" aria-label="Lead boxes">
-      <a role="tab" aria-selected="<%= !isSent && !isArchived && !filters.status %>" class="lead-tab<%= !isSent && !isArchived && !filters.status ? ' on' : '' %>" href="/dashboard/leads<%= filters.listingId ? '?listing=' + filters.listingId : '' %>">Received <span class="lead-n"><%= counts.total %></span></a>
-      <a role="tab" aria-selected="<%= isSent %>" class="lead-tab<%= isSent ? ' on' : '' %>" href="/dashboard/leads?box=sent">Sent <span class="lead-n"><%= sentCounts.total %></span></a>
+      <a role="tab" aria-selected="<%= !isSent && !isArchived && !filters.status %>" class="lead-tab<%= !isSent && !isArchived && !filters.status ? ' on' : '' %>" href="/dashboard/leads<%= filters.listingId ? '?listing=' + filters.listingId : '' %>">Received <span class="lead-n"><%= counts.total %></span><% if (counts.unread) { %><span class="lead-unread" title="<%= counts.unread %> unread message<%= counts.unread === 1 ? '' : 's' %>"><%= counts.unread %> new</span><% } %></a>
+      <a role="tab" aria-selected="<%= isSent %>" class="lead-tab<%= isSent ? ' on' : '' %>" href="/dashboard/leads?box=sent">Sent <span class="lead-n"><%= sentCounts.total %></span><% if (sentCounts.unread) { %><span class="lead-unread" title="<%= sentCounts.unread %> unread repl<%= sentCounts.unread === 1 ? 'y' : 'ies' %>"><%= sentCounts.unread %> new</span><% } %></a>
       <% if (pro && !isSent) { %>
         <% STATUSES.forEach(function (s) { %>
         <a role="tab" aria-selected="<%= filters.status === s && !isArchived %>" class="lead-tab<%= filters.status === s && !isArchived ? ' on' : '' %>" href="/dashboard/leads?status=<%= s %><%= filters.listingId ? '&listing=' + filters.listingId : '' %>"><%= STATUS_LABELS[s] %> <span class="lead-n"><%= counts[s] || 0 %></span></a>
@@ -90,13 +90,26 @@
           <% } else { %>
             <div class="lead-list lead-list-scroll">
               <% box.rows.forEach(function (ld) { %>
-              <a class="lead-row<%= open && open.id === ld.id ? ' open' : '' %><%= !isSent && ld.status === 'new' ? ' is-new' : '' %>" href="/dashboard/leads?<%= _fqs %>open=<%= ld.id %>">
+              <%
+                /* Unread is per side: what the OTHER party has said since this
+                   one last opened the thread. It is the real signal — status
+                   only ever described the business's own pipeline stage. */
+                const unread = Number(isSent ? ld.inquirer_unread : ld.owner_unread) || 0;
+                /* Preview the latest message, not the opening one, so a live
+                   conversation reads like a conversation. */
+                const preview = ld.last_body || ld.message || '';
+                const mineLast = (isSent && ld.last_sender === 'inquirer') || (!isSent && ld.last_sender === 'owner');
+              %>
+              <a class="lead-row<%= open && open.id === ld.id ? ' open' : '' %><%= unread ? ' is-unread' : '' %><%= !isSent && ld.status === 'new' ? ' is-new' : '' %>" href="/dashboard/leads?<%= _fqs %>open=<%= ld.id %>">
                 <span class="lead-row-main">
-                  <b><%= isSent ? ld.listing_name : ld.name %></b>
-                  <small class="muted"><%= ld.looking_for || (ld.message || '').slice(0, 80) %></small>
-                  <small class="muted"><%= isSent ? ld.name : ld.listing_name %> · <%= fmtDate(ld.updated_at || ld.created_at) %></small>
+                  <b><%= isSent ? ld.listing_name : ld.name %><% if (unread) { %> <span class="lead-dot" aria-label="<%= unread %> unread message<%= unread === 1 ? '' : 's' %>"></span><% } %></b>
+                  <small class="muted"><%= ld.looking_for || preview.slice(0, 80) %></small>
+                  <small class="muted"><% if (preview && ld.looking_for) { %><%= mineLast ? 'You: ' : '' %><%= preview.slice(0, 60) %> · <% } %><%= fmtDate(ld.updated_at || ld.created_at) %></small>
                 </span>
-                <% if (!isSent) { %><span class="pill pill-lead-<%= ld.status %>"><%= STATUS_LABELS[ld.status] %></span><% } %>
+                <span class="lead-row-side">
+                  <% if (unread) { %><span class="pill pill-lead-unread"><%= unread %> new</span><% } %>
+                  <% if (!isSent) { %><span class="pill pill-lead-<%= ld.status %>"><%= STATUS_LABELS[ld.status] %></span><% } %>
+                </span>
               </a>
               <% }) %>
             </div>
@@ -125,6 +138,10 @@
               <% } %>
             </p>
 
+            <% if (openRole === 'owner' && open.archived) { %>
+            <p class="lead-archived-note">Archived — it stays out of your inbox until the customer writes again.</p>
+            <% } %>
+
             <% if (openRole === 'owner') { %>
             <table class="facts">
               <tr><th>Email</th><td><a href="mailto:<%= open.email %>" style="color:var(--accent2)"><%= open.email %></a></td></tr>
@@ -135,13 +152,22 @@
             <p style="font-size:13.5px;margin:8px 0 0"><span class="muted">Looking for:</span> <b><%= open.looking_for %></b></p>
             <% } %>
 
+            <%
+              /* openUnread is how many messages arrived since this side last
+                 opened the thread; mark exactly where they left off. */
+              const _unread = Number(typeof openUnread !== 'undefined' ? openUnread : 0) || 0;
+              const _firstUnread = _unread > 0 ? Math.max(0, (openMessages || []).length - _unread) : -1;
+            %>
             <div class="lead-thread" id="leadThread">
               <% if (openMessages && openMessages.length) { %>
                 <% let lastDay = ''; %>
-                <% openMessages.forEach(function (m) { %>
+                <% openMessages.forEach(function (m, i) { %>
                   <% const day = String(m.created_at || '').slice(0, 10); %>
                   <% if (day && day !== lastDay) { lastDay = day; %>
                     <div class="lead-day"><%= fmtDate(day) %></div>
+                  <% } %>
+                  <% if (i === _firstUnread) { %>
+                    <div class="lead-day lead-new-line" id="leadNewLine"><%= _unread %> new message<%= _unread === 1 ? '' : 's' %></div>
                   <% } %>
                   <% const mine = (openRole === 'owner' && m.sender === 'owner') || (openRole === 'inquirer' && m.sender === 'inquirer'); %>
                   <div class="lead-bubble<%= mine ? ' mine' : ' theirs' %>">
@@ -155,10 +181,22 @@
               <% } %>
             </div>
 
+            <%
+              /* The member can delete their copy of a conversation; the business
+                 keeps the record but there is nobody left to receive a reply.
+                 Never show a live reply box that quietly writes to nowhere. */
+              const _detached = openRole === 'owner' && !open.inquirer_user_id;
+            %>
+            <% if (_detached) { %>
+            <div class="alert alert-info lead-detached" role="status">
+              <b><%= open.name %></b> deleted this conversation from their FirmLedger account, so they can no longer receive replies here. The inquiry stays on your record.
+              <% if (open.email) { %><br>Reach them directly at <a href="mailto:<%= open.email %>?subject=<%= encodeURIComponent('Re: your inquiry to ' + open.listing_name + (open.looking_for ? ' — ' + open.looking_for : '')) %>"><%= open.email %></a><% if (open.phone) { %> or <a href="tel:<%= String(open.phone).replace(/\s/g, '') %>"><%= open.phone %></a><% } %>.<% } %>
+            </div>
+            <% } else { %>
             <form class="lead-reply-form" method="post" action="/dashboard/leads/<%= open.id %>/reply">
               <input type="hidden" name="_csrf" value="<%= csrfToken %>">
               <label class="sr-only" for="lead-reply-<%= open.id %>">Your message</label>
-              <textarea class="input" id="lead-reply-<%= open.id %>" name="body" rows="3" maxlength="4000" required placeholder="<%= openRole === 'owner' ? 'Reply to ' + open.name + '…' : 'Write a follow-up to ' + open.listing_name + '…' %>"></textarea>
+              <textarea class="input" id="lead-reply-<%= open.id %>" name="body" rows="3" maxlength="<%= typeof MESSAGE_MAX !== 'undefined' ? MESSAGE_MAX : 4000 %>" required placeholder="<%= openRole === 'owner' ? 'Reply to ' + open.name + '…' : 'Write a follow-up to ' + open.listing_name + '…' %>"></textarea>
               <div class="lead-reply-actions">
                 <button class="btn btn-primary btn-sm" type="submit">Send message</button>
                 <% if (openRole === 'owner') { %>
@@ -168,6 +206,7 @@
               </div>
               <p class="muted" style="font-size:12px;margin:8px 0 0">The first message of a conversation goes by email; every reply after that arrives as a FirmLedger notification.</p>
             </form>
+            <% } %>
 
             <% if (openRole === 'inquirer') { %>
             <form method="post" action="/dashboard/leads/<%= open.id %>/delete" style="margin-top:10px" onsubmit="return confirm('Delete this conversation from your Sent box? The business keeps its own record of the inquiry. This cannot be undone.');">
@@ -230,8 +269,27 @@
 
 <script>
 (function () {
+  'use strict';
   var t = document.getElementById('leadThread');
-  if (t) t.scrollTop = t.scrollHeight;
+  if (!t) return;
+  /* Land on the first unread message when there is one, otherwise on the
+     newest — the same rule every mail client uses. */
+  var line = document.getElementById('leadNewLine');
+  if (line) t.scrollTop = Math.max(0, line.offsetTop - 12);
+  else t.scrollTop = t.scrollHeight;
+
+  /* Reply box: never let a double-click send the same message twice. */
+  var form = document.querySelector('.lead-reply-form');
+  if (!form) return;
+  form.addEventListener('submit', function () {
+    var btn = form.querySelector('button[type="submit"]');
+    var box = form.querySelector('textarea');
+    if (!btn || btn.disabled) return;
+    if (typeof form.checkValidity === 'function' && !form.checkValidity()) return;
+    if (box && !box.value.trim()) return;
+    btn.disabled = true;
+    btn.textContent = 'Sending…';
+  });
 })();
 </script>
 

@@ -17,6 +17,7 @@ const careers = require('../lib/careers');
 
 const spam = require('../lib/spam');
 const newsLib = require('../lib/news');
+const leadsLib = require('../lib/leads');
 const { requireUser } = require('../lib/session');
 
 const router = express.Router();
@@ -484,8 +485,25 @@ router.get('/listing/:slug', (req, res, next) => {
     hiringUrl: l.hiring_url || '',
     techCheckedAt: l.tech_checked_at || '',
     news: newsLib.approvedFor(l.id, 6),
-    /* Leads: “Contact this business” lives on claimed profiles only. The form
-       posts to /listing/:slug/leads; flash state rides the query string. */
+    /* Leads: “Contact this business” lives on claimed profiles only, and only
+       while a live owner account can actually read what is sent (leadsLib
+       .canReceive) — a button that posts into a void is worse than no button.
+       The form posts to /listing/:slug/leads; flash state rides the query
+       string, and whatever the member typed is handed back on `leadOld` so a
+       validation error never costs them their message. */
+    leadCanReceive: leadsLib.canReceive(l).ok,
+    leadLimits: {
+      name: leadsLib.NAME_MAX,
+      phone: leadsLib.PHONE_MAX,
+      subject: leadsLib.SUBJECT_MAX,
+      message: leadsLib.MESSAGE_MAX,
+    },
+    leadOld: {
+      name: String(req.query.lead_name || '').slice(0, leadsLib.NAME_MAX),
+      phone: String(req.query.lead_phone || '').slice(0, leadsLib.PHONE_MAX),
+      subject: String(req.query.lead_subject || '').slice(0, leadsLib.SUBJECT_MAX),
+      message: String(req.query.lead_message || '').slice(0, leadsLib.MESSAGE_MAX),
+    },
     leadOk: req.query.lead_ok || '',
     leadErr: req.query.lead_err || '',
     leadSent: req.query.lead_sent === '1',
@@ -498,29 +516,61 @@ router.get('/listing/:slug', (req, res, next) => {
  * VERIFIED OWNER's inbox (Dashboard → Leads) + email. Both sides can keep
  * talking in the Leads thread. The owner's email is never exposed.
  * Rate-limited, honeypot-guarded and domain-checked like every other form.
+ *
+ * The spam gate checks the SIGNED-IN ACCOUNT's email, not req.body.email: the
+ * body address is cosmetic (the form renders it read-only and this handler
+ * ignores it), so domain-blocking it would have blocked nothing while letting
+ * a blocked account through by simply typing a different address.
  */
-router.post('/listing/:slug/leads', spam.gate('lead', { checkEmail: true }), (req, res, next) => {
+const leadEmailGate = (req, res, next) => {
+  if (req.user && req.user.email) req.spamEmail = req.user.email;
+  return spam.gate('lead', { checkEmail: true })(req, res, next);
+};
+router.post('/listing/:slug/leads', leadEmailGate, (req, res, next) => {
   const l = db.prepare('SELECT * FROM listings WHERE slug = ?').get(req.params.slug);
   if (!l) return next();
-  const back = (q) => res.redirect(`/listing/${l.slug}${q}#contact-business`);
-  if (String(req.body.company_site || '').trim()) return back(''); // honeypot
+  /* Hand the member's own words back on any bounce so a validation error never
+     costs them a long, carefully written brief. */
+  const typed = {
+    lead_name: String(req.body.name || '').slice(0, leadsLib.NAME_MAX),
+    lead_phone: String(req.body.phone || '').slice(0, leadsLib.PHONE_MAX),
+    lead_subject: String(req.body.subject || req.body.looking_for || '').slice(0, leadsLib.SUBJECT_MAX),
+    lead_message: String(req.body.message || '').slice(0, leadsLib.MESSAGE_MAX),
+  };
+  /* Percent-encoding (not URLSearchParams, which writes "+" for spaces) so the
+     redirect matches every other flash URL on the site and decodes cleanly. */
+  const back = (params) => {
+    const qs = Object.entries(params)
+      .filter(([, v]) => v !== undefined && v !== null && v !== '')
+      .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
+      .join('&');
+    return res.redirect(`/listing/${l.slug}${qs ? `?${qs}` : ''}#contact-business`);
+  };
+  const bounce = (message) => back({ lead_err: message, ...typed });
+  if (String(req.body.company_site || '').trim()) return back({}); // honeypot
   if (!req.user) {
     return res.redirect('/login?next=' + encodeURIComponent(`/listing/${l.slug}#contact-business`));
   }
-  if (l.status !== 'approved' || !l.claimed || !l.owner_user_id) {
-    return back('?lead_err=' + encodeURIComponent('This business cannot receive inquiries yet.'));
-  }
   if (l.owner_user_id === req.user.id) {
-    return back('?lead_err=' + encodeURIComponent('This is your own listing — inquiries from visitors land in your Leads inbox.'));
+    return bounce('This is your own listing — inquiries from visitors land in your Leads inbox.');
   }
-  const leads = require('../lib/leads');
+  /* One question, asked the same way here and on the page that drew the form:
+     can a live owner account actually read this? */
+  const gate = leadsLib.canReceive(l);
+  if (!gate.ok) return bounce(gate.error);
+
+  const leads = leadsLib;
   const analytics = require('../lib/analytics');
   const loc = analytics.locate(req);
-  /* Email always comes from the FirmLedger account — never freehand input. */
+  /* Email always comes from the FirmLedger account — never freehand input.
+     The NAME prefers what the member typed for this business (they may sign as
+     "Jane Wanjiku, Facilities" or fix a one-letter profile name) and falls back
+     to the account name. Before, the account name always won, which left any
+     member whose profile name was too short permanently unable to send. */
   const r = leads.create({
     listing: l,
     fields: {
-      name: req.user.name || req.body.name,
+      name: req.body.name || req.user.name,
       email: req.user.email,
       phone: req.body.phone,
       looking_for: req.body.subject || req.body.looking_for,
@@ -530,7 +580,15 @@ router.post('/listing/:slug/leads', spam.gate('lead', { checkEmail: true }), (re
     inquirerUserId: req.user.id,
   });
   if (!r.ok) {
-    return back('?lead_err=' + encodeURIComponent(r.errors ? r.errors.join(' ') : (r.error || 'That inquiry could not be sent.')));
+    return bounce(r.errors ? r.errors.join(' ') : (r.error || 'That inquiry could not be sent.'));
+  }
+  /* A double-submit (button double-clicked, POST refreshed) reuses the thread
+     that already exists — confirm it without emailing or notifying twice. */
+  if (r.duplicate) {
+    return back({
+      lead_sent: '1',
+      lead_ok: `Your inquiry is already with ${l.name} — we didn't send it twice. Follow the conversation in Dashboard → Leads → Sent.`,
+    });
   }
   /* Owner inbox + email. The inquirer never sees the owner's address. */
   const notify = require('../lib/notify');
@@ -540,7 +598,7 @@ router.post('/listing/:slug/leads', spam.gate('lead', { checkEmail: true }), (re
     body: `${r.fields.looking_for ? `${r.fields.looking_for} · ` : ''}${r.fields.message.slice(0, 140)}`,
     url: `/dashboard/leads?open=${r.id}`,
   });
-  const owner = db.prepare('SELECT email, name FROM users WHERE id=?').get(l.owner_user_id);
+  const owner = gate.owner;
   if (owner && owner.email) {
     const util2 = require('../lib/util');
     const { sendBranded } = require('../lib/mailer');
@@ -564,8 +622,10 @@ router.post('/listing/:slug/leads', spam.gate('lead', { checkEmail: true }), (re
       note: `Listing: <b>${esc(l.name)}</b> · received ${new Date().toISOString().slice(0, 10)}. You can also reply by email to <a href="mailto:${esc(r.fields.email)}" style="color:#1D4ED8;">${esc(r.fields.email)}</a>.`,
     }).catch(() => {});
   }
-  return back('?lead_sent=1&lead_ok=' + encodeURIComponent(
-    `Your inquiry was sent to ${l.name}. Follow the conversation in Dashboard → Leads → Sent.`));
+  return back({
+    lead_sent: '1',
+    lead_ok: `Your inquiry was sent to ${l.name}. Follow the conversation in Dashboard → Leads → Sent.`,
+  });
 });
 
 /* ---------------- Analytics beacon — outbound website click ----------------

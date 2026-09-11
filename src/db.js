@@ -900,6 +900,11 @@ CREATE TABLE IF NOT EXISTS leads (
      emailed, every later response is an in-app notification only. */
   owner_emailed INTEGER NOT NULL DEFAULT 0,
   inquirer_emailed INTEGER NOT NULL DEFAULT 0,
+  /* Unread messages waiting for each side of the conversation. Incremented
+     when the OTHER party posts, cleared when this party opens the thread, so
+     both inboxes can show an honest badge instead of guessing from status. */
+  owner_unread INTEGER NOT NULL DEFAULT 0,
+  inquirer_unread INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -937,6 +942,30 @@ try { db.exec('ALTER TABLE leads ADD COLUMN inquirer_user_id INTEGER REFERENCES 
 /* One-email-per-conversation flags for tables that pre-date them. */
 try { db.exec('ALTER TABLE leads ADD COLUMN owner_emailed INTEGER NOT NULL DEFAULT 0'); } catch { /* column exists */ }
 try { db.exec('ALTER TABLE leads ADD COLUMN inquirer_emailed INTEGER NOT NULL DEFAULT 0'); } catch { /* column exists */ }
+/* Per-side unread counters (see migrations/2026-09-11-lead-unread.sql). Older
+   rows land on 0 = "read", which is the honest default: nobody can prove a
+   pre-migration message was already opened, and a stuck badge on every
+   historic thread would be worse than none.
+
+   The status='new' backfill runs ONLY on the boot that actually adds the
+   column — a lead still sitting at 'new' has provably never been worked, but
+   re-running this later would resurrect badges an owner has since cleared. */
+let addedOwnerUnread = false;
+try {
+  db.exec('ALTER TABLE leads ADD COLUMN owner_unread INTEGER NOT NULL DEFAULT 0');
+  addedOwnerUnread = true;
+} catch { /* column exists */ }
+try { db.exec('ALTER TABLE leads ADD COLUMN inquirer_unread INTEGER NOT NULL DEFAULT 0'); } catch { /* column exists */ }
+if (addedOwnerUnread) {
+  try {
+    const migrated = db.prepare(
+      "UPDATE leads SET owner_unread = 1 WHERE status='new' AND archived=0"
+    ).run();
+    if (migrated.changes) {
+      console.log(`[db] leads: marked ${migrated.changes} unworked inquir${migrated.changes === 1 ? 'y' : 'ies'} unread`);
+    }
+  } catch { /* nothing to backfill */ }
+}
 // Keep index creation AFTER the column migration; IF NOT EXISTS makes repeat boots safe.
 // Do not swallow index failures: a successful boot must have the complete schema.
 db.exec('CREATE INDEX IF NOT EXISTS idx_leads_inquirer ON leads(inquirer_user_id, updated_at DESC)');

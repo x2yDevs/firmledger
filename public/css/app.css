@@ -520,6 +520,8 @@ mark { background: #FBF0CB; color: inherit; border-radius: 3px; padding: 0 1px; 
 /* shared inline alerts (unchanged) */
 .alert-ok { background: var(--ok-soft); border: 1px solid #CBE5D7; color: #0B5C3C; }
 .alert-err { background: var(--bad-soft); border: 1px solid #F2D2CF; color: #8C1F19; }
+.alert-info { background: var(--soft); border: 1px solid #CBD9F7; color: #14367F; }
+.alert-info a { color: var(--accent2); }
 .alert-warn { background: var(--warn-soft); border: 1px solid #EDDFC0; color: #7A4A05; }
 
 /* ---------- claim ---------- */
@@ -2935,6 +2937,15 @@ select.input::-ms-expand,
 .pill-lead-qualified { background: #E2F5E9; color: #0E7B4F; }
 .pill-lead-won { background: #0E7B4F; color: #fff; }
 .pill-lead-lost { background: var(--soft); color: var(--muted); }
+/* Unread = the other party has spoken since this side last looked. It reads
+   louder than the pipeline status pill because it is the actionable one. */
+.pill-lead-unread { background: var(--bad); color: #fff; }
+.lead-row-side { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex: 0 0 auto; align-self: center; }
+.lead-row.is-unread { border-color: var(--accent); background: linear-gradient(0deg, var(--surface), var(--soft)); }
+.lead-row.is-unread .lead-row-main b { font-weight: 700; }
+.lead-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--bad); vertical-align: 1px; }
+.lead-unread { display: inline-flex; padding: 0 7px; border-radius: 999px; background: var(--bad); color: #fff; font: 600 10.5px/1.9 var(--fm); }
+.lead-tab.on .lead-unread { background: #fff; color: var(--bad); }
 
 .lead-detail {
   position: sticky; top: 90px;
@@ -2984,8 +2995,17 @@ select.input::-ms-expand,
 .lead-bubble-text { font-size: .93rem; line-height: 1.55; color: var(--ink); overflow-wrap: anywhere; }
 .lead-bubble-meta { display: flex; justify-content: flex-end; margin-top: 4px; font: 500 .66rem var(--fm); color: var(--muted); }
 
+/* Where this side stopped reading last time. */
+.lead-new-line { align-self: stretch; text-align: center; border-color: var(--bad); color: var(--bad); background: var(--bad-soft); }
+
 .lead-reply-form { display: grid; gap: 10px; margin-top: 12px; flex: 0 0 auto; }
 .lead-reply-form .input { min-height: 72px; resize: vertical; }
+/* Shown instead of the reply box when the member deleted their copy. */
+.lead-detached { margin-top: 12px; flex: 0 0 auto; font-size: 13px; line-height: 1.6; }
+.lead-archived-note { margin: 8px 0 0; font: 500 12.5px/1.6 var(--fb); color: var(--warn); }
+/* Live character counter on the public contact form. */
+.lead-count { margin: -4px 0 0; }
+.lead-count.over { color: var(--bad); font-weight: 600; }
 .lead-reply-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .lead-delete-btn { color: var(--bad); }
 .lead-delete-btn:hover { border-color: var(--bad); color: var(--bad); }

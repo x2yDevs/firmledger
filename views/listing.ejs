@@ -54,7 +54,7 @@
         </button>
       </form>
       <% if (l.website && viewFull) { %><a class="btn btn-ghost" href="<%= l.website %>" rel="noopener nofollow" target="_blank" data-track-website="<%= l.slug %>">Visit website ↗</a><% } %>
-      <% if (l.claimed && !isOwner) { %><a class="btn btn-primary" href="<%= user ? '#contact-business' : '/login?next=' + encodeURIComponent('/listing/' + l.slug + '#contact-business') %>"><%= user ? 'Contact this business' : 'Sign in to contact' %></a><% } %>
+      <% if (l.claimed && !isOwner && leadCanReceive) { %><a class="btn btn-primary" href="<%= user ? '#contact-business' : '/login?next=' + encodeURIComponent('/listing/' + l.slug + '#contact-business') %>"><%= user ? 'Contact this business' : 'Sign in to contact' %></a><% } %>
       <% if (!l.claimed) { %><a class="btn btn-accent" href="/claim/<%= l.slug %>">Claim this listing</a><% } %>
     </div>
     <div class="share-row" aria-label="Share this listing">
@@ -344,6 +344,14 @@
         <% if (isOwner) { %>
         <p style="font-size:13.5px">This is your listing — inquiries from FirmLedger members land in your <b>Leads inbox</b>.</p>
         <a class="btn btn-primary btn-block" style="margin-top:12px" href="/dashboard/leads">Open your Leads inbox</a>
+        <% } else if (!leadCanReceive) { %>
+        <%# No live owner account can read an inquiry right now (unclaimed mid-transfer,
+            listing not approved, or the owner's account is suspended). Say so plainly
+            rather than showing a form that posts into nothing. %>
+        <p style="font-size:13.5px">This business is not accepting inquiries through FirmLedger at the moment.</p>
+        <% if (l.website && viewFull) { %>
+        <a class="btn btn-ghost btn-block" style="margin-top:12px" href="<%= l.website %>" rel="noopener nofollow" target="_blank" data-track-website="<%= l.slug %>">Visit their website ↗</a>
+        <% } %>
         <% } else if (!user) { %>
         <p style="font-size:13.5px">Only FirmLedger members can contact verified businesses. Sign in — your account email is used automatically so the owner can reply.</p>
         <a class="btn btn-primary btn-block" style="margin-top:12px" href="/login?next=<%= encodeURIComponent('/listing/' + l.slug + '#contact-business') %>">Sign in to contact</a>
@@ -355,15 +363,18 @@
         <% } else { %>
         <% if (leadErr) { %><div class="alert alert-err" role="alert"><%= leadErr %></div><% } %>
         <% if (leadOk) { %><div class="alert alert-ok" role="status"><%= leadOk %></div><% } %>
+        <%# Values fall back to whatever was typed before a validation bounce, so a
+            long brief is never lost to a rejected submission. %>
         <form class="form lead-form" method="post" action="/listing/<%= l.slug %>/leads">
           <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-          <label><span>Your name</span><input class="input" type="text" name="name" maxlength="80" required autocomplete="name" placeholder="Jane Wanjiku" value="<%= user.name || '' %>"></label>
+          <label><span>Your name</span><input class="input" type="text" name="name" maxlength="<%= leadLimits.name %>" minlength="2" required autocomplete="name" placeholder="Jane Wanjiku" value="<%= leadOld.name || user.name || '' %>"></label>
           <label><span>Your FirmLedger email</span>
             <input class="input" type="email" name="email" value="<%= user.email %>" readonly aria-readonly="true" tabindex="-1">
           </label>
-          <label><span>Phone <em class="opt">(optional)</em></span><input class="input" type="tel" name="phone" maxlength="40" autocomplete="tel" placeholder="+254 …"></label>
-          <label><span>What are you looking for?</span><input class="input" type="text" name="subject" maxlength="140" required placeholder="e.g. A quote for office cleaning"></label>
-          <label><span>Message</span><textarea class="input" name="message" rows="4" maxlength="4000" required placeholder="Tell <%= l.name %> what you need…"></textarea></label>
+          <label><span>Phone <em class="opt">(optional)</em></span><input class="input" type="tel" name="phone" maxlength="<%= leadLimits.phone %>" autocomplete="tel" placeholder="+254 …" value="<%= leadOld.phone %>"></label>
+          <label><span>What are you looking for?</span><input class="input" type="text" name="subject" maxlength="<%= leadLimits.subject %>" required placeholder="e.g. A quote for office cleaning" value="<%= leadOld.subject %>"></label>
+          <label><span>Message</span><textarea class="input" name="message" rows="4" maxlength="<%= leadLimits.message %>" minlength="10" required placeholder="Tell <%= l.name %> what you need…" data-counter="leadMsgCount"><%= leadOld.message %></textarea></label>
+          <p class="form-note lead-count" id="leadMsgCount" aria-live="polite" hidden></p>
           <input type="text" name="company_site" value="" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;opacity:0;height:0">
           <button class="btn btn-primary btn-block" type="submit">Send inquiry</button>
           <p class="form-note">Goes straight to the verified owner. Your FirmLedger email is shared with them so you can talk in the Leads inbox — their email stays private.</p>

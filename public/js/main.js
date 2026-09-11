@@ -425,6 +425,32 @@
       btn.disabled = true;
       btn.textContent = 'Sending…';
     });
+
+    // Live "characters left" once a long message approaches the server ceiling.
+    // The server refuses anything longer rather than truncating it, so the
+    // writer must be able to see the limit coming before they hit send.
+    var box = form.querySelector('textarea[data-counter]');
+    var out = box && document.getElementById(box.getAttribute('data-counter'));
+    if (!box || !out) return;
+    var max = parseInt(box.getAttribute('maxlength'), 10) || 4000;
+    var min = parseInt(box.getAttribute('minlength'), 10) || 0;
+    var update = function () {
+      var n = box.value.length;
+      if (n === 0) { out.hidden = true; return; }
+      out.hidden = false;
+      if (n < min) {
+        out.textContent = (min - n) + ' more character' + (min - n === 1 ? '' : 's') + ' needed.';
+        out.classList.add('over');
+      } else {
+        var left = max - n;
+        out.textContent = left <= 400
+          ? left + ' character' + (left === 1 ? '' : 's') + ' left of ' + max.toLocaleString() + '.'
+          : n.toLocaleString() + ' characters.';
+        out.classList.toggle('over', left <= 0);
+      }
+    };
+    box.addEventListener('input', update);
+    update();
   });
   if (location.hash === '#contact-business') {
     var panel = document.getElementById('contact-business');

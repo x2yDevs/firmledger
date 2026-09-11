@@ -65,6 +65,17 @@
                 headline sentence, and the weekly digest: per-owner channels
                 (both/email/notification/none), quiet-week silence, Pro full
                 report vs Free teaser, and once-per-week idempotency.
+   leads-contact-flow
+                the public "Contact this business" journey over HTTP: the form
+                appears only where a live owner can answer (unclaimed,
+                owner-less and suspended-owner listings refuse both the form
+                and the POST), long messages are refused instead of silently
+                truncated, every bounce hands the typed values back, the
+                account email is authoritative (and carries the domain
+                blocklist), a double-submit is one thread and one email,
+                unread badges rise and clear on both sides, a reply
+                un-archives, per-thread flood control holds, and a detached
+                member turns the reply box into an honest dead-end notice.
    db-upgrade   the current schema code boots against a simulated OLD
                 production database (pre-migration tables with real rows):
                 migrations apply without throwing, the inquirer index lands
@@ -97,6 +108,7 @@ const suites = [
   ['Leads messaging — two-user conversation over HTTP', 'leads-messaging.test.js'],
   ['Leads housekeeping — permanent delete + email-first policy', 'leads-housekeeping.test.js'],
   ['Leads + blog fit — notes, honest Sent, article rhythm', 'leads-blog-fit.test.js'],
+  ['Leads contact flow — member contacts a business, end to end', 'leads-contact-flow.test.js'],
   ['Blog content — accuracy, stale refresh, 2026 guide', 'blog-content.test.js'],
   ['Focus hygiene — no rings on inputs & dropdowns', 'focus-hygiene.test.js'],
   ['Production database upgrade', 'db-upgrade.test.js'],

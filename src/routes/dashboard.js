@@ -1364,6 +1364,10 @@ router.get('/dashboard/leads', (req, res) => {
   let openMessages = [];
   let openNotes = [];
 
+  /* How many of the open thread's messages this side had not read yet, so the
+     timeline can mark exactly where they left off. Reading clears the badge. */
+  let openUnread = 0;
+
   if (boxKind === 'sent') {
     box = leads.listForInquirer(req.user.id, { page: req.query.page });
     if (openId) {
@@ -1372,6 +1376,7 @@ router.get('/dashboard/leads', (req, res) => {
         open = acc;
         openRole = 'inquirer';
         openMessages = leads.messagesFor(open.id, req.user.id);
+        openUnread = leads.markRead(open.id, req.user.id);
       }
     }
   } else if (pro) {
@@ -1383,6 +1388,7 @@ router.get('/dashboard/leads', (req, res) => {
         openRole = 'owner';
         openMessages = leads.messagesFor(open.id, req.user.id);
         openNotes = leads.notesFor(open.id, req.user.id);
+        openUnread = leads.markRead(open.id, req.user.id);
       }
     }
   } else if (openId) {
@@ -1392,16 +1398,27 @@ router.get('/dashboard/leads', (req, res) => {
       open = acc;
       openRole = 'inquirer';
       openMessages = leads.messagesFor(open.id, req.user.id);
+      openUnread = leads.markRead(open.id, req.user.id);
     }
   }
 
+  /* The badge counts are read BEFORE markRead() above would skew them, but the
+     row we just opened should no longer be counted — recompute so the tabs and
+     the list agree with what is on screen. */
+  const freshCounts = leads.countsForOwner(req.user.id);
+  const freshSent = leads.countsForInquirer(req.user.id);
+
   res.render('dashboard/leads', {
     meta: { title: 'Leads — FirmLedger', description: '', robots: 'noindex' },
-    pro, counts, sentCounts, box, listings, open, openRole,
-    openMessages, openNotes,
+    pro,
+    counts: { ...counts, unread: freshCounts.unread },
+    sentCounts: { ...sentCounts, unread: freshSent.unread },
+    box, listings, open, openRole,
+    openMessages, openNotes, openUnread,
     filters: { status, listingId, archived, box: boxKind },
     ok: req.query.ok || '', err: req.query.err || '',
     STATUS_LABELS: leads.STATUS_LABELS, STATUSES: leads.STATUSES,
+    MESSAGE_MAX: leads.MESSAGE_MAX,
   });
 });
 
@@ -1539,7 +1556,15 @@ router.post('/dashboard/leads/:id/reply', (req, res) => {
       }
     }
   }
-  res.redirect(back + '&ok=' + encodeURIComponent('Message sent.'));
+  /* Say what actually happened. A business replying to a member who has since
+     deleted their copy used to get a cheerful "Message sent." while the words
+     went nowhere — the note is kept on the record, but nobody is listening.
+     (A reply to an archived thread silently un-archives it for the owner; the
+     member is not told the business had filed their conversation away.) */
+  const confirmation = r.delivered === false
+    ? 'Saved to this conversation — but the member deleted it from their Sent box, so they will not receive it.'
+    : 'Message sent.';
+  res.redirect(back + '&ok=' + encodeURIComponent(confirmation));
 });
 
 /* ================= Claimable search (JSON) ================= */

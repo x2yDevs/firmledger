@@ -176,7 +176,10 @@ function deny(req, res, status, heading, message) {
   });
 }
 
-/** Express middleware. `kind` is a rate-limit bucket. `opts.checkEmail` reads req.body.email. */
+/** Express middleware. `kind` is a rate-limit bucket. `opts.checkEmail` checks
+    the address this submission will actually be attributed to: `req.spamEmail`
+    when a caller has set it (routes that use the signed-in account's address
+    and ignore whatever the body says), otherwise req.body.email. */
 function gate(kind, opts = {}) {
   return (req, res, next) => {
     const ip = clientIp(req);
@@ -185,7 +188,7 @@ function gate(kind, opts = {}) {
       return deny(req, res, 403, 'Access denied', 'Requests from this network are not accepted.');
     }
     if (opts.checkEmail) {
-      const email = String((req.body && req.body.email) || '').trim().toLowerCase();
+      const email = String(req.spamEmail || (req.body && req.body.email) || '').trim().toLowerCase();
       if (email) {
         const d = emailDomainStatus(email);
         if (!d.ok) return deny(req, res, 403, 'Not accepted', d.reason);
