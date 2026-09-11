@@ -473,32 +473,41 @@ router.get('/listing/:slug', (req, res, next) => {
 });
 
 /* ---------------- Leads — “Contact this business” (claimed listings) --------
- * Anyone (guests included) can send an inquiry to a claimed business. The lead
- * goes to the VERIFIED OWNER's inbox (Dashboard → Leads) and email — the
- * owner's email address is never exposed to the inquirer. Rate-limited,
- * honeypot-guarded and domain-checked like every other public form.
+ * Only signed-in FirmLedger members can contact a claimed business. The lead
+ * uses the member's FirmLedger account email automatically and lands in the
+ * VERIFIED OWNER's inbox (Dashboard → Leads) + email. Both sides can keep
+ * talking in the Leads thread. The owner's email is never exposed.
+ * Rate-limited, honeypot-guarded and domain-checked like every other form.
  */
 router.post('/listing/:slug/leads', spam.gate('lead', { checkEmail: true }), (req, res, next) => {
   const l = db.prepare('SELECT * FROM listings WHERE slug = ?').get(req.params.slug);
   if (!l) return next();
   const back = (q) => res.redirect(`/listing/${l.slug}${q}#contact-business`);
   if (String(req.body.company_site || '').trim()) return back(''); // honeypot
+  if (!req.user) {
+    return res.redirect('/login?next=' + encodeURIComponent(`/listing/${l.slug}#contact-business`));
+  }
   if (l.status !== 'approved' || !l.claimed || !l.owner_user_id) {
     return back('?lead_err=' + encodeURIComponent('This business cannot receive inquiries yet.'));
   }
-  if (req.user && l.owner_user_id === req.user.id) {
+  if (l.owner_user_id === req.user.id) {
     return back('?lead_err=' + encodeURIComponent('This is your own listing — inquiries from visitors land in your Leads inbox.'));
   }
   const leads = require('../lib/leads');
   const analytics = require('../lib/analytics');
   const loc = analytics.locate(req);
+  /* Email always comes from the FirmLedger account — never freehand input. */
   const r = leads.create({
     listing: l,
     fields: {
-      name: req.body.name, email: req.body.email, phone: req.body.phone,
-      looking_for: req.body.subject || req.body.looking_for, message: req.body.message,
+      name: req.user.name || req.body.name,
+      email: req.user.email,
+      phone: req.body.phone,
+      looking_for: req.body.subject || req.body.looking_for,
+      message: req.body.message,
     },
     city: loc.city, country: loc.country,
+    inquirerUserId: req.user.id,
   });
   if (!r.ok) {
     return back('?lead_err=' + encodeURIComponent(r.errors ? r.errors.join(' ') : (r.error || 'That inquiry could not be sent.')));
@@ -509,7 +518,7 @@ router.post('/listing/:slug/leads', spam.gate('lead', { checkEmail: true }), (re
     kind: 'lead',
     title: `New inquiry for ${l.name} — ${r.fields.name}`,
     body: `${r.fields.looking_for ? `${r.fields.looking_for} · ` : ''}${r.fields.message.slice(0, 140)}`,
-    url: '/dashboard/leads',
+    url: `/dashboard/leads?open=${r.id}`,
   });
   const owner = db.prepare('SELECT email, name FROM users WHERE id=?').get(l.owner_user_id);
   if (owner && owner.email) {
@@ -521,19 +530,19 @@ router.post('/listing/:slug/leads', spam.gate('lead', { checkEmail: true }), (re
       replyTo: `${r.fields.name} <${r.fields.email}>`,
       kicker: 'New lead',
       title: `${esc(r.fields.name)} wants to hear from ${esc(l.name)}`,
-      preheader: `A visitor sent an inquiry to ${l.name} through FirmLedger.`,
+      preheader: `A FirmLedger member sent an inquiry to ${l.name}.`,
       alert: `<b>From:</b> ${esc(r.fields.name)} &lt;${esc(r.fields.email)}&gt;${r.fields.phone ? ` &nbsp;·&nbsp; <b>Phone:</b> ${esc(r.fields.phone)}` : ''}${r.fields.looking_for ? `<br><b>Looking for:</b> ${esc(r.fields.looking_for)}` : ''}`,
       alertTone: 'ok',
       paragraphs: [
         esc(r.fields.message).replace(/\n/g, '<br>'),
-        `Manage this inquiry — reply, set its status, add notes — in your <b>Leads inbox</b>. Your email address was not shown to the inquirer.`,
+        `Reply in your <b>Leads inbox</b> — both of you can keep talking there. Your email address was not shown to the inquirer.`,
       ],
-      cta: { label: 'Open your Leads inbox', url: util2.siteUrl('/dashboard/leads') },
-      note: `Listing: <b>${esc(l.name)}</b> · received ${new Date().toISOString().slice(0, 10)}. Reply directly to <a href="mailto:${esc(r.fields.email)}" style="color:#1D4ED8;">${esc(r.fields.email)}</a> or hit reply — replies go straight to the inquirer.`,
+      cta: { label: 'Open conversation', url: util2.siteUrl(`/dashboard/leads?open=${r.id}`) },
+      note: `Listing: <b>${esc(l.name)}</b> · received ${new Date().toISOString().slice(0, 10)}. You can also reply by email to <a href="mailto:${esc(r.fields.email)}" style="color:#1D4ED8;">${esc(r.fields.email)}</a>.`,
     }).catch(() => {});
   }
   return back('?lead_sent=1&lead_ok=' + encodeURIComponent(
-    `Your inquiry was sent to ${l.name}. The verified owner typically replies by email — check your inbox.`));
+    `Your inquiry was sent to ${l.name}. Follow the conversation in Dashboard → Leads → Sent.`));
 });
 
 /* ---------------- Analytics beacon — outbound website click ----------------

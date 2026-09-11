@@ -886,6 +886,7 @@ CREATE TABLE IF NOT EXISTS leads (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   listing_id INTEGER NOT NULL REFERENCES listings(id) ON DELETE CASCADE,
   owner_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  inquirer_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
   name TEXT NOT NULL DEFAULT '',
   email TEXT NOT NULL DEFAULT '',
   phone TEXT NOT NULL DEFAULT '',
@@ -900,6 +901,7 @@ CREATE TABLE IF NOT EXISTS leads (
 );
 CREATE INDEX IF NOT EXISTS idx_leads_owner ON leads(owner_user_id, archived, status, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_leads_listing ON leads(listing_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_leads_inquirer ON leads(inquirer_user_id, updated_at DESC);
 
 CREATE TABLE IF NOT EXISTS lead_notes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -909,7 +911,21 @@ CREATE TABLE IF NOT EXISTS lead_notes (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_lead_notes_lead ON lead_notes(lead_id, id);
+
+/* Two-way conversation on a lead. sender is 'owner' or 'inquirer'. */
+CREATE TABLE IF NOT EXISTS lead_messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  lead_id INTEGER NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+  sender TEXT NOT NULL DEFAULT 'inquirer',
+  body TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_lead_msgs ON lead_messages(lead_id, id);
 `);
+
+/* Existing deployments: add the inquirer column if the leads table pre-dates it. */
+try { db.exec('ALTER TABLE leads ADD COLUMN inquirer_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL'); } catch { /* column exists */ }
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_leads_inquirer ON leads(inquirer_user_id, updated_at DESC)'); } catch { /* ignore */ }
 
 /* Settings helpers */
 function getSetting(key, fallback = '') {

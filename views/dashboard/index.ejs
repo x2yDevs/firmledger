@@ -353,7 +353,7 @@
       </div>
       <div class="side-card">
         <h3 style="margin:0 0 10px">Leads inbox <% if (accountPro) { %><span class="pill pill-pro" style="margin-left:6px">PRO</span><% } %><% if (typeof leadCounts !== 'undefined' && leadCounts.new) { %> <span class="count-badge"><%= leadCounts.new %> new</span><% } %></h3>
-        <p class="muted" style="margin-bottom:14px"><% if (typeof leadCounts !== 'undefined' && leadCounts.total) { %>You have <b><%= leadCounts.total %> <%= leadCounts.total === 1 ? 'inquiry' : 'inquiries' %></b> from your claimed listings<% if (leadCounts.new) { %> — <b><%= leadCounts.new %> new</b><% } %>.<% } else { %>Inquiries from the “Contact this business” button on your claimed listings land here.<% } %><% if (!accountPro) { %> <b>Managing leads is Pro.</b><% } %></p>
+        <p class="muted" style="margin-bottom:14px"><% if (typeof leadCounts !== 'undefined' && leadCounts.total) { %>You have <b><%= leadCounts.total %> <%= leadCounts.total === 1 ? 'inquiry' : 'inquiries' %></b> from your claimed listings<% if (leadCounts.new) { %> — <b><%= leadCounts.new %> new</b><% } %>.<% } else { %>Inquiries from signed-in members who use “Contact this business” land here — reply in-thread. Listings you contacted live under Sent.<% } %><% if (!accountPro) { %> <b>Managing the business inbox is Pro.</b><% } %></p>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <a class="btn <%= accountPro ? 'btn-primary' : 'btn-ghost' %> btn-sm" href="/dashboard/leads">Open inbox</a>
           <% if (!accountPro) { %><a class="btn btn-ghost btn-sm" href="/dashboard/upgrade">Upgrade</a><% } %>

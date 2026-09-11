@@ -115,7 +115,12 @@ section('Funnel aggregates + headline');
   ins.run(lid, 'sponsored_impression', '', '', 'old2', '', daysAgo(60));
   // 4 leads: 1 qualified, 1 won, 1 new, 1 lost (1 stale lead excluded).
   const mk = (name, status, ago = 0) => {
-    const r = leads.create({ listing: l, fields: { name, email: `${name}@example.com`, message: 'A proper inquiry message here.' } });
+    const inq = addUser(`${name}-inq@test.dev`, 'free', 'none');
+    const r = leads.create({
+      listing: l,
+      fields: { name, email: `${name}@example.com`, message: 'A proper inquiry message here.' },
+      inquirerUserId: inq,
+    });
     if (ago) db.prepare('UPDATE leads SET created_at=? WHERE id=?').run(daysAgo(ago), r.id);
     if (status) leads.setStatus(r.id, oid, status);
     return r.id;
@@ -160,9 +165,11 @@ section('Funnel aggregates + headline');
   const mkActive = (owner, slug, status) => {
     const id = addListing({ slug, owner_user_id: owner, claimed: 1 });
     analytics.recordView(getListing(id), fakeReq({}));
+    const inq = addUser(`inq-${slug}@test.dev`, 'free', 'none');
     const r = leads.create({
       listing: getListing(id),
-      fields: { name: 'Inquirer Person', email: 'inq@example.com', message: 'Please send a detailed quotation.' },
+      fields: { name: 'Inquirer Person', email: `inq-${slug}@example.com`, message: 'Please send a detailed quotation.' },
+      inquirerUserId: inq,
     });
     if (status) leads.setStatus(r.id, owner, status);
     return id;
