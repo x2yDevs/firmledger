@@ -65,6 +65,10 @@
                 headline sentence, and the weekly digest: per-owner channels
                 (both/email/notification/none), quiet-week silence, Pro full
                 report vs Free teaser, and once-per-week idempotency.
+   db-upgrade   the current schema code boots against a simulated OLD
+                production database (pre-migration tables with real rows):
+                migrations apply without throwing, the inquirer index lands
+                after its column, and every row survives.
  */
 const path = require('path');
 const { spawnSync } = require('child_process');
@@ -90,6 +94,7 @@ const suites = [
   ['Status monitor accuracy', 'status-monitor.test.js'],
   ['Pro growth: fair rotation, analytics, leads', 'pro-growth.test.js'],
   ['Conversion funnel + weekly leads digest', 'leads-digest.test.js'],
+  ['Production database upgrade', 'db-upgrade.test.js'],
 ];
 
 const results = [];
