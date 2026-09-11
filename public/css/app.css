@@ -855,8 +855,17 @@ img.logo-tile { object-fit: contain; padding: 4px; background: #fff; border: 1px
 .blog-byline { font: 500 12.5px/1 var(--fm); color: var(--muted); margin: 0 0 28px; padding-bottom: 20px; border-bottom: 1px solid var(--hair); }
 .blog-crumb a { font: 500 12.5px/1 var(--fm); color: var(--accent2); text-decoration: none; }
 .blog-body { font-size: 15.5px; line-height: 1.85; color: var(--ink2); }
-.blog-body p.lead { font-size: 18px; line-height: 1.7; color: var(--ink); }
-.blog-body h2 { font: 700 23px/1.25 var(--fd); color: var(--ink); margin: 34px 0 12px; }
+/* The global reset zeroes every margin — restore the reading rhythm inside
+   articles or the 80+ paragraphs ship as one glued wall of text. */
+.blog-body p { margin: 0 0 1.15em; }
+.blog-body p.lead { font-size: 18px; line-height: 1.7; color: var(--ink); margin: 0 0 1.2em; }
+.blog-body li p { margin: 0 0 .5em; }
+.blog-body li p:last-child { margin-bottom: 0; }
+.blog-body a { color: var(--accent2); text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; }
+.blog-body a:hover { color: var(--accent); }
+.blog-body strong, .blog-body b { color: var(--ink); }
+.blog-body hr { border: none; border-top: 1px solid var(--hair); margin: 28px 0; }
+.blog-body h2 { font: 700 clamp(20px, 4.4vw, 23px)/1.25 var(--fd); color: var(--ink); margin: 34px 0 12px; overflow-wrap: anywhere; }
 .blog-body code { background: var(--bg2, #F4F1EA); border-radius: 4px; padding: 1.5px 6px; font: 500 13px/1.5 var(--fm); overflow-wrap: anywhere; }
 /* Code blocks inside blog articles live in a contained, scrollable box so long
    curl/JSON lines never spill outside the 780px prose column and break the page.
@@ -2918,6 +2927,8 @@ select.input::-ms-expand,
 .lead-row-main { display: grid; gap: 3px; min-width: 0; }
 .lead-row-main b { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lead-row-main small { font-size: 12px; line-height: 1.5; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The status pill keeps its shape on narrow rows — the name/preview shrink, never the pill. */
+.lead-row .pill { flex: 0 0 auto; align-self: center; white-space: nowrap; }
 
 .pill-lead-new { background: #E3ECFD; color: #1D4ED8; }
 .pill-lead-contacted { background: #FFF3D6; color: #8A5F00; }
@@ -3017,7 +3028,7 @@ select.input::-ms-expand,
 .blog-card-link { display: flex; flex-direction: column; padding: 22px; text-decoration: none; color: inherit; height: 100%; min-width: 0; }
 .blog-card h3 { overflow-wrap: anywhere; }
 .blog-card p {
-  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+  display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical;
   overflow: hidden; flex: 1 1 auto;
 }
 .blog-prose-wrap { max-width: min(780px, 100%); margin-inline: auto; min-width: 0; }
@@ -3026,12 +3037,21 @@ select.input::-ms-expand,
 .blog-body { overflow-wrap: anywhere; }
 .blog-body img { max-width: 100%; height: auto; border-radius: 10px; }
 .blog-body figure { max-width: 100%; margin: 18px 0; }
-.blog-body video, .blog-body iframe { max-width: 100%; border-radius: 10px; }
+.blog-body figure img { display: block; }
+.blog-body figcaption { font-size: 13px; color: var(--muted); margin-top: 8px; text-align: center; }
+/* height:auto keeps attr-sized embeds (560x315) proportional as max-width
+   shrinks them — width stays natural so small widgets never stretch. */
+.blog-body video, .blog-body iframe { max-width: 100%; height: auto; border-radius: 10px; border: 0; }
 /* Tables keep their real layout — the .table-wrap they ship inside scrolls
-   horizontally on narrow screens. Forcing `display:block` here would stack
-   thead/tbody rows into columns and break the seeded API tables. */
+   horizontally on narrow screens. Forcing `display:block` on those would
+   restyle the seeded .table components, so bare admin-pasted tables (no
+   .table class, no wrapper) get their own scroll container instead: the
+   outer box scrolls while thead/tbody keep their table display and rows. */
 .blog-body table { max-width: 100%; }
 .blog-body .table-wrap { margin: 18px 0; }
+.blog-body table:not(.table) { display: block; width: 100%; overflow-x: auto; border-collapse: collapse; font-size: 14px; margin: 18px 0; }
+.blog-body table:not(.table) th, .blog-body table:not(.table) td { border: 1px solid var(--hair); padding: 10px 12px; text-align: left; vertical-align: top; }
+.blog-body table:not(.table) th { background: var(--paper); font-weight: 600; color: var(--ink); }
 .blog-body ul, .blog-body ol { padding-left: 22px; margin: 14px 0; }
 .blog-body li { margin: 6px 0; }
 .blog-body li::marker { color: var(--accent2); }
@@ -3045,8 +3065,14 @@ select.input::-ms-expand,
 }
 @media (max-width: 640px) {
   .blog-head { text-align: center; }
-  .blog-lede { margin-inline: auto; }
+  .blog-lede { margin-inline: auto; font-size: 14.5px; }
   .blog-crumb { text-align: left; }
+  .blog-card-link { padding: 18px; }
+  .blog-body { font-size: 15px; line-height: 1.8; }
+  .blog-body p.lead { font-size: 16.5px; }
+  .blog-body h2 { margin: 28px 0 10px; }
+  .blog-body pre { padding: 12px 14px; font-size: 12px; }
+  .blog-body ul, .blog-body ol { padding-left: 20px; }
 }
 
 /* ============ Conversion funnel (analytics) + digest preference ============ */

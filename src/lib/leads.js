@@ -88,11 +88,16 @@ function countsForOwner(ownerId) {
   return out;
 }
 
-/** How many threads this member opened as the inquirer. */
+/**
+ * How many threads this member opened as the inquirer. Counts every thread in
+ * their Sent box — including ones the business archived on its own side, which
+ * stay readable (and replyable) for the inquirer — so the tab count always
+ * matches the list below it.
+ */
 function countsForInquirer(userId) {
   try {
     const total = db.prepare(
-      `SELECT COUNT(*) c FROM leads WHERE inquirer_user_id=? AND archived=0`
+      `SELECT COUNT(*) c FROM leads WHERE inquirer_user_id=?`
     ).get(userId).c;
     return { total: total || 0 };
   } catch {
