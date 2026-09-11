@@ -2,8 +2,15 @@
  * FirmLedger audience analytics (Pro).
  *
  * What it records:
- *   - 'view'          a human opened a listing profile (GET /listing/:slug)
- *   - 'website_click' a human clicked through to the business website
+ *   - 'view'                 a human opened a listing profile (GET /listing/:slug)
+ *   - 'website_click'        a human clicked through to the business website
+ *   - 'sponsored_impression' a human was shown a sponsored card for the listing
+ *   - 'featured_impression'  a human was shown a featured card for the listing
+ *
+ * Impressions complete the conversion funnel — Sponsored/Featured exposure →
+ * Views → Leads → Qualified → Won — so a Pro owner can see what their
+ * visibility actually produced. Cards rendered for bots, admins or the
+ * listing's own owner are never counted, exactly like views.
  *
  * What it never records: bot/crawler traffic, the listing owner's own views
  * and admin views — “audience” means other people, honestly counted.
@@ -21,7 +28,8 @@ const crypto = require('crypto');
 const { db } = require('../db');
 const { clientIp } = require('./spam');
 
-const KINDS = ['view', 'website_click'];
+const KINDS = ['view', 'website_click', 'sponsored_impression', 'featured_impression'];
+const IMPRESSION_KINDS = ['sponsored_impression', 'featured_impression'];
 
 /* Bots and link-preview fetchers must never inflate audience numbers. */
 const BOT_UA = /bot|crawl|spider|slurp|mediapartners|baidu|yandex|sogou|exabot|facebot|facebookexternalhit|linkedinbot|embedly|quora|pinterest|slackbot|twitterbot|whatsapp|telegram|discordbot|applebot|semrush|ahrefs|mj12bot|dotbot|petalbot|bytespider|claudebot|gptbot|ccbot|amazonbot/i;
@@ -110,6 +118,41 @@ function recordWebsiteClick(listing, req) {
     return true;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Record card impressions for one rendered strip (homepage, directory, search
+ * or category). One batched INSERT per strip — not one write per card — with
+ * the same honesty rules as views: bots, admins, non-approved listings and
+ * the owner's own listings are skipped. Returns the number recorded.
+ */
+function recordImpressions(listings, kind, req) {
+  try {
+    if (!IMPRESSION_KINDS.includes(kind)) return 0;
+    if (!Array.isArray(listings) || !listings.length) return 0;
+    if (!req || isBot(req) || req.admin) return 0;
+    const mine = req.user ? req.user.id : 0;
+    const ids = [];
+    for (const l of listings) {
+      if (!l || l.status !== 'approved') continue;
+      if (mine && l.owner_user_id && l.owner_user_id === mine) continue;
+      ids.push(Number(l.id) || 0);
+    }
+    if (!ids.length) return 0;
+    const { city, country } = locate(req);
+    const vh = visitorHash(req);
+    const ref = referrerPath(req);
+    const rows = ids.map(() => '(?,?,?,?,?,?)').join(',');
+    const params = [];
+    for (const id of ids) params.push(id, kind, vh, city, country, ref);
+    db.prepare(
+      `INSERT INTO listing_stat_events (listing_id, kind, visitor_hash, city, country, referrer)
+       VALUES ${rows}`
+    ).run(...params);
+    return ids.length;
+  } catch {
+    return 0;
   }
 }
 
@@ -263,9 +306,116 @@ function perListing(listingIds) {
   }
 }
 
+/**
+ * The conversion funnel for a set of listings over the last `days` days:
+ * Sponsored/Featured exposure → profile views → website clicks → leads →
+ * qualified → won. Leads are counted by arrival window; statuses are their
+ * CURRENT state (archived leads still count — archiving is inbox tidying,
+ * not un-receiving). Rates are percentages with one decimal, or null when
+ * the denominator is zero.
+ */
+function funnel(listingIds, days = 30) {
+  const d = Math.max(1, Math.min(365, Number(days) || 30));
+  const zero = {
+    days: d,
+    impressions: 0, sponsoredImpressions: 0, featuredImpressions: 0,
+    views: 0, websiteClicks: 0,
+    leads: 0, byStatus: { new: 0, contacted: 0, qualified: 0, won: 0, lost: 0 },
+    contactRate: null, qualifyRate: null, winRate: null,
+  };
+  if (!listingIds.length) return zero;
+  const marks = placeholders(listingIds);
+  try {
+    const e = db.prepare(
+      `SELECT kind, COUNT(*) AS c FROM listing_stat_events
+       WHERE listing_id IN (${marks}) AND created_at >= datetime('now', ?)
+       GROUP BY kind`
+    ).all(...listingIds, `-${d} days`);
+    const byKind = Object.fromEntries(e.map((r) => [r.kind, r.c]));
+    const s = db.prepare(
+      `SELECT status, COUNT(*) AS c FROM leads
+       WHERE listing_id IN (${marks}) AND created_at >= datetime('now', ?)
+       GROUP BY status`
+    ).all(...listingIds, `-${d} days`);
+    const byStatus = { ...zero.byStatus };
+    for (const r of s) if (r.status in byStatus) byStatus[r.status] = r.c;
+    const sponsored = byKind.sponsored_impression || 0;
+    const featured = byKind.featured_impression || 0;
+    const views = byKind.view || 0;
+    const leads = Object.values(byStatus).reduce((a, b) => a + b, 0);
+    const pct = (n, den) => (den > 0 ? Math.round((n / den) * 1000) / 10 : null);
+    return {
+      days: d,
+      impressions: sponsored + featured,
+      sponsoredImpressions: sponsored, featuredImpressions: featured,
+      views, websiteClicks: byKind.website_click || 0,
+      leads, byStatus,
+      contactRate: pct(leads, views),
+      qualifyRate: pct(byStatus.qualified + byStatus.won, leads),
+      winRate: pct(byStatus.won, leads),
+    };
+  } catch {
+    return zero;
+  }
+}
+
+/** Any funnel activity (events or leads) for these listings in `days` days? */
+function hasActivity(listingIds, days = 7) {
+  if (!listingIds.length) return false;
+  const d = Math.max(1, Math.min(365, Number(days) || 7));
+  const marks = placeholders(listingIds);
+  try {
+    const e = db.prepare(
+      `SELECT COUNT(*) c FROM listing_stat_events
+       WHERE listing_id IN (${marks}) AND created_at >= datetime('now', ?)`
+    ).get(...listingIds, `-${d} days`).c;
+    if (e > 0) return true;
+    return db.prepare(
+      `SELECT COUNT(*) c FROM leads
+       WHERE listing_id IN (${marks}) AND created_at >= datetime('now', ?)`
+    ).get(...listingIds, `-${d} days`).c > 0;
+  } catch {
+    return false;
+  }
+}
+
+function plural(n, one, many) { return `${n} ${n === 1 ? one : many}`; }
+
+/**
+ * The Pro justification sentence: “Your FirmLedger listing generated 37
+ * leads in the last 30 days, including 6 qualified leads and 2 won
+ * opportunities.” Shared by the dashboard and the weekly digest so the
+ * numbers always read the same in both places.
+ */
+function funnelHeadline(f, listingCount = 1) {
+  const what = listingCount === 1 ? 'listing' : 'listings';
+  const window = f.days === 7 ? 'last 7 days' : `last ${f.days} days`;
+  let s = `Your FirmLedger ${what} generated ${plural(f.leads, 'lead', 'leads')} in the ${window}`;
+  const parts = [];
+  if (f.byStatus.qualified > 0) parts.push(plural(f.byStatus.qualified, 'qualified lead', 'qualified leads'));
+  if (f.byStatus.won > 0) parts.push(plural(f.byStatus.won, 'won opportunity', 'won opportunities'));
+  if (parts.length) s += `, including ${parts.join(' and ')}`;
+  return s + '.';
+}
+
+/* Retention — raw stat events older than every analytics window (the funnel
+   accepts at most 365 days) are deleted by the scheduled jobs. Returns the
+   number of rows removed. */
+function purgeOldEvents(retentionDays = 400) {
+  const d = Math.max(366, Math.min(3650, Number(retentionDays) || 400));
+  try {
+    return db.prepare(
+      `DELETE FROM listing_stat_events WHERE created_at < datetime('now', ?)`
+    ).run(`-${d} days`).changes || 0;
+  } catch {
+    return 0;
+  }
+}
+
 module.exports = {
-  KINDS,
+  KINDS, IMPRESSION_KINDS,
   isBot, locate, visitorHash, referrerPath,
-  recordView, recordWebsiteClick,
+  recordView, recordWebsiteClick, recordImpressions,
   summary, topLocations, locationDetail, totals, perListing,
+  funnel, funnelHeadline, hasActivity, purgeOldEvents,
 };

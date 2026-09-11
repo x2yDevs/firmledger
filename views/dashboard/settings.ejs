@@ -39,6 +39,31 @@
 
       <div class="pref-row" style="border-top:1px solid var(--hair)">
         <div class="pref-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg>
+        </div>
+        <div class="pref-copy">
+          <div class="pref-title">
+            Weekly leads report
+            <span class="pill <%= leadsDigest === 'none' ? 'pill-pending' : 'pill-approved' %>" style="margin-left:8px"><%= leadsDigest === 'both' ? 'Email + notifications' : leadsDigest === 'email' ? 'Email only' : leadsDigest === 'notification' ? 'Notifications only' : 'Off' %></span>
+          </div>
+          <p class="pref-desc">
+            One automatic report per week — how many leads your listings generated, how many qualified and won —
+            sent only in weeks with activity.
+            <% if (!ownsListings) { %>You don't own any listings yet, so there's nothing to report; the choice below applies from your first listing.<% } %>
+          </p>
+          <form method="post" action="/dashboard/settings/leads-digest" class="pref-chan">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <label><input type="radio" name="leads_digest" value="both"<%= leadsDigest === 'both' ? ' checked' : '' %>> <span>Email + in-app <em>recommended</em></span></label>
+            <label><input type="radio" name="leads_digest" value="email"<%= leadsDigest === 'email' ? ' checked' : '' %>> <span>Email only</span></label>
+            <label><input type="radio" name="leads_digest" value="notification"<%= leadsDigest === 'notification' ? ' checked' : '' %>> <span>In-app only</span></label>
+            <label><input type="radio" name="leads_digest" value="none"<%= leadsDigest === 'none' ? ' checked' : '' %>> <span>Off</span></label>
+            <button class="btn btn-ghost btn-sm" type="submit">Save</button>
+          </form>
+        </div>
+      </div>
+
+      <div class="pref-row" style="border-top:1px solid var(--hair)">
+        <div class="pref-icon">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.9 6.26 6.6.56-5 4.4 1.5 6.44L12 16.9l-6 2.76 1.5-6.44-5-4.4 6.6-.56L12 2z"/></svg>
         </div>
         <div class="pref-copy">

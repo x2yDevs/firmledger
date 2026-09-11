@@ -16,7 +16,10 @@
     "test:2fa": "node tests/admin-2fa.test.js",
     "test:indexing": "node tests/google-indexing.test.js",
     "test:health": "node tests/indexing-health.test.js",
-    "test:status": "node tests/status-monitor.test.js"
+    "test:status": "node tests/status-monitor.test.js",
+    "test:pro-growth": "node tests/pro-growth.test.js",
+    "test:leads-digest": "node tests/leads-digest.test.js",
+    "test:scale": "node tests/scale.test.js"
   },
   "keywords": [],
   "author": "",

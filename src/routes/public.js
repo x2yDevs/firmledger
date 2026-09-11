@@ -94,6 +94,13 @@ router.get('/', (req, res) => {
   const sponsored = ad.sponsoredStrip(SPONSORED_SHOW);
   const sponsoredCount = ad.countActive();
   const hasActiveSponsors = sponsored.length > 0;
+  /* Conversion funnel: record what this human was actually shown. Batched,
+     one INSERT per strip; bots, admins and owners are skipped inside. */
+  try {
+    const ana = require('../lib/analytics');
+    ana.recordImpressions(sponsored, 'sponsored_impression', req);
+    ana.recordImpressions(featured, 'featured_impression', req);
+  } catch { /* never break the page */ }
 
   res.render('home', {
     meta: {
@@ -168,6 +175,7 @@ router.get('/directory', (req, res) => {
   const sponsoredInline = page === 1
     ? ad.sponsoredSample({ q, type, category, country }, SPONSORED_INLINE)
     : [];
+  try { require('../lib/analytics').recordImpressions(sponsoredInline, 'sponsored_impression', req); } catch { /* ignore */ }
   const inlineIds = sponsoredInline.map((l) => l.id);
   const organicWhere = inlineIds.length
     ? `${where.join(' AND ')} AND l.id NOT IN (${inlineIds.map(() => '?').join(',')})`
@@ -243,6 +251,7 @@ function categoryPage(req, res, next, catSlug, locSlug) {
     }
     sponsoredInline = shuffled.slice(0, 3);
   }
+  try { require('../lib/analytics').recordImpressions(sponsoredInline, 'sponsored_impression', req); } catch { /* ignore */ }
   const inlineIds = new Set(sponsoredInline.map((l) => l.id));
   const organic = listings.filter((l) => !inlineIds.has(l.id));
   const count = listings.length;
@@ -790,6 +799,7 @@ router.get('/search', spam.gate('search'), (req, res) => {
     /* Sponsored matches lead — a fair random draw of up to two matching
        sponsors, clearly labelled, never the whole set. */
     sponsoredHits = ad.sponsoredSample({ q }, 2);
+    try { require('../lib/analytics').recordImpressions(sponsoredHits, 'sponsored_impression', req); } catch { /* ignore */ }
     const hitIds = sponsoredHits.map((l) => l.id);
     const notHits = hitIds.length ? `AND l.id NOT IN (${hitIds.map(() => '?').join(',')})` : '';
     out.listings = db.prepare(

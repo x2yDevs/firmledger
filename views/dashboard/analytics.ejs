@@ -52,6 +52,37 @@
         <div class="stat-card"><span class="stat-label">Website clicks</span><span class="stat-num"><%= totals.websiteClicks %></span><span class="muted" style="font-size:12px">outbound clicks</span></div>
       </div>
 
+      <div class="panel funnel-panel" style="margin-top:1.8rem">
+        <div class="panel-h-t">
+          <h3>Conversion funnel · last 30 days</h3>
+          <a class="muted" style="font-size:.8rem" href="/dashboard/leads">Open Leads inbox →</a>
+        </div>
+        <p class="funnel-headline"><%= funnelHeadline %></p>
+        <%
+          const _steps = [
+            { label: 'Exposure', hint: 'Sponsored + Featured impressions', n: funnel.impressions },
+            { label: 'Profile views', hint: 'opened the profile', n: funnel.views },
+            { label: 'Website clicks', hint: 'clicked through to your site', n: funnel.websiteClicks },
+            { label: 'Leads', hint: 'inquiries received', n: funnel.leads },
+            { label: 'Qualified', hint: 'status Qualified or Won', n: funnel.byStatus.qualified + funnel.byStatus.won },
+            { label: 'Won', hint: 'status Won', n: funnel.byStatus.won },
+          ];
+          const _max = Math.max(1, ..._steps.map((s) => s.n));
+        %>
+        <div class="funnel">
+          <% _steps.forEach(function (s, i) { %>
+          <div class="funnel-step">
+            <div class="funnel-top"><b><%= s.label %></b><span><%= s.n.toLocaleString('en-US') %></span></div>
+            <div class="funnel-bar"><i style="width:<%= Math.max(s.n > 0 ? 3 : 0, Math.round(s.n / _max * 100)) %>%"></i></div>
+            <small><%= s.hint %></small>
+            <% if (i === 3) { %><small class="funnel-rate">view → inquiry: <b><%= funnel.contactRate === null ? '—' : funnel.contactRate + '%' %></b></small><% } %>
+            <% if (i === 5) { %><small class="funnel-rate">inquiry → won: <b><%= funnel.winRate === null ? '—' : funnel.winRate + '%' %></b></small><% } %>
+          </div>
+          <% }) %>
+        </div>
+        <p class="form-note">This same report lands automatically every week — on your chosen channels — whenever there's activity. <a href="/dashboard/settings">Notification settings →</a></p>
+      </div>
+
       <div class="section-head" style="margin-top:2.4rem"><h2>Top locations</h2><% if (selected) { %><a class="btn btn-ghost btn-sm" href="/dashboard/analytics">All listings</a><% } %></div>
       <% if (!topLocations.length) { %>
         <div class="empty-state">

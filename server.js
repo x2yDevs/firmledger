@@ -19,7 +19,7 @@ const session = require('./src/lib/session');
 const util = require('./src/lib/util');
 
 /* Bumped on every deploy that changes public/ assets — defeats the 7-day static cache. */
-const ASSET_V = '52';
+const ASSET_V = '53';
 
 const app = express();
 app.set('trust proxy', true);
@@ -232,11 +232,23 @@ function hourlyJobs() {
      news coverage, capped per hour and switched in Admin → Settings. */
   require('./src/lib/upkeep').runSweep().catch((e) => console.error('[upkeep] sweep failed:', e && e.message));
   newsletter.sendWeeklyDigest().catch(() => {});
+  /* Weekly leads & conversion digest — per-owner funnel report, only in weeks
+     with activity, on each owner's chosen channels (email / notification /
+     both / none). Pro owners get the full funnel; Free owners get a teaser. */
+  require('./src/lib/leadsdigest').sendWeeklyLeadDigests().then((r) => {
+    if (r && r.sent) console.log(`[leads-digest] sent ${r.sent} weekly report(s)`);
+  }).catch(() => {});
   try { supportLib.autoCloseStale(); } catch (e) { console.error('[auto-close]', e.message); }
   try {
     const purged = notificationsLib.purgeExpired();
     if (purged) console.log(`[notifications] purged ${purged} expired archived notification(s)`);
   } catch (e) { console.error('[notif-purge]', e.message); }
+  /* Raw analytics events past every reporting window go, so the table that
+     feeds views/impressions/funnels stays bounded as traffic grows. */
+  try {
+    const purgedStats = require('./src/lib/analytics').purgeOldEvents();
+    if (purgedStats) console.log(`[analytics] purged ${purgedStats} stat event(s) older than 400 days`);
+  } catch (e) { console.error('[analytics-purge]', e.message); }
   /* Free trials: expire finished ones AND send the reminder ladder (halfway,
      a few days left, final day, trial-ended) by email + in-app notification. */
   try { require('./src/lib/trialreminders').sweep().catch(() => {}); } catch (e) { console.error('[trials]', e.message); }

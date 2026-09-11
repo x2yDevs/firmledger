@@ -594,6 +594,12 @@ try { db.exec('ALTER TABLE users ADD COLUMN provider_id TEXT'); } catch { /* col
 try { db.exec('ALTER TABLE users ADD COLUMN avatar_url TEXT'); } catch { /* column exists */ }
 db.exec('CREATE INDEX IF NOT EXISTS idx_users_provider ON users(provider, provider_id)');
 
+/* ---- Weekly leads & conversion digest preference ----
+   How the owner wants the automatic weekly report: 'both' (default),
+   'email', 'notification' or 'none'. Quiet weeks (no funnel activity)
+   never send, whatever the preference. */
+try { db.exec("ALTER TABLE users ADD COLUMN leads_digest TEXT NOT NULL DEFAULT 'both'"); } catch { /* column exists */ }
+
 require('./lib/blogseed').seedBlog(db);
 
 /* ---- Advertising (Sponsored Content) + FirmLedger careers ---- */

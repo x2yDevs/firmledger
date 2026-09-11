@@ -61,6 +61,10 @@
                 recording + aggregates, the Leads inbox pipeline, the lead
                 rate-limit bucket, reply-to lead alerts, eligible-wording,
                 no sandbox leaks in user views, and the three new blog seeds.
+   leads-digest impression recording, the conversion funnel, the shared
+                headline sentence, and the weekly digest: per-owner channels
+                (both/email/notification/none), quiet-week silence, Pro full
+                report vs Free teaser, and once-per-week idempotency.
  */
 const path = require('path');
 const { spawnSync } = require('child_process');
@@ -85,6 +89,7 @@ const suites = [
   ['Robots & Auth OAuth', 'robots-auth.test.js'],
   ['Status monitor accuracy', 'status-monitor.test.js'],
   ['Pro growth: fair rotation, analytics, leads', 'pro-growth.test.js'],
+  ['Conversion funnel + weekly leads digest', 'leads-digest.test.js'],
 ];
 
 const results = [];

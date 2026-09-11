@@ -760,11 +760,25 @@ router.get('/dashboard/support/:id/poll', requireUser, loadMyTicket, (req, res) 
 /* ================= User settings — email preferences ================= */
 router.get('/dashboard/settings', (req, res) => {
   const sub = db.prepare('SELECT * FROM newsletter_subscribers WHERE email = ?').get(req.user.email);
+  const pref = db.prepare('SELECT leads_digest FROM users WHERE id=?').get(req.user.id) || {};
+  const owns = db.prepare('SELECT COUNT(*) c FROM listings WHERE owner_user_id=?').get(req.user.id).c;
   res.render('dashboard/settings', {
     meta: { title: 'Notification settings — FirmLedger', description: '', robots: 'noindex' },
     sub, active: Boolean(sub && sub.active),
+    leadsDigest: ['both', 'email', 'notification', 'none'].includes(pref.leads_digest) ? pref.leads_digest : 'both',
+    ownsListings: owns > 0,
     ok: req.query.ok || '', err: req.query.err || '',
   });
+});
+
+router.post('/dashboard/settings/leads-digest', (req, res) => {
+  const v = String(req.body.leads_digest || '').trim();
+  if (!['both', 'email', 'notification', 'none'].includes(v)) {
+    return res.redirect('/dashboard/settings?err=' + encodeURIComponent('Choose how you want the weekly leads report: both, email, notifications, or off.'));
+  }
+  db.prepare('UPDATE users SET leads_digest=? WHERE id=?').run(v, req.user.id);
+  const label = { both: 'email + in-app notifications', email: 'email only', notification: 'in-app notifications only', none: 'off' }[v];
+  res.redirect('/dashboard/settings?ok=' + encodeURIComponent(`Weekly leads report set to ${label}.`));
 });
 
 router.post('/dashboard/settings/digest', (req, res) => {
@@ -1293,6 +1307,7 @@ router.get('/dashboard/analytics', (req, res) => {
   /* Any ?city=/country= params (even empty) mean “drill into the Unknown
      location group” — presence of the keys is the intent, not their values. */
   const drilled = Boolean(pro && ('city' in req.query || 'country' in req.query));
+  const monthFunnel = pro ? analytics.funnel(ids, 30) : null;
   res.render('dashboard/analytics', {
     meta: { title: 'Audience analytics — FirmLedger', description: '', robots: 'noindex' },
     pro, listings, selected, ids,
@@ -1300,6 +1315,8 @@ router.get('/dashboard/analytics', (req, res) => {
     totals: pro ? analytics.totals(ids) : { views: 0, uniques: 0, profileClicks: 0, websiteClicks: 0, leads: 0 },
     topLocations: pro ? analytics.topLocations(ids, 10) : [],
     perListing: pro ? analytics.perListing(ids) : {},
+    funnel: monthFunnel,
+    funnelHeadline: monthFunnel ? analytics.funnelHeadline(monthFunnel, selected ? 1 : Math.max(1, listings.length)) : '',
     drill: drilled ? {
       city: locCity, country: locCountry,
       ...analytics.locationDetail(ids, locCity, locCountry),
