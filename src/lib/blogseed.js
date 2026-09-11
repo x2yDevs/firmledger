@@ -65,7 +65,7 @@ const POSTS = [
     slug: 'introducing-the-firmledger-api',
     title: 'The FirmLedger API: a production guide to the ledger',
     excerpt: 'A practical guide to every FirmLedger API capability: keys, scopes, listings, filters, webhooks, exports, limits and production-safe integration patterns.',
-    body: `<p class="lead">FirmLedger’s directory has always been open for reading — that was the point of a public ledger. From today the same records are available over a single, key-authenticated REST API, and reading it requires a key like everything else. Unlocking it is one FirmLedger Pro plan, which also unlocks the directory, verified ticks and Featured placement.</p>
+    body: `<p class="lead">FirmLedger’s directory has always been open for reading — that was the point of a public ledger. From today the same records are available over a single, key-authenticated REST API, and reading it requires a key like everything else. Unlocking it is one FirmLedger Pro plan, which also unlocks the directory, verified ticks, eligibility for Featured placement, Audience Analytics and the Leads inbox.</p>
 <h2>Why every endpoint now needs a key</h2>
 <p>We used to keep a small set of public read endpoints — a liveness probe, a discovery index and a couple of directory reads — on the theory that “open data” should be open. In practice that made the directory easy to scrape wholesale and impossible to meter or protect. So we closed the door. There is no public, key-less endpoint left on <code>/api/v1</code>: <code>/health</code>, the discovery index, the directory — all of them answer <code>401 missing_key</code> unless you send a valid key.</p>
 <p>The trade-off is deliberately generous. A single Pro API key unlocks the entire surface, per-key read and write rate limits keep things fair, and the endpoints return the same approved, sourced, moderated records your browser sees — with the contact details and CSV export you would otherwise have to hand-collect.</p>
@@ -213,6 +213,57 @@ curl "https://firmledger.co.ke/api/v1/listings?category=Fintech&amp;country=Keny
 <h2>The short version</h2>
 <p>FirmLedger now tells you what is being published about a company, not just what the company says about itself — and it does it under the same rule the rest of the ledger lives by. Detected stories have to prove they are about the business. Submitted stories wait for a human. Nothing appears without a link you can open yourself.</p>
 <p>Browse <a href="/directory">the directory</a> to see it on a live profile, or read <a href="/blog/how-firmledger-builds-a-trustworthy-record">how a record is built</a> for the pipeline underneath it.</p>`,
+  },
+  {
+    slug: 'how-featured-placement-works',
+    title: 'How Featured placement works on FirmLedger',
+    excerpt: 'Pro listings are eligible for Featured placement — but eligibility is not a guarantee. Here is how the fair rotation chooses what appears on the homepage.',
+    body: `<p class="lead">The Featured section is the highest-visibility slot on FirmLedger — and the most misunderstood. This note explains exactly what FirmLedger Pro buys you there: eligibility for Featured placement, with the system choosing a fair subset on every visit.</p>
+<h2>Eligibility, not entitlement</h2>
+<p>Pro listings are <strong>eligible for Featured placement</strong>. That word matters. The homepage can only show a handful of cards at once, so if every eligible listing were shown, the section would either stretch forever or silently favour whoever loaded first. Instead, every visit draws a random subset of the eligible pool — and every eligible listing has exactly the same probability of appearing.</p>
+<p>In plain terms: Pro puts your listing in the draw; it does not pin it to the page. Over days and weeks of traffic, every eligible listing gets its turn on screen.</p>
+<h2>What the system chooses on each visit</h2>
+<p>On every homepage load the system assembles up to eight Featured cards. Records pinned by the FirmLedger team — genuine editorial picks, used sparingly — always lead. The remaining slots are filled by a uniform random draw from the other eligible Pro listings. Reload the page and you will see a different mix; that is the fairness working as designed.</p>
+<h2>What keeps you in the draw</h2>
+<p>Eligibility follows your Pro subscription, not your listing. While your account holds active FirmLedger Pro, every approved listing you own is in the eligible pool. If Pro lapses, your listings simply leave the rotation — nothing is deleted, and they rejoin automatically when you renew. A listing that is rejected or removed from the directory is never drawn, no matter whose it is.</p>
+<h2>Featured is not Sponsored</h2>
+<p>The two strips look similar but mean different things. Featured placement is a Pro perk: no per-placement fee, chosen by the rotation described here. Sponsored Content is paid advertising, always labelled <strong>Sponsored</strong>, with its own fair rotation — read <a href="/blog/how-advertising-works-on-firmledger">how advertising works</a> for that side. Neither strip is for sale as an editorial endorsement, and neither affects where a listing ranks in the organic directory.</p>
+<h2>The one-line version</h2>
+<p>Pro makes your listings eligible; the system rotates a fair random subset onto the homepage on every visit, so every eligible listing has the same chance of appearing. See <a href="/pricing">pricing</a> for what else Pro unlocks.</p>`,
+  },
+  {
+    slug: 'how-advertising-works-on-firmledger',
+    title: 'How advertising works on FirmLedger',
+    excerpt: 'Sponsored Content is paid placement, always labelled, fairly rotated — even with ten thousand sponsors. How the draw works and what your money buys.',
+    body: `<p class="lead">FirmLedger sells exactly one kind of advertising: time-based Sponsored Content placements for verified listings. Every placement is clearly labelled, and visibility is shared by fair random draw — this note explains the mechanics.</p>
+<h2>What you are buying</h2>
+<p>A Sponsored Content package puts your listing into the sponsored rotation for its duration — currently 7, 30 or 90 days (see <a href="/advertise">packages</a>). Your card links straight to your verified company profile. The moment PayPal confirms your payment, the placement goes live: no setup calls, no creative review queue — the card is your profile, rendered by the ledger.</p>
+<h2>Fair rotation, even at ten thousand sponsors</h2>
+<p>The homepage can only show a few sponsored cards at once, so it never tries to show all of them. Every visit draws a random subset of the active sponsors, and every sponsor has exactly the same probability of appearing — whether there are twelve sponsors or ten thousand. When someone searches or browses a category, the same rule applies inside that slice: up to three matching sponsors are drawn at random and shown first with a clear <strong>Sponsored</strong> label, while the organic results below exclude the drawn cards so nothing appears twice.</p>
+<p>This is deliberate. A directory that showed every advertiser would either paginate its sponsors into oblivion or quietly rank them by spend. The draw treats a one-week package exactly like a quarterly one while both are active: presence in the pool is what matters, not budget.</p>
+<h2>Always labelled, never ranked</h2>
+<p>Every sponsored card carries a <strong>Sponsored</strong> label — paid placement is never presented as an editorial pick. And sponsorship buys visibility, not rank: it never changes where a listing appears in organic directory results, search relevance, confidence scores or the Featured rotation. Those are earned or drawn, never sold.</p>
+<h2>Who can advertise</h2>
+<p>Any account with at least one approved listing it owns. Advertising is separate from FirmLedger Pro: Pro unlocks viewing full profiles and perks on your listings, while advertising buys placement in the sponsored rotation. Claiming and verifying your listing first is free, and sponsored cards for verified businesses carry the verified badge too.</p>
+<h2>The one-line version</h2>
+<p>You buy time in the pool; the system draws a fair random subset onto every page, always labelled Sponsored. Start at <a href="/advertise">Advertise on FirmLedger</a>.</p>`,
+  },
+  {
+    slug: 'turning-your-listing-into-leads',
+    title: 'Turning your FirmLedger listing into leads',
+    excerpt: 'Every claimed listing carries a Contact this business button. How inquiries reach you, what the Leads inbox does, and how to convert them.',
+    body: `<p class="lead">Every claimed listing on FirmLedger carries a <strong>Contact this business</strong> button. Visitors who find your profile can send an inquiry in under a minute — and it lands in your Leads inbox without your email address ever being shown. This guide walks through the whole loop.</p>
+<h2>What the visitor sees</h2>
+<p>On any claimed (verified-owner) profile, a <strong>Contact this business</strong> button sits with the profile actions. The form asks for exactly what you need to reply: name, email, phone (optional), what they are looking for, and a message. No account required — guests can inquire as easily as members — and spam-grade rate limiting plus honeypot checks keep the inbox clean.</p>
+<h2>What you receive</h2>
+<p>Each inquiry arrives twice: as an in-app notification and as an email to your account address, with the inquirer's details and message. Your email address is never exposed on the profile — the conversation starts through the ledger, and you choose when to take it direct. Hitting reply on the email answers the inquirer; their address is the reply-to.</p>
+<h2>The Leads inbox</h2>
+<p><strong>Dashboard → Leads</strong> is where inquiries live. Reading and managing them is a FirmLedger Pro feature (inquiries keep arriving either way — upgrading unlocks the backlog). Every lead carries a status pipeline — <strong>New, Contacted, Qualified, Won, Lost</strong> — plus private notes only you can see, filtering by status and listing, and archiving for the done-and-dusted. A badge on your dashboard counts what's new.</p>
+<h2>Closing the loop with Analytics</h2>
+<p>Leads pair naturally with <strong>Audience Analytics</strong>, also Pro: views today, this week and this month, the top locations your audience comes from, and a drill-down per location showing views, unique visitors, profile clicks, website clicks and leads. If a city sends views but no inquiries, your profile — not your traffic — is the problem, and now you can see it.</p>
+<h2>Three habits of listings that convert</h2>
+<p><strong>Claim first.</strong> Only claimed listings receive inquiries — verification is free and takes minutes. <strong>Reply fast.</strong> The email lands instantly; same-day replies win. <strong>Work the pipeline.</strong> Move every lead out of New within a day, even if only to Lost — an honest pipeline is what turns a directory profile into a sales channel.</p>
+<p>Claim your listing, then see <a href="/pricing">what Pro unlocks</a>: the Leads inbox, Audience Analytics, Featured eligibility and more.</p>`,
   },
 ];
 

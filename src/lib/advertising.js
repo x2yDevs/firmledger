@@ -99,22 +99,75 @@ function revokeSponsorship(listingId) {
 }
 
 /**
- * Homepage Sponsored Content strip — every active placement, newest first.
- * `limit` is optional: pass a positive number to cap the result (SQLite's
- * `LIMIT -1` means "no limit"). The homepage marquee scrolls the whole strip,
- * so it asks for all of them rather than the first four.
+ * Homepage Sponsored Content strip — a FAIR RANDOM subset of the active
+ * placements, re-drawn on every request.
+ *
+ * Why random: with tens or thousands of active sponsors the homepage can only
+ * show a handful of cards. `ORDER BY RANDOM()` gives every active sponsor the
+ * exact same probability of appearing on any given visit — no sponsor can buy
+ * the top slot twice, and none is ever starved. Pass a positive `limit` to
+ * cap the draw (the homepage asks for a dozen); `LIMIT -1` keeps the legacy
+ * “all, newest first” order for callers that genuinely need the full set.
  */
 function sponsoredStrip(limit = 0) {
   const today = new Date().toISOString().slice(0, 10);
   const cap = Number(limit) > 0 ? Math.floor(Number(limit)) : -1;
+  const order = cap > 0 ? 'RANDOM()' : 'l.updated_at DESC';
   return db.prepare(
     `SELECT l.*, u.plan AS owner_plan, u.plan_expires_at AS owner_plan_expires
        FROM listings l
        LEFT JOIN users u ON u.id = l.owner_user_id
       WHERE l.status='approved' AND l.sponsored=1
         AND (l.sponsored_expires_at='' OR l.sponsored_expires_at >= ?)
-      ORDER BY l.updated_at DESC LIMIT ?`
+      ORDER BY ${order} LIMIT ?`
   ).all(today, cap);
+}
+
+/** How many placements are currently active (for “showing X of N” notes). */
+function countActive() {
+  const today = new Date().toISOString().slice(0, 10);
+  try {
+    return db.prepare(
+      `SELECT COUNT(*) c FROM listings
+        WHERE status='approved' AND sponsored=1
+          AND (sponsored_expires_at='' OR sponsored_expires_at >= ?)`
+    ).get(today).c;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Sponsored matches for a filtered view (directory / search / category).
+ * Returns up to `limit` ACTIVE sponsors matching the same filters, drawn at
+ * random so every matching sponsor has the same probability of leading the
+ * results on any given visit — the strip shows the sample first, never the
+ * whole set. `filters`: { q, type, category, country }.
+ */
+function sponsoredSample(filters = {}, limit = 3) {
+  const today = new Date().toISOString().slice(0, 10);
+  const cap = Math.max(1, Math.min(12, Math.floor(Number(limit)) || 3));
+  const where = [`l.status='approved'`, 'l.sponsored=1', `(l.sponsored_expires_at='' OR l.sponsored_expires_at >= ?)`];
+  const params = [today];
+  const q = String(filters.q || '').trim();
+  if (q) {
+    where.push('(l.name LIKE ? OR l.tagline LIKE ? OR l.description LIKE ? OR l.tags LIKE ? OR l.city LIKE ?)');
+    const like = `%${q.replace(/[%_]/g, '')}%`;
+    params.push(like, like, like, like, like);
+  }
+  if (filters.type) { where.push('l.type = ?'); params.push(filters.type); }
+  if (filters.category) { where.push('l.category = ?'); params.push(filters.category); }
+  if (filters.country) { where.push('l.country = ?'); params.push(filters.country); }
+  try {
+    return db.prepare(
+      `SELECT l.*, u.plan AS owner_plan, u.plan_expires_at AS owner_plan_expires
+         FROM listings l LEFT JOIN users u ON u.id = l.owner_user_id
+        WHERE ${where.join(' AND ')}
+        ORDER BY RANDOM() LIMIT ?`
+    ).all(...params, cap);
+  } catch {
+    return [];
+  }
 }
 
 /** Current sponsored listings (admin console + sanity). */
@@ -131,5 +184,6 @@ function allSponsored() {
 
 module.exports = {
   allPackages, getPackage, createPackage, updatePackage, togglePackage, deletePackage,
-  isSponsored, grantSponsorship, revokeSponsorship, sponsoredStrip, allSponsored, plusDays,
+  isSponsored, grantSponsorship, revokeSponsorship, sponsoredStrip, sponsoredSample,
+  countActive, allSponsored, plusDays,
 };

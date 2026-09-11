@@ -381,3 +381,55 @@
     });
   });
 })();
+
+// ---- Audience analytics: outbound website-click beacon + lead-form UX ----
+// Both features work fully without JS (plain links and a plain form); this
+// only records the click-through and polishes the contact form.
+(function () {
+  'use strict';
+
+  // Fire-and-forget beacon when a visitor clicks through to the business site.
+  // sendBeacon first (survives the tab navigating away), fetch as fallback.
+  document.querySelectorAll('a[data-track-website]').forEach(function (a) {
+    if (a.__tracked) return;
+    a.__tracked = true;
+    a.addEventListener('click', function () {
+      var slug = a.getAttribute('data-track-website');
+      if (!slug) return;
+      var url = '/listing/' + encodeURIComponent(slug) + '/track-website';
+      var csrf = document.querySelector('input[name="_csrf"]');
+      var token = csrf && csrf.value ? csrf.value : '';
+      try {
+        // Guests hold no session, so the headerless sendBeacon is enough —
+        // and it survives the tab navigating away. Signed-in visitors must
+        // carry their CSRF token, which only fetch can attach.
+        if (!token && navigator.sendBeacon) { navigator.sendBeacon(url, ''); return; }
+        fetch(url, {
+          method: 'POST',
+          keepalive: true,
+          headers: token ? { 'x-csrf-token': token } : {},
+        }).catch(function () {});
+      } catch (e) { /* analytics must never break the click */ }
+    });
+  });
+
+  // Contact form: prevent double-submits and scroll the result into view.
+  document.querySelectorAll('form.lead-form').forEach(function (form) {
+    form.addEventListener('submit', function () {
+      var btn = form.querySelector('button[type="submit"]');
+      if (!btn || btn.disabled) return;
+      // Let native validation run first; only lock once the form is valid.
+      if (typeof form.reportValidity === 'function' && !form.checkValidity()) return;
+      btn.disabled = true;
+      btn.textContent = 'Sending…';
+    });
+  });
+  if (location.hash === '#contact-business') {
+    var panel = document.getElementById('contact-business');
+    if (panel) {
+      try { panel.scrollIntoView({ block: 'start' }); } catch (e) { /* ignore */ }
+      var firstField = panel.querySelector('input[name="name"]');
+      if (firstField && !panel.querySelector('.alert')) { try { firstField.focus({ preventScroll: true }); } catch (e) {} }
+    }
+  }
+})();

@@ -848,6 +848,63 @@ CREATE TABLE IF NOT EXISTS google_indexing_submissions (
 CREATE INDEX IF NOT EXISTS idx_google_sub_created ON google_indexing_submissions(created_at DESC);
 `);
 
+/* ---- Audience analytics (Pro) + Leads inbox (Pro) ----
+   listing_stat_events  one row per human listing-page view ('view') or
+                        outbound website click ('website_click'). Bots, the
+                        listing owner and admins are never recorded, so the
+                        numbers describe the real audience. City/country come
+                        from standard geo headers when the deployment sets
+                        them (Cloudflare / Vercel / proxy) and stay empty
+                        otherwise — never guessed, never fabricated.
+   leads                inquiries sent through “Contact this business” on a
+                        claimed listing. The owner's email is never exposed:
+                        the inquirer only ever sees the form, the owner gets
+                        the lead in Dashboard → Leads + by email.
+   lead_notes           timestamped owner notes on a lead. */
+db.exec(`
+CREATE TABLE IF NOT EXISTS listing_stat_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  listing_id INTEGER NOT NULL REFERENCES listings(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL DEFAULT 'view',
+  visitor_hash TEXT NOT NULL DEFAULT '',
+  city TEXT NOT NULL DEFAULT '',
+  country TEXT NOT NULL DEFAULT '',
+  referrer TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_stat_listing_day ON listing_stat_events(listing_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_stat_listing_kind ON listing_stat_events(listing_id, kind, created_at);
+CREATE INDEX IF NOT EXISTS idx_stat_loc ON listing_stat_events(listing_id, country, city);
+
+CREATE TABLE IF NOT EXISTS leads (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  listing_id INTEGER NOT NULL REFERENCES listings(id) ON DELETE CASCADE,
+  owner_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL DEFAULT '',
+  email TEXT NOT NULL DEFAULT '',
+  phone TEXT NOT NULL DEFAULT '',
+  looking_for TEXT NOT NULL DEFAULT '',
+  message TEXT NOT NULL DEFAULT '',
+  city TEXT NOT NULL DEFAULT '',
+  country TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'new',
+  archived INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_leads_owner ON leads(owner_user_id, archived, status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_leads_listing ON leads(listing_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS lead_notes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  lead_id INTEGER NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  note TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_lead_notes_lead ON lead_notes(lead_id, id);
+`);
+
 /* Settings helpers */
 function getSetting(key, fallback = '') {
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);

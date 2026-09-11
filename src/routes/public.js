@@ -40,23 +40,33 @@ router.get('/', (req, res) => {
     verified: db.prepare("SELECT COUNT(*) c FROM listings WHERE status='approved' AND claimed=1").get().c,
     countries: db.prepare("SELECT COUNT(DISTINCT country) c FROM listings WHERE status='approved' AND country<>''").get().c,
   };
-  /* Homepage featured records: admin-pinned records first, then listings carrying
-     Pro perks — either admin-boosted or owned by an account with an active
-     subscription. Up to 8 render as the normal grid; when there are more than 8
-     the whole set rides the same horizontal marquee as the promoted (sponsored)
-     strip, so nothing is ever dropped from the homepage. */
-  const FEATURED_GRID_MAX = 8;
-  const FEATURED_RAIL_MAX = 24;
-  const featuredWhere = `FROM listings l
+  /* Homepage featured records — eligibility, not entitlement. Pro listings are
+     ELIGIBLE for Featured placement; the system rotates a fair subset onto the
+     homepage on every visit. Admin-pinned records (l.featured=1) always lead;
+     the remaining slots are drawn at random from the other eligible Pro
+     listings, so every eligible listing has the same probability of appearing.
+     The count shown is the eligible pool, not the cards on screen. */
+  const FEATURED_SHOW = 8;
+  const eligibleWhere = `FROM listings l
      LEFT JOIN users u ON u.id = l.owner_user_id
      WHERE l.status='approved'
        AND (l.featured=1 OR ${PRO_LISTING_SQL} OR ${PRO_USER_SQL})`;
-  const featuredCount = db.prepare(`SELECT COUNT(*) c ${featuredWhere}`).get().c;
-  const featuredOverflow = featuredCount > FEATURED_GRID_MAX;
-  const featured = db.prepare(
-    `SELECT l.*, u.plan AS owner_plan, u.plan_expires_at AS owner_plan_expires ${featuredWhere}
-     ORDER BY l.featured DESC, l.updated_at DESC LIMIT ?`
-  ).all(featuredOverflow ? FEATURED_RAIL_MAX : FEATURED_GRID_MAX);
+  const featuredCount = db.prepare(`SELECT COUNT(*) c ${eligibleWhere}`).get().c;
+  const pinned = db.prepare(
+    `SELECT l.*, u.plan AS owner_plan, u.plan_expires_at AS owner_plan_expires ${eligibleWhere}
+       AND l.featured=1 ORDER BY l.updated_at DESC LIMIT ?`
+  ).all(FEATURED_SHOW);
+  let featured = pinned;
+  if (pinned.length < FEATURED_SHOW) {
+    const pinnedIds = pinned.map((l) => l.id);
+    const notPinned = pinnedIds.length ? `AND l.id NOT IN (${pinnedIds.map(() => '?').join(',')})` : '';
+    const rotation = db.prepare(
+      `SELECT l.*, u.plan AS owner_plan, u.plan_expires_at AS owner_plan_expires ${eligibleWhere}
+         ${notPinned} ORDER BY RANDOM() LIMIT ?`
+    ).all(...pinnedIds, FEATURED_SHOW - pinned.length);
+    featured = pinned.concat(rotation);
+  }
+  const featuredOverflow = featuredCount > featured.length;
   /* Longer strip ⇒ longer loop, so the scroll speed stays constant. */
   const featuredDur = Math.min(300, Math.max(28, Math.round(featured.length * 5.5)));
   const latest = db.prepare(
@@ -77,9 +87,12 @@ router.get('/', (req, res) => {
   const tickerItems = db.prepare(
     "SELECT name, slug, confidence FROM listings WHERE status='approved' ORDER BY updated_at DESC LIMIT 12"
   ).all();
-  /* Every active sponsor is rendered: the homepage strip is a marquee that scrolls
-     the whole set through a fixed-width row instead of dropping all but the first four. */
-  const sponsored = ad.sponsoredStrip();
+  /* Sponsored strip — a fair random draw, re-drawn every visit. With thousands of
+     active sponsors the homepage can only show a few cards, so each visit shows
+     a random subset and every sponsor has the same probability of appearing. */
+  const SPONSORED_SHOW = 12;
+  const sponsored = ad.sponsoredStrip(SPONSORED_SHOW);
+  const sponsoredCount = ad.countActive();
   const hasActiveSponsors = sponsored.length > 0;
 
   res.render('home', {
@@ -118,7 +131,7 @@ router.get('/', (req, res) => {
       },
     },
     stats, featured, latest, byType, medianConf, recentVerifications, tickerItems,
-    sponsored, hasActiveSponsors,
+    sponsored, hasActiveSponsors, sponsoredCount,
     featuredCount, featuredOverflow, featuredDur,
   });
 });
@@ -146,12 +159,26 @@ router.get('/directory', (req, res) => {
   if (sort === 'name') order = 'l.name ASC';
 
   const total = db.prepare(`SELECT COUNT(*) c FROM listings l WHERE ${where.join(' AND ')}`).get(...params).c;
+  /* Sponsored matches lead the results — but never all of them. Up to three
+     ACTIVE sponsors matching the same filters are drawn at random (equal
+     probability for every matching sponsor) and shown first with a clear
+     “Sponsored” label, on page 1 only. The organic results below exclude the
+     drawn cards so nothing appears twice. */
+  const SPONSORED_INLINE = 3;
+  const sponsoredInline = page === 1
+    ? ad.sponsoredSample({ q, type, category, country }, SPONSORED_INLINE)
+    : [];
+  const inlineIds = sponsoredInline.map((l) => l.id);
+  const organicWhere = inlineIds.length
+    ? `${where.join(' AND ')} AND l.id NOT IN (${inlineIds.map(() => '?').join(',')})`
+    : where.join(' AND ');
+  const organicParams = inlineIds.length ? [...params, ...inlineIds] : params;
   const listings = db.prepare(
     `SELECT l.*, u.plan AS owner_plan, u.plan_expires_at AS owner_plan_expires
      FROM listings l LEFT JOIN users u ON u.id = l.owner_user_id
-     WHERE ${where.join(' AND ')}
+     WHERE ${organicWhere}
      ORDER BY ${order} LIMIT ? OFFSET ?`
-  ).all(...params, PER_PAGE, (page - 1) * PER_PAGE);
+  ).all(...organicParams, PER_PAGE, (page - 1) * PER_PAGE);
 
   const pages = Math.max(1, Math.ceil(total / PER_PAGE));
   const bits = [q && `“${q}”`, type && typeLabel(type), category, country].filter(Boolean);
@@ -165,6 +192,7 @@ router.get('/directory', (req, res) => {
       canonical: siteUrl('/directory' + (q ? `?q=${encodeURIComponent(q)}` : '')),
     },
     listings, total, page, pages,
+    sponsoredInline,
     filters: { q, type, category, country, verified, sort },
     view: req.query.view === 'list' ? 'list' : 'grid',
     TYPES, COUNTRIES, allCats,
@@ -199,10 +227,27 @@ function categoryPage(req, res, next, catSlug, locSlug) {
     }
   }
 
-  const count = listings.length;
+  /* Sponsored leads, fairly: up to three ACTIVE sponsors from this slice, drawn
+     at random (equal probability), shown first with a “Sponsored” label on
+     page 1 only. The organic grid below excludes the drawn cards. */
   const page = Math.max(1, parseInt(req.query.page, 10) || 1);
-  const pages = Math.max(1, Math.ceil(count / 24));
-  const visible = listings.slice((page - 1) * 24, page * 24);
+  const today = new Date().toISOString().slice(0, 10);
+  const sponsoredPool = listings.filter((l) =>
+    l.sponsored && (l.sponsored_expires_at === '' || (l.sponsored_expires_at || '') >= today));
+  let sponsoredInline = [];
+  if (page === 1 && sponsoredPool.length) {
+    const shuffled = [...sponsoredPool];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    sponsoredInline = shuffled.slice(0, 3);
+  }
+  const inlineIds = new Set(sponsoredInline.map((l) => l.id));
+  const organic = listings.filter((l) => !inlineIds.has(l.id));
+  const count = listings.length;
+  const pages = Math.max(1, Math.ceil(organic.length / 24));
+  const visible = organic.slice((page - 1) * 24, page * 24);
 
   const whereStr = placeName ? ` in ${placeName}` : '';
   const path = `/directory/c/${catSlug}${locSlug ? `-in-${locSlug}` : ''}`;
@@ -238,6 +283,7 @@ function categoryPage(req, res, next, catSlug, locSlug) {
       ],
     },
     cat, placeName, listings: visible, total: count, page, pages, path,
+    sponsoredInline,
     siblings: (() => {
       const places = new Map();
       for (const l of all) {
@@ -349,6 +395,10 @@ router.get('/listing/:slug', (req, res, next) => {
     a: `If you represent ${l.name}, claim the profile to edit it directly — verification takes minutes using DNS, a meta tag, or the FirmLedger badge. Anyone can also request a review or removal using the “Request removal” link on this page, and our moderation team will act on it.`,
   });
 
+  /* Audience analytics (Pro): count this human view. Bots, the owner and
+     admins are skipped inside recordView — the numbers describe the audience. */
+  try { require('../lib/analytics').recordView(l, req); } catch { /* never break the page */ }
+
   const jsonld = {
     '@context': 'https://schema.org',
     '@type': 'Organization',
@@ -405,7 +455,86 @@ router.get('/listing/:slug', (req, res, next) => {
     hiringUrl: l.hiring_url || '',
     techCheckedAt: l.tech_checked_at || '',
     news: newsLib.approvedFor(l.id, 6),
+    /* Leads: “Contact this business” lives on claimed profiles only. The form
+       posts to /listing/:slug/leads; flash state rides the query string. */
+    leadOk: req.query.lead_ok || '',
+    leadErr: req.query.lead_err || '',
+    leadSent: req.query.lead_sent === '1',
   });
+});
+
+/* ---------------- Leads — “Contact this business” (claimed listings) --------
+ * Anyone (guests included) can send an inquiry to a claimed business. The lead
+ * goes to the VERIFIED OWNER's inbox (Dashboard → Leads) and email — the
+ * owner's email address is never exposed to the inquirer. Rate-limited,
+ * honeypot-guarded and domain-checked like every other public form.
+ */
+router.post('/listing/:slug/leads', spam.gate('lead', { checkEmail: true }), (req, res, next) => {
+  const l = db.prepare('SELECT * FROM listings WHERE slug = ?').get(req.params.slug);
+  if (!l) return next();
+  const back = (q) => res.redirect(`/listing/${l.slug}${q}#contact-business`);
+  if (String(req.body.company_site || '').trim()) return back(''); // honeypot
+  if (l.status !== 'approved' || !l.claimed || !l.owner_user_id) {
+    return back('?lead_err=' + encodeURIComponent('This business cannot receive inquiries yet.'));
+  }
+  if (req.user && l.owner_user_id === req.user.id) {
+    return back('?lead_err=' + encodeURIComponent('This is your own listing — inquiries from visitors land in your Leads inbox.'));
+  }
+  const leads = require('../lib/leads');
+  const analytics = require('../lib/analytics');
+  const loc = analytics.locate(req);
+  const r = leads.create({
+    listing: l,
+    fields: {
+      name: req.body.name, email: req.body.email, phone: req.body.phone,
+      looking_for: req.body.subject || req.body.looking_for, message: req.body.message,
+    },
+    city: loc.city, country: loc.country,
+  });
+  if (!r.ok) {
+    return back('?lead_err=' + encodeURIComponent(r.errors ? r.errors.join(' ') : (r.error || 'That inquiry could not be sent.')));
+  }
+  /* Owner inbox + email. The inquirer never sees the owner's address. */
+  const notify = require('../lib/notify');
+  notify.notifyUser(l.owner_user_id, {
+    kind: 'lead',
+    title: `New inquiry for ${l.name} — ${r.fields.name}`,
+    body: `${r.fields.looking_for ? `${r.fields.looking_for} · ` : ''}${r.fields.message.slice(0, 140)}`,
+    url: '/dashboard/leads',
+  });
+  const owner = db.prepare('SELECT email, name FROM users WHERE id=?').get(l.owner_user_id);
+  if (owner && owner.email) {
+    const util2 = require('../lib/util');
+    const { sendBranded } = require('../lib/mailer');
+    const esc = util2.escHtml;
+    sendBranded(owner.email, `New inquiry for ${l.name} — ${r.fields.name}`, {
+      alias: 'support',
+      replyTo: `${r.fields.name} <${r.fields.email}>`,
+      kicker: 'New lead',
+      title: `${esc(r.fields.name)} wants to hear from ${esc(l.name)}`,
+      preheader: `A visitor sent an inquiry to ${l.name} through FirmLedger.`,
+      alert: `<b>From:</b> ${esc(r.fields.name)} &lt;${esc(r.fields.email)}&gt;${r.fields.phone ? ` &nbsp;·&nbsp; <b>Phone:</b> ${esc(r.fields.phone)}` : ''}${r.fields.looking_for ? `<br><b>Looking for:</b> ${esc(r.fields.looking_for)}` : ''}`,
+      alertTone: 'ok',
+      paragraphs: [
+        esc(r.fields.message).replace(/\n/g, '<br>'),
+        `Manage this inquiry — reply, set its status, add notes — in your <b>Leads inbox</b>. Your email address was not shown to the inquirer.`,
+      ],
+      cta: { label: 'Open your Leads inbox', url: util2.siteUrl('/dashboard/leads') },
+      note: `Listing: <b>${esc(l.name)}</b> · received ${new Date().toISOString().slice(0, 10)}. Reply directly to <a href="mailto:${esc(r.fields.email)}" style="color:#1D4ED8;">${esc(r.fields.email)}</a> or hit reply — replies go straight to the inquirer.`,
+    }).catch(() => {});
+  }
+  return back('?lead_sent=1&lead_ok=' + encodeURIComponent(
+    `Your inquiry was sent to ${l.name}. The verified owner typically replies by email — check your inbox.`));
+});
+
+/* ---------------- Analytics beacon — outbound website click ----------------
+ * Fired by JS when a human clicks through to the business website. Bots and
+ * owner/admin views are skipped, exactly like page views. */
+router.post('/listing/:slug/track-website', (req, res, next) => {
+  const l = db.prepare('SELECT * FROM listings WHERE slug = ?').get(req.params.slug);
+  if (!l) return res.status(404).json({ ok: false });
+  try { require('../lib/analytics').recordWebsiteClick(l, req); } catch { /* ignore */ }
+  res.json({ ok: true });
 });
 
 /* ---------------- Listing news ----------------
@@ -504,7 +633,7 @@ router.get('/pricing', (req, res) => {
   res.render('pricing', {
     meta: {
       title: 'Pricing — FirmLedger Pro unlocks everything',
-      description: 'Listings are always free to add with full details. FirmLedger Pro unlocks viewing all listing details site-wide, plus the blue verified tick, homepage Featured placement and premium company badge for listings you own.',
+      description: 'Listings are always free to add with full details. FirmLedger Pro unlocks viewing all listing details site-wide, plus the blue verified tick, eligibility for Featured placement and the premium company badge for listings you own.',
       canonical: siteUrl('/pricing'),
     },
     offers: allPlans(true),
@@ -655,15 +784,21 @@ router.get('/blog/:slug', (req, res, next) => {
 router.get('/search', spam.gate('search'), (req, res) => {
   const q = String(req.query.q || '').trim().slice(0, 120);
   const out = { listings: [], posts: [], docs: [] };
+  let sponsoredHits = [];
   if (q) {
     const needle = `%${q.replace(/[%_]/g, '')}%`;
+    /* Sponsored matches lead — a fair random draw of up to two matching
+       sponsors, clearly labelled, never the whole set. */
+    sponsoredHits = ad.sponsoredSample({ q }, 2);
+    const hitIds = sponsoredHits.map((l) => l.id);
+    const notHits = hitIds.length ? `AND l.id NOT IN (${hitIds.map(() => '?').join(',')})` : '';
     out.listings = db.prepare(
       `SELECT l.*, u.plan AS owner_plan, u.plan_expires_at AS owner_plan_expires
        FROM listings l LEFT JOIN users u ON u.id = l.owner_user_id
-       WHERE l.status='approved'
+       WHERE l.status='approved' ${notHits}
          AND (l.name LIKE ? OR l.tagline LIKE ? OR l.category LIKE ? OR l.city LIKE ?)
        ORDER BY l.featured DESC, l.confidence DESC LIMIT 5`
-    ).all(needle, needle, needle, needle);
+    ).all(...hitIds, needle, needle, needle, needle);
     out.posts = db.prepare(
       "SELECT slug, title, excerpt, published_at FROM blog_posts WHERE status='published' AND (title LIKE ? OR body LIKE ? OR excerpt LIKE ?) ORDER BY published_at DESC LIMIT 5"
     ).all(needle, needle, needle);
@@ -694,6 +829,7 @@ router.get('/search', spam.gate('search'), (req, res) => {
     },
     q,
     providers: out.listings,
+    sponsoredHits,
     posts: out.posts,
     docs: out.docs,
     total,
@@ -848,7 +984,11 @@ router.get('/advertise', (req, res) => {
     },
     {
       q: 'When does my sponsored placement go live?',
-      a: 'The moment PayPal confirms your payment. Our server verifies the order, flags your listing as sponsored for the purchased duration, and it appears in the homepage Sponsored Content strip immediately. You also receive an in-app notification and a receipt email.',
+      a: 'The moment PayPal confirms your payment. Our server verifies the order, flags your listing as sponsored for the purchased duration, and it joins the homepage Sponsored Content rotation immediately. You also receive an in-app notification and a receipt email.',
+    },
+    {
+      q: 'How is homepage visibility shared between sponsors?',
+      a: 'Fairly and at random. The homepage can only show a few sponsored cards at once, so every visit draws a random subset of the active sponsors — each sponsor has exactly the same probability of appearing. The same rule applies inside filtered views: when someone searches or browses a category, up to three matching sponsors are drawn at random and shown first with a clear “Sponsored” label.',
     },
     {
       q: 'Do I need a Pro subscription or a verified listing to advertise?',

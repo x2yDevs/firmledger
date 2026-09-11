@@ -57,6 +57,10 @@
    status       /status accuracy: no false "Major Outage" without a monitor
                 API key, real failures walk the outage ladder and heal,
                 and a poisoned state self-heals on the live server.
+   pro-growth   fair Sponsored/Featured rotation, Audience Analytics
+                recording + aggregates, the Leads inbox pipeline, the lead
+                rate-limit bucket, reply-to lead alerts, eligible-wording,
+                no sandbox leaks in user views, and the three new blog seeds.
  */
 const path = require('path');
 const { spawnSync } = require('child_process');
@@ -80,6 +84,7 @@ const suites = [
   ['Indexing health (crawl view)', 'indexing-health.test.js'],
   ['Robots & Auth OAuth', 'robots-auth.test.js'],
   ['Status monitor accuracy', 'status-monitor.test.js'],
+  ['Pro growth: fair rotation, analytics, leads', 'pro-growth.test.js'],
 ];
 
 const results = [];

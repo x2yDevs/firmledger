@@ -4,7 +4,7 @@
   <div class="container" style="text-align:center">
     <p class="kicker kicker-center">Pricing</p>
     <h1 class="h-display">Create with Free.<br><em style="font-style:normal;color:var(--accent2)">Unlock everything</em> with Pro.</h1>
-    <p class="lede" style="margin-left:auto;margin-right:auto">Adding a listing — every field of it — is <b>free, forever</b>. FirmLedger Pro is one account-level subscription: you get to <b>view every listing's full details</b>, listings you own get the blue tick, homepage Featured placement and the premium gold badge — <b>plus full REST API access</b> with keys, docs and a playground.</p>
+    <p class="lede" style="margin-left:auto;margin-right:auto">Adding a listing — every field of it — is <b>free, forever</b>. FirmLedger Pro is one account-level subscription: you get to <b>view every listing's full details</b>, listings you own get the blue tick, eligibility for Featured placement and the premium gold badge — <b>plus Audience Analytics, a Leads inbox and full REST API access</b> with keys, docs and a playground.</p>
   </div>
 </section>
 
@@ -20,10 +20,10 @@
         <p class="kicker" style="margin:0 0 4px">Free trial</p>
         <% if (trial.active) { %>
           <h3>Your free Pro trial is running — <%= trial.daysLeft %> day<%= trial.daysLeft === 1 ? '' : 's' %> left</h3>
-          <p class="muted">Full Pro access until <b><%= trial.expiresAt %></b>: every listing's details, the blue tick, Featured placement, gold badge and the developer API. Upgrade below to keep it after the trial.</p>
+          <p class="muted">Full Pro access until <b><%= trial.expiresAt %></b>: every listing's details, the blue tick, Featured eligibility, Analytics, Leads, gold badge and the developer API. Upgrade below to keep it after the trial.</p>
         <% } else if (trial.eligible) { %>
           <h3>Try everything in Pro — free for <%= trial.days %> days</h3>
-          <p class="muted">No card, no commitment. One click activates <b>real, full Pro access</b> on your account: every listing's complete details, the blue verified tick, homepage Featured placement, the gold badge and developer API keys. When it ends, your account simply returns to Free.</p>
+          <p class="muted">No card, no commitment. One click activates <b>real, full Pro access</b> on your account: every listing's complete details, the blue verified tick, eligibility for Featured placement, Audience Analytics, the Leads inbox, the gold badge and developer API keys. When it ends, your account simply returns to Free.</p>
         <% } else if (trial.used) { %>
           <h3>Your free trial has been used</h3>
           <p class="muted">Every account gets one free trial. Keep full Pro access with one of the offers below — new time always stacks on anything remaining.</p>
@@ -83,7 +83,9 @@
           <li><b>View every listing's full details</b> — websites, emails, phones, timelines, graphs</li>
           <li><b>Developer API access</b> — REST CRUD endpoints with API-key auth, rate limits, full docs &amp; a live playground</li>
           <li>Blue verified tick on listings you own — everywhere</li>
-          <li>Homepage Featured placement for your listings</li>
+          <li><b>Pro listings are eligible for Featured placement.</b></li>
+          <li><b>Audience Analytics</b> — listing views, top locations &amp; drill-downs</li>
+          <li><b>Leads inbox</b> — inquiries from your claimed listings, managed in one place</li>
           <li>Premium gold company badge</li>
           <li>Priority verification &amp; moderation</li>
         </ul>
@@ -116,11 +118,11 @@
     <div class="faq-list">
       <details class="faq" open>
         <summary>What exactly is paid in FirmLedger?<span class="faq-tgl" aria-hidden="true">+</span></summary>
-        <div class="faq-a"><p>Two things. (1) <b>Viewing</b> the full details of every listing — public websites, emails, phones, social platforms, the events timeline and relationship graph. (2) The <b>perks</b> on listings you own: the blue tick, homepage Featured placement, the premium gold badge and priority review. Adding and editing your listings stays completely free.</p></div>
+        <div class="faq-a"><p>Two things. (1) <b>Viewing</b> the full details of every listing — public websites, emails, phones, social platforms, the events timeline and relationship graph. (2) The <b>perks</b> on listings you own: the blue tick, eligibility for Featured placement, Audience Analytics, the Leads inbox, the premium gold badge and priority review. Adding and editing your listings stays completely free.</p></div>
       </details>
       <details class="faq">
         <summary>Can I see the tick and Featured placement before paying?<span class="faq-tgl" aria-hidden="true">+</span></summary>
-        <div class="faq-a"><p>Your verified listing always shows in the directory and search for free. The blue verified tick, homepage Featured strip and gold badge are the Pro upgrade — that's the paid layer.</p></div>
+        <div class="faq-a"><p>Your verified listing always shows in the directory and search for free. The blue verified tick, eligibility for the homepage Featured rotation and the gold badge are the Pro upgrade — that's the paid layer. Note that Pro makes a listing <b>eligible</b> for Featured placement; the system rotates a fair subset of the eligible pool onto the homepage on every visit, so every eligible listing has the same chance of appearing.</p></div>
       </details>
       <details class="faq">
         <summary>Guests vs accounts — who sees what?<span class="faq-tgl" aria-hidden="true">+</span></summary>
@@ -128,11 +130,11 @@
       </details>
       <details class="faq">
         <summary>What happens when the subscription runs out?<span class="faq-tgl" aria-hidden="true">+</span></summary>
-        <div class="faq-a"><p>The tick, Featured slot and gold badge pause and the profile gracefully returns to the free presentation; nothing is deleted. Your full-details viewing pauses too. Renew any time — new time stacks on what you still have.</p></div>
+        <div class="faq-a"><p>The tick, Featured eligibility, Analytics, Leads inbox and gold badge pause and the profile gracefully returns to the free presentation; nothing is deleted — your analytics history and leads are kept. Your full-details viewing pauses too. Renew any time — new time stacks on what you still have.</p></div>
       </details>
       <details class="faq">
         <summary>Is there a free trial?<span class="faq-tgl" aria-hidden="true">+</span></summary>
-        <div class="faq-a"><p>Yes — every account gets one <b><%= typeof trial !== 'undefined' ? trial.days : 14 %>-day free trial of full Pro</b>, no payment details required. Create an account (email, Google or LinkedIn), then activate the trial in the banner at the top of this page — you'll also receive the activation link by email. While it runs it is real Pro access: every listing's full details, the blue tick, Featured placement, gold badge and developer API. When it ends your account returns to Free automatically; nothing is deleted and nothing is charged.</p></div>
+        <div class="faq-a"><p>Yes — every account gets one <b><%= typeof trial !== 'undefined' ? trial.days : 14 %>-day free trial of full Pro</b>, no payment details required. Create an account (email, Google or LinkedIn), then activate the trial in the banner at the top of this page — you'll also receive the activation link by email. While it runs it is real Pro access: every listing's full details, the blue tick, Featured eligibility, Analytics, Leads, gold badge and developer API. When it ends your account returns to Free automatically; nothing is deleted and nothing is charged.</p></div>
       </details>
       <details class="faq">
         <summary>How do payments work?<span class="faq-tgl" aria-hidden="true">+</span></summary>
@@ -141,6 +143,14 @@
       <details class="faq">
         <summary>Is API access included in Pro?<span class="faq-tgl" aria-hidden="true">+</span></summary>
         <div class="faq-a"><p>Yes. An active Pro subscription unlocks the <b>Developer API</b> area in your dashboard: up to 3 API keys (shown once, stored hashed), full REST endpoints — <code>GET</code>, <code>POST</code>, <code>PUT</code>, <code>DELETE</code> on the records you own — per-key rate limits with <code>X-RateLimit-*</code> headers, a complete documentation page at <a href="/api/docs">/api/docs</a>, and a live playground that runs real calls against your own data. If Pro lapses, keys answer <code>403 pro_required</code> until you renew — nothing is deleted.</p></div>
+      </details>
+      <details class="faq">
+        <summary>What is Audience Analytics?<span class="faq-tgl" aria-hidden="true">+</span></summary>
+        <div class="faq-a"><p>A Pro dashboard that shows who is viewing your listings: views today, this week and this month, the top locations your audience comes from, and a drill-down per location — views, unique visitors, profile clicks, website clicks and leads. Bots, your own views and admin views are never counted, and locations are only shown when they are genuinely known.</p></div>
+      </details>
+      <details class="faq">
+        <summary>How do Leads work?<span class="faq-tgl" aria-hidden="true">+</span></summary>
+        <div class="faq-a"><p>Every claimed (verified-owner) listing carries a <b>Contact this business</b> button. Visitors send an inquiry — name, email, phone, what they are looking for, message — and it lands in your <b>Dashboard → Leads</b> inbox and your email. Your email address is never shown publicly. Managing leads (statuses, notes, archive) is a Pro feature; inquiries keep arriving either way.</p></div>
       </details>
       <details class="faq">
         <summary>Can someone write a negative review here?<span class="faq-tgl" aria-hidden="true">+</span></summary>

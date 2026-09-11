@@ -53,7 +53,8 @@
           <%= comparing ? 'Not comparing' : 'Compare' %>
         </button>
       </form>
-      <% if (l.website && viewFull) { %><a class="btn btn-ghost" href="<%= l.website %>" rel="noopener nofollow" target="_blank">Visit website ↗</a><% } %>
+      <% if (l.website && viewFull) { %><a class="btn btn-ghost" href="<%= l.website %>" rel="noopener nofollow" target="_blank" data-track-website="<%= l.slug %>">Visit website ↗</a><% } %>
+      <% if (l.claimed && !isOwner) { %><a class="btn btn-primary" href="#contact-business">Contact this business</a><% } %>
       <% if (!l.claimed) { %><a class="btn btn-accent" href="/claim/<%= l.slug %>">Claim this listing</a><% } %>
     </div>
     <div class="share-row" aria-label="Share this listing">
@@ -329,13 +330,40 @@
           <% if (viewFull) { %>
           <% if (l.email) { %><tr><th>Email</th><td><a href="mailto:<%= l.email %>" style="color:var(--accent2)"><%= l.email %></a></td></tr><% } %>
           <% if (l.phone) { %><tr><th>Phone</th><td><a href="tel:<%= l.phone.replace(/\s/g, '') %>" style="color:var(--accent2)"><%= l.phone %></a></td></tr><% } %>
-          <% if (l.website) { %><tr><th>Website</th><td><a href="<%= l.website %>" rel="noopener nofollow" target="_blank" style="color:var(--accent2)"><%= l.website.replace(/^https?:\/\//, '') %> ↗</a></td></tr><% } %>
+          <% if (l.website) { %><tr><th>Website</th><td><a href="<%= l.website %>" rel="noopener nofollow" target="_blank" style="color:var(--accent2)" data-track-website="<%= l.slug %>"><%= l.website.replace(/^https?:\/\//, '') %> ↗</a></td></tr><% } %>
           <% } %>
           <tr><th>Plan</th><td><% if (perksPro) { %><span class="pill pill-pro">FirmLedger Pro</span><% } else { %><span class="pill pill-free">Free</span><% } %></td></tr>
           <tr><th>Listed</th><td><%= fmtDate(l.created_at) %></td></tr>
           <tr><th>FirmLedger ID</th><td class="mono" style="font-size:11px">FL-<%= String(100000 + l.id).slice(1) %></td></tr>
         </table>
       </div>
+
+      <% if (l.claimed) { %>
+      <div class="panel rv lead-panel" style="--d:100ms" id="contact-business">
+        <h3>Contact this business</h3>
+        <% if (isOwner) { %>
+        <p style="font-size:13.5px">This is your listing — inquiries from visitors land in your <b>Leads inbox</b>.</p>
+        <a class="btn btn-primary btn-block" style="margin-top:12px" href="/dashboard/leads">Open your Leads inbox</a>
+        <% } else if (leadSent) { %>
+        <div class="alert alert-ok" role="status"><%= leadOk || 'Your message was sent to the verified owner. They will reply to your email address.' %></div>
+        <p class="form-note">Want to follow up? Send another message below — it starts a new inquiry.</p>
+        <% } else { %>
+        <% if (leadErr) { %><div class="alert alert-err" role="alert"><%= leadErr %></div><% } %>
+        <% if (leadOk) { %><div class="alert alert-ok" role="status"><%= leadOk %></div><% } %>
+        <form class="form lead-form" method="post" action="/listing/<%= l.slug %>/leads">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <label><span>Your name</span><input class="input" type="text" name="name" maxlength="80" required autocomplete="name" placeholder="Jane Wanjiku"<% if (user && user.name) { %> value="<%= user.name %>"<% } %>></label>
+          <label><span>Your email</span><input class="input" type="email" name="email" maxlength="160" required autocomplete="email" placeholder="you@example.com"<% if (user && user.email) { %> value="<%= user.email %>"<% } %>></label>
+          <label><span>Phone <em class="opt">(optional)</em></span><input class="input" type="tel" name="phone" maxlength="40" autocomplete="tel" placeholder="+254 …"></label>
+          <label><span>What are you looking for?</span><input class="input" type="text" name="subject" maxlength="140" required placeholder="e.g. A quote for office cleaning"></label>
+          <label><span>Message</span><textarea class="input" name="message" rows="4" maxlength="4000" required placeholder="Tell <%= l.name %> what you need…"></textarea></label>
+          <input type="text" name="company_site" value="" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;opacity:0;height:0">
+          <button class="btn btn-primary btn-block" type="submit">Send inquiry</button>
+          <p class="form-note">Goes straight to the verified owner — your details are shared with them, and only them.</p>
+        </form>
+        <% } %>
+      </div>
+      <% } %>
 
       <div class="panel rv flscore-panel" style="--d:120ms">
         <h3>FirmLedger Score</h3>

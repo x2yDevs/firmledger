@@ -106,6 +106,8 @@
     <a href="/about">About</a>
     <% if (user) { %>
     <a href="/dashboard">Dashboard</a>
+    <a href="/dashboard/leads">Leads</a>
+    <a href="/dashboard/analytics">Analytics</a>
     <a href="/dashboard/notifications">Notifications<% if (typeof userUnread !== 'undefined' && userUnread) { %> (<%= userUnread %>)<% } %></a>
     <a href="/dashboard/security">Security</a>
     <a href="/dashboard/support">Support</a>

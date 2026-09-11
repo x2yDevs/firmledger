@@ -141,7 +141,7 @@ router.get('/billing/cancel', (req, res) => {
       alertTone: 'info',
       paragraphs: isAdCancel
         ? ['Nothing was charged and your listing is unchanged. You can return and complete the advertising checkout at any time — once confirmed, your listing appears on the homepage Sponsored Content strip, clearly labelled as Sponsored.']
-        : ['Nothing was charged and your account is unchanged. You can return and complete the upgrade at any time — Pro unlocks every listing\'s full details (email, phone, website, events, relationship graph) plus the verified tick, Featured placement and gold badge on listings you own.'],
+        : ['Nothing was charged and your account is unchanged. You can return and complete the upgrade at any time — Pro unlocks every listing\'s full details (email, phone, website, events, relationship graph) plus the verified tick, Featured eligibility, Analytics, Leads and the gold badge on listings you own.'],
       cta: { label: `Return to ${label}`, url: dest },
       note: `Reference <b>${util.escHtml(reference)}</b> — quote it if anything looks wrong. Questions? ${isAdCancel ? '<a href="mailto:advertising@firmledger.co.ke" style="color:#1D4ED8;">advertising@firmledger.co.ke</a>' : '<a href="mailto:billing@firmledger.co.ke" style="color:#1D4ED8;">billing@firmledger.co.ke</a>'}`,
       }).catch(() => {});
@@ -250,7 +250,7 @@ router.get('/billing/callback', async (req, res) => {
         alertTone: 'ok',
         paragraphs: [
           `Your payment was confirmed and FirmLedger Pro is live on your account${till ? ` until <b>${till}</b>` : ''}. Here are your details: reference <b>${util.escHtml(reference)}</b>, PayPal order <b>${util.escHtml(orderId)}</b>.`,
-          `You can now view every listing's full details — public email, phone, website, events timeline and relationship graph. Any listings you own carry the blue verified tick, homepage Featured placement, the premium gold badge, and priority admin verification & trust review.`,
+          `You can now view every listing's full details — public email, phone, website, events timeline and relationship graph. Any listings you own carry the blue verified tick, Featured eligibility, Audience Analytics, the Leads inbox, the premium gold badge, and priority admin verification & trust review.`,
         ],
         cta: { label: 'Open your dashboard', url: util.siteUrl('/dashboard') },
         note: 'Keep this email as your receipt. Questions about the charge? Reply to <a href="mailto:billing@firmledger.co.ke" style="color:#1D4ED8;">billing@firmledger.co.ke</a> quoting your reference.',
@@ -288,7 +288,7 @@ router.post('/pricing/free-trial', requireUser, (req, res) => {
   notify.notifyUser(u.id, {
     kind: 'billing',
     title: `Your ${r.days}-day FirmLedger Pro trial is active`,
-    body: `Full Pro access until ${String(r.expiresAt).slice(0, 10)} — every listing's details, the verified tick, Featured placement and the developer API.`,
+    body: `Full Pro access until ${String(r.expiresAt).slice(0, 10)} — every listing's details, the verified tick, Featured eligibility, Analytics, Leads and the developer API.`,
     url: '/dashboard',
   });
   trialmail.sendTrialActivated(u, { days: r.days, expiresAt: r.expiresAt }).catch(() => {});
