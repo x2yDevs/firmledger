@@ -267,14 +267,19 @@ run("INSERT INTO sessions (token,user_id,csrf,kind,expires_at) VALUES (?,NULL,?,
     /* --- homepage Featured rotation ----------------------------------- */
     const home = await (await fetch(BASE + '/')).text();
     check('homepage renders', /Featured records/.test(home));
-    check('12 eligible listings render as a capped 8-card grid',
-      (home.match(/class="l-card featured-card/g) || []).length === 8 && !/featured-rail is-marquee/.test(home),
+    // Fair rotation: repeated visits must surface more than one fixed 8-set.
+    // Scoped to featured-card anchors — the marquee renders each drawn card
+    // twice (the second pass is the `featured-card--dup` seamless-loop copy),
+    // so only the non-dup anchors count; other homepage sections link the same
+    // listings and must not inflate the count.
+    const featSlugs = (html) => [...html.matchAll(/l-card featured-card" href="\/listing\/([^"]+)"/g)].map((m) => m[1]);
+    check('12 eligible listings render as an 8-card marquee',
+      /featured-rail is-marquee/.test(home) && featSlugs(home).length === 8,
+      `${featSlugs(home).length} unique cards, marquee=${/featured-rail is-marquee/.test(home)}`);
+    check('the marquee loop is seamless (8 originals + 8 duplicates)',
+      (home.match(/class="l-card featured-card/g) || []).length === 16,
       String((home.match(/class="l-card featured-card/g) || []).length));
     check('the eligible pool size is disclosed', /random subset of the 12 eligible records/.test(home));
-    // Fair rotation: repeated visits must surface more than one fixed 8-set.
-    // (Scoped to featured-card anchors — other homepage sections link the
-    // same listings and must not inflate the count.)
-    const featSlugs = (html) => [...html.matchAll(/l-card featured-card" href="\/listing\/([^"]+)"/g)].map((m) => m[1]);
     const seenSlugs = new Set(featSlugs(home));
     for (let i = 0; i < 3; i++) {
       const h = await (await fetch(BASE + '/')).text();
@@ -282,7 +287,8 @@ run("INSERT INTO sessions (token,user_id,csrf,kind,expires_at) VALUES (?,NULL,?,
     }
     check('repeated visits rotate the cards shown', seenSlugs.size > 8, `${seenSlugs.size} distinct of 12`);
 
-    // Drop back to 8 eligible records → the whole pool shows, no rotation note.
+    // Drop back to 8 eligible records → the whole pool shows, still a marquee,
+    // and no rotation note (nothing is left out).
     const trim = `
 process.env.FIRMLEDGER_DATA_DIR = ${JSON.stringify(dataDir)};
 const { db } = require(${JSON.stringify(path.join(ROOT, 'src/db.js'))});
@@ -290,10 +296,9 @@ db.prepare("UPDATE listings SET owner_user_id=NULL WHERE slug IN ('web-co-9','we
 `;
     spawnSync(process.execPath, ['-e', trim], { cwd: ROOT, env });
     const home2 = await (await fetch(BASE + '/')).text();
-    check('a pool of 8 renders the normal grid',
-      /class="list-grid"/.test(home2) && !/featured-rail is-marquee/.test(home2));
-    check('the grid shows all 8 cards', (home2.match(/class="l-card featured-card/g) || []).length === 8,
-      String((home2.match(/class="l-card featured-card/g) || []).length));
+    check('a pool of 8 still marquees the whole set',
+      /featured-rail is-marquee/.test(home2) && featSlugs(home2).length === 8,
+      `${featSlugs(home2).length} unique cards, marquee=${/featured-rail is-marquee/.test(home2)}`);
     check('no rotation note when the whole pool shows', !/fair rotation/.test(home2));
 
     /* --- settings page ------------------------------------------------ */

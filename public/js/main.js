@@ -364,8 +364,10 @@
   var ICO_PLAY = '<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true"><path d="M8 5.2v13.6a1 1 0 0 0 1.53.85l10.6-6.8a1 1 0 0 0 0-1.7L9.53 4.35A1 1 0 0 0 8 5.2z"/></svg>';
 
   document.querySelectorAll('[data-rail-toggle]').forEach(function (btn) {
-    var section = btn.closest('section');
-    var rail = section ? section.querySelector(btn.getAttribute('data-rail-target') || '.sponsor-rail') : null;
+    /* The toggle usually lives in the section head, but the directory page puts
+       it inside the page container instead — fall back through likely scopes. */
+    var scope = btn.closest('section') || btn.closest('.container') || document;
+    var rail = scope ? scope.querySelector(btn.getAttribute('data-rail-target') || '.sponsor-rail') : null;
     if (!rail) return;
     var ico = btn.querySelector('.sponsor-toggle-ico');
     var txt = btn.querySelector('.sponsor-toggle-txt');
