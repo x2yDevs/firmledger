@@ -2928,7 +2928,7 @@ select.input::-ms-expand,
   /* Chat-first: the two panes take nearly the whole screen — the thread, and
      not the composer or a stack of cards, gets the height. Both columns run
      to the same line and each scrolls on its own. */
-  height: min(84vh, 880px);
+  height: min(92vh, 960px);
   min-height: 460px;
 }
 @media (max-width: 900px) {
@@ -2992,7 +2992,7 @@ select.input::-ms-expand,
   height: 100%;
   /* The thread is the whole pane below the facts, so it takes the height the
      retired notes block used to reserve — the same box the list stands in. */
-  max-height: max(min(84vh, 880px), 460px);
+  max-height: max(min(92vh, 960px), 460px);
   overflow: hidden;
   margin-bottom: 0;
   min-height: 0;
@@ -3100,7 +3100,7 @@ select.input::-ms-expand,
 
 @media (max-width: 900px) {
   /* Stacked: the list scrolls inside its own frame, the chat gets ticket height. */
-  .lead-detail .lead-thread { min-height: 320px; max-height: min(72vh, 620px); }
+  .lead-detail .lead-thread { min-height: 380px; max-height: min(80vh, 680px); }
   .lead-reply-form .input { min-height: 76px; }
 }
 @media (max-width: 640px) {
@@ -3109,7 +3109,7 @@ select.input::-ms-expand,
   .ana-pick select { min-width: 0; width: 100%; }
   .lead-tabs { gap: 6px; }
   .lead-tab { padding: 7px 12px; font-size: 12.5px; }
-  .lead-detail .lead-thread { min-height: 300px; max-height: min(68vh, 540px); }
+  .lead-detail .lead-thread { min-height: 360px; max-height: min(76vh, 600px); }
   .lead-status-form label { flex-direction: column; align-items: stretch; }
   .lead-status-form select.input { width: 100%; min-width: 0; }
 }
