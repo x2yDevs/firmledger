@@ -3420,3 +3420,74 @@ select:not(:where(.chat-model-pick select)) {
   cursor: pointer;
 }
 select:not(:where(.chat-model-pick select))::-ms-expand { display: none; }
+
+/* ============ Leads inbox — the chat extends, the reply box holds, the page ends clean ============
+   The inbox shell it builds on is untouched (window-derived pane height, sticky
+   top, one pinned foot, the corner drag): these are the four gaps it left.
+
+   1. Reply box: the composer is the pane's floor, so its own growth can never
+      push Send out of the pane. A hand-dragged box now stops where the pane
+      stops paying for it.
+   2. Chat area: extendable, and honestly so — it gives height back on a short
+      window instead of growing a second scrollbar inside the pane, and one
+      button widens the conversation over the whole window with the list
+      stepping aside (see [data-lead-focus] in views/dashboard/leads.ejs).
+   3. Nothing selected: the invitation is a compact panel, not a window-tall
+      white box beside a three-row list.
+   4. Below the inbox: the weekly-digest band is not rendered on this route at
+      all (hideNews in src/routes/dashboard.js), so scrolling past the
+      conversation lands on the footer instead of a logo, and the section's
+      bottom air tightens to match. */
+.lead-reply-form .input { max-height: 240px; }
+
+/* Short desktop windows: 96px is two bubbles of chat, and the whole foot —
+   Send, counter, status line — stays inside the pane. Below ~516px of height
+   the pane's own escape hatch (overflow-y: auto, further up) takes over. */
+@media (min-width: 901px) and (max-height: 880px) {
+  .lead-detail .lead-thread { min-height: 96px; }
+}
+
+/* No conversation open: the pane keeps an inviting measure, not the window. */
+.lead-detail.lead-detail-empty { height: auto; min-height: 208px; padding: 26px 18px; }
+
+/* The header's right edge: focus control and Close, one tidy pair. */
+.lead-pane-tools { display: inline-flex; align-items: center; gap: 10px; align-self: center; flex: 0 0 auto; }
+.lead-pane-focus .lpf-ico { font-size: 13px; line-height: 1; transition: transform .18s; }
+.lead-pane-focus[aria-pressed="true"] { border-color: var(--accent); background: var(--soft); color: var(--accent2); }
+.lead-pane-focus[aria-pressed="true"] .lpf-ico { transform: rotate(180deg); }
+
+/* Focus mode. The list column keeps its markup — the inbox is still one page,
+   still one form per action, still the same stored pane size waiting when the
+   width comes back — it just is not competing for it. Height, too, is the
+   window's own: header stop above, 12px of air below, so the whole thread and
+   the reply box under it are on screen with no page scroll at all (the 640px
+   floor the two-column pane pays for is a compromise a full-window pane does
+   not need — a 580px window has 484px, and that is what it gets). */
+.lead-layout.is-max { grid-template-columns: minmax(0, 1fr); }
+.lead-layout.is-max .lead-list-col { display: none; }
+.lead-detail.is-max { height: max(480px, calc(100vh - 96px)); }
+@supports (height: 100dvh) {
+  .lead-detail.is-max { height: max(480px, calc(100dvh - 96px)); }
+}
+/* Nothing left to trade: the height is the window's own and the column the
+   grip would shrink is already gone, so the handle stands down. */
+.lead-layout.is-max .lead-resize { display: none; }
+/* A wider pane wraps nothing, so the composer row keeps Send, the counter and
+   the two contact actions on one line at every width. */
+.lead-detail.is-max .lead-reply-actions { flex-wrap: nowrap; }
+
+/* Stacked screens have no side column to widen into: the control is not
+   offered and a class carried over from a resized window stays inert. */
+@media (max-width: 900px) {
+  .lead-pane-focus { display: none; }
+  .lead-layout.is-max { grid-template-columns: 1fr; }
+  .lead-layout.is-max .lead-list-col { display: flex; }
+  .lead-detail.is-max { height: auto; }
+}
+@media print {
+  .lead-layout.is-max .lead-list-col { display: flex; }
+  .lead-detail.is-max { height: auto; }
+}
+
+/* The inbox ends where the conversation does. */
+.leads-section { padding-bottom: 1.5rem; }

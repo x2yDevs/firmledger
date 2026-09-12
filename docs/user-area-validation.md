@@ -91,3 +91,64 @@ download hosts are unreachable from it. Run it locally with
 `npx playwright install chromium && npm run test:leads-fit:browser`, or point
 `CHROMIUM_EXECUTABLE_PATH` at an existing browser. Visual spot-checks on
 Safari/iOS and Android are still outstanding.
+
+---
+
+# Leads inbox — the reply box holds, the chat extends — 2026-09-12
+
+## What changed
+
+- **The reply box is the pane's floor, and now behaves like one.** Its textarea
+  had a ceiling in script only (`autoSize` stops at 160px) — a hand-dragged
+  one could still outgrow the pane and push Send out of it. `.lead-reply-form
+  .input` now carries `max-height: 240px`, so the box can be made comfortable
+  but the pane always pays for it.
+- **The chat area is extendable at both ends.** On a short desktop window the
+  thread floor gives way (`.lead-detail .lead-thread { min-height: 96px }`
+  under 880px of height) instead of the pane growing a second scrollbar, so
+  the conversation keeps everything above the composer and the composer stays
+  on screen. One button in the pane header — `⤢ Full width`, `Esc` to release —
+  extends the conversation over the whole window: the grid collapses to one
+  column, the list steps aside, the pane measures `max(480px, 100dvh − 96px)`
+  from the header stop to 12px above the bottom, and the corner grip stands
+  down because there is nothing left to trade. Stacked screens do not offer it;
+  print and a resize through 900px both hand the list back.
+- **Nothing selected no longer fills the window.** The empty invitation is a
+  compact `min-height: 208px` panel rather than a `--pane-h` white box beside
+  a three-row list.
+- **The page ends with the conversation.** The site's weekly-digest band —
+  logo mark, copy, subscribe form — is skipped on this route (`hideNews` in
+  `src/routes/dashboard.js`, the same escape hatch the maintenance page uses),
+  and `.leads-section` bottom padding tightened from 3.5rem to 1.5rem. Every
+  other page keeps the band.
+
+## Kept exactly as it was
+
+The thread still renders every message with day separators, mine/theirs sides
+and escaped bodies; the composer, its counter, its inline refusal, the status
+pill, `Update`, `Archive` and `Delete` still post from inside the one pinned
+foot and return to the same filtered inbox view; the corner grip still
+persists per browser; and with no stored size and no scroll the shipped
+geometry still computes to the same pixels. `npm run test:leads-pane` (64
+checks) and `npm run test:leads-fit` (42) pass unchanged, including their
+default-identity proofs and their height budgets.
+
+## Verified locally
+
+- `npm test`: all 31 suites pass.
+- `npm run test:leads-reply`: 54 checks — the band (present elsewhere, absent
+  here), the focus control's markup and its order relative to the thread and
+  Close, the stylesheet scoping above, a window-by-window budget audit read
+  back out of `app.css` (at rest the thread keeps its full 220px floor; with
+  the box dragged to its 240px ceiling the chat still stands and the foot is
+  still inside the pane), and the shipped focus script run under `vm` against a
+  stub DOM: click engages and parks, `Esc` releases, only `Esc` does, a stacked
+  window refuses and a mid-focus resize clears, and a page with no open
+  conversation runs the block as a no-op.
+
+## Not verified here
+
+No Chromium exists in this sandbox and the Playwright download hosts are
+unreachable from it, so nothing here is a measured-pixels result: `npm run
+test:leads-fit:browser` (and any visual check of focus mode, the dock and the
+composer on Safari/iOS and Android) still needs one local run.

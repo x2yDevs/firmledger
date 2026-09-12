@@ -26,6 +26,7 @@
     "test:leads-fit": "node tests/leads-blog-fit.test.js",
     "test:leads-fit:browser": "node tests/leads-blog-fit.test.js --browser",
     "test:leads-pane": "node tests/leads-pane-resize.test.js",
+    "test:leads-reply": "node tests/leads-reply-fit.test.js",
     "test:leads-pane:browser": "node tests/leads-pane-resize.test.js --browser",
     "test:blog": "node tests/blog-content.test.js",
     "test:focus": "node tests/focus-hygiene.test.js",

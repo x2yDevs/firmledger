@@ -1,3 +1,43 @@
+## 2026-09-12 (leads inbox) — the reply box holds the floor, the conversation extends, the page ends clean
+
+**The composer is now the pane's floor in fact, not only in flow.** Its textarea
+was bounded only by the script that sizes it (`autoSize`, 160px); dragging the
+native handle could still outgrow the pane and shove Send out of it. The box
+carries `max-height: 240px` now — the same ceiling is enforced in CSS and in
+script — and short desktop windows reclaim the *thread* floor (`min-height: 96px`
+under 880px of height) instead of letting the pane grow a second scrollbar over
+the pinned foot. The budget is auditable and audited: at rest the chat keeps its
+full 220px floor on every window from 640px up, and even with the box dragged to
+240px the conversation still stands and the foot is still inside the pane.
+
+**The chat area above it extends.** One button in the pane header — `⤢ Full
+width`, `Esc` (or the button again) to release — hands the conversation the whole
+window: the list column steps aside, the grid becomes one column, the pane
+measures `max(480px, 100dvh − 96px)` from the header stop to 12px above the
+bottom, the Send row stops wrapping, and the corner grip stands down because
+there is nothing left to trade. It is a view, not a setting: nothing is stored,
+so the next page load is the two-column inbox with the list in hand again, and a
+pane with no conversation open ships no button and runs no handler. Stacked
+screens never offer it; print and a resize through 900px hand the list back. The
+same thread, composer, status line and pinned foot are underneath — no new form,
+no new route, no changed markup order.
+
+**Two loose ends in the same area.** An unopened inbox no longer renders a
+window-tall empty panel beside a short list (`min-height: 208px`, content height
+otherwise); and the site's weekly-digest band — logo mark, copy, subscribe form
+— is not rendered on this route at all (`hideNews` in `src/routes/dashboard.js`,
+the escape hatch the maintenance page already uses), with the section's bottom
+padding tightened to match, so scrolling past the conversation lands on the
+footer instead of on a logo. Every other page keeps the band.
+
+Covered by the new `npm run test:leads-reply` (54 checks, plus `npm test` at 31
+suites green, including the shipped
+focus script run against a stub DOM and a height budget read back out of
+`app.css`), and by `test:leads-pane` (64), `test:leads-fit` (42),
+`test:leads-chat` (105), `test:leads-inbox`, `test:leads-contact`,
+`test:leads-housekeeping`, `test:user-area` and `test:focus` — all unchanged and
+all green.
+
 ## 2026-09-11 (leads inbox) — a refused reply says why, and the thread owns the pane
 
 **A reply that will not send states the reason in the box it was refused from.**
