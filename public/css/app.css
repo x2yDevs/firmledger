@@ -3465,3 +3465,20 @@ select:not(:where(.chat-model-pick select))::-ms-expand { display: none; }
 
 /* The inbox ends where the conversation does. */
 .leads-section { padding-bottom: 1.5rem; }
+
+/* ============ Leads inbox — header follows the system; the chat extends like the reply box ============
+   Two small alignments, no new chrome, nothing else touched:
+   1. The pane header reads as one FirmLedger row: the inquiry name and its
+      status pill share a flex line with a real gap (they used to sit on a
+      single space that jammed and wrapped badly), and the listing named in
+      the line under it takes the same accent link treatment as every other
+      inline link on the site — muted text is not a link colour.
+   2. The chat box extends from its own corner, exactly like the reply box
+      below it: it carries the same vertical resize handle. The thread keeps
+      its flexible fill, so on wide screens a press in that corner drives the
+      same stored pane height the seam grip drives (see the pane script);
+      everywhere else the native handle already sticks on its own. */
+.lead-detail .panel-h-t h3 { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.lead-detail > .muted a { color: var(--accent2); font-weight: 600; }
+.lead-detail > .muted a:hover { color: var(--accent); text-decoration: underline; }
+.lead-thread { resize: vertical; }
