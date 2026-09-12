@@ -152,3 +152,67 @@ No Chromium exists in this sandbox and the Playwright download hosts are
 unreachable from it, so nothing here is a measured-pixels result: `npm run
 test:leads-fit:browser` (and any visual check of focus mode, the dock and the
 composer on Safari/iOS and Android) still needs one local run.
+
+---
+
+# Leads inbox — the reply box resizes by hand, the card grows with it — 2026-09-12
+
+## What changed
+
+- **The reply box has one floor and one ceiling, everywhere.** `.lead-reply-form
+  .input` is `min-height: 80px; max-height: 300px; width: 100%; box-sizing:
+  border-box; resize: vertical`. The short-window (56px) and stacked (76px)
+  floors that used to override it are gone, so the field a member drags is the
+  same field on every screen, and a sideways drag cannot happen at all.
+- **A hand drag is kept, not undone.** `autoSize` reads the bounds back from
+  `getComputedStyle`, and a height the member dragged to outranks the
+  typed-text growth (which still stops at 160px): the box holds the dragged
+  size, clamped to the same bounds, and the choice is kept for the tab under
+  `fl.leadReply.h.<thread>` so it comes back with the page after a send. An
+  inline width left behind by a drag is dropped — the column owns the width.
+- **The card grows instead of clipping.** `.lead-detail` is `height: auto` with
+  `min-height: var(--lead-user-h, var(--pane-h, …))`: exactly the window at
+  rest, taller when the composer needs it, with `Send message` always inside
+  it. The thread's zero flex basis (`flex: 1 1 0%`, desktop) keeps a long
+  conversation on its own scrollbar so it can never stretch the card; stacked
+  screens drop the floor and stay content-height.
+- **The facts above the box read as two lines.** Email (and the phone, when
+  there is one) on the first, `Looking for` on the line below it (`.lf-look`).
+
+## Kept exactly as it was
+
+The pane's sticky top, the seam grip and its persisted size, the dock, the
+pinned foot, the thread's bubbles and day separators, the composer's counter
+and inline refusal, and the status/archive/delete line — with no stored size
+and no drag the card computes to the same pixels it did before.
+
+## Verified locally
+
+- `npm test`: all 31 suites pass.
+- `npm run test:leads-chat`: 113 checks, including 8 new ones over the shipped
+  composer script run against a stub DOM whose box has an inline style and
+  whose `getComputedStyle` answers with the bounds read out of `app.css`:
+  the box opens at the floor, typed text grows it only to the script's cap, a
+  dragged height survives the next keystroke and the send after it, drags past
+  the ceiling and below the floor are clamped, and a sideways drag is dropped.
+- `npm run test:leads-reply`: 35 checks — the bounds are declared once, with no
+  leftover per-screen floors, and the window-by-window budget audit (read back
+  out of `app.css`) shows the card at rest still leaving the thread its full
+  220px floor from a 640px window up, and, with the box dragged to 300px, the
+  card growing by no more than the box gained.
+- `npm run test:leads-pane`: 64 checks — the floor model, the thread's zero
+  basis on desktop and its flexible fill everywhere else, the clamp/dock
+  geometry and the seam drag.
+- `npm run test:leads-fit`: 43 checks — the two-line facts strip in the served
+  markup (owner and inquirer) and its rule in the stylesheet.
+- Served page and stylesheet checked over HTTP with the preview seed
+  (`LEADS_INBOX_PREVIEW=1`): `lf lf-look` renders under the contact line and
+  the composer rule ships 80/300.
+
+## Not verified here
+
+No Chromium exists in this sandbox and the Playwright download hosts are
+unreachable from it, so no measured pixels: a real drag of the reply handle,
+the card growing past a short window, and the docked pane scrolling with Send
+pinned still need one local run of `npm run test:leads-pane:browser` (and a
+look on Safari/iOS and Android).

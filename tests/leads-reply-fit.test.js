@@ -10,10 +10,12 @@
  *      so scrolling past the conversation lands on the footer and not on a
  *      logo — and the section's own bottom air tightened to match. Every other
  *      page keeps the band.
- *   2. The composer is the pane's floor: the reply box has a ceiling, and the
- *      thread gives height back on a short window instead of making the pane
- *      scroll. Budget audit over real windows, read out of app.css, at rest
- *      and with the box dragged to that ceiling — the seam grip's own line
+ *   2. The composer is the pane's floor: the reply box has real bounds — 80px
+ *      to 300px, dragged vertically only, always exactly as wide as its column
+ *      — and the card's window height is a floor rather than a fixed height, so
+ *      a box dragged past what the window budgeted grows the card instead of
+ *      clipping Send. Budget audit over real windows, read out of app.css, at
+ *      rest and with the box dragged to that ceiling — the seam grip's own line
  *      included, which short windows give straight back.
  *   3. Chat area extendable: the grip at the seam just above the reply box
  *      lengthens or shortens the conversation — the thread takes every pixel
@@ -154,9 +156,12 @@ const html = async (route, who) => (await call(route, who)).text();
   check('the shipped geometry above it is untouched',
     /\.lead-detail \{[^}]*padding: 14px 18px 12px;/.test(css.slice(0, mark))
     && /\.lead-detail \.lead-thread \{ min-height: 220px; \}/.test(css.slice(0, mark)));
-  check('a dragged reply box stops at the ceiling the script already sizes to',
-    /\.lead-reply-form \.input \{ max-height: (240)px; \}/.test(tail)
-    && /\.lead-reply-form \.input \{ min-height: 66px/.test(css));
+  check('a dragged reply box has one floor, one ceiling and no sideways drag',
+    /\.lead-reply-form \.input \{ min-height: (80)px; max-height: (300)px; width: 100%; box-sizing: border-box;/.test(css)
+    && /\.lead-reply-form \.input \{[^}]*resize: vertical;/.test(css)
+    && !/\.lead-reply-form \.input \{[^}]*resize: (horizontal|both)/.test(css)
+    && !/\.lead-reply-form \.input \{ min-height: (56|66|76)px/.test(css),
+    'one box, one set of bounds, on every screen');
   check('short windows reclaim the thread floor instead of scrolling the pane',
     /@media \(min-width: 901px\) and \(max-height: 880px\) \{\s*\.lead-detail \.lead-thread \{ min-height: 96px; \}/.test(tail)
     && css.indexOf('.lead-detail .lead-thread { min-height: 96px; }') > css.indexOf('.lead-detail .lead-thread { min-height: 220px; }'));
@@ -190,33 +195,51 @@ const html = async (route, who) => (await call(route, who)).text();
   const [gripH, gripTop] = px(/\.lead-thread-grip \{\s*position: relative; z-index: \d+;\s*height: (\d+)px; margin-top: (\d+)px;/, 'the seam grip');
   const [formGap, formTop] = px(/\.lead-reply-form \{ display: grid; gap: (\d+)px; margin-top: (\d+)px/, 'the composer rows');
   const [boxMin] = px(/\.lead-reply-form \.input \{ min-height: (\d+)px/, 'the composer box floor');
-  const [boxMax] = px(/\.lead-reply-form \.input \{ max-height: (\d+)px/, 'the composer box ceiling');
+  const [boxMax] = px(/\.lead-reply-form \.input \{[^}]*?max-height: (\d+)px/, 'the composer box ceiling');
   const [btnRow] = px(/\.btn-sm \{ height: (\d+)px/, 'the control row');
   const [barTop, barPad] = px(/\.lead-detail-bar \{[^}]*margin-top: (\d+)px; padding-top: (\d+)px/, 'the housekeeping line');
   const [floorRest] = px(/\.lead-detail \.lead-thread \{ min-height: (\d+)px/, 'the shipped thread floor');
   const [floorShort] = px(/@media \(min-width: 901px\) and \(max-height: 880px\) \{\s*\.lead-detail \.lead-thread \{ min-height: (\d+)px/, 'the reclaimed thread floor');
-  const text = 27 /* pane title */ + 18 /* meta line */ + 47 /* facts strip over two rows */ + 51 /* composer help */;
+  const text = 27 /* pane title */ + 18 /* meta line */
+    + 47 /* facts strip: the contact line, and the ask on the line below it */
+    + 51 /* composer help */;
   /* The seam grip is full chrome on normal windows and collapses to zero on
      short ones — the same media the thread floor reclaims under. */
   const gripCost = (vh) => (vh <= 880 ? 0 : gripTop + gripH);
   const footAt = (box, vh) => gripCost(vh) + formTop + box + formGap + btnRow + formGap + barTop + barPad + 1 + btnRow;
   const chrome = (box, vh) => padTop + padBottom + threadGap + footAt(box, vh) + text;
+  /* The card's window height is a floor, not a ceiling: the card is exactly the
+     window at rest and grows by whatever the chrome plus the thread's floor
+     does not fit inside it. The thread never stretches the card itself — a zero
+     flex basis and its own scrollbar keep a long conversation inside the chat. */
+  const floorFor = (vh) => (vh <= 880 ? floorShort : floorRest);
+  const cardAt = (box, vh) => Math.max(paneHeight(vh), chrome(box, vh) + floorFor(vh));
+  const chatAt = (box, vh) => cardAt(box, vh) - chrome(box, vh);
 
-  console.log('Screen fit — the foot is inside the pane, at rest and dragged wide');
+  console.log('Screen fit — the foot is inside the card, at rest and dragged wide');
   let atRestBad = '';
   let worstBad = '';
   let eaten = '';
   for (const vh of [640, 668, 720, 768, 800, 900, 1014, 1080, 1440]) {
     const pane = paneHeight(vh);
-    if (pane - chrome(boxMin, vh) < floorRest && !atRestBad) atRestBad = `vh=${vh}: chat ${pane - chrome(boxMin, vh)}px under the ${floorRest}px floor (pane ${pane}px)`;
-    const left = pane - chrome(boxMax, vh);
-    if (left < floorShort && !worstBad) worstBad = `vh=${vh}: chat ${left}px under the reclaimed ${floorShort}px floor`;
-    if (left < 60 && !eaten) eaten = `vh=${vh}: the composer leaves only ${left}px of chat`;
+    /* At rest the box sits at its floor and the shipped geometry still fits the
+       window: the thread keeps its full floor and the card does not grow. */
+    if (pane - chrome(boxMin, vh) < floorRest && !atRestBad) {
+      atRestBad = `vh=${vh}: chat ${pane - chrome(boxMin, vh)}px under the ${floorRest}px floor (pane ${pane}px)`;
+    }
+    /* Dragged to the ceiling, the card grows instead of squeezing the chat. */
+    if (chatAt(boxMax, vh) < floorShort && !worstBad) {
+      worstBad = `vh=${vh}: chat ${chatAt(boxMax, vh)}px under the reclaimed ${floorShort}px floor`;
+    }
+    const grown = cardAt(boxMax, vh) - pane;
+    if (grown > boxMax - boxMin && !eaten) {
+      eaten = `vh=${vh}: the card grew ${grown}px for a box that gained ${boxMax - boxMin}px`;
+    }
   }
-  check('at rest the thread keeps its full floor, so the pane never needs a scrollbar of its own', !atRestBad, atRestBad);
-  check('with the box dragged to its ceiling the chat still stands and Send stays in the pane', !worstBad, worstBad);
-  check('the reply box can never eat the conversation', !eaten, eaten);
-  check('the ceiling is what makes that provable', boxMax === 240 && boxMin < boxMax, `min ${boxMin}, max ${boxMax}`);
+  check('at rest the thread keeps its full floor, so the card never needs a scrollbar of its own', !atRestBad, atRestBad);
+  check('with the box dragged to its ceiling the chat still stands and Send stays in the card', !worstBad, worstBad);
+  check('the card only grows by what the box gained — the reply box can never eat the conversation', !eaten, eaten);
+  check('the bounds are what make that provable', boxMin === 80 && boxMax === 300, `min ${boxMin}, max ${boxMax}`);
 
   /* ── 5. the old focus mode ships nothing ────────────────────────────────── */
   console.log('Focus mode — the button, the labels, the script and the rules are all gone');

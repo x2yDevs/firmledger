@@ -189,17 +189,26 @@ async function call(route, who = null, form = null) {
     /\.lead-day \{[^}]*position: sticky; top: 0;/.test(css));
   /* Default-identity proofs: with no stored size the new declarations must
      resolve to the shipped ones — shown by reducing the var() fallbacks. */
-  const heightOrig = /\.lead-detail \{[^}]*?height: ([^;]+);/.exec(css)[1];
-  check('pane height default is the shipped --pane-h chain, still sticky',
-    css.includes(`height: var(--lead-user-h, ${heightOrig});`)
+  const floorVar = /\.lead-detail \{[^}]*?min-height: ([^;]+);/.exec(css)[1];
+  check('the card\'s window height is a floor, and a stored size simply replaces it',
+    /\.lead-detail \{[^}]*height: auto;[^}]*min-height: var\(--pane-h, /.test(css)
+    && css.includes(`min-height: var(--lead-user-h, ${floorVar});`)
     && /\.lead-detail \{\s*position: sticky; top: 84px;/.test(css));
+  check('stacked screens drop the floor: the card is content-height there',
+    /\.lead-detail \{ position: static; height: auto; min-height: 0; max-height: none; overflow: visible; \}/.test(css));
   check('the width trade left with the corner grip',
     !css.includes('--lead-list-w') && !/\.lead-resize\b/.test(css));
   const floorOrig = Number(/\.lead-detail \.lead-thread \{ min-height: (\d+)px/.exec(css)[1]);
-  const floorNew = /\.lead-detail \.lead-thread \{ min-height: clamp\((\d+)px, ([\d.]+)vh, (\d+)px\);/.exec(css)
+  const floorNew = /\.lead-detail \.lead-thread \{[^}]*?min-height: clamp\((\d+)px, ([\d.]+)vh, (\d+)px\);/.exec(css)
     .slice(1).map(Number);
   check('thread floor keeps 220px, easing only on short windows',
     floorOrig === 220 && floorNew[2] === floorOrig && floorNew[0] === 140, `was ${floorOrig}, now clamp(${floorNew})`);
+  /* A card whose height is content-driven needs a thread that cannot stretch
+     it: zero basis on desktop (its own scrollbar, its floor), and the shipped
+     flexible fill everywhere else, where the page — not the card — scrolls. */
+  check('the thread keeps a zero basis on desktop, so a long chat never stretches the card',
+    /\.lead-detail \.lead-thread \{ flex: 1 1 0%; min-height: clamp\(/.test(css)
+    && /\.lead-thread \{\s+flex: 1 1 auto; min-height: 200px;/.test(css));
   check('foot wrapper adds no box of its own',
     css.includes('.lead-detail-foot { display: grid; gap: 0; margin: 0; padding: 0; min-width: 0; }')
     && css.includes('.lead-detail > .lead-detail-foot { flex: 0 0 auto; }'));
@@ -211,7 +220,7 @@ async function call(route, who = null, form = null) {
   check('height, floor, foot, dock and resizing cursor are desktop-only',
     (slice.match(/@media \(min-width: 901px\)/g) || []).length === 2
     && deskOnly.includes('--lead-user-h') && !deskOnly.includes('--lead-list-w')
-    && deskOnly.includes('.lead-detail .lead-thread { min-height: clamp(')
+    && deskOnly.includes('.lead-detail .lead-thread { flex: 1 1 0%; min-height: clamp(')
     && deskOnly.includes('.lead-detail-foot { position: sticky; bottom: 0; z-index: 2; background: var(--surface); }')
     && deskOnly.includes('.lead-detail.is-docked { position: fixed; z-index: 30; margin: 0; }')
     && deskOnly.includes('.lead-detail.is-resizing { box-shadow: 0 0 0 2px var(--accent); }'));

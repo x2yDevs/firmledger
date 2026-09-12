@@ -109,6 +109,13 @@ async function call(route, who = null, form = null) {
     && /class="lead-facts"/.test(buyerView));
   check('the facts strip keeps every contact detail and link', /lf-k">Email<\/span><a class="lf-v" href="mailto:/.test(openHtml)
     && /lf-k">Looking for<\/span><b class="lf-v">/.test(openHtml));
+  /* Two lines, in this order: how to reach them, then what they want. One
+     run-on line reads as though the ask were the tail of the email address. */
+  check('the ask sits on its own line below the contact details',
+    /class="lf lf-look"><span class="lf-k">Looking for/.test(openHtml)
+    && openHtml.indexOf('lf-k">Email') < openHtml.indexOf('lf lf-look')
+    && /\.lead-facts \.lf-look \{ flex: 0 0 100%; \}/.test(inboxCss)
+    && /class="lf lf-look"/.test(buyerView));
   check('the head above the inbox is slim and scoped to it', /class="page-head leads-head"/.test(openHtml)
     && /class="section-tight leads-section"/.test(openHtml)
     && /\.leads-head h1 \{[^}]*clamp\(1\.45rem/.test(inboxCss));
