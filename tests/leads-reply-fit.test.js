@@ -21,7 +21,8 @@
  *      lengthens or shortens the conversation — the thread takes every pixel
  *      the pane gains or loses; short windows collapse the seam to zero so
  *      the foot keeps every pixel.
- *   4. Nothing selected: a compact invitation, not a window-tall white box.
+ *   4. Nothing selected: no pane at all — the list is the whole page, so the
+ *      compact invitation panel (and its rules) went with the two-column inbox.
  *   5. The old focus mode ships nothing: no button, no label, no script, no
  *      rules — what the pane header keeps is the Close link, and what the
  *      page ships is the pane script's seam and nothing else of that era.
@@ -129,9 +130,9 @@ const html = async (route, who) => (await call(route, who)).text();
     && openHtml.indexOf('data-lead-thread-grip') < openHtml.indexOf('name="body"'));
   check('it cannot submit a form and holds no field name',
     !/<div[^>]*data-lead-thread-grip[^>]*(type="submit"|name=)/.test(openHtml));
-  check('an inbox with nothing open ships no grip and no foot',
+  check('an inbox with nothing open ships no pane, no grip and no foot',
     !/<div[^>]*data-lead-thread-grip/.test(plainHtml) && !/class="lead-detail-foot"/.test(plainHtml)
-    && plainHtml.includes('lead-detail-empty'));
+    && !/<div class="lead-detail-col">/.test(plainHtml) && plainHtml.includes('<div class="lead-list-col">'));
   const buyerHtml = await html(`/dashboard/leads?box=sent&open=${lead.id}`, 'inquirer');
   check('the inquirer gets the same seam grip above their box',
     /data-lead-thread-grip/.test(buyerHtml)
@@ -167,10 +168,11 @@ const html = async (route, who) => (await call(route, who)).text();
     && css.indexOf('.lead-detail .lead-thread { min-height: 96px; }') > css.indexOf('.lead-detail .lead-thread { min-height: 220px; }'));
   check('the pane scroll escape hatch is still declared, untouched',
     /@media \(min-width: 901px\) \{\s*\.lead-detail \{ overflow-y: auto; \}/.test(css));
-  check('an empty pane is compact, not window-tall',
-    /\.lead-detail\.lead-detail-empty \{ height: auto; min-height: 208px; padding: 26px 18px; \}/.test(tail));
-  check('the list column keeps its own sticky frame beside it',
-    /\.lead-list-col \{ position: sticky; top: 84px; max-height:/.test(css));
+  check('nothing open renders no pane at all, and the empty pane left no rules behind',
+    !css.includes('lead-detail-empty') && !plainHtml.includes('lead-detail-empty'));
+  check('the list column keeps its own sticky frame, stretched across the page',
+    /\.lead-list-col \{ position: sticky; top: 84px; max-height:/.test(css)
+    && !/\.lead-list-col \{[^}]*max-width/.test(css));
   check('the focus mode left no rules behind',
     !css.includes('.is-max') && !css.includes('lead-pane-focus') && !css.includes('--lead-list-w'));
   check('the seam grip is a vertical drag that collapses on short windows',

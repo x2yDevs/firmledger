@@ -1,3 +1,67 @@
+## 2026-09-12 (leads inbox) — one column: an open inquiry is a page of its own, and the list stretches across the screen
+
+**Pressing an inquiry now opens the conversation as a page, not as a pane
+beside the list.** The thread used to render in the right-hand column while the
+220/300px list rail stayed pinned on the left, so the conversation — the thing
+actually being read — got the leftover two-thirds of the screen, with the
+composer and the housekeeping line squeezed into the same measure. The inbox is
+one column now: `.lead-layout` is a single `minmax(0, 1fr)` grid holding either
+the list or the conversation, never both, and the conversation column is centred
+at `max-width: min(1040px, 100%)` — wide enough for a real chat, narrow enough
+that a bubble is never read across a 1340px container. Everything the pane held
+came with it unchanged: the thread and its day separators, the seam grip and the
+persisted pane height (`fl.leadsPane.v2`), the dock, the pinned foot, the
+composer with the server's own limits and its inline refusal, the status pill,
+status/archive/delete, `mailto:`/`tel:` and the Close link. The trail above it
+names the conversation (`Dashboard › Leads inbox › Amina Njeri`), and “Leads
+inbox” there — like Close — carries the box, the status filter, the listing and
+the page the thread was opened from, so going back lands on the same list.
+
+**With nothing open, the list is the page — stretched, not railed.** The
+220/300px column and the empty “Select an inquiry…” pane beside it are gone:
+`.lead-list-col` takes the whole container, so a row's preview and its
+“listing · date” line stop being ellipsised at 300px, while the frame keeps the
+sticky top and the window-derived `--pane-h` it always had (rows, pager and the
+empty state inside it are untouched). On stacked screens the capped 34vh rail
+goes with it — the list runs the length of the page and the page does the
+scrolling instead of a box inside it. `.lead-detail-empty` and its two rules are
+retired along with the pane they belonged to.
+
+**The contact facts at the top are lines now, not one crowded strip.** `Email`
+first, `Phone` under it, and `Looking for` on a line of its own below those —
+`.lead-facts` is a column (`flex-direction: column; flex-wrap: nowrap`, one fact
+per row) instead of a wrapping row that ran the address and the subject together
+and broke wherever the pane happened to end. The labels share an 84px column, so
+the values start on the same line and the rows read as one small definition
+list. Same labels, same order, same `mailto:`/`tel:` links, still no table; the
+member's Sent view still shows only the subject line, with the business email
+staying private.
+
+**No link, route or redirect moved.** Notifications, reply emails and the
+listing page's “Follow the conversation” all point at
+`/dashboard/leads?open=<id>` (and `?box=sent&open=<id>`), which is that page
+now; the `ctx_*` fields still carry the view through every POST, so a reply, a
+status change, an archive or a refused send returns to the same conversation
+with its message. Preview it without signing in:
+`LEADS_INBOX_PREVIEW=1 node server.js` → `/dashboard/leads`, then press any
+inquiry.
+
+Tests: the new `npm run test:leads-thread` (42 checks) locks all of it — one
+column either way, no rail on the thread page and no pane on the list page, the
+centred measure and the stretched list, every feature still present, the two
+fact lines and their links, the trail and its filtered way back, both roles,
+the empty-filter state, and the round trips (reply, status, refused send,
+archive, notification deep link). `tests/leads-pane-resize.test.js` and
+`tests/leads-reply-fit.test.js` now assert that nothing open renders no pane at
+all (and that the retired empty pane left no rules behind), and the optional
+browser drag holds the pane's own width still instead of a list column that is
+no longer there. `npm test` is green at 32 suites, including `test:leads-pane`
+(64), `test:leads-reply` (35), `test:leads-fit` (43), `test:leads-chat` (113),
+`test:leads-inbox` (25), `test:leads-contact` (143), `test:leads-housekeeping`
+(33), `test:focus` and `test:user-area`.
+
+---
+
 ## 2026-09-12 (leads inbox) — the reply box resizes by hand inside real bounds, and the card grows with it
 
 **The reply textarea is a field a member resizes, so it now has bounds that

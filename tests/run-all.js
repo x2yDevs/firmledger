@@ -82,8 +82,18 @@
  *   leads-reply   the reply box holds the card's floor (one floor and one
  *                 ceiling on the box, a giving thread floor, no card scrollbar
  *                 on real windows, the card growing by what the box gains),
- *                 nothing open is a compact panel, and the digest band no
+ *                 nothing open renders no pane at all, and the digest band no
  *                 longer sits below the inbox.
+ *   leads-thread  the inbox is one column: an open conversation is a page of
+ *                 its own (no list rail beside it, centred at a readable
+ *                 measure, every feature of the old pane intact, the trail
+ *                 naming it and leading back to the filtered list), and with
+ *                 nothing open the list is the page — stretched across the
+ *                 container, with no empty pane beside it. Plus the contact
+ *                 facts on their two lines (how to reach them, then the ask
+ *                 below), and every round trip — reply, status, refused send,
+ *                 archive, notification deep link — landing back on the
+ *                 conversation for both roles.
    db-upgrade   the current schema code boots against a simulated OLD
                 production database (pre-migration tables with real rows):
                 migrations apply without throwing, the inquirer index lands
@@ -120,6 +130,7 @@ const suites = [
   ['Leads + blog fit — composer guidance, honest Sent, article rhythm', 'leads-blog-fit.test.js'],
   ['Leads pane — conversation card, seam resize, chat kept', 'leads-pane-resize.test.js'],
   ['Leads reply fit — bounded box, growing card, clean tail', 'leads-reply-fit.test.js'],
+  ['Leads thread page — an open conversation is its own page', 'leads-thread-page.test.js'],
   ['Blog content — accuracy, stale refresh, 2026 guide', 'blog-content.test.js'],
   ['Focus hygiene — no rings on inputs & dropdowns', 'focus-hygiene.test.js'],
   ['Production database upgrade', 'db-upgrade.test.js'],
