@@ -1,3 +1,84 @@
+## 2026-09-12 (leads inbox) — both pages take the screen they are given, and nothing is stranded on the left
+
+**Both pages are now on the wide container.** The list and the conversation were the
+last two dashboard pages still on the 1200px `.container` (1340px on very wide
+screens), so on a 1920 monitor the inbox was a strip down the left-hand side with
+a band of empty paper beside it. They now carry `container container-wide`, and the
+ceiling is restated where the pages are named — `max-width:
+min(var(--wide-max, 1560px), 100%)` on `.leads-head / .leads-inbox-page /
+.leads-thread-page` — because `.container` raises its own `max-width` later in the
+sheet, at a specificity a plain `--wide-max` could not beat. 1560px rather than the
+1760px the directory uses: an inbox of sentences wants a readable measure more than
+it wants every pixel of a 27-inch screen, and the gutters stay symmetric either way
+(226px each side at 1920, 546px each side at 2560). Nothing about that is pinned to
+a breakpoint — a narrow window simply uses the window.
+
+**The width is spent, not just given.** At ≥1200px an inbox row becomes three
+columns — who it is and where it stands, what they asked for, where it came from
+and when it last moved — instead of three lines stacked at the left edge with the
+right two-thirds of the row blank; the base two-column row is what every narrower
+screen reads. The conversation keeps a measure and grows it (1040px, 1180px at
+≥1500px), centred, because a reply bubble stretched to 1468px is unreadable; the
+strip under the composer, which used to bunch `Status · Update · Archive` at the
+left and `Delete permanently` at the right edge of a 720px card, now spreads across
+the card it is in. The free-plan invitation was the worst of it — a
+`max-width: 720px` welded inline to the markup, sitting flush left under a centred
+page. It is a card of its own now (`.lead-lock-card`: 1100px, `margin-inline: auto`,
+its copy on the left, `Upgrade to Pro` and `See pricing` kept on the right of it),
+so a Pro refusal reads as the page's one statement rather than a note in the
+margin.
+
+**The frame is measured instead of guessed.** Both pages cut one height — the list
+frame on the inbox, the conversation card on its page — out of `--pane-h`, which
+until now was `min(1060px, max(calc(100vh - 100px), 640px))`: a guess at 100px of
+chrome above it. The chrome is 190-320px in practice, so a tall window was handed a
+short list with a band of dead paper under it and a short window got clipped at the
+fold. `views/partials/leads-fit.ejs` now runs on both pages: it measures the room
+between the top of the shell and the bottom of the window, less the section's own
+bottom air, and writes it to the shell as `--lead-fit-h`, which every `--pane-h`
+reads from (with the shipped arithmetic as the no-script fallback). Re-measured on
+resize, orientation change, load and when the webfonts land, because the head
+reflows and the shell moves with it. Two floors, because the two pages hold
+different things: 240px for a frame of inquiries (two rows and a scroll) and 400px
+for a conversation (its foot is 345px of composer, counter and status line, which
+must not be cut). With no script at all, nothing changes.
+
+**One bug was holding the card open.** `.lead-detail .lead-thread` had
+`flex: 1 1 0%` — and a percentage basis in a container whose height is `auto`
+resolves against an indefinite main size, so it falls back to the item's content.
+The bubbles therefore decided how tall the card was: 520px of thread made an 868px
+card whatever the window said, and the composer sat 340px below the fold. `0%` →
+`0px` is the whole fix; the clamp on the thread's `min-height` had been fighting it
+silently for two rounds. `leads-pane-resize` now asserts the basis is `0px` and
+forbids `0%`, because the difference is invisible in the file and decides whether
+the page fits at all. The card is not given a height by script — nothing to
+re-measure, nothing to keep in sync.
+
+**Short windows reclaim chrome rather than clipping.** At `max-height: 780px` the
+head's padding, the lede and the tab row tighten up, and on a conversation the
+lede goes entirely (`display: none` on `.leads-thread-lede`) — the card repeats what
+it says in its own meta line, and 18px is a bubble. Under 640px the head and the
+filter pills compact, so the list starts at 474px instead of 517px and a phone
+shows three inquiries above its fold instead of two. The thread opens on its newest
+message — and now opens on it *after* the measurement, since the box the bubbles
+live in is decided by the fit script; it re-sticks when the frame changes and leaves
+a reader who scrolled back up alone.
+
+Tests: `leads-thread-page` is 68 checks — the two pages on the wide container, the
+lock card centred, the three-column row, and the fit script itself extracted from
+the served page and driven over 10 windows × 5 shell tops × 2 pages (the frame ends
+on the fold, never past it, never below its floor; a window too short to hold a
+frame leaves the stylesheet in charge) plus the settle check. `leads-pane-resize`
+64, `leads-reply-fit` 35, `leads-blog-fit` 43, `leads-messaging` 113,
+`leads-contact` 143, `leads-inbox-e2e` 25, `leads-housekeeping` 33,
+`leads-digest` 36, `focus-hygiene` 13. Full `npm test` is unchanged at 31 suites
+passing, the only failure being the pre-existing production-db-upgrade assertion
+that needs the real better-sqlite3 binding. Measured in a real browser at nine
+viewports from 360×800 to 1920×1440: every desktop and tablet window ends its page
+at the fold with the composer visible, no viewport scrolls sideways, and tabs,
+counts, the listing filter, the pager, the seam drag and its double-click restore,
+the status form and the reply counter all still do what they did before.
+
 ## 2026-09-12 (leads inbox) — the inbox is the list of inquiries, and an inquiry opens as a full page of its own
 
 **The inbox page is inquiries only — one row per inquiry, edge to edge, one

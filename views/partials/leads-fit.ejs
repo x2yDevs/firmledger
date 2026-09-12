@@ -1,0 +1,97 @@
+<script>
+<% /*
+  Leads inbox — the shell takes the screen it is on (both pages).
+
+  Both pages cut one height, --pane-h: the frame of inquiries on the list, the
+  conversation card on its own page. That height used to be a guess about the
+  chrome above it — utility strip, head, tabs, the sticky site header — so a tall
+  window was handed a short list with a band of dead paper under it, and a short
+  window got clipped. This measures instead: the room between the top of the
+  shell and the bottom of the window, less the section's own bottom air, written
+  onto the shell as --lead-fit-h. Everything that consumes --pane-h reads it from
+  there, so the frame ends where the screen does and no second scrollbar is needed
+  to reach the bottom of it.
+
+  Re-measured when the fonts land and on every resize, because the head reflows
+  and the shell moves with it. With no script at all the stylesheet's own subtract
+  stands, and the page is simply its shipped geometry. No control is added or
+  moved: tabs, counts, the listing picker, the pager, the thread, the seam drag,
+  the composer and the housekeeping line all behave exactly as before.
+*/ %>
+(function () {
+  'use strict';
+  var shell = document.querySelector('.lead-layout');
+  if (!shell || !shell.style || !shell.style.setProperty) return;
+  /* Two floors, because the two pages hold different things: a conversation
+     needs room for its foot — the composer, the counter and the status line —
+     while a frame of inquiries only needs room for a row or two and scrolls the
+     rest. Below the floor the page scrolls a little rather than clipping. */
+  var LIST_FLOOR = 240;
+  var PANE_FLOOR = 400;
+  var MIN_H = shell.closest && shell.closest('.leads-inbox-page') ? LIST_FLOOR : PANE_FLOOR;
+  var MAX_H = 1400;       /* past this a frame is just a very tall page */
+  var BOTTOM_AIR = 26;    /* the section's own bottom padding: stop above the fold */
+
+  /* Open on the newest message — but only once this measurement has landed. The
+     frame is sized here, so a scroll that runs before it ends up on a box that is
+     about to change height, which is what left a half-cut bubble at the foot.
+     Re-stick whenever the frame changes and only then: a reader who scrolled back
+     up through an old thread is not dragged down by a window resize. */
+  var lastH = -1;
+  function stickToNewest() {
+    var t = (document.getElementById && document.getElementById('leadThread')) || null;
+    if (t) t.scrollTop = t.scrollHeight;
+  }
+
+  function measure() {
+    var r = shell.getBoundingClientRect();
+    var doc = document.documentElement;
+    /* Document space, so a load that restores a scroll position measures the
+       same room as a load at the top of the page. */
+    var top = r.top + (window.pageYOffset || (doc && doc.scrollTop) || 0);
+    var vh = window.innerHeight || (doc && doc.clientHeight) || 0;
+    if (!(vh > 0) || !(top > 0)) return;
+    var h = Math.round(vh - top - BOTTOM_AIR);
+    if (!(h > 0)) return;               /* nothing to give: leave the fallback */
+    if (h < MIN_H) h = MIN_H;
+    if (h > MAX_H) h = MAX_H;
+    shell.style.setProperty('--lead-fit-h', h + 'px');
+    if (h !== lastH) { lastH = h; stickToNewest(); }
+  }
+
+  var pending = false;
+  function schedule() {
+    if (pending) return;
+    pending = true;
+    (window.requestAnimationFrame || function (f) { setTimeout(f, 16); })(function () {
+      pending = false;
+      measure();
+    });
+  }
+
+  measure();
+  if (window.addEventListener) {
+    window.addEventListener('resize', schedule);
+    window.addEventListener('orientationchange', schedule);
+    window.addEventListener('load', measure);
+  }
+  if (document.fonts && document.fonts.ready && document.fonts.ready.then) {
+    document.fonts.ready.then(measure, function () {});
+  }
+
+  /* Test seam: the same arithmetic the page runs, with no DOM needed. */
+  window.__flLeadsFit = {
+    measure: measure,
+    minH: MIN_H,
+    listFloor: LIST_FLOOR,
+    paneFloor: PANE_FLOOR,
+    maxH: MAX_H,
+    bottomAir: BOTTOM_AIR,
+    fit: function (vh, top) {
+      var h = Math.round((Number(vh) || 0) - (Number(top) || 0) - BOTTOM_AIR);
+      if (!(h > 0)) return 0;
+      return Math.max(MIN_H, Math.min(MAX_H, h));
+    },
+  };
+})();
+</script>

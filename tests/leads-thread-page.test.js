@@ -30,6 +30,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const vm = require('vm');
 const { spawn } = require('child_process');
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'firmledger-leads-thread-'));
 process.env.FIRMLEDGER_DATA_DIR = dataDir;
@@ -152,8 +153,8 @@ const DETAIL_COL = '<div class="lead-detail-col">';
     && /\.lead-list-col \{[^}]*max-height:\s*var\(--pane-h/.test(css));
   check('the list is cut to the window, so the page does not scroll to read it',
     /class="section-tight leads-section leads-inbox-page"/.test(plainHtml)
-    && /\.leads-inbox-page \.lead-layout \{ --pane-h: min\(1060px, max\(calc\(100vh - 320px\), 520px\)\); \}/.test(css)
-    && /@supports \(height: 100dvh\) \{\s*\.leads-inbox-page \.lead-layout \{ --pane-h: min\(1060px, max\(calc\(100dvh - 320px\), 520px\)\); \}/.test(css));
+    && /\.leads-inbox-page \.lead-layout \{ --pane-h: var\(--lead-fit-h, min\(1060px, max\(calc\(100vh - 244px\), 240px\)\)\); \}/.test(css)
+    && /@supports \(height: 100dvh\) \{\s*\.leads-inbox-page \.lead-layout \{ --pane-h: var\(--lead-fit-h, min\(1060px, max\(calc\(100dvh - 244px\), 240px\)\)\); \}/.test(css));
   check('on stacked screens the list runs the page, not a capped box',
     /@media \(max-width: 900px\) \{[\s\S]{0,400}?\.lead-list-col \{ max-height: none; \}/.test(css)
     && !css.includes('min(34vh, 300px)'));
@@ -162,6 +163,7 @@ const DETAIL_COL = '<div class="lead-detail-col">';
     && /class="lead-tab[^"]*" href="\/dashboard\/leads\?box=sent">Sent/.test(plainHtml)
     && />Archived <span class="lead-n">0<\/span>/.test(plainHtml)
     && />New <span class="lead-n">1<\/span>/.test(plainHtml));
+  const plainHtmlFree = await text(await call('/dashboard/leads', 'inquirer'));
   const noneHtml = await text(await call('/dashboard/leads?status=lost', 'owner'));
   check('a filter with nothing in it says so, across the full width',
     noneHtml.includes(LIST_COL) && noneHtml.includes('No lost leads')
@@ -175,8 +177,8 @@ const DETAIL_COL = '<div class="lead-detail-col">';
     ownerHtml.includes('class="lead-layout"') && ownerHtml.includes(DETAIL_COL)
     && ownerHtml.indexOf(DETAIL_COL) < ownerHtml.indexOf('panel lead-detail'));
   check('the page fits the window instead of inheriting the inbox’s tall card',
-    /\.leads-thread-page \.lead-layout \{ --pane-h: min\(1060px, max\(calc\(100vh - 260px\), 520px\)\); \}/.test(css)
-    && /@supports \(height: 100dvh\) \{\s*\.leads-thread-page \.lead-layout \{ --pane-h: min\(1060px, max\(calc\(100dvh - 260px\), 520px\)\); \}/.test(css));
+    /\.leads-thread-page \.lead-layout \{ --pane-h: var\(--lead-fit-h, min\(1060px, max\(calc\(100vh - 196px\), 400px\)\)\); \}/.test(css)
+    && /@supports \(height: 100dvh\) \{\s*\.leads-thread-page \.lead-layout \{ --pane-h: var\(--lead-fit-h, min\(1060px, max\(calc\(100dvh - 196px\), 400px\)\)\); \}/.test(css));
   check('the conversation keeps a readable measure, centred in the container',
     /\.lead-detail-col \{ width: 100%; max-width: min\(1040px, 100%\); margin-inline: auto; \}/.test(css));
   check('the grid is one column now, whichever page is showing',
@@ -186,6 +188,158 @@ const DETAIL_COL = '<div class="lead-detail-col">';
   check('the card keeps the geometry it has always had — sticky, window-tall, growing',
     /\.lead-detail \{\s*position: sticky; top: 84px;/.test(css)
     && /\.lead-detail \{[^}]*height: auto;[^}]*min-height: var\(--pane-h/.test(css));
+
+  console.log('Leads inbox — both pages fill the screen they are on, centred');
+  /* Width: the head and the body of each page run on the site's wide container,
+     with the inbox's own ceiling, so a row is as wide as the screen and the
+     gutters are equal — nothing is pinned to the left edge with a hole beside
+     it. Height: one measured value (--lead-fit-h) drives --pane-h on both
+     pages, so the frame ends at the fold rather than at a guessed subtract. */
+  check('the head and the body of both pages take the wide container',
+    /<div class="container container-wide dash-head">/.test(plainHtml)
+    && plainHtml.includes('<div class="container container-wide">')
+    && /<div class="container container-wide dash-head">/.test(ownerHtml)
+    && ownerHtml.includes('<div class="container container-wide">'));
+  check('the inbox retunes that ceiling for itself, not for the site',
+    /\.leads-head, \.leads-inbox-page, \.leads-thread-page \{ --wide-max: 1560px; \}/.test(css)
+    && /\.container-wide \{[\s\S]{0,320}?max-width: min\(var\(--wide-max, 1760px\), 100%\);/.test(css));
+  check('the shell is measured, not guessed: --pane-h takes the room the window has left',
+    css.includes('--lead-fit-h') && /\.leads-inbox-page \.lead-layout \{ --pane-h: var\(--lead-fit-h, /.test(css)
+    && /\.leads-thread-page \.lead-layout \{ --pane-h: var\(--lead-fit-h, /.test(css));
+  check('and the fit script ships on both pages — and only where a shell exists',
+    plainHtml.includes('__flLeadsFit') && ownerHtml.includes('__flLeadsFit')
+    && noneHtml.includes('__flLeadsFit') && !noneHtml.includes('__flLeadsPane'));
+  check('a short list still owns the screen: the column is the frame, floor to ceiling',
+    /\.leads-inbox-page \.lead-list-col \{\s*min-height: var\(--pane-h/.test(css));
+  check('with nothing in it, the empty state sits in the middle of that frame',
+    /\.leads-inbox-page \.lead-list-col \.empty-state \{[^}]*align-content: center/.test(css)
+    && /\.leads-inbox-page \.lead-list-col \.empty-state \{[^}]*flex: 1 1 auto/.test(css));
+  check('a Free account’s invitation is a centred card, not a strip welded to the left edge',
+    plainHtmlFree.includes('class="panel pro-locked lead-lock-card"')
+    && !/class="panel pro-locked" style="max-width:720px"/.test(plainHtmlFree)
+    && /\.lead-lock-card \{ width: 100%; max-width: min\(1100px, 100%\); margin-inline: auto; \}/.test(css));
+  check('a wide row spends its width: who · what they asked · where and when',
+    /@media \(min-width: 1200px\) \{[\s\S]{0,240}?\.lead-row-main \{\s*grid-template-columns: minmax\(0, 1\.05fr\) minmax\(0, 1\.5fr\) minmax\(0, \.8fr\);/.test(css)
+    /* …and the base row is still the three-line one every narrow screen reads. */
+    && /\.lead-row-main \{ display: grid; gap: 4px; min-width: 0; \}/.test(css));
+  check('the conversation keeps a measure, and that measure grows with the screen',
+    /\.lead-detail-col \{ width: 100%; max-width: min\(1040px, 100%\); margin-inline: auto; \}/.test(css)
+    && /@media \(min-width: 1500px\) \{\s*\.lead-detail-col \{ max-width: min\(1180px, 100%\); \}/.test(css));
+  check('the fit block adds geometry and nothing else',
+    (() => {
+      const mark = css.indexOf('==== Leads inbox — every page fills the screen');
+      if (mark < 0) return false;
+      const tail = css.slice(mark);
+      return !tail.includes('!important')
+        && !/:focus|outline|box-shadow/.test(tail)
+        && !tail.includes('.lead-detail-foot')
+        && !/data-lead-thread-grip|lead-reply-form|lead-status-form/.test(tail);
+    })());
+
+  /* The script the page runs, extracted from the served HTML and driven over a
+     matrix of real windows: the frame must land on the fold, never past it, and
+     a window with nothing left gets the floor rather than a clipped card. */
+  const fitJs = (() => {
+    const at = plainHtml.indexOf('--lead-fit-h');
+    const start = plainHtml.lastIndexOf('<script>', at);
+    return plainHtml.slice(start + '<script>'.length, plainHtml.indexOf('</script>', start));
+  })();
+  check('the fit script is extracted from the served page', fitJs.includes('__flLeadsFit') && fitJs.includes('BOTTOM_AIR'));
+  /* The two pages carry two floors — a list frame can be short, a conversation
+     cannot — so the harness asks for each one by name. */
+  const runFit = (vh, top, listPage = false) => {
+    const shell = {
+      style: { _vars: {}, setProperty(k, v) { this._vars[k] = v; }, removeProperty(k) { delete this._vars[k]; } },
+      getBoundingClientRect: () => ({ top, bottom: top + 400 }),
+      closest: (sel) => (listPage && sel === '.leads-inbox-page' ? {} : null),
+    };
+    const win = {
+      innerHeight: vh, pageYOffset: 0,
+      addEventListener() {}, requestAnimationFrame(f) { f(); },
+    };
+    win.window = win;
+    const ctx = {
+      window: win,
+      document: { querySelector: () => shell, documentElement: { clientHeight: vh, scrollTop: 0 }, fonts: null },
+      setTimeout(f) { f(); },
+    };
+    vm.runInNewContext(fitJs, ctx);
+    return Number(String(shell.style._vars['--lead-fit-h'] || '').replace('px', '')) || 0;
+  };
+  const AIR = 26, LIST_FLOOR = 240, PANE_FLOOR = 400, CEIL = 1400;
+  let foldBad = '';
+  for (const vh of [568, 600, 668, 720, 768, 800, 900, 1080, 1440, 2160]) {
+    for (const top of [168, 196, 244, 290, 340]) {
+      for (const listPage of [true, false]) {
+        const FLOOR = listPage ? LIST_FLOOR : PANE_FLOOR;
+        const room = vh - top - AIR;
+        const want = room <= 0 ? 0 : Math.max(FLOOR, Math.min(CEIL, room));
+        const h = runFit(vh, top, listPage);
+        if (h !== want && !foldBad) foldBad = `${vh}x${top}${listPage ? ' list' : ' chat'}: got ${h}px, want ${want}px`;
+        /* Unclamped, the frame lands on the fold; clamped to the floor it scrolls
+           a little instead of clipping the composer, and never spills past 1400px. */
+        if (room >= FLOOR && room <= CEIL && top + h + AIR > vh + 1 && !foldBad) {
+          foldBad = `${vh}x${top}: bottom ${top + h + AIR}px is past the fold`;
+        }
+      }
+    }
+  }
+  check('every window gets a frame that ends at the fold, inside the floor and the ceiling', !foldBad, foldBad);
+  const tall = runFit(1440, 196), short = runFit(668, 196);
+  check('a tall window gets a tall frame instead of the shipped 1060px with dead paper under it',
+    tall === 1440 - 196 - 26 && tall > 1060, `${tall}px`);
+  check('a short window keeps a usable floor and scrolls instead of clipping',
+    short === 668 - 196 - 26 && short < 520, `${short}px`);
+  check('a short window ends a list at the fold and holds a conversation at its foot',
+    runFit(600, 212, true) === 362            /* 240 floor not needed: on the fold */
+    && runFit(600, 212) === PANE_FLOOR        /* the conversation takes its floor and the page scrolls 26px */
+    && runFit(700, 212) === 462               /* one pixel up, it is back on the fold */
+    && runFit(460, 212, true) === LIST_FLOOR,  /* and a list never collapses below two rows */
+    `${runFit(600, 212, true)}/${runFit(600, 212)}/${runFit(700, 212)}/${runFit(460, 212, true)}`);
+  check('a window too short to hold a frame leaves the stylesheet in charge',
+    runFit(420, 400) === 0, String(runFit(420, 400)));
+  /* Sizing the frame and opening on the newest message are one job here: the box
+     the bubbles live in is decided by this measurement, so the scroll has to wait
+     for it — and only has to happen again when the height actually moves. */
+  const fitWithThread = (vh, top, thread) => {
+    const shell = {
+      style: { _vars: {}, setProperty(k, v) { this._vars[k] = v; }, removeProperty(k) { delete this._vars[k]; } },
+      getBoundingClientRect: () => ({ top, bottom: top + 400 }),
+      closest: () => null,
+    };
+    const win = {
+      innerHeight: vh, pageYOffset: 0,
+      addEventListener() {}, requestAnimationFrame(f) { f(); },
+    };
+    win.window = win;
+    const ctx = {
+      window: win,
+      document: {
+        querySelector: () => shell, documentElement: { clientHeight: vh, scrollTop: 0 }, fonts: null,
+        getElementById: (id) => (id === 'leadThread' ? thread : null),
+      },
+      setTimeout(f) { f(); },
+    };
+    vm.runInNewContext(fitJs, ctx);
+    return win;
+  };
+  check('the newest message is kept in view as the frame settles, and a reader who scrolled up is left alone',
+    (() => {
+      const thread = { scrollHeight: 700, at: 0, scrolls: 0 };
+      Object.defineProperty(thread, 'scrollTop', {
+        get() { return this.at; },
+        set(v) { this.at = v; this.scrolls += 1; },
+      });
+      const win = fitWithThread(900, 196, thread);
+      const landed = thread.scrolls === 1 && thread.at === 700;
+      thread.scrollHeight = 900;
+      win.__flLeadsFit.measure();                    /* same frame: no drag back down */
+      const held = thread.scrolls === 1 && thread.at === 700;
+      win.innerHeight = 700;
+      win.__flLeadsFit.measure();                    /* a different frame: newest again */
+      return landed && held && thread.scrolls === 2 && thread.at === 900;
+    })(),
+    'scrolls/at after settle');
 
   console.log('Leads thread page — every feature came with it');
   check('the whole thread is there, in order, with its day separators',
