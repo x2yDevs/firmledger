@@ -1,3 +1,50 @@
+## 2026-09-12 (leads inbox) — the chat area extends from the seam, the corner mark and the full-width toggle are gone
+
+**The chat space is now extendable from the seam above the reply box.** The
+small corner grip that sat below the “Delete permanently” button is removed,
+and in its place the pinned foot starts with a full-width drag seam
+(`.lead-thread-grip`, `role="separator"`, keyboard-focusable) resting directly
+above the composer — the same spot the text box extends from. Dragging down
+lengthens the conversation, dragging up shortens it: the thread is the pane’s
+only flexible child, so every pixel the pane gains or loses goes to the chat,
+with the composer, counter and status line following the seam. Arrow keys
+fine-tune, double-click (or Ctrl/Cmd+Home) restores, and the size persists per
+browser under `fl.leadsPane.v2` — clamped to 420px…min(1100, window−96), the
+same contract the corner grip held for height. Short desktop windows
+(≤880px of height) reclaim the seam’s line like the rest of the chrome — it
+collapses to zero and the 4px bar straddles the thread/composer boundary — so
+the reply-fit budget audit still holds at rest and with the box dragged to its
+240px ceiling on every window from 640px up. Stacked screens and print ship no
+grip at all.
+
+**The “Full width / Back to list” toggle is removed.** The button, its script
+(esc-handling, re-dock resync, `__flLeadsFocus` seam) and every `.is-max` /
+`.lead-pane-focus` rule are gone — the pane header keeps only the Close link.
+With the corner grip gone too, the width trade it carried goes with it:
+`--lead-list-w` no longer exists and the list column is back to the shipped
+220/300px measure. The dock (parking the pane at the header stop while the
+section scrolls) and the pinned foot are unchanged.
+
+**Preview without signing in.** `LEADS_INBOX_PREVIEW=1` lets an unsigned-in
+browser open `GET /dashboard/leads` as the seeded demo owner
+(`demo@firmledger.test`), so the fixed inbox can be viewed directly; a real
+session always wins, and with the flag off the `/dashboard` login wall is
+untouched (verified: 302 → `/login`). `scripts/seed-leads-preview.js`
+idempotently seeds the demo owner (Pro), two claimed listings and three
+inquiries — new/contacted/won with a two-day thread — printing the
+`/dashboard/leads?open=` URL to open.
+
+Tests: `tests/leads-pane-resize.test.js` re-locks the seam grip (markup order
+foot → grip → composer → bar, the pure clamp/dock geometry, a vertical drag
+through the stubbed handlers, keyboard restore, dock behaviour, and the
+browser drag — pane resizes, list untouched, persists across reload);
+`tests/leads-reply-fit.test.js` now audits the seam in the chrome budget and
+asserts the focus mode left no button, label, script or rule behind. Both
+suites plus `leads-inbox-e2e`, `leads-messaging`, `leads-contact`,
+`leads-housekeeping`, `focus-hygiene` and `user-area` pass.
+
+---
+
 ## 2026-09-12 (leads inbox) — the reply box holds the floor, the conversation extends, the page ends clean
 
 **The composer is now the pane's floor in fact, not only in flow.** Its textarea

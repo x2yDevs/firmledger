@@ -31,6 +31,28 @@ const ad = require('../lib/advertising');
 const listingEvents = require('../lib/listingevents');
 
 const router = express.Router();
+/* Preview escape hatch — only when the LEADS_INBOX_PREVIEW=1 env flag is on:
+   an unsigned-in browser may open GET /dashboard/leads as the seeded preview
+   owner (demo@firmledger.test, created by scripts/seed-leads-preview.js).
+   With the flag off this middleware is a no-op and the /dashboard login wall
+   is untouched; a real session always wins. */
+const LEADS_PREVIEW_EMAIL = 'demo@firmledger.test';
+router.use('/dashboard/leads', (req, res, next) => {
+  if (process.env.LEADS_INBOX_PREVIEW !== '1' || req.method !== 'GET' || req.user) return next();
+  const demo = db.prepare(
+    `SELECT id, email, name, role, created_at, suspended, plan, plan_expires_at,
+            subscription_status, trial_started_at, trial_expires_at, trial_days,
+            provider, provider_id, avatar_url
+     FROM users WHERE email = ?`
+  ).get(LEADS_PREVIEW_EMAIL);
+  if (demo && !demo.suspended) {
+    req.user = demo;
+    res.locals.user = demo;
+    res.locals.csrfToken = 'leads-inbox-preview';
+    return next();
+  }
+  next();
+});
 router.use('/dashboard', requireUser);
 
 const LIMITS = {
