@@ -101,7 +101,7 @@ const html = async (route, who) => (await call(route, who)).text();
   db.prepare('INSERT INTO lead_messages (lead_id, sender, body, created_at) VALUES (?,?,?,?)')
     .run(lead.id, 'owner', 'Happy to — a twelve-desk clean is KES 24,000/month.', '2026-09-09 10:05:00');
 
-  const openHtml = await html(`/dashboard/leads?open=${lead.id}`, 'owner');
+  const openHtml = await html(`/dashboard/leads/${lead.id}`, 'owner');
   const plainHtml = await html('/dashboard/leads', 'owner');
   const dashHtml = await html('/dashboard', 'owner');
   check('the inbox ships no weekly-digest band',
@@ -133,7 +133,7 @@ const html = async (route, who) => (await call(route, who)).text();
   check('an inbox with nothing open ships no pane, no grip and no foot',
     !/<div[^>]*data-lead-thread-grip/.test(plainHtml) && !/class="lead-detail-foot"/.test(plainHtml)
     && !/<div class="lead-detail-col">/.test(plainHtml) && plainHtml.includes('<div class="lead-list-col">'));
-  const buyerHtml = await html(`/dashboard/leads?box=sent&open=${lead.id}`, 'inquirer');
+  const buyerHtml = await html(`/dashboard/leads/${lead.id}?box=sent`, 'inquirer');
   check('the inquirer gets the same seam grip above their box',
     /data-lead-thread-grip/.test(buyerHtml)
     && buyerHtml.indexOf('data-lead-thread-grip') < buyerHtml.indexOf('name="body"'));

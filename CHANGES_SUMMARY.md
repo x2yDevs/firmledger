@@ -1,3 +1,57 @@
+## 2026-09-12 (leads inbox) — the inbox is the list of inquiries, and an inquiry opens as a full page of its own
+
+**The inbox page is inquiries only — one row per inquiry, edge to edge, one
+below the last.** `/dashboard/leads` renders the list and nothing else: no pane
+beside it, no thread, no composer, no grip. A row is a full-width card built for
+the width it now has — who it is and where it stands on the first line (name and
+status pill), what they are asking for on the second (two lines, then clamped,
+instead of one ellipsised line), where it came from and when it last moved on
+the third, and a chevron at the right edge that says the row opens. The frame is
+cut to the window (`--pane-h` scoped by `.leads-inbox-page`), so the page does
+not scroll to read the list — the list scrolls inside its own frame, as it
+always did. Tabs, counts, the waiting line, the listing filter, the pager and
+the empty states are untouched.
+
+**Pressing an inquiry opens a page: `/dashboard/leads/<id>`.** It is the whole
+screen, not a pane: a slim head naming the conversation (`Dashboard › Leads
+inbox › Amina Njeri`), then one card that fits the window — the thread taking
+every remaining pixel, the composer pinned beneath it, and the conversation's
+whole housekeeping in one strip under that: the status select (saving on change,
+with Update for keyboards), Archive/Restore, Delete permanently, `Email instead`
+and `Call`. The trail's “Leads inbox”, the “← Back to inbox” button and Close all
+carry the box, the status filter, the listing and the page the conversation was
+opened from, so coming back lands on the same list with the same pills and
+counts. Both roles get the same page: the business sees the inquirer's email and
+phone and owns the status; the member sees the thread with the business email
+still private and gets their own delete. Everything else came with it unchanged
+— day separators, bubbles, the seam grip and its persisted height, the dock, the
+inline refusal with its draft kept, the status pill stated where it is set.
+
+**No link was left behind.** `/dashboard/leads?open=<id>` — the deep link in
+every notification and reply email already sent, and the listing page's “Follow
+the conversation” — now answers with a redirect to `/dashboard/leads/<id>`,
+carrying the same view with it; a link to a lead that is gone renders the list
+instead of bouncing. The POST round trips changed with it: a reply, a status
+change and a refused send return to the conversation page (`/dashboard/leads/<id>?status=new&ok=…`), while archive and delete — which take the lead out of the
+conversation — close it and return to the list, exactly as before.
+
+Tests: `npm run test:leads-thread` is rewritten for the new shape (51 checks) —
+the list page shipping no conversation at all, rows that read across the page
+and link to the page, both pages cut to the window, the conversation page
+carrying every feature, the trail and its filtered way back, the old `?open=`
+links redirecting to it, and every round trip landing back on the conversation
+for both roles. `tests/leads-pane-resize.test.js`, `tests/leads-reply-fit.test.js`,
+`tests/leads-blog-fit.test.js`, `tests/leads-contact.test.js`,
+`tests/leads-messaging.test.js`, `tests/leads-inbox-e2e.test.js`,
+`tests/leads-housekeeping.test.js` and `tests/user-area.test.js` follow the
+conversation to its new URL. `npm test` is green at 32 suites, including
+`test:leads-thread` (51), `test:leads-pane` (64), `test:leads-reply` (35),
+`test:leads-fit` (43), `test:leads-chat` (113), `test:leads-contact` (143),
+`test:leads-inbox` (25), `test:leads-housekeeping` (33), `test:pro-growth` (79),
+`test:leads-digest` (36) and `test:user-area`.
+
+---
+
 ## 2026-09-12 (leads inbox) — one column: an open inquiry is a page of its own, and the list stretches across the screen
 
 **Pressing an inquiry now opens the conversation as a page, not as a pane

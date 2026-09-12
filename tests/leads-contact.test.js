@@ -276,7 +276,7 @@ const LONG_MESSAGE = 'Hello, we need a steel gate fabricated for our Nakuru plot
     const msgs = db.prepare('SELECT * FROM lead_messages WHERE lead_id=? ORDER BY id').all(gateLeadId);
     check('the opening message seeds the shared thread', msgs.length === 1 && msgs[0].sender === 'inquirer' && msgs[0].body === LONG_MESSAGE);
     const notif = db.prepare("SELECT * FROM notifications WHERE user_id=? AND kind='lead' ORDER BY id DESC").all(bizId)[0];
-    check('the business is notified with a deep link into the thread', !!notif && notif.url === `/dashboard/leads?open=${gateLeadId}`);
+    check('the business is notified with a deep link into the thread', !!notif && notif.url === `/dashboard/leads/${gateLeadId}`);
     await waitFor(() => outboxTo(outboxSince(mark), 'biz@contact.example') === 1);
     const sent = outboxSince(mark);
     check('the business got exactly one email for the inquiry', outboxTo(sent, 'biz@contact.example') === 1);
@@ -290,13 +290,13 @@ const LONG_MESSAGE = 'Hello, we need a steel gate fabricated for our Nakuru plot
     check('the profile confirms the inquiry was sent', done.includes('Your inquiry was sent to Nakuru Metal Works'));
     check('the confirmation keeps the “Follow the conversation” copy', /Follow the conversation/.test(done));
     check('the confirmation deep-links into the new thread',
-      done.includes(`/dashboard/leads?box=sent&amp;open=${gateLeadId}`) || done.includes(`/dashboard/leads?box=sent&open=${gateLeadId}`));
+      done.includes(`/dashboard/leads/${gateLeadId}?box=sent`) || done.includes(`/dashboard/leads/${gateLeadId}&amp;box=sent`));
     check('the member can still send a different request', done.includes('Send another inquiry'));
 
     const inbox = await text(await call('/dashboard/leads', 'biz'));
     check('the received inbox lists the member and the subject', inbox.includes('Jane Wanjiku') && inbox.includes('Steel gate quote'));
     check('the inbox reports what waits for a reply', /inquir(y|ies) waiting for your reply/.test(inbox));
-    const thread = await text(await call(`/dashboard/leads?open=${gateLeadId}`, 'biz'));
+    const thread = await text(await call(`/dashboard/leads/${gateLeadId}`, 'biz'));
     check('the business sees the member’s email and phone', thread.includes('member@contact.example') && thread.includes('+254 700 000 111'));
     check('the business sees the full message', thread.includes('3.2 metres wide'));
   }
@@ -305,7 +305,7 @@ const LONG_MESSAGE = 'Hello, we need a steel gate fabricated for our Nakuru plot
   {
     const revisit = await text(await call('/listing/nakuru-metal', 'member'));
     check('the profile lists the open conversation', revisit.includes('Your conversations with Nakuru Metal Works'));
-    check('the conversation links into Sent', revisit.includes(`/dashboard/leads?box=sent&open=${gateLeadId}`));
+    check('the conversation links into Sent', revisit.includes(`/dashboard/leads/${gateLeadId}?box=sent`));
     check('the conversation says the business has not answered yet', revisit.includes('waiting for Nakuru Metal Works'));
     check('the form is still there for a different request', revisit.includes('Send inquiry'));
 
@@ -366,7 +366,7 @@ const LONG_MESSAGE = 'Hello, we need a steel gate fabricated for our Nakuru plot
     check('the Sent tab keeps its count markup', />Sent <span class="lead-n">\d+<\/span>/.test(before));
     check('no “new reply” marker before the business answers', !before.includes('lead-wait">New reply'));
 
-    const thread = await text(await call(`/dashboard/leads?open=${repliedLeadId}`, 'biz'));
+    const thread = await text(await call(`/dashboard/leads/${repliedLeadId}`, 'biz'));
     const mark = outboxMark();
     const reply = await call(`/dashboard/leads/${repliedLeadId}/reply`, 'biz', {
       _csrf: csrfOf(thread), body: 'Yes — repainting is KES 9,000 including primer. We can come on Friday.',
@@ -387,7 +387,7 @@ const LONG_MESSAGE = 'Hello, we need a steel gate fabricated for our Nakuru plot
     ).get(memberId).c);
     check('the Sent count still matches the rows listed', leads.countsForInquirer(memberId).total === leads.listForInquirer(memberId, { perPage: 100 }).total);
 
-    const openThread = await text(await call(`/dashboard/leads?box=sent&open=${repliedLeadId}`, 'member'));
+    const openThread = await text(await call(`/dashboard/leads/${repliedLeadId}?box=sent`, 'member'));
     check('the member reads the answer in the thread', openThread.includes('KES 9,000'));
     check('the business bubble is labelled with the company name', openThread.includes('lead-bubble-who">Nakuru Metal Works'));
     check('the business email is nowhere in the member’s view', !openThread.includes('biz@contact.example'));
@@ -397,7 +397,7 @@ const LONG_MESSAGE = 'Hello, we need a steel gate fabricated for our Nakuru plot
 
   section('Guards on the conversation');
   {
-    const page = await text(await call(`/dashboard/leads?open=${repliedLeadId}`, 'biz'));
+    const page = await text(await call(`/dashboard/leads/${repliedLeadId}`, 'biz'));
     const bizToken = csrfOf(page);   /* each session has its own CSRF token */
     const before = msgCount(repliedLeadId);
 
@@ -418,7 +418,7 @@ const LONG_MESSAGE = 'Hello, we need a steel gate fabricated for our Nakuru plot
     const strangerReply = await call(`/dashboard/leads/${repliedLeadId}/reply`, 'stranger', { _csrf: s.stranger.csrf, body: 'Let me into this conversation.' });
     check('a stranger cannot reply', loc(strangerReply).includes('not found'));
     check('the stranger added nothing', msgCount(repliedLeadId) === before);
-    const strangerView = await text(await call(`/dashboard/leads?box=sent&open=${repliedLeadId}`, 'stranger'));
+    const strangerView = await text(await call(`/dashboard/leads/${repliedLeadId}?box=sent`, 'stranger'));
     check('a stranger cannot read the thread', !strangerView.includes('KES 9,000'));
 
     /* The ceilings are real: drop them through the admin setting (read live on

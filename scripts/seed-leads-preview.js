@@ -11,7 +11,8 @@
  *
  * Then start the server with the preview flag and open the inbox:
  *
- *   LEADS_INBOX_PREVIEW=1 node server.js        →  /dashboard/leads?open=<id>
+ *   LEADS_INBOX_PREVIEW=1 node server.js        →  /dashboard/leads, then press
+ *                                                  an inquiry to open its page
  *
  * The flag is the only gate (src/routes/dashboard.js): unsigned-in browsers
  * are shown the page as the demo owner, signed-in browsers always win.
@@ -126,4 +127,4 @@ console.log('  leads    1 new (open thread), 1 contacted, 1 won');
 console.log('');
 console.log('Start it and open the inbox without signing in:');
 console.log('  LEADS_INBOX_PREVIEW=1 node server.js');
-console.log('  → /dashboard/leads?open=' + openLead);
+console.log('  → /dashboard/leads   (press an inquiry to open /dashboard/leads/' + openLead + ')');

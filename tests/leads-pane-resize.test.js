@@ -106,7 +106,7 @@ async function call(route, who = null, form = null) {
   addMsg.run(lead.id, 'owner', 'Monday works <b>fine</b> & we bring everything.', '2026-09-09 08:50:00');
   db.prepare('UPDATE leads SET updated_at = ? WHERE id = ?').run('2026-09-09 08:50:00', lead.id);
 
-  const ownerHtml = await (await call(`/dashboard/leads?open=${lead.id}`, 'owner')).text();
+  const ownerHtml = await (await call(`/dashboard/leads/${lead.id}`, 'owner')).text();
   const bodies = [
     'Hello, please quote a full office clean for twelve desks in Westlands.',
     'Happy to — a twelve-desk clean is KES 24,000/month.',
@@ -132,7 +132,7 @@ async function call(route, who = null, form = null) {
   check('Close link and facts strip intact',
     ownerHtml.includes('>Close') && ownerHtml.includes('class="lead-facts"'));
 
-  const buyerHtml = await (await call(`/dashboard/leads?box=sent&open=${lead.id}`, 'inquirer')).text();
+  const buyerHtml = await (await call(`/dashboard/leads/${lead.id}?box=sent`, 'inquirer')).text();
   check('inquirer sees the same thread, sides mirrored',
     at.every((_, i) => buyerHtml.includes(bodies[i]))
     && (buyerHtml.match(/class="lead-day"/g) || []).length === 2
@@ -167,7 +167,7 @@ async function call(route, who = null, form = null) {
     { _csrf: s.owner.csrf, body: 'Confirming Monday 8am — see you then.' });
   check('reply posts from inside the pinned foot',
     reply.status === 302 && decodeURIComponent(reply.headers.get('location') || '').includes('Message sent'));
-  const reopened = await (await call(`/dashboard/leads?open=${lead.id}`, 'owner')).text();
+  const reopened = await (await call(`/dashboard/leads/${lead.id}`, 'owner')).text();
   check('the reply lands in the thread, newest last',
     reopened.indexOf('Confirming Monday 8am') > reopened.indexOf('Monday works'));
   const status = await call(`/dashboard/leads/${lead.id}/status`, 'owner',
@@ -175,7 +175,7 @@ async function call(route, who = null, form = null) {
   check('status posts from inside the pinned foot',
     status.status === 302 && decodeURIComponent(status.headers.get('location') || '').includes('Marked as Won'));
   assert.equal(db.prepare('SELECT status FROM leads WHERE id=?').get(lead.id).status, 'won');
-  const wonHtml = await (await call(`/dashboard/leads?open=${lead.id}`, 'owner')).text();
+  const wonHtml = await (await call(`/dashboard/leads/${lead.id}`, 'owner')).text();
   check('the pane states the new status where it was set', wonHtml.includes('pill-lead-won'));
 
   console.log('Leads pane — the stylesheet keeps the chat, scopes the new');
@@ -463,7 +463,7 @@ async function call(route, who = null, form = null) {
       await ctx.addCookies([{ name: 'fl_session', value: s.owner.token, url: base }]);
       const page = await ctx.newPage();
       page.on('pageerror', (e) => jsErrors.push(`${label}: ${e.message}`));
-      const route = `/dashboard/leads?open=${lead.id}`;
+      const route = `/dashboard/leads/${lead.id}`;
       const res = await page.goto(base + route);
       check(`${label} thread renders`, res.status() === 200, `HTTP ${res.status()}`);
       await page.evaluate(() => document.fonts.ready);
@@ -483,15 +483,12 @@ async function call(route, who = null, form = null) {
           return form.getBoundingClientRect().top - g.getBoundingClientRect().bottom;
         });
         check(`${label} grip sits directly above the reply box`, gap >= 4 && gap <= 14, `${Math.round(gap)}px off`);
-        /* The dock must engage at some scroll offset — found by scanning, so
-           the check holds whatever the header and footer measure. */
-        const max = await page.evaluate(() => document.documentElement.scrollHeight - innerHeight);
-        let docked = false;
-        for (let y = 0; y <= max && !docked; y += 60) {
-          await page.evaluate((yy) => window.scrollTo(0, yy), y);
-          docked = await page.locator('.lead-detail.is-docked').count() > 0;
-        }
-        check(`${label} pane docks mid-page like the header`, docked);
+        /* The conversation is a page of its own now, cut to the window: at rest
+           the whole card — head, chat, composer — is on screen together, so
+           nothing has to be scrolled to reach Send. */
+        const box = await pane.boundingBox();
+        check(`${label} the conversation fits the window at rest`,
+          box.y + box.height <= height + 1, `pane bottom ${Math.round(box.y + box.height)} > ${height}`);
         await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
         const sendBottom = await pane.locator('.lead-reply-form button[type="submit"]').evaluate(
           (el) => el.getBoundingClientRect().bottom);

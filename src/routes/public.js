@@ -570,7 +570,7 @@ router.post('/listing/:slug/leads', spam.gate('lead', { checkEmail: true }), (re
       kind: 'lead',
       title: `New inquiry for ${l.name} — ${r.fields.name}`,
       body: `${r.fields.looking_for ? `${r.fields.looking_for} · ` : ''}${r.fields.message.slice(0, 140)}`,
-      url: `/dashboard/leads?open=${r.id}`,
+      url: `/dashboard/leads/${r.id}`,
     });
   } catch (e) {
     console.error('[leads] owner notification failed:', l.id, r.id, e && e.message);
@@ -595,7 +595,7 @@ router.post('/listing/:slug/leads', spam.gate('lead', { checkEmail: true }), (re
         esc(r.fields.message).replace(/\n/g, '<br>'),
         `Reply in your <b>Leads inbox</b> — both of you can keep talking there. Your email address was not shown to the inquirer.`,
       ],
-      cta: { label: 'Open conversation', url: util2.siteUrl(`/dashboard/leads?open=${r.id}`) },
+      cta: { label: 'Open conversation', url: util2.siteUrl(`/dashboard/leads/${r.id}`) },
       note: `Listing: <b>${esc(l.name)}</b> · received ${new Date().toISOString().slice(0, 10)}. You can also reply by email to <a href="mailto:${esc(r.fields.email)}" style="color:#1D4ED8;">${esc(r.fields.email)}</a>.`,
     }).catch((e) => console.error('[leads] owner alert email failed:', owner.email, e && e.message));
   }

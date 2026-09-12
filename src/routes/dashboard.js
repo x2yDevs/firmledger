@@ -1386,8 +1386,43 @@ function leadsReturnTo(req, openId = 0, boxOverride = null) {
   if (status) q.push('status=' + encodeURIComponent(status));
   if (listing) q.push('listing=' + encodeURIComponent(String(listing)));
   if (page > 1) q.push('page=' + page);
-  if (openId) q.push('open=' + encodeURIComponent(String(Number(openId) || openId)));
-  return '/dashboard/leads' + (q.length ? '?' + q.join('&') : '');
+  /* An open conversation is a page of its own — /dashboard/leads/<id> — and it
+     carries the list it was opened from (box, status filter, listing, page), so
+     acting inside it lands back on that same conversation, never on the list. */
+  const path = openId
+    ? '/dashboard/leads/' + encodeURIComponent(String(Number(openId) || openId))
+    : '/dashboard/leads';
+  return path + (q.length ? '?' + q.join('&') : '');
+}
+
+/**
+ * The view of the inbox a conversation was opened from — read field by field
+ * against the same allow-lists the list page uses, never as a URL to bounce to.
+ * Shared by the list (row links), the conversation page (the way back) and the
+ * redirect that answers the old ?open= links.
+ */
+function leadContext(q = {}) {
+  const leads = require('../lib/leads');
+  const box = q.box === 'archived' ? 'archived' : q.box === 'sent' ? 'sent' : 'received';
+  const status = leads.STATUSES.includes(String(q.status || '')) ? String(q.status) : '';
+  const listingId = Number(q.listing) || 0;
+  const page = Math.max(1, Number(q.page) || 1);
+  const parts = [];
+  if (box === 'sent') parts.push('box=sent');
+  else if (box === 'archived') parts.push('box=archived');
+  if (status) parts.push('status=' + encodeURIComponent(status));
+  if (listingId) parts.push('listing=' + encodeURIComponent(String(listingId)));
+  if (page > 1) parts.push('page=' + page);
+  return { box, status, listingId, page, query: parts.join('&') };
+}
+
+/** /dashboard/leads — the inbox list; /dashboard/leads/<id> — one conversation. */
+function leadInboxUrl(ctx) {
+  return '/dashboard/leads' + (ctx.query ? '?' + ctx.query : '');
+}
+function leadThreadUrl(id, ctx) {
+  return '/dashboard/leads/' + encodeURIComponent(String(Number(id) || id))
+    + (ctx.query ? '?' + ctx.query : '');
 }
 
 /** Append message params to an inbox URL without ever leaving the inbox. */
@@ -1402,71 +1437,87 @@ router.get('/dashboard/leads', (req, res) => {
   const pro = hasProAccess(req.user);
   const counts = leads.countsForOwner(req.user.id);
   const sentCounts = leads.countsForInquirer(req.user.id);
-  const status = String(req.query.status || '');
-  const listingId = Number(req.query.listing) || 0;
-  const boxKind = req.query.box === 'archived' ? 'archived'
-    : req.query.box === 'sent' ? 'sent'
-    : 'received';
+  const ctx = leadContext(req.query);
+  const { status, listingId, box: boxKind } = ctx;
   const archived = boxKind === 'archived';
+  /* The inbox page is the LIST — inquiries, one below another, across the full
+     width of the page. A conversation is never drawn beside it any more: it has
+     a page of its own at /dashboard/leads/<id>. Old links (?open=, the deep
+     links in notifications and emails already sent) point here, so they are
+     answered with a redirect to that page — carrying this view with them, so
+     the way back from the conversation is the same list. */
   const openId = Number(req.query.open) || 0;
+  if (openId) {
+    const acc = leads.getAccessible(openId, req.user.id);
+    const canOpen = acc && (acc.role === 'inquirer' || (acc.role === 'owner' && pro));
+    if (canOpen) return res.redirect(leadThreadUrl(openId, ctx));
+  }
   const listings = db.prepare(
     'SELECT id, name FROM listings WHERE owner_user_id=? ORDER BY name ASC'
   ).all(req.user.id);
-
-  let box = { rows: [], total: 0, page: 1, pages: 1 };
-  let open = null;
-  let openRole = null;
-  let openMessages = [];
 
   /* A redirect can come back to a page the list has since shrunk past (the lead
      on it was the last one there). Clamping keeps the inbox on a page that
      exists instead of showing an empty list with “Page 4 of 2”. */
   const fitPage = (r) => (r.page > r.pages ? r.pages : 0);
+  let box = { rows: [], total: 0, page: 1, pages: 1 };
   if (boxKind === 'sent') {
     box = leads.listForInquirer(req.user.id, { page: req.query.page });
     if (fitPage(box)) box = leads.listForInquirer(req.user.id, { page: fitPage(box) });
-    if (openId) {
-      const acc = leads.getAccessible(openId, req.user.id);
-      if (acc && acc.role === 'inquirer') {
-        open = acc;
-        openRole = 'inquirer';
-        openMessages = leads.messagesFor(open.id, req.user.id);
-      }
-    }
   } else if (pro) {
     box = leads.listForOwner(req.user.id, { status, archived, listingId, page: req.query.page });
     if (fitPage(box)) box = leads.listForOwner(req.user.id, { status, archived, listingId, page: fitPage(box) });
-    if (openId) {
-      const acc = leads.getAccessible(openId, req.user.id);
-      if (acc && acc.role === 'owner') {
-        open = acc;
-        openRole = 'owner';
-        openMessages = leads.messagesFor(open.id, req.user.id);
-      }
-    }
-  } else if (openId) {
-    /* Free owners can still open a sent thread if they were the inquirer. */
-    const acc = leads.getAccessible(openId, req.user.id);
-    if (acc && acc.role === 'inquirer') {
-      open = acc;
-      openRole = 'inquirer';
-      openMessages = leads.messagesFor(open.id, req.user.id);
-    }
   }
 
   res.render('dashboard/leads', {
     meta: { title: 'Leads — FirmLedger', description: '', robots: 'noindex' },
-    /* The inbox is a screen-filling workspace: the pane below the head already
+    /* The inbox is a screen-filling workspace: the list below the head already
        owns the viewport, so the site's weekly-digest band — logo, copy and a
        subscribe form — is skipped on this route (the same escape hatch the
-       maintenance page uses) and the page ends with the conversation. */
+       maintenance page uses) and the page ends with the inquiries. */
     hideNews: true,
-    pro, counts, sentCounts, box, listings, open, openRole,
-    openMessages,
-    filters: { status, listingId, archived, box: boxKind },
+    pro, counts, sentCounts, box, listings,
+    filters: { status, listingId, archived, box: boxKind, page: box.page },
+    /* Row links and the pager carry the current view with them. */
+    ctx, inboxUrl: leadInboxUrl(ctx), threadUrl: (id) => leadThreadUrl(id, ctx),
+    pageUrl: (n) => '/dashboard/leads?' + [ctx.query, 'page=' + n].filter(Boolean).join('&'),
+    ok: req.query.ok || '', err: req.query.err || '',
+    STATUS_LABELS: leads.STATUS_LABELS, STATUSES: leads.STATUSES,
+  });
+});
+
+/* One conversation — a full page of its own.
+   The inbox lists inquiries; opening one opens this page: the thread filling
+   the screen, the composer under it, and the whole of the conversation's
+   housekeeping — status, archive, delete — in one strip below. The way back is
+   the view of the inbox it was opened from. */
+router.get('/dashboard/leads/:id', (req, res) => {
+  const leads = require('../lib/leads');
+  const ctx = leadContext(req.query);
+  const back = leadInboxUrl(ctx);
+  const openId = Number(req.params.id) || 0;
+  const open = openId ? leads.getAccessible(openId, req.user.id) : null;
+  if (!open) {
+    return res.redirect(withMsg(back, { err: 'Conversation not found — it was deleted, or it was never yours to open.' }));
+  }
+  const openRole = open.role;
+  const pro = hasProAccess(req.user);
+  if (openRole === 'owner' && !pro) {
+    return res.redirect(withMsg(back, { err: 'The Leads inbox is a FirmLedger Pro feature — upgrade to manage your inquiries.' }));
+  }
+  res.render('dashboard/lead-thread', {
+    meta: {
+      title: `${openRole === 'inquirer' ? open.listing_name : open.name} — Leads — FirmLedger`,
+      description: '', robots: 'noindex',
+    },
+    hideNews: true,
+    pro, counts: leads.countsForOwner(req.user.id), sentCounts: leads.countsForInquirer(req.user.id),
+    open, openRole, openMessages: leads.messagesFor(open.id, req.user.id),
+    filters: { status: ctx.status, listingId: ctx.listingId, archived: ctx.box === 'archived', box: ctx.box, page: ctx.page },
+    ctx, backUrl: back, threadUrl: leadThreadUrl(open.id, ctx),
     ok: req.query.ok || '', err: req.query.err || '',
     /* A refused reply is explained inside the composer it belongs to, not in a
-       banner above the tabs the member has already scrolled past. */
+       banner above the conversation the member has already scrolled past. */
     cerr: req.query.cerr || '', replySent: req.query.sent === '1',
     REPLY_MIN: leads.LIMITS.reply.min, REPLY_MAX: leads.LIMITS.reply.max,
     STATUS_LABELS: leads.STATUS_LABELS, STATUSES: leads.STATUSES,
@@ -1590,7 +1641,7 @@ router.post('/dashboard/leads/:id/reply', spam.gate('lead_reply'), (req, res) =>
           kind: 'lead',
           title: `Reply from ${acc.listing_name}`,
           body: preview,
-          url: `/dashboard/leads?box=sent&open=${acc.id}`,
+          url: `/dashboard/leads/${acc.id}?box=sent`,
         });
       } catch (e) { console.error('[leads] inquirer notification failed:', acc.id, e && e.message); }
       if (!acc.inquirer_emailed && acc.email) {
@@ -1601,7 +1652,7 @@ router.post('/dashboard/leads/:id/reply', spam.gate('lead_reply'), (req, res) =>
           title: `${esc(acc.listing_name)} replied to your inquiry`,
           preheader: `${acc.listing_name} sent you a message on FirmLedger.`,
           paragraphs: [esc(r.body).replace(/\n/g, '<br>')],
-          cta: { label: 'Continue the conversation', url: util2.siteUrl(`/dashboard/leads?box=sent&open=${acc.id}`) },
+          cta: { label: 'Continue the conversation', url: util2.siteUrl(`/dashboard/leads/${acc.id}?box=sent`) },
           note: 'You are talking through FirmLedger Leads — the business email stays private. Later replies arrive as FirmLedger notifications.',
         }).catch((e) => console.error('[leads] reply email to the inquirer failed:', acc.id, e && e.message));
       }
@@ -1613,7 +1664,7 @@ router.post('/dashboard/leads/:id/reply', spam.gate('lead_reply'), (req, res) =>
         kind: 'lead',
         title: `Reply from ${acc.name} — ${acc.listing_name}`,
         body: preview,
-        url: `/dashboard/leads?open=${acc.id}`,
+        url: `/dashboard/leads/${acc.id}`,
       });
     } catch (e) { console.error('[leads] owner notification failed:', acc.id, e && e.message); }
     if (!acc.owner_emailed) {
@@ -1627,7 +1678,7 @@ router.post('/dashboard/leads/:id/reply', spam.gate('lead_reply'), (req, res) =>
           title: `${esc(acc.name)} replied about ${esc(acc.listing_name)}`,
           preheader: `A follow-up on your lead from ${acc.name}.`,
           paragraphs: [esc(r.body).replace(/\n/g, '<br>')],
-          cta: { label: 'Open conversation', url: util2.siteUrl(`/dashboard/leads?open=${acc.id}`) },
+          cta: { label: 'Open conversation', url: util2.siteUrl(`/dashboard/leads/${acc.id}`) },
           note: 'Reply in your Leads inbox to keep talking — both of you stay on FirmLedger. Later replies arrive as FirmLedger notifications.',
         }).catch((e) => console.error('[leads] reply email to the business failed:', acc.id, e && e.message));
       }

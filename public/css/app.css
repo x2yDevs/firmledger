@@ -2976,23 +2976,43 @@ select.input::-ms-expand,
 /* The pager sits under the frame inside the same fixed-height column, so it
    keeps a tight margin: every row it does not spend is a row the list shows. */
 .lead-list-col .pagination { margin-top: 10px; }
-.lead-row { display: flex; flex: 0 0 auto; gap: 12px; align-items: flex-start; justify-content: space-between; padding: 11px 14px; border: 0; border-bottom: 1px solid var(--hair); border-radius: 0; background: transparent; text-decoration: none; color: inherit; }
+/* The inbox is a column of inquiries: one row per inquiry, edge to edge, each
+   one below the last, and nothing beside them — a conversation is a page of
+   its own. The list runs the full width of the container, so a row reads
+   across it instead of being squeezed into a rail: who it is and where it
+   stands on the first line, what they asked for on the second (two lines, then
+   clamped — there is width for it now), where it came from and when it last
+   moved on the third. A chevron at the right edge says the row opens. */
+.lead-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center; gap: 14px; flex: 0 0 auto;
+  padding: 14px 16px; border: 0; border-bottom: 1px solid var(--hair);
+  border-radius: 0; background: transparent; text-decoration: none; color: inherit;
+}
 .lead-row:last-child { border-bottom: 0; }
 .lead-row:hover { background: var(--paper); text-decoration: none; }
-/* The row that owns the thread, and the unread one, are marked by an inset
-   bar — inside the row, so nothing shifts as a lead is opened or read. The
-   open row also names itself in the accent, so "this is the chat on the right"
-   and "this one is unread" stay two different signals in one flat list. */
+.lead-row:hover .lead-row-go { color: var(--accent); transform: translateX(2px); }
+.lead-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* An unread inquiry is marked by an inset bar inside the row, so nothing
+   shifts as it is read. */
 .lead-row.is-new { box-shadow: inset 3px 0 0 var(--accent); }
-.lead-row.open { background: var(--soft); box-shadow: inset 3px 0 0 var(--accent); }
-.lead-row.open .lead-row-title b { color: var(--accent2); }
-.lead-row-main { display: grid; gap: 3px; min-width: 0; }
-.lead-row-main b { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lead-row-main small { font-size: 12px; line-height: 1.5; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lead-row-main { display: grid; gap: 4px; min-width: 0; }
+.lead-row-main b { font-size: 15px; overflow-wrap: anywhere; }
 /* Keep the status beside the inquiry name — the name/preview shrink, never the pill. */
-.lead-row-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.lead-row-title b { min-width: 0; flex: 1 1 auto; }
+.lead-row-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.lead-row-title b { min-width: 0; }
 .lead-row .pill { flex: 0 0 auto; align-self: center; white-space: nowrap; }
+/* What they asked for: two lines of the page's width, not one ellipsised one. */
+.lead-row-ask {
+  font-size: 13px; line-height: 1.5; color: var(--ink2); overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.lead-row-from { font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.lead-row-go { flex: 0 0 auto; font-size: 21px; line-height: 1; color: var(--hair2); transition: color .12s ease, transform .12s ease; }
+@media (max-width: 640px) {
+  .lead-row { padding: 13px 13px; gap: 10px; }
+  .lead-row-main b { font-size: 14px; }
+}
 
 .pill-lead-new { background: #E3ECFD; color: #1D4ED8; }
 .pill-lead-contacted { background: #FFF3D6; color: #8A5F00; }
@@ -3495,6 +3515,27 @@ select:not(:where(.chat-model-pick select))::-ms-expand { display: none; }
 
 /* The inbox ends where the conversation does. */
 .leads-section { padding-bottom: 1.5rem; }
+
+/* The way back to the list of inquiries, on the head's right edge. */
+.lead-back-btn { flex: 0 0 auto; align-self: center; white-space: nowrap; }
+
+/* The inbox list is cut to the window for the same reason: the frame of
+   inquiries ends above the fold and the page does not scroll to read it — the
+   list scrolls inside its own frame, one inquiry below the last. */
+.leads-inbox-page .lead-layout { --pane-h: min(1060px, max(calc(100vh - 320px), 520px)); }
+@supports (height: 100dvh) {
+  .leads-inbox-page .lead-layout { --pane-h: min(1060px, max(calc(100dvh - 320px), 520px)); }
+}
+
+/* One conversation is a page of its own, so the card is cut to the window the
+   page is drawn in: head, chat, composer and the status line are all on screen
+   together at rest, and the page does not scroll until the member asks it to
+   (drag the seam, or shrink the window). Growing the card past that budget is
+   still allowed — then the page scrolls and the pane parks under the header. */
+.leads-thread-page .lead-layout { --pane-h: min(1060px, max(calc(100vh - 260px), 520px)); }
+@supports (height: 100dvh) {
+  .leads-thread-page .lead-layout { --pane-h: min(1060px, max(calc(100dvh - 260px), 520px)); }
+}
 
 /* ============ Leads inbox — header follows the system; the chat extends like the reply box ============
    Two small alignments, no new chrome, nothing else touched:
