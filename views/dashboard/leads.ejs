@@ -158,7 +158,18 @@
                   list to the left after the chat is closed. */ %>
             <div class="panel-h-t">
               <h3><%= openRole === 'inquirer' ? open.listing_name : open.name %><% if (openRole === 'owner') { %> <span class="pill pill-lead-<%= open.status %>" data-lead-pill-current><%= STATUS_LABELS[open.status] %></span><% } %></h3>
-              <a class="muted" style="font-size:.8rem" href="<%= leadUrl([]) %>">Close ✕</a>
+              <% /* Focus mode: one button hands the conversation the whole window
+                    — the list steps aside, the chat grows into the width and the
+                    reply box below keeps its place. A view choice, not a setting:
+                    the next page load comes back two-column with the list in hand. */ %>
+              <span class="lead-pane-tools">
+                <button class="btn btn-ghost btn-sm lead-pane-focus" type="button" data-lead-focus
+                        aria-pressed="false" aria-controls="leadThread"
+                        title="Give this conversation the whole window">
+                  <span class="lpf-ico" aria-hidden="true">⤢</span><span class="lpf-label">Full width</span>
+                </button>
+                <a class="muted" style="font-size:.8rem" href="<%= leadUrl([]) %>">Close ✕</a>
+              </span>
             </div>
             <p class="muted" style="font-size:13px;margin-top:-4px">
               <% if (openRole === 'inquirer') { %>
@@ -626,6 +637,99 @@
     dockTop: DOCK_TOP,
     state: function () { return { h: S.h || null, w: S.w || null }; },
     reset: function () { S = {}; save(S); applySize(); dockTick(); }
+  };
+})();
+</script>
+
+<script>
+/* Leads inbox — focus mode: the reply box stays where it is, the conversation
+   above it takes the whole window. One button, three behaviours, nothing else
+   touched:
+
+   1. The list column steps aside and the pane grows to the viewport, so the
+      chat area extends into every pixel between the facts strip and the
+      pinned composer. The composer, its counter, the status line and the
+      stored corner-drag size all keep working exactly as in the two-column
+      view — this is the same pane, wider and taller.
+   2. Esc, or the same button, hands the width back to the list.
+   3. Stacked screens have no side column to widen into, so the control is not
+      offered there and a stale flag cannot strand the list.
+
+   The state lives in this page view only: picking another inquiry returns you
+   to the two-column inbox with the list in hand, never to a hidden one. */
+(function () {
+  'use strict';
+  var layout = document.querySelector('.lead-layout');
+  var btn = document.querySelector('[data-lead-focus]');
+  var pane = layout ? layout.querySelector('.lead-detail') : null;
+  if (!layout || !btn || !pane) return;
+  var mq = window.matchMedia ? window.matchMedia('(min-width: 901px)') : null;
+  var TOP = 84; /* the header stop the pane sticks at — matches the dock */
+  var LABEL_ON = 'Back to list';
+  var LABEL_OFF = 'Full width';
+
+  function wide() { return mq ? mq.matches : (window.innerWidth || 0) >= 901; }
+  function on() { return layout.classList.contains('is-max'); }
+
+  function paint() {
+    btn.setAttribute('aria-pressed', on() ? 'true' : 'false');
+    btn.title = on()
+      ? 'Give the list column its width back (Esc)'
+      : 'Give this conversation the whole window';
+    var label = btn.querySelector('.lpf-label');
+    if (label) label.textContent = on() ? LABEL_ON : LABEL_OFF;
+  }
+
+  function set(want) {
+    if (want === on()) { paint(); return; }
+    if (want && !wide()) return;
+    layout.classList.toggle('is-max', want);
+    pane.classList.toggle('is-max', want);
+    paint();
+    resync();
+    if (want) park();
+  }
+
+  /* The dock parks the pane with inline left/width measured over its own grid
+     slot, and this button changes that slot. Both numbers are dropped and the
+     scroll tick the pane script already listens for re-measures them — one
+     frame of the pane's own geometry, no arithmetic duplicated here. */
+  function resync() {
+    if (pane.style) { pane.style.left = ''; pane.style.width = ''; }
+    if (window.dispatchEvent && typeof window.Event === 'function') {
+      try { window.dispatchEvent(new window.Event('scroll')); } catch (e) {
+        /* An engine without Event still self-corrects on the next scroll. */
+      }
+    }
+  }
+
+  /* Bring the pane to the header stop so the whole conversation, reply box
+     included, is on screen at once. Only ever a short nudge, and never while
+     the pane is already parked there. */
+  function park() {
+    if (!window.scrollTo || !pane.getBoundingClientRect) return;
+    var top = pane.getBoundingClientRect().top;
+    if (Math.abs(top - TOP) < 8) return;
+    window.scrollTo(0, Math.max(0, (window.scrollY || 0) + top - TOP));
+  }
+
+  btn.addEventListener('click', function () { set(!on()); btn.focus(); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && on()) { set(false); btn.focus(); }
+  });
+  if (mq) {
+    var off = function () { if (!wide() && on()) set(false); };
+    if (mq.addEventListener) mq.addEventListener('change', off);
+    else if (mq.addListener) mq.addListener(off);
+  }
+  paint();
+
+  /* Test seam: the whole mode in three pure calls. */
+  window.__flLeadsFocus = {
+    isOn: on,
+    enter: function () { set(true); return on(); },
+    leave: function () { set(false); return on(); },
+    top: TOP
   };
 })();
 </script>

@@ -1434,6 +1434,11 @@ router.get('/dashboard/leads', (req, res) => {
 
   res.render('dashboard/leads', {
     meta: { title: 'Leads — FirmLedger', description: '', robots: 'noindex' },
+    /* The inbox is a screen-filling workspace: the pane below the head already
+       owns the viewport, so the site's weekly-digest band — logo, copy and a
+       subscribe form — is skipped on this route (the same escape hatch the
+       maintenance page uses) and the page ends with the conversation. */
+    hideNews: true,
     pro, counts, sentCounts, box, listings, open, openRole,
     openMessages,
     filters: { status, listingId, archived, box: boxKind },

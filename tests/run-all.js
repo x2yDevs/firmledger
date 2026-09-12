@@ -79,6 +79,11 @@
  *   leads-pane    the desktop conversation pane stays fixed under the header,
  *                resizes from a persisted corner grip and pins its reply foot
  *                — with the thread, bubbles and composer locked in.
+   leads-reply   the reply box holds the pane floor (a ceiling on the box, a
+                 giving thread floor, no pane scrollbar on real windows), one
+                 button extends the chat over the whole window, nothing open
+                 is a compact panel, and the digest band no longer sits below
+                 the inbox. Includes the focus script run against a stub DOM.
    db-upgrade   the current schema code boots against a simulated OLD
                 production database (pre-migration tables with real rows):
                 migrations apply without throwing, the inquirer index lands
@@ -114,6 +119,7 @@ const suites = [
   ['Leads housekeeping — permanent delete + email-first policy', 'leads-housekeeping.test.js'],
   ['Leads + blog fit — composer guidance, honest Sent, article rhythm', 'leads-blog-fit.test.js'],
   ['Leads pane — fixed conversation, corner resize, chat kept', 'leads-pane-resize.test.js'],
+  ['Leads reply fit — pinned box, extending chat, clean tail', 'leads-reply-fit.test.js'],
   ['Blog content — accuracy, stale refresh, 2026 guide', 'blog-content.test.js'],
   ['Focus hygiene — no rings on inputs & dropdowns', 'focus-hygiene.test.js'],
   ['Production database upgrade', 'db-upgrade.test.js'],
