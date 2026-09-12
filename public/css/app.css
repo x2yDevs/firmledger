@@ -967,7 +967,9 @@ img.logo-tile { object-fit: contain; padding: 4px; background: #fff; border: 1px
 .upgrade-status .us-title { display: grid; gap: 2px; }
 
 /* Pro content locked gate (listing page) */
-.pro-locked { display:flex; flex-wrap:wrap; gap:16px; align-items:center; justify-content:space-between; border:2px dashed var(--accent2); background:linear-gradient(135deg, rgba(37,99,235,.06) 0%, transparent 60%); }
+/* A capped upsell panel centres inside its container instead of hugging the
+   left edge (no-op for the full-width variant on the listing page). */
+.pro-locked { display:flex; flex-wrap:wrap; gap:16px; align-items:center; justify-content:space-between; margin-inline:auto; border:2px dashed var(--accent2); background:linear-gradient(135deg, rgba(37,99,235,.06) 0%, transparent 60%); }
 .pro-locked .plc-left { display:flex; gap:14px; align-items:flex-start; flex:1 1 420px; }
 .pro-locked .plc-lock { width:36px; height:36px; flex:none; display:grid; place-items:center; background:rgba(37,99,235,.1); border-radius:10px; color:var(--accent2); }
 .pro-locked .plc-lock svg { width:20px !important; height:20px !important; max-width:none; }
@@ -3553,3 +3555,44 @@ select:not(:where(.chat-model-pick select))::-ms-expand { display: none; }
 .lead-detail > .muted a { color: var(--accent2); font-weight: 600; }
 .lead-detail > .muted a:hover { color: var(--accent); text-decoration: underline; }
 .lead-thread { resize: vertical; }
+
+/* ============ Leads inbox — exact viewport fit for the list and the chat ============
+   The --pane-h formulas above subtract a fixed estimate of the page head, but
+   the real slot starts lower once the breadcrumb head, the filter tabs, the
+   waiting line and the listing picker are drawn, and an auto-height card with
+   only a floor lets a tall thread push the pinned composer past the fold.
+   public/js/leads-fit.js measures the actual .lead-layout slot on desktop
+   (min-width: 901px, the sticky-pane breakpoint) and sets --lead-fit-h to the
+   exact pixels left in the window: the inbox frame (pager included) and the
+   conversation card then end above the fold at rest on every window, with the
+   internal list and chat keeping their own scrollbars. Stacked screens
+   (<=900px) stay content-height — the document does the scrolling there. */
+@media (min-width: 901px) {
+  /* Measured fit wins; without the script the list falls back to a pure
+     window cap (slot top ~347px plus the same 12px gap), so a short window is
+     never forced past the fold by the old 520px floor. */
+  .leads-inbox-page .lead-list-col {
+    max-height: var(--lead-fit-h, calc(100vh - 359px));
+  }
+  @supports (height: 100dvh) {
+    .leads-inbox-page .lead-list-col {
+      max-height: var(--lead-fit-h, calc(100dvh - 359px));
+    }
+  }
+  /* The conversation card: the measured size becomes a DEFINITE height (not
+     just a floor), so a tall thread can no longer push the pinned composer
+     below the fold — the chat shrinks and scrolls inside itself instead. A
+     hand-dragged size (--lead-user-h) still wins on all three, so the seam
+     resize behaves exactly as before; the max-height is the no-script safety
+     net, and never caps a parked pane (the dock sets an inline max-height). */
+  .leads-thread-page .lead-detail {
+    min-height: var(--lead-user-h, var(--lead-fit-h, var(--pane-h)));
+    height: var(--lead-user-h, var(--lead-fit-h, auto));
+    max-height: var(--lead-user-h, calc(100vh - 252px));
+  }
+  @supports (height: 100dvh) {
+    .leads-thread-page .lead-detail {
+      max-height: var(--lead-user-h, calc(100dvh - 252px));
+    }
+  }
+}
