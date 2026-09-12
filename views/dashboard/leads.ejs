@@ -582,6 +582,41 @@
     dockTick();
   });
 
+  /* --- the chat box extends from its own corner, like the reply box below ---
+     The thread keeps its flexible fill (it must take whatever the pane gives
+     it), so a native drag alone would snap straight back — the grow rule
+     reclaims every pixel on the next layout. Instead, a left-button mouse
+     press in the thread's own resize corner drives the same stored pane
+     height the seam grip drives, and the thread — the pane's only flexible
+     child — takes every pixel of it. Same clamp, same save, same dock.
+     Touch is left alone (no corner handle there, so a press stays a scroll),
+     and so are narrow screens (with the pane at its natural height the
+     native handle already sticks on its own). */
+  var thread = document.querySelector('#leadThread');
+  function inThreadCorner(e) {
+    if (!thread || e.pointerType === 'touch') return false;
+    var r = thread.getBoundingClientRect();
+    return e.clientX >= r.right - 28 && e.clientY >= r.bottom - 28;
+  }
+  if (thread) {
+    thread.addEventListener('pointerdown', function (e) {
+      if (!desktop() || e.button !== 0 || !inThreadCorner(e)) return;
+      e.preventDefault();
+      try { thread.setPointerCapture(e.pointerId); } catch (err) {}
+      drag = { y: e.clientY, h: S.h || pane.offsetHeight };
+      pane.classList.add('is-resizing');
+      document.body.classList.add('is-lead-resizing');
+    });
+    thread.addEventListener('pointermove', function (e) {
+      if (!drag) return;
+      S.h = clampH(drag.h + (e.clientY - drag.y), window.innerHeight || 800);
+      applySize();
+      dockTick();
+    });
+    thread.addEventListener('pointerup', endDrag);
+    thread.addEventListener('pointercancel', endDrag);
+  }
+
   var ticking = false;
   function requestDock() {
     if (ticking) return;
