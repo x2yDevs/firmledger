@@ -208,7 +208,12 @@ async function call(route, who = null, form = null) {
      it: zero basis on desktop (its own scrollbar, its floor), and the shipped
      flexible fill everywhere else, where the page — not the card — scrolls. */
   check('the thread keeps a zero basis on desktop, so a long chat never stretches the card',
-    /\.lead-detail \.lead-thread \{ flex: 1 1 0%; min-height: clamp\(/.test(css)
+    /* 0px and not 0%: the card is height:auto, so a percentage basis resolves
+       against an indefinite height and becomes the item's content size — the
+       chat's bubbles would then set the card's height and push the composer
+       below the fold. Only a definite zero stays zero. */
+    /\.lead-detail \.lead-thread \{ flex: 1 1 0px; min-height: clamp\(/.test(css)
+    && !/\.lead-detail \.lead-thread \{ flex: 1 1 0%/.test(css)
     && /\.lead-thread \{\s+flex: 1 1 auto; min-height: 200px;/.test(css));
   check('foot wrapper adds no box of its own',
     css.includes('.lead-detail-foot { display: grid; gap: 0; margin: 0; padding: 0; min-width: 0; }')
@@ -221,7 +226,7 @@ async function call(route, who = null, form = null) {
   check('height, floor, foot, dock and resizing cursor are desktop-only',
     (slice.match(/@media \(min-width: 901px\)/g) || []).length === 2
     && deskOnly.includes('--lead-user-h') && !deskOnly.includes('--lead-list-w')
-    && deskOnly.includes('.lead-detail .lead-thread { flex: 1 1 0%; min-height: clamp(')
+    && deskOnly.includes('.lead-detail .lead-thread { flex: 1 1 0px; min-height: clamp(')
     && deskOnly.includes('.lead-detail-foot { position: sticky; bottom: 0; z-index: 2; background: var(--surface); }')
     && deskOnly.includes('.lead-detail.is-docked { position: fixed; z-index: 30; margin: 0; }')
     && deskOnly.includes('.lead-detail.is-resizing { box-shadow: 0 0 0 2px var(--accent); }'));

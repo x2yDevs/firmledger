@@ -5,6 +5,10 @@
      One page, one job: inquiries, one below another, across the whole width
      of the screen. Nothing is drawn beside them — a conversation is a page of
      its own (/dashboard/leads/<id>), so every pixel here belongs to the list.
+     Both the head and the list run on the wide container, with equal gutters,
+     and the frame of rows is cut to the room the window actually has left —
+     measured, not guessed (views/partials/leads-fit.ejs) — so the page ends at
+     the fold instead of leaving a band of dead paper under it.
      Every link carries the current view with it: which box, which status
      filter, which listing, which page — so opening an inquiry and coming back
      lands on the same list with the same pills and counts, instead of dropping
@@ -25,7 +29,7 @@
 %>
 
 <section class="page-head leads-head">
-  <div class="container dash-head">
+  <div class="container container-wide dash-head">
     <div>
       <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/dashboard">Dashboard</a><span aria-hidden="true">›</span><span>Leads</span></nav>
       <h1>Leads inbox</h1>
@@ -47,7 +51,7 @@
 </section>
 
 <section class="section-tight leads-section leads-inbox-page">
-  <div class="container">
+  <div class="container container-wide">
     <% if (typeof ok !== 'undefined' && ok) { %><div class="alert alert-ok"><%= ok %></div><% } %>
     <% if (typeof err !== 'undefined' && err) { %><div class="alert alert-err"><%= err %></div><% } %>
 
@@ -69,7 +73,7 @@
     <% } %>
 
     <% if (!isSent && !pro) { %>
-      <div class="panel pro-locked" style="max-width:720px">
+      <div class="panel pro-locked lead-lock-card">
         <div class="plc-left">
           <span class="plc-lock" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></span>
           <div>
@@ -139,5 +143,9 @@
     <% } %>
   </div>
 </section>
+
+<% /* The frame of inquiries is the room the window has left under the tabs —
+       measured, not guessed — so the list ends at the fold and the pager with it. */ %>
+<%- include('../partials/leads-fit') %>
 
 <%- include('../partials/bottom') %>

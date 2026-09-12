@@ -28,13 +28,15 @@
 %>
 
 <section class="page-head leads-head">
-  <div class="container dash-head">
+  <div class="container container-wide dash-head">
     <div>
       <% /* The trail names the conversation and “Leads inbox” is the way back —
             to the same box, filter and page it was opened from. */ %>
       <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/dashboard">Dashboard</a><span aria-hidden="true">›</span><a href="<%= backUrl %>">Leads inbox</a><span aria-hidden="true">›</span><span><%= isOwner ? open.name : open.listing_name %></span></nav>
       <h1><%= isOwner ? open.name : open.listing_name %></h1>
-      <p class="muted"><%= isOwner
+      <% /* On a short window this line gives its height to the chat, which is the
+             point of the page — see the max-height reclaim in app.css. */ %>
+      <p class="muted leads-thread-lede"><%= isOwner
         ? 'An inquiry on ' + open.listing_name + ' — reply here, and set its status as it moves.'
         : 'Your conversation with ' + open.listing_name + ' — keep talking here; both of you see the same thread.' %></p>
     </div>
@@ -43,7 +45,7 @@
 </section>
 
 <section class="section-tight leads-section leads-thread-page">
-  <div class="container">
+  <div class="container container-wide">
     <% if (typeof ok !== 'undefined' && ok) { %><div class="alert alert-ok"><%= ok %></div><% } %>
     <% if (typeof err !== 'undefined' && err) { %><div class="alert alert-err"><%= err %></div><% } %>
 
@@ -591,5 +593,10 @@
   };
 })();
 </script>
+
+<% /* The shell measures the room the window has left and hands it to
+       --pane-h, so the card is the screen: head, chat, composer and the status
+       line on one page, nothing below the fold and nothing cut short above it. */ %>
+<%- include('../partials/leads-fit') %>
 
 <%- include('../partials/bottom') %>

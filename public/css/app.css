@@ -3237,7 +3237,13 @@ select.input::-ms-expand,
      fills every pixel the chrome does not need and keeps its own scrollbar,
      so a long conversation never stretches the card past the window — only a
      grown reply box does that, by exactly as much as it grew. */
-  .lead-detail .lead-thread { flex: 1 1 0%; min-height: clamp(140px, 30vh, 220px); }
+  /* 0px and never 0%: the card is height:auto, so a percentage basis resolves
+     against an indefinite height, falls back to the item's content size, and
+     hands the chat its full height — 520px of bubbles on a real thread, which
+     is how the composer landed below the fold on a laptop. A definite zero is
+     the only zero that stays zero: the thread takes the rest of the card, no
+     more, and scrolls inside itself. */
+  .lead-detail .lead-thread { flex: 1 1 0px; min-height: clamp(140px, 30vh, 220px); }
   /* Pinned foot: Send + housekeeping hold the pane bottom while the thread
      above scrolls. Scoped to desktop — on stacked screens the composer sits at
      the natural end of the thread, never overlaying it. */
@@ -3521,20 +3527,28 @@ select:not(:where(.chat-model-pick select))::-ms-expand { display: none; }
 
 /* The inbox list is cut to the window for the same reason: the frame of
    inquiries ends above the fold and the page does not scroll to read it — the
-   list scrolls inside its own frame, one inquiry below the last. */
-.leads-inbox-page .lead-layout { --pane-h: min(1060px, max(calc(100vh - 320px), 520px)); }
+   list scrolls inside its own frame, one inquiry below the last.
+   The height now comes from the room the page actually has: the shell measures
+   the space between its own top and the bottom of the window and writes it to
+   --lead-fit-h (views/partials/leads-fit.ejs), because the chrome above it —
+   utility strip, head, tabs, an alert after a send — is not a constant anyone
+   can subtract. The subtract below is only the fallback for a browser with no
+   script, and it is the honest figure for the head as it ships. */
+.leads-inbox-page .lead-layout { --pane-h: var(--lead-fit-h, min(1060px, max(calc(100vh - 244px), 240px))); }
 @supports (height: 100dvh) {
-  .leads-inbox-page .lead-layout { --pane-h: min(1060px, max(calc(100dvh - 320px), 520px)); }
+  .leads-inbox-page .lead-layout { --pane-h: var(--lead-fit-h, min(1060px, max(calc(100dvh - 244px), 240px))); }
 }
 
 /* One conversation is a page of its own, so the card is cut to the window the
    page is drawn in: head, chat, composer and the status line are all on screen
    together at rest, and the page does not scroll until the member asks it to
    (drag the seam, or shrink the window). Growing the card past that budget is
-   still allowed — then the page scrolls and the pane parks under the header. */
-.leads-thread-page .lead-layout { --pane-h: min(1060px, max(calc(100vh - 260px), 520px)); }
+   still allowed — then the page scrolls and the pane parks under the header.
+   Same treatment as the list: measured, with the head's own height as the
+   no-script fallback. */
+.leads-thread-page .lead-layout { --pane-h: var(--lead-fit-h, min(1060px, max(calc(100vh - 196px), 400px))); }
 @supports (height: 100dvh) {
-  .leads-thread-page .lead-layout { --pane-h: min(1060px, max(calc(100dvh - 260px), 520px)); }
+  .leads-thread-page .lead-layout { --pane-h: var(--lead-fit-h, min(1060px, max(calc(100dvh - 196px), 400px))); }
 }
 
 /* ============ Leads inbox — header follows the system; the chat extends like the reply box ============
@@ -3553,3 +3567,150 @@ select:not(:where(.chat-model-pick select))::-ms-expand { display: none; }
 .lead-detail > .muted a { color: var(--accent2); font-weight: 600; }
 .lead-detail > .muted a:hover { color: var(--accent); text-decoration: underline; }
 .lead-thread { resize: vertical; }
+
+/* ============ Leads inbox — every page fills the screen it is on, centred ============
+   Three rounds cut this inbox to the window from the inside out — the pane's
+   height, the foot that pins, the thread that flexes. This is the same fit from
+   the outside: the page as a whole, both pages, on every screen from a phone to
+   a 1920 monitor. Geometry only — no control is added, moved or dropped: tabs
+   and counts, the listing picker, the pager, the thread, the seam drag, the
+   composer and the housekeeping line all behave exactly as they did.
+
+   1. Width. Both pages run their head and their body on the site's wide
+      container — the directory's treatment, symmetric gutters and all — with a
+      ceiling of 1560px, because an inbox wants the room for its rows without
+      being read across the 1760px a card grid takes. Nothing on these pages is a fixed column welded
+      to the left edge any more: the free account's invitation is the one block
+      that was, and it is now a centred card of its own.
+   2. Height. --pane-h on both pages takes --lead-fit-h, the room the window has
+      left below the shell (measured by views/partials/leads-fit.ejs), so the
+      frame of inquiries and the conversation card end at the fold instead of a
+      guessed 100px above it. The shipped subtracts stay as the fallback.
+   3. Give-backs. A list of three inquiries still owns the screen: the column is
+      the whole frame, top to bottom, and an empty result centres itself in it
+      instead of parking a note at the top-left. A row uses the width it is given
+      — name and status, what they asked for, where and when, three columns on a
+      wide screen rather than one long line with a void beside it. And the
+      conversation's measure grows with the screen, still centred, so a bubble is
+      never read across a monitor and never stranded on one side of it. */
+
+/* 1 — the screen, with equal gutters, at the inbox's own ceiling. The gutters
+   keep the standard container's floor, so a phone loses none of the margin it
+   has today; the extra room appears between 760px and 1560px, where a list of
+   inquiries can genuinely use it. */
+.leads-head, .leads-inbox-page, .leads-thread-page { --wide-max: 1560px; }
+.leads-head .container-wide, .leads-inbox-page .container-wide, .leads-thread-page .container-wide {
+  /* The width itself, restated: the site raises .container to 1340px at
+     1500px-up in a rule that comes AFTER .container-wide, so inheriting the
+     wide class alone would still stop the inbox at 1340 on exactly the screens
+     it is meant to fill. Specificity is what makes the ceiling real. */
+  max-width: min(var(--wide-max, 1560px), 100%);
+  padding-inline: clamp(20px, 3.4vw, 46px);
+}
+
+/* A Free account's invitation is a centred card, not a strip pinned to the
+   left edge of a wide container with a hole beside it. */
+.lead-lock-card { width: 100%; max-width: min(1100px, 100%); margin-inline: auto; }
+
+/* 2 — 3. the list column is the frame the window has left, floor and ceiling:
+   more rows than fit still scroll inside it, fewer rows still fill the screen,
+   and the pager keeps its line under it. Desktop only — stacked screens let the
+   page run the full length of the list, as they always have. */
+@media (min-width: 901px) {
+  .leads-inbox-page .lead-list-col {
+    min-height: var(--pane-h, min(1060px, max(calc(100vh - 244px), 240px)));
+  }
+}
+.leads-inbox-page .lead-list-col .empty-state {
+  flex: 1 1 auto; min-height: 0; min-width: 0; overflow: auto;
+  display: grid; align-content: center; justify-items: center; gap: 3px;
+  padding: clamp(24px, 5vh, 52px) 20px; text-align: center;
+}
+/* A filtered inbox that says “no matches, clear the filter” is a full-screen
+   answer, not a note in the top-left: the message and its button take the
+   frame and sit in the middle of it. */
+.leads-inbox-page .lead-list-col .empty-state h3 { margin: 0; }
+.leads-inbox-page .lead-list-col .empty-state p { max-width: min(58ch, 100%); margin: 6px 0 0; }
+.leads-inbox-page .lead-list-col .empty-state .btn { margin-top: 12px; }
+@media (max-width: 900px) {
+  .leads-inbox-page .lead-list-col .empty-state {
+    flex: 0 0 auto; display: block; gap: 0; padding: 3rem 1.5rem;
+  }
+}
+
+/* A wide row has three things to say and now says them across the width,
+   instead of one long line of preview and a hundred pixels of nothing. The
+   base row (name over ask over where-and-when) is untouched, so every narrow
+   screen keeps the three-line row it reads today. */
+@media (min-width: 1200px) {
+  .lead-list-scroll .lead-row { padding: 14px clamp(18px, 1.9vw, 32px); gap: clamp(18px, 2vw, 36px); }
+  .lead-row-main {
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.5fr) minmax(0, .8fr);
+    align-items: baseline; column-gap: clamp(18px, 2vw, 36px); row-gap: 0;
+  }
+  .lead-row-main > * { min-width: 0; }
+  .lead-row-ask { -webkit-line-clamp: 1; line-clamp: 1; }
+}
+
+/* The conversation grows with the screen and stays centred in it: one measure,
+   equal margins, and the room used rather than left beside the card. */
+@media (min-width: 1500px) {
+  .lead-detail-col { max-width: min(1180px, 100%); }
+  .lead-bubble { max-width: min(86%, 720px); }
+}
+
+/* The foot, spread instead of clustered. Send keeps the left of its row and the
+   direct routes (Email instead, Call) take the right edge; the status select and
+   Archive keep the left of the housekeeping line and Delete — the one action
+   that must not be pressed by accident — sits at the other end of it. Same
+   controls, same forms, same order in the markup: on a narrow card the row is
+   already tight, so this only speaks up once there is room to spread into. */
+@media (min-width: 1100px) {
+  .lead-reply-actions a:first-of-type { margin-left: auto; }
+  .lead-detail-bar form + form:last-child { margin-left: auto; }
+  /* The counter stays with the button it counts, not with the void. */
+  .lead-reply-actions .lead-reply-count { margin-left: 2px; }
+}
+
+/* A short desktop window reclaims its head the way the pane reclaims its
+   padding: the description under the title gives first, then the air around the
+   pills. Every control stays — the frame simply starts higher up, which is the
+   difference between a list that ends at the fold and one that runs past it. */
+@media (min-width: 901px) and (max-height: 780px) {
+  .leads-head { padding: .6rem 0 .7rem; }
+  .leads-head .muted { font-size: 12.5px; line-height: 1.45; }
+  .leads-section { padding-top: .55rem; }
+  .leads-section .lead-tabs { margin: 2px 0 8px; }
+  /* On a conversation the head's one descriptive line is the first thing to go:
+     the card repeats what it says (the listing, the date, the city) in its own
+     meta line and the trail above already names the inquiry, so the room is the
+     chat's — 18px on a 1366×768 window, which is another bubble of thread above
+     the fold. */
+  .leads-thread-lede { display: none; }
+}
+
+/* Phones get the same treatment from the other end: on a 390×844 phone the
+   head and the wrapping row of box pills spent 414px between the app bar and the
+   first inquiry, which is two rows and nothing else above the fold. The lede
+   gives up a little size, the pills get compact, and the list starts at 371px —
+   three inquiries on the screen instead of two, every pill, count and filter
+   still there, just shorter. */
+@media (max-width: 640px) {
+  .leads-head { padding: .8rem 0 .85rem; }
+  .leads-head h1 { font-size: 1.3rem; margin-bottom: 3px; }
+  .leads-head .muted { font-size: 12.5px; line-height: 1.5; }
+  .leads-section { padding-top: .7rem; }
+  .leads-section .lead-tabs { margin: 2px 0 9px; gap: 5px; }
+  .lead-tab { padding: 6px 10px; font-size: 12px; gap: 6px; }
+  .lead-n { min-width: 20px; font-size: 10.5px; }
+}
+
+/* Nothing above re-derives the pane's inner geometry: on a tall window the
+   composer is still the last thing in the card and the pinned foot still holds
+   it, and on a short one the shipped floors still stand. Stacked screens need
+   no un-doing either — the wide row is a min-width rule, so a phone keeps the
+   base row (who, over what they asked for, over where and when), the frame runs
+   its full length down the page, and the empty state goes back to being a block
+   of copy rather than a centred panel. Every one of these rules is scoped to
+   .leads-head / .leads-inbox-page / .leads-thread-page / the row classes, so no
+   other page of the site moves a pixel. */
