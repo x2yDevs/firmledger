@@ -179,17 +179,21 @@
               <% } %>
             </p>
 
-            <% /* Contact facts on their own lines instead of one crowded
-                  strip: the address first, then what the member is looking
-                  for below it. Same labels, same mailto/tel links — and still
-                  no three-row table costing the conversation its height. */ %>
+            <% /* Contact facts as one compact strip instead of a three-row
+                  table: same labels, same mailto/tel links, but the block
+                  costs the conversation a couple of lines instead of a
+                  hundred vertical pixels. Two lines, and always in this
+                  order: how to reach them (email, then the phone when there
+                  is one) on the first, and what they are looking for on the
+                  line below it — never one run-on line where the ask reads
+                  as the tail of the email address. */ %>
             <% if (openRole === 'owner' || open.looking_for) { %>
             <div class="lead-facts">
               <% if (openRole === 'owner') { %>
               <span class="lf"><span class="lf-k">Email</span><a class="lf-v" href="mailto:<%= open.email %>"><%= open.email %></a></span>
               <% if (open.phone) { %><span class="lf"><span class="lf-k">Phone</span><a class="lf-v" href="tel:<%= String(open.phone).replace(/\s/g, '') %>"><%= open.phone %></a></span><% } %>
               <% } %>
-              <% if (open.looking_for) { %><span class="lf"><span class="lf-k">Looking for</span><b class="lf-v"><%= open.looking_for %></b></span><% } %>
+              <% if (open.looking_for) { %><span class="lf lf-look"><span class="lf-k">Looking for</span><b class="lf-v"><%= open.looking_for %></b></span><% } %>
             </div>
             <% } %>
 
@@ -350,11 +354,66 @@
     var touched = state === 'error' || !!ta.value.trim();
 
     /* Same trick as the support composer: the box stays small and only grows
-       with what is typed, so the thread above keeps the pane. */
+       with what is typed, so the thread above keeps the pane. A height the
+       member dragged by hand outranks that growth — the box holds the size
+       they chose, inside the bounds the stylesheet declares, instead of
+       snapping back on the next keystroke, and the choice survives the send
+       that follows it (the page comes back with the same thread open). */
+    var GROW_TO = 160;   /* typed text grows the box this far, then the box scrolls */
+    var FALLBACK_MIN = 80, FALLBACK_MAX = 300;   /* the stylesheet's bounds, mirrored */
+    var hKey = 'fl.leadReply.h.' + (form.getAttribute('data-draft-key') || 'x');
+    var userH = 0;       /* the height of a drag, 0 until the member makes one */
+    var wrote = '';      /* the height this script last wrote, so a drag is recognizable */
+    if (store) {
+      try { userH = parseInt(store.getItem(hKey), 10) || 0; } catch (e) { userH = 0; }
+    }
+
+    /* The stylesheet owns the bounds; read them back so the script and the CSS
+       can never disagree about how tall this box is allowed to be. */
+    function bounds() {
+      var cs = window.getComputedStyle ? window.getComputedStyle(ta) : null;
+      var lo = cs ? parseFloat(cs.minHeight) : NaN;
+      var hi = cs ? parseFloat(cs.maxHeight) : NaN;
+      if (!(lo > 0)) lo = FALLBACK_MIN;
+      if (!(hi > lo)) hi = Math.max(lo, FALLBACK_MAX);
+      return { lo: lo, hi: hi };
+    }
+
+    /* A drag on the box's own handle writes the element's inline height, so
+       anything standing there that this script did not write is the member's. */
+    function keepDrag() {
+      /* A vertical drag has no business leaving a width behind: the column owns
+         this box's width, so whatever is inline goes and the stylesheet
+         (width: 100%, border-box) governs — the card can never be wedged open. */
+      if (ta.style && ta.style.width) ta.style.width = '';
+      var now = ta.style && ta.style.height ? String(ta.style.height) : '';
+      if (!now || now === wrote) return;
+      var h = Math.round(parseFloat(now));
+      if (!(h > 0)) return;
+      userH = h;
+      if (store) { try { store.setItem(hKey, String(h)); } catch (e) { /* storage is a comfort, not a requirement */ } }
+    }
+    /* Adopt a drag the moment the member lets go instead of at the next
+       keystroke: a native handle drag fires no event of its own, so the
+       release is watched on the box and, failing that, on the window. */
+    if (ta.style) {
+      if (ta.addEventListener) {
+        ta.addEventListener('pointerup', keepDrag);
+        ta.addEventListener('pointercancel', keepDrag);
+      }
+      if (window.addEventListener) window.addEventListener('pointerup', keepDrag, { passive: true });
+    }
+
     function autoSize() {
       if (!ta.style) return; /* a detached node has nothing to size */
+      keepDrag();
+      var b = bounds();
       ta.style.height = 'auto';
-      ta.style.height = Math.min(ta.scrollHeight || 0, 160) + 'px';
+      var want = userH
+        ? Math.min(Math.max(userH, b.lo), b.hi)
+        : Math.min(Math.max(ta.scrollHeight || 0, b.lo), Math.min(GROW_TO, b.hi));
+      wrote = Math.round(want) + 'px';
+      ta.style.height = wrote;
     }
 
     /** The exact reason the message would not send — '' means it will. */

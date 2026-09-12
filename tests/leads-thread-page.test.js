@@ -14,8 +14,8 @@
  *      day separators, seam grip, pinned foot, composer with the server's
  *      limits, status, archive, delete, mailto/tel, Close, and the trail that
  *      names it and leads back to the list.
- *   2. The contact facts: one per line, the email first and what the member is
- *      looking for below it — never the old single wrapping strip.
+ *   2. The contact facts on the page they now live on: how to reach them
+ *      first, and the ask on a line of its own below — never one run-on line.
  *   3. The list page: stretched across the whole container instead of a rail,
  *      with no pane and no empty hint box beside it — and its rows, pager,
  *      tabs, counts and empty state all still there.
@@ -129,9 +129,9 @@ const DETAIL_COL = '<div class="lead-detail-col">';
     /\.lead-layout \{\s*display: grid;\s*grid-template-columns: minmax\(0, 1fr\);\s*gap: 0;/.test(css)
     && !css.includes('minmax(220px, 300px)')
     && !/\.lead-layout \{[^}]*max-width/.test(css));
-  check('the pane keeps the geometry it has always had',
+  check('the card keeps the geometry it has always had — sticky, window-tall, growing',
     /\.lead-detail \{\s*position: sticky; top: 84px;/.test(css)
-    && /\.lead-detail \{[^}]*height:\s*var\(--pane-h/.test(css));
+    && /\.lead-detail \{[^}]*height: auto;[^}]*min-height: var\(--pane-h/.test(css));
 
   console.log('Leads thread page — every feature came with it');
   check('the whole thread is there, in order, with its day separators',
@@ -177,24 +177,22 @@ const DETAIL_COL = '<div class="lead-detail-col">';
   check('and the trail never leaves a stray trailing ?',
     !/href="\/dashboard\/leads\?">/.test(ownerHtml));
 
-  console.log('Leads thread page — the contact facts read one per line');
-  check('the facts block stacks instead of wrapping into one line',
-    /\.lead-facts \{\s*display: flex; flex-direction: column; flex-wrap: nowrap;[^}]*\}/.test(css)
-    && !/\.lead-facts \{[^}]*flex-wrap: wrap/.test(css));
+  console.log('Leads thread page — the contact facts keep their two lines');
   const emailAt = ownerHtml.indexOf('lf-k">Email</span>');
   const phoneAt = ownerHtml.indexOf('lf-k">Phone</span>');
   const wantAt = ownerHtml.indexOf('lf-k">Looking for</span>');
-  check('the email is the first line', emailAt > -1 && emailAt < phoneAt && emailAt < wantAt);
-  check('what they are looking for is a line of its own below it',
-    wantAt > phoneAt && phoneAt > -1
-    && (ownerHtml.match(/class="lf"/g) || []).length === 3
+  check('how to reach them is the first line: the email, then the phone',
+    emailAt > -1 && emailAt < phoneAt && phoneAt < wantAt);
+  check('and the ask is a line of its own below it, never the tail of the address',
+    /class="lf lf-look"><span class="lf-k">Looking for/.test(ownerHtml)
+    && ownerHtml.indexOf('lf lf-look') > emailAt
+    && /\.lead-facts \.lf-look \{ flex: 0 0 100%; \}/.test(css)
     && /lf-k">Looking for<\/span><b class="lf-v">Office cleaning quote<\/b>/.test(ownerHtml));
   check('each line keeps its own label and link, and nothing became a table',
     /lf-k">Email<\/span><a class="lf-v" href="mailto:buyer@thread\.example">buyer@thread\.example<\/a>/.test(ownerHtml)
     && /lf-k">Phone<\/span><a class="lf-v" href="tel:\+254700321321">\+254 700 321 321<\/a>/.test(ownerHtml)
+    && (ownerHtml.match(/class="lf[ "]/g) || []).length === 3
     && !/<table class="facts">/.test(ownerHtml));
-  check('the labels share one column, so the values line up',
-    /\.lead-facts \.lf-k \{[^}]*min-width: 84px;/.test(css));
 
   console.log('Leads thread page — the member gets the same page, the address stays private');
   check('the Sent thread is a page too, with no rail beside it',

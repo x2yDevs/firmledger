@@ -76,25 +76,24 @@
                 length caps are enforced rather than applied silently, the
                 Sent/Received boxes say who is waiting, and both write routes
                 are really rate limited.
- *   leads-pane    the desktop conversation pane stays fixed under the header,
- *                resizes from a persisted corner grip and pins its reply foot
- *                — with the thread, bubbles and composer locked in.
-   leads-reply   the reply box holds the pane floor (a ceiling on the box, a
-                 giving thread floor, no pane scrollbar on real windows), one
-                 button extends the chat over the whole window, nothing open
-                 renders no pane at all, and the digest band no longer sits
-                 below the inbox. Includes the focus script run against a
-                 stub DOM.
-   leads-thread  the inbox is one column: an open conversation is a page of
-                 its own (no list rail beside it, centred at a readable
-                 measure, every feature of the old pane intact, the trail
-                 naming it and leading back to the filtered list), and with
-                 nothing open the list is the page — stretched across the
-                 container, with no empty pane beside it. Plus the contact
-                 facts one per line (the email first, what the member is
-                 looking for below it), and every round trip — reply, status,
-                 refused send, archive, notification deep link — landing back
-                 on the conversation for both roles.
+ *   leads-pane    the desktop conversation card parks under the header, its
+ *                window height a floor the seam grip raises and persists, its
+ *                reply foot pinned — thread, bubbles and composer locked in.
+ *   leads-reply   the reply box holds the card's floor (one floor and one
+ *                 ceiling on the box, a giving thread floor, no card scrollbar
+ *                 on real windows, the card growing by what the box gains),
+ *                 nothing open renders no pane at all, and the digest band no
+ *                 longer sits below the inbox.
+ *   leads-thread  the inbox is one column: an open conversation is a page of
+ *                 its own (no list rail beside it, centred at a readable
+ *                 measure, every feature of the old pane intact, the trail
+ *                 naming it and leading back to the filtered list), and with
+ *                 nothing open the list is the page — stretched across the
+ *                 container, with no empty pane beside it. Plus the contact
+ *                 facts on their two lines (how to reach them, then the ask
+ *                 below), and every round trip — reply, status, refused send,
+ *                 archive, notification deep link — landing back on the
+ *                 conversation for both roles.
    db-upgrade   the current schema code boots against a simulated OLD
                 production database (pre-migration tables with real rows):
                 migrations apply without throwing, the inquirer index lands
@@ -129,8 +128,8 @@ const suites = [
   ['Leads inbox — member → claimed owner → chat round trip', 'leads-inbox-e2e.test.js'],
   ['Leads housekeeping — permanent delete + email-first policy', 'leads-housekeeping.test.js'],
   ['Leads + blog fit — composer guidance, honest Sent, article rhythm', 'leads-blog-fit.test.js'],
-  ['Leads pane — fixed conversation, corner resize, chat kept', 'leads-pane-resize.test.js'],
-  ['Leads reply fit — pinned box, extending chat, clean tail', 'leads-reply-fit.test.js'],
+  ['Leads pane — conversation card, seam resize, chat kept', 'leads-pane-resize.test.js'],
+  ['Leads reply fit — bounded box, growing card, clean tail', 'leads-reply-fit.test.js'],
   ['Leads thread page — an open conversation is its own page', 'leads-thread-page.test.js'],
   ['Blog content — accuracy, stale refresh, 2026 guide', 'blog-content.test.js'],
   ['Focus hygiene — no rings on inputs & dropdowns', 'focus-hygiene.test.js'],

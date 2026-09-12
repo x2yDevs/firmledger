@@ -335,13 +335,22 @@ const qs = (o) => Object.entries(o).map(([k, v]) => `${k}=${encodeURIComponent(v
         said() { return this.children.map((c) => c.textContent).join(' '); },
       };
     }
-    function compose({ state = 'idle', reason = '', draft = null, typed = null } = {}) {
+    /* The box is a field a member resizes by hand, so the script has to size it
+       inside the bounds the stylesheet declares. Read those out of app.css and
+       answer getComputedStyle with them, the way a browser would. */
+    const inboxCss = fs.readFileSync(path.join(__dirname, '..', 'public', 'css', 'app.css'), 'utf8');
+    const [cssBoxMin, cssBoxMax] = /\.lead-reply-form \.input \{ min-height: (\d+)px; max-height: (\d+)px;/.exec(inboxCss).slice(1).map(Number);
+    const growTo = Number(/var GROW_TO = (\d+);/.exec(script)[1]);
+
+    function compose({ state = 'idle', reason = '', draft = null, typed = null, mem: seeded = null } = {}) {
       const ta = node({ 'data-min': '2', 'data-max': '4000', 'data-count': 'cnt', 'data-error': 'err' });
+      ta.style = {};          /* resizable: the browser writes its inline box here */
+      ta.scrollHeight = 0;    /* what the typed text needs */
       const counter = node({}); counter.hidden = false;
       const errEl = node({}); errEl.hidden = false;
       const form = node({ 'data-draft-key': 'lead-4-owner', 'data-reply-state': state, 'data-reason': reason });
       form.querySelector = () => ta;
-      const mem = draft === null ? {} : { 'fl.leadReply.lead-4-owner': draft };
+      const mem = seeded || (draft === null ? {} : { 'fl.leadReply.lead-4-owner': draft });
       const store = {
         getItem: (k) => (k in mem ? mem[k] : null),
         setItem: (k, v) => { mem[k] = String(v); },
@@ -352,9 +361,21 @@ const qs = (o) => Object.entries(o).map(([k, v]) => `${k}=${encodeURIComponent(v
         querySelectorAll: (sel) => (sel === '.lead-reply-form' ? [form] : []),
         createElement: () => node({}),
       };
-      new Function('document', 'window', script)(document, { sessionStorage: store });
+      new Function('document', 'window', script)(document, {
+        sessionStorage: store,
+        getComputedStyle: () => ({ minHeight: cssBoxMin + 'px', maxHeight: cssBoxMax + 'px' }),
+      });
       if (typed !== null) { ta.value = typed; ta.fire('input'); }
       return { ta, counter, errEl, form, mem };
+    }
+    /* What a drag on the box's own handle looks like from the script's side:
+       the browser writes the element's inline height (and, if it is allowed to
+       drag sideways, its width) and fires no event at all. */
+    function drag(c, h, w) {
+      c.ta.style.height = h + 'px';
+      if (w) c.ta.style.width = w + 'px';
+      c.ta.fire('input');
+      return c;
     }
 
     check('an untouched box does not scold the member', compose().errEl.hidden && !compose().form.classList.contains('has-error'));
@@ -369,6 +390,36 @@ const qs = (o) => Object.entries(o).map(([k, v]) => `${k}=${encodeURIComponent(v
     check('a refused draft is put back in the box', compose({ state: 'error', reason: 'Too short', draft: 'a' }).ta.value === 'a');
     check('a sent message drops the kept draft', !('fl.leadReply.lead-4-owner' in compose({ state: 'sent', draft: 'sent already' }).mem));
     check('typing saves as they go, so a refusal cannot cost the text', compose({ typed: 'Saved as typed' }).mem['fl.leadReply.lead-4-owner'] === 'Saved as typed');
+
+    console.log('Leads messaging — the reply box keeps the size the member drags it to');
+    check('an untouched box opens at the stylesheet floor',
+      compose().ta.style.height === cssBoxMin + 'px', compose().ta.style.height);
+    {
+      const c = compose(); c.ta.scrollHeight = 900; c.ta.value = 'x'.repeat(60); c.ta.fire('input');
+      check('typed text grows the box, but only as far as the script says',
+        c.ta.style.height === Math.min(growTo, cssBoxMax) + 'px', c.ta.style.height);
+    }
+    {
+      const c = drag(compose(), 233);
+      check('a hand-dragged height survives the next keystroke', c.ta.style.height === '233px', c.ta.style.height);
+      check('and is remembered for the send that follows it',
+        compose({ state: 'sent', mem: c.mem }).ta.style.height === '233px');
+    }
+    {
+      const c = drag(compose(), 233);
+      c.ta.scrollHeight = 40; c.ta.value = 'Short.'; c.ta.fire('input');
+      check('the drag also holds when the text needs less than it',
+        c.ta.style.height === '233px', c.ta.style.height);
+    }
+    check('a drag past the ceiling is held at it',
+      drag(compose(), cssBoxMax + 600).ta.style.height === cssBoxMax + 'px');
+    check('a drag below the floor is held at it',
+      drag(compose(), 12).ta.style.height === cssBoxMin + 'px');
+    {
+      const c = drag(compose(), 200, 742);
+      check('a sideways drag is dropped: the column owns the box width',
+        c.ta.style.width === '', JSON.stringify(c.ta.style));
+    }
   }
 })().catch((e) => { console.error(e); process.exitCode = 1; }).finally(async () => {
   server.kill();
