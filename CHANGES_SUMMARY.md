@@ -1,3 +1,51 @@
+## 2026-09-12 (leads inbox) — the reply box resizes by hand inside real bounds, and the card grows with it
+
+**The reply textarea is a field a member resizes, so it now has bounds that
+hold.** `.lead-reply-form .input` carries `min-height: 80px; max-height: 300px;
+width: 100%; box-sizing: border-box; resize: vertical` — one floor and one
+ceiling on every screen (the short-window 56px and stacked 76px overrides are
+gone: three floors for one field was the confusion), vertical drags only, and a
+width that is always exactly its column, so padding and border can never wedge
+the card open. The sizing script reads those bounds back out of
+`getComputedStyle` instead of carrying its own copy of them, and a height the
+member dragged by hand now outranks the typed-text growth: the box holds the
+size they chose (clamped to the same bounds) instead of snapping back to 160px
+on the next keystroke, and the choice is kept for the tab under
+`fl.leadReply.h.<thread>` so it survives the send that follows it. A drag that
+leaves an inline width behind has that width dropped.
+
+**The card is a flex column whose window height is a floor, not a ceiling.**
+`.lead-detail` is `height: auto` with `min-height: var(--lead-user-h,
+var(--pane-h, …))`, so at rest it is exactly as tall as the window allows — the
+same pixels, the same sticky top, the same seam drag as before — and a reply box
+dragged past what the window budgeted grows the card (the page scrolls) instead
+of pushing `Send message` out of it. The thread keeps a zero flex basis on
+desktop (`flex: 1 1 0%`) with its own scrollbar, so a long conversation never
+stretches the card: only a grown composer does, and only by as much as it grew.
+Stacked screens drop the floor (`min-height: 0`) and stay content-height; the
+desktop `overflow-y: auto` escape hatch now serves the one capped case, a pane
+the script has parked at the header stop.
+
+**The contact facts read as two lines, in order.** How to reach them (email,
+then the phone when there is one) is the first line; what they are looking for
+is the line below it (`.lf-look`, a full-row flex basis), so a long ask wraps
+under its own label instead of trailing the email address across the pane and
+reading as the tail of it.
+
+Tests: `tests/leads-messaging.test.js` runs the shipped composer script against
+a stub whose box has an inline style and whose `getComputedStyle` answers with
+the bounds read out of `app.css` — floor at rest, typed growth capped, a drag
+held against the next keystroke and the send after it, drags past the ceiling
+and below the floor clamped, a sideways drag dropped (8 checks);
+`tests/leads-reply-fit.test.js` audits the card-growth budget in place of the
+fixed-pane one (at rest the thread still keeps its full 220px floor on every
+window from 640px up, and dragged to the 300px ceiling the card grows by no
+more than the box gained); `tests/leads-pane-resize.test.js` locks the floor
+model and the thread's zero basis; `tests/leads-blog-fit.test.js` locks the
+two-line facts strip. All 31 suites pass.
+
+---
+
 ## 2026-09-12 (leads inbox) — the chat area extends from the seam, the corner mark and the full-width toggle are gone
 
 **The chat space is now extendable from the seam above the reply box.** The

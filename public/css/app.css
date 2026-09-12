@@ -2997,10 +2997,15 @@ select.input::-ms-expand,
 .lead-detail {
   position: sticky; top: 84px;
   display: flex; flex-direction: column;
-  /* The pane IS the window: exactly as tall as the viewport allows, never
-     taller, so the thread, the composer and the housekeeping line are all on
-     screen together and nothing inside the pane has to scroll twice. */
-  height: var(--pane-h, min(1060px, max(calc(100vh - 100px), 640px)));
+  /* The pane IS the window at rest: exactly as tall as the viewport allows, so
+     the thread, the composer and the housekeeping line are all on screen
+     together and nothing inside the pane has to scroll twice. That height is a
+     floor, though, not a ceiling — a reply box dragged taller than the window
+     budgeted grows the card instead of pushing Send out of it. Only the
+     composer can do that: the thread is the pane's one flexible child and
+     keeps its own scrollbar, so a long conversation never stretches the card. */
+  height: auto;
+  min-height: var(--pane-h, min(1060px, max(calc(100vh - 100px), 640px)));
   overflow: hidden;
   margin-bottom: 0;
   /* Tighter padding and a tighter header line: every row saved here is a row
@@ -3008,7 +3013,9 @@ select.input::-ms-expand,
   padding: 14px 18px 12px;
 }
 @media (max-width: 900px) {
-  .lead-detail { position: static; height: auto; max-height: none; overflow: visible; }
+  /* Stacked: the pane is content-height — no window-derived floor, no clipping;
+     the page does the scrolling. */
+  .lead-detail { position: static; height: auto; min-height: 0; max-height: none; overflow: visible; }
 }
 /* Everything but the thread is fixed-height; the thread takes the remainder. */
 .lead-detail > .panel-h-t,
@@ -3017,9 +3024,16 @@ select.input::-ms-expand,
 .lead-detail .panel-h-t h3 { margin-bottom: 6px; }
 /* Contact facts: one wrapping strip of label + value instead of a three-row
    table. Same information, same links, roughly a quarter of the height — the
-   difference goes straight into the conversation above the composer. */
+   difference goes straight into the conversation above the composer.
+   Two lines, though, never one run-on line: the way to reach them (email, and
+   the phone when there is one) is the first line, and what they are looking
+   for is the line under it — see .lf-look. */
 .lead-facts { display: flex; flex-wrap: wrap; gap: 3px 20px; margin-top: 6px; min-width: 0; }
 .lead-facts .lf { display: inline-flex; align-items: baseline; gap: 7px; min-width: 0; font-size: 13px; line-height: 1.55; }
+/* The ask owns its line: a full-row basis is all it takes to start a new one,
+   so a long "Looking for" wraps under its own label instead of trailing the
+   email address across the pane (and being read as part of it). */
+.lead-facts .lf-look { flex: 0 0 100%; }
 .lead-facts .lf-k {
   flex: 0 0 auto; color: var(--muted);
   font: 500 10px/1.7 var(--fm); letter-spacing: .12em; text-transform: uppercase;
@@ -3077,9 +3091,15 @@ select.input::-ms-expand,
 .lead-bubble-meta { display: flex; justify-content: flex-end; margin-top: 4px; font: 500 .66rem var(--fm); color: var(--muted); }
 
 /* Composer: the smallest box that still says what it accepts, so the thread
-   above keeps the height. Send, counter and the limit line share two rows. */
+   above keeps the height. Send, counter and the limit line share two rows.
+   The box is a field a member resizes by hand, so it carries real bounds:
+   80px to start with (two lines of a reply and a little air), 300px at the
+   ceiling, vertical drags only — and a width that is always exactly its
+   column, box-sizing included, so padding and border can never widen the card
+   or push Send out of it. What the box gains, the card grows by: the pane's
+   window height is a floor, not a ceiling (see the desktop pane rules). */
 .lead-reply-form { display: grid; gap: 8px; margin-top: 10px; flex: 0 0 auto; }
-.lead-reply-form .input { min-height: 66px; padding: 9px 12px; font-size: 14px; line-height: 1.5; resize: vertical; }
+.lead-reply-form .input { min-height: 80px; max-height: 300px; width: 100%; box-sizing: border-box; padding: 9px 12px; font-size: 14px; line-height: 1.5; resize: vertical; }
 .lead-reply-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .lead-delete-btn { color: var(--bad); }
 .lead-delete-btn:hover { border-color: var(--bad); color: var(--bad); }
@@ -3117,16 +3137,17 @@ select.input::-ms-expand,
 .lead-status-form.is-saving { opacity: .6; }
 .lead-status-form.is-saving select { pointer-events: none; }
 
-/* Short desktop windows: the pane cannot grow, so the fixed chrome shrinks
-   instead — padding, control heights and the two text lines around the chat.
-   Every pixel reclaimed here is a pixel the conversation keeps. */
+/* Short desktop windows: the fixed chrome shrinks instead — padding, control
+   heights and the two text lines around the chat. Every pixel reclaimed here
+   is a pixel the conversation keeps. The reply box is the one thing that does
+   not shrink: 80px is the smallest box a member can actually write a reply in,
+   and the card now grows past the window rather than clipping it. */
 @media (min-width: 901px) and (max-height: 880px) {
   .lead-detail { padding: 12px 16px 10px; }
   .lead-detail .panel-h-t h3 { margin-bottom: 4px; }
   .lead-facts { margin-top: 4px; }
   .lead-facts .lf { line-height: 1.45; }
   .lead-reply-form { margin-top: 8px; }
-  .lead-reply-form .input { min-height: 56px; }
   .lead-reply-help { font-size: 11px; line-height: 1.45; }
   .lead-detail-bar { margin-top: 8px; padding-top: 8px; }
   .lead-detail-bar .btn-sm,
@@ -3136,9 +3157,10 @@ select.input::-ms-expand,
 
 @media (max-width: 900px) {
   /* Stacked: the list scrolls inside its own rail and the conversation gets a
-     long, uncapped run of the page — no second scrollbar, no squeeze. */
+     long, uncapped run of the page — no second scrollbar, no squeeze. The
+     reply box keeps the same 80px floor it has on desktop: one bound, one
+     field, whatever the screen. */
   .lead-detail .lead-thread { min-height: min(62vh, 520px); max-height: none; }
-  .lead-reply-form .input { min-height: 76px; }
 }
 @media (max-width: 640px) {
   .dash-head { align-items: stretch; }
@@ -3184,11 +3206,19 @@ select.input::-ms-expand,
 .lead-detail > .lead-detail-foot { flex: 0 0 auto; }
 @media (min-width: 901px) {
   /* Height trade: the stored height wins, the window-derived --pane-h stays
-     the default — delete the stored size and this rule computes identically. */
-  .lead-detail { height: var(--lead-user-h, var(--pane-h, min(1060px, max(calc(100vh - 100px), 640px)))); }
+     the default — delete the stored size and this rule computes identically.
+     Either way it is the card's floor (the card itself is height: auto, above),
+     so the seam drag and a hand-dragged reply box both lengthen the pane
+     instead of squeezing it: the composer pushes the card open, it never
+     pushes Send out of it. */
+  .lead-detail { min-height: var(--lead-user-h, var(--pane-h, min(1060px, max(calc(100vh - 100px), 640px)))); }
   /* Short windows reclaim thread floor instead of clipping the composer: full
-     220px from ~734px windows up, easing to 140px on the shortest screens. */
-  .lead-detail .lead-thread { min-height: clamp(140px, 30vh, 220px); }
+     220px from ~734px windows up, easing to 140px on the shortest screens.
+     The zero basis is what keeps a content-driven card honest: the thread
+     fills every pixel the chrome does not need and keeps its own scrollbar,
+     so a long conversation never stretches the card past the window — only a
+     grown reply box does that, by exactly as much as it grew. */
+  .lead-detail .lead-thread { flex: 1 1 0%; min-height: clamp(140px, 30vh, 220px); }
   /* Pinned foot: Send + housekeeping hold the pane bottom while the thread
      above scrolls. Scoped to desktop — on stacked screens the composer sits at
      the natural end of the thread, never overlaying it. */
@@ -3338,8 +3368,10 @@ body.is-lead-resizing, body.is-lead-resizing .lead-detail { cursor: ns-resize; u
 .lead-facts, .lead-detail .panel-h-t, .lead-detail > .muted {
   min-width: 0; overflow-wrap: anywhere;
 }
-/* On short desktop viewports (or with a resized composer), allow access to
-   controls rather than clipping them below the fixed-height detail pane. */
+/* The card grows with a resized composer rather than clipping it, so this
+   scrollbar is the escape hatch for the one case where a card is capped: a
+   pane the script has parked at the header stop (inline max-height) scrolls
+   inside itself, which keeps every control in it reachable. */
 @media (min-width: 901px) {
   .lead-detail { overflow-y: auto; }
 }
@@ -3436,8 +3468,10 @@ select:not(:where(.chat-model-pick select))::-ms-expand { display: none; }
    top, one pinned foot, the seam drag): these are the four gaps it left.
 
    1. Reply box: the composer is the pane's floor, so its own growth can never
-      push Send out of the pane. A hand-dragged box now stops where the pane
-      stops paying for it.
+      push Send out of the pane. Its bounds are declared once, with the
+      composer itself: 80px to 300px, dragged vertically only, and always
+      exactly as wide as its column. What it gains past the window's budget,
+      the card grows by — see the pane rules above.
    2. Chat area: extendable from the seam just above the reply box — the grip
       lengthens or shortens the conversation, and the thread gives height back
       on a short window instead of growing a second scrollbar inside the pane
@@ -3448,7 +3482,6 @@ select:not(:where(.chat-model-pick select))::-ms-expand { display: none; }
       all (hideNews in src/routes/dashboard.js), so scrolling past the
       conversation lands on the footer instead of a logo, and the section's
       bottom air tightens to match. */
-.lead-reply-form .input { max-height: 240px; }
 
 /* Short desktop windows: 96px is two bubbles of chat, and the whole foot —
    Send, counter, status line — stays inside the pane. Below ~516px of height
