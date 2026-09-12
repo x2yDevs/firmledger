@@ -1,25 +1,27 @@
 /**
- * Leads inbox — an open conversation is a page of its own.
+ * Leads inbox — one column: an open conversation is a page, the list is a page.
  * npm run test:leads-thread
  *
- * Pressing an inquiry used to open the thread in the right-hand pane while the
- * list stayed pinned on the left, so the conversation got the leftover
- * two-thirds of the screen and its contact facts ran together on one line.
- * This suite locks in the page it is now, without touching anything else:
+ * The inbox used to be two columns at all times: a 220/300px list rail pinned
+ * on the left and a pane beside it that held the conversation when one was
+ * open, or an empty "select an inquiry" box when none was. So the thing being
+ * read got the leftover two-thirds of the screen, and the list got a rail.
+ * This suite locks in the single-column inbox it is now, without touching
+ * anything else:
  *
- *   1. The conversation page: no list rail beside it, the column takes the
- *      whole width centred at a readable measure, and every feature the pane
- *      had is still on it — thread, day separators, seam grip, pinned foot,
- *      composer with the server's limits, status, archive, delete, mailto/tel,
- *      Close, and the trail that names it and leads back to the list.
+ *   1. The conversation page: no list rail beside it, the column centred at a
+ *      readable measure, and every feature the pane had still on it — thread,
+ *      day separators, seam grip, pinned foot, composer with the server's
+ *      limits, status, archive, delete, mailto/tel, Close, and the trail that
+ *      names it and leads back to the list.
  *   2. The contact facts: one per line, the email first and what the member is
  *      looking for below it — never the old single wrapping strip.
- *   3. The inbox list: untouched. Its rail, its hint pane, its tabs and its
- *      row links all render exactly as before, and the two-column geometry in
- *      the stylesheet is still there for it.
- *   4. The round trips: a reply, a status change, a refused send and the
- *      email/notification deep links all land back on the conversation page —
- *      never on the list, never on a pane beside it.
+ *   3. The list page: stretched across the whole container instead of a rail,
+ *      with no pane and no empty hint box beside it — and its rows, pager,
+ *      tabs, counts and empty state all still there.
+ *   4. The round trips: a reply, a status change, a refused send, an archive
+ *      and the email/notification deep links all land back on the conversation
+ *      page — never on the list, never on a pane beside it.
  *   5. Both roles: the business sees the member's address and phone; the
  *      member sees the same page with the business email still private.
  */
@@ -78,6 +80,10 @@ async function call(route, who = null, form = null) {
 }
 const text = (res) => res.text();
 const loc = (res) => decodeURIComponent(res.headers.get('location') || '');
+/* The pane script names both columns in its selectors, so what gets asserted
+   is the element the view renders, not the string somewhere on the page. */
+const LIST_COL = '<div class="lead-list-col">';
+const DETAIL_COL = '<div class="lead-detail-col">';
 
 (async () => {
   await new Promise((resolve, reject) => {
@@ -112,17 +118,17 @@ const loc = (res) => decodeURIComponent(res.headers.get('location') || '');
 
   console.log('Leads thread page — the conversation takes the page, not a pane beside the list');
   check('the thread page ships no list rail and no rows',
-    !ownerHtml.includes('lead-list-col') && !ownerHtml.includes('class="lead-row')
+    !ownerHtml.includes(LIST_COL) && !ownerHtml.includes('class="lead-row')
     && !ownerHtml.includes('lead-list-scroll'));
-  check('and it says so in the layout it renders',
-    ownerHtml.includes('class="lead-layout lead-layout-thread"')
-    && ownerHtml.indexOf('lead-layout-thread') < ownerHtml.indexOf('panel lead-detail'));
-  check('the column is the whole width, centred at a readable measure',
-    /\.lead-layout\.lead-layout-thread \{ grid-template-columns: minmax\(0, 1fr\); gap: 0; \}/.test(css)
-    && /\.lead-layout-thread \.lead-detail-col \{[^}]*max-width: min\(1040px, 100%\);[^}]*margin-inline: auto;/.test(css));
-  check('the measure is scoped to an open thread, never to the list',
-    !/\.lead-layout \{[^}]*max-width/.test(css)
-    && /\.lead-layout \{[^}]*grid-template-columns: minmax\(220px, 300px\) minmax\(0, 1fr\);/.test(css));
+  check('the inbox renders one column, and it is the conversation',
+    ownerHtml.includes('class="lead-layout"') && ownerHtml.includes(DETAIL_COL)
+    && ownerHtml.indexOf(DETAIL_COL) < ownerHtml.indexOf('panel lead-detail'));
+  check('the conversation keeps a readable measure, centred in the container',
+    /\.lead-detail-col \{ width: 100%; max-width: min\(1040px, 100%\); margin-inline: auto; \}/.test(css));
+  check('the grid is one column now, whichever side is showing',
+    /\.lead-layout \{\s*display: grid;\s*grid-template-columns: minmax\(0, 1fr\);\s*gap: 0;/.test(css)
+    && !css.includes('minmax(220px, 300px)')
+    && !/\.lead-layout \{[^}]*max-width/.test(css));
   check('the pane keeps the geometry it has always had',
     /\.lead-detail \{\s*position: sticky; top: 84px;/.test(css)
     && /\.lead-detail \{[^}]*height:\s*var\(--pane-h/.test(css));
@@ -161,7 +167,7 @@ const loc = (res) => decodeURIComponent(res.headers.get('location') || '');
   const trail = /<nav class="breadcrumbs"[^>]*>([\s\S]*?)<\/nav>/.exec(ownerHtml)[1];
   check('the trail is Dashboard › Leads inbox › the inquiry',
     trail.includes('<a href="/dashboard">Dashboard</a>')
-    && trail.includes(`<a href="/dashboard/leads">Leads inbox</a>`)
+    && trail.includes('<a href="/dashboard/leads">Leads inbox</a>')
     && trail.includes('<span>Thread Buyer</span>')
     && trail.indexOf('Leads inbox') < trail.indexOf('Thread Buyer'));
   const filtered = await text(await call(`/dashboard/leads?status=new&open=${lead.id}`, 'owner'));
@@ -187,10 +193,12 @@ const loc = (res) => decodeURIComponent(res.headers.get('location') || '');
     /lf-k">Email<\/span><a class="lf-v" href="mailto:buyer@thread\.example">buyer@thread\.example<\/a>/.test(ownerHtml)
     && /lf-k">Phone<\/span><a class="lf-v" href="tel:\+254700321321">\+254 700 321 321<\/a>/.test(ownerHtml)
     && !/<table class="facts">/.test(ownerHtml));
+  check('the labels share one column, so the values line up',
+    /\.lead-facts \.lf-k \{[^}]*min-width: 84px;/.test(css));
 
   console.log('Leads thread page — the member gets the same page, the address stays private');
   check('the Sent thread is a page too, with no rail beside it',
-    buyerHtml.includes('lead-layout-thread') && !buyerHtml.includes('lead-list-col'));
+    buyerHtml.includes(DETAIL_COL) && !buyerHtml.includes(LIST_COL));
   check('its trail names the business',
     /<a href="\/dashboard\/leads\?box=sent">Leads inbox<\/a><span aria-hidden="true">›<\/span><span>Thread Cleaners<\/span>/.test(buyerHtml));
   check('the same thread, sides mirrored',
@@ -203,19 +211,32 @@ const loc = (res) => decodeURIComponent(res.headers.get('location') || '');
     && !buyerHtml.includes('owner@thread.example'));
   check('and keeps their own housekeeping', buyerHtml.includes('Delete conversation'));
 
-  console.log('Leads inbox list — the page the conversation is opened from is unchanged');
-  check('the list still has its rail, its rows and its hint pane',
-    plainHtml.includes('lead-list-col') && plainHtml.includes('lead-list-scroll')
-    && plainHtml.includes('lead-detail-empty') && !plainHtml.includes('lead-layout-thread'));
+  console.log('Leads inbox list — nothing open, the list is the whole page');
+  check('the list keeps its frame and its rows',
+    plainHtml.includes(LIST_COL) && plainHtml.includes('lead-list-scroll')
+    && plainHtml.includes('class="lead-row is-new"'));
+  check('and ships no pane, no rail and no empty hint box beside them',
+    !plainHtml.includes(DETAIL_COL) && !plainHtml.includes('panel lead-detail')
+    && !plainHtml.includes('lead-detail-empty') && !css.includes('lead-detail-empty'));
+  check('it stretches the container instead of sitting in a 300px rail',
+    !/\.lead-list-col \{[^}]*max-width/.test(css)
+    && /\.lead-list-col \{ position: sticky; top: 84px; max-height:/.test(css)
+    && /\.lead-list-col \{[^}]*max-height:\s*var\(--pane-h/.test(css));
+  check('on stacked screens the list runs the page, not a capped box',
+    /@media \(max-width: 900px\) \{[\s\S]{0,400}?\.lead-list-col \{ max-height: none; \}/.test(css)
+    && !css.includes('min(34vh, 300px)'));
   check('a row still links to the conversation',
-    plainHtml.includes(`class="lead-row is-new" href="${threadUrl}"`)
-    || plainHtml.includes(`href="${threadUrl}"`));
+    plainHtml.includes(`class="lead-row is-new" href="${threadUrl}"`));
   check('the tabs and their counts are all still there',
     />Received <span class="lead-n">1<\/span>/.test(plainHtml)
     && /class="lead-tab[^"]*" href="\/dashboard\/leads\?box=sent">Sent/.test(plainHtml)
     && />Archived <span class="lead-n">0<\/span>/.test(plainHtml)
     && />New <span class="lead-n">1<\/span>/.test(plainHtml));
   check('the list page ships no facts block of its own', !plainHtml.includes('class="lead-facts"'));
+  const noneHtml = await text(await call('/dashboard/leads?status=lost', 'owner'));
+  check('a filter with nothing in it says so, across the full width',
+    noneHtml.includes(LIST_COL) && noneHtml.includes('No lost leads')
+    && noneHtml.includes('Clear filters') && !noneHtml.includes(DETAIL_COL));
 
   console.log('Leads thread page — every round trip lands back on the conversation');
   const reply = await call(`/dashboard/leads/${lead.id}/reply`, 'owner', {
@@ -225,9 +246,9 @@ const loc = (res) => decodeURIComponent(res.headers.get('location') || '');
   check('a reply redirects back to the conversation, not to the list',
     reply.status === 302 && loc(reply).includes(`open=${lead.id}`) && loc(reply).includes('Message sent'), loc(reply));
   const afterReply = await text(await call(loc(reply).replace(/&?(ok|sent)=[^&]*/g, ''), 'owner'));
-  check('and the page it lands on is still a page of its own',
-    afterReply.includes('Confirming Monday 8am') && afterReply.includes('lead-layout-thread')
-    && !afterReply.includes('lead-list-col'));
+  check('and the page it lands on is still the conversation alone',
+    afterReply.includes('Confirming Monday 8am') && afterReply.includes(DETAIL_COL)
+    && !afterReply.includes(LIST_COL));
 
   const status = await call(`/dashboard/leads/${lead.id}/status`, 'owner', {
     _csrf: s.owner.csrf, status: 'won', ctx_box: 'received', ctx_status: 'new', ctx_page: '1',
@@ -236,7 +257,7 @@ const loc = (res) => decodeURIComponent(res.headers.get('location') || '');
     status.status === 302 && /\?status=new&open=\d+&ok=/.test(status.headers.get('location') || ''), loc(status));
   const afterStatus = await text(await call(`/dashboard/leads?open=${lead.id}`, 'owner'));
   check('the conversation states the new status where it was set',
-    afterStatus.includes('data-lead-pill-current>Won<') && afterStatus.includes('lead-layout-thread'));
+    afterStatus.includes('data-lead-pill-current>Won<') && !afterStatus.includes('lead-list-col'));
 
   const refused = await call(`/dashboard/leads/${lead.id}/reply`, 'owner', { _csrf: s.owner.csrf, body: 'a' });
   check('a refused reply is explained on the conversation page',
@@ -245,14 +266,15 @@ const loc = (res) => decodeURIComponent(res.headers.get('location') || '');
   check('inside the composer of a page with no rail beside it',
     /class="lead-reply-form has-error"/.test(refusedPage)
     && /Too short to send/.test(refusedPage)
-    && refusedPage.includes('lead-layout-thread') && !refusedPage.includes('lead-list-col'));
+    && refusedPage.includes(DETAIL_COL) && !refusedPage.includes(LIST_COL));
 
   const notif = db.prepare("SELECT url FROM notifications WHERE user_id=? AND kind='lead' ORDER BY id DESC").get(owner);
   check('the notification deep link still opens the conversation',
     !!notif && notif.url === threadUrl);
   const fromNotif = await text(await call(notif.url, 'owner'));
-  check('and that link lands on the page, not on a pane',
-    fromNotif.includes('lead-layout-thread') && fromNotif.includes('twelve desks in Westlands'));
+  check('and that link lands on the conversation, not on a list',
+    fromNotif.includes(DETAIL_COL) && fromNotif.includes('twelve desks in Westlands')
+    && !fromNotif.includes(LIST_COL));
 
   const archive = await call(`/dashboard/leads/${lead.id}/archive`, 'owner', {
     _csrf: s.owner.csrf, archived: '1', ctx_box: 'received', ctx_page: '1',
@@ -260,9 +282,13 @@ const loc = (res) => decodeURIComponent(res.headers.get('location') || '');
   check('archiving still returns to the received list',
     archive.status === 302 && (archive.headers.get('location') || '').includes('/dashboard/leads')
     && !(archive.headers.get('location') || '').includes('open='), loc(archive));
+  const backToList = await text(await call(archive.headers.get('location').split('?')[0] + '?box=archived', 'owner'));
+  check('and the archived list is the whole page too',
+    backToList.includes(LIST_COL) && backToList.includes('Thread Buyer')
+    && !backToList.includes(DETAIL_COL));
   const archivedThread = await text(await call(threadUrl, 'owner'));
   check('the archived conversation still opens as its own page',
-    archivedThread.includes('lead-layout-thread') && archivedThread.includes('Restore to inbox'));
+    archivedThread.includes(DETAIL_COL) && archivedThread.includes('Restore to inbox'));
 
   console.log('\n' + '='.repeat(64));
   if (process.exitCode) console.log(`Leads thread page: ${passed} passed, with failures above`);

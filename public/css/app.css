@@ -2920,21 +2920,22 @@ select.input::-ms-expand,
 .lead-tab.on .lead-n { background: rgba(255,255,255,.2); color: #fff; }
 .lead-n { display: inline-flex; min-width: 22px; justify-content: center; padding: 0 6px; border-radius: 999px; background: var(--soft); color: var(--muted); font: 600 11px/1.9 var(--fm); }
 
-/* Chat-first shell: the two panes are sized by the window, not by a guess.
-   Each column is exactly the space left under the sticky site header
-   (100dvh − 100px) and scrolls inside itself, so the conversation is never
+/* Chat-first shell: the inbox is ONE column, sized by the window rather than
+   by a guess — either the list or the conversation, never both side by side.
+   Whichever is on screen is exactly the space left under the sticky site
+   header (100dvh − 100px) and scrolls inside itself, so neither is ever
    handed a box taller than the viewport it is drawn in — the failure mode
    that used to bury the composer below the fold and give the pane a second
    scrollbar. Inside the pane the thread is the only flexible child, so every
-   pixel between the facts strip and the composer belongs to the chat. */
+   pixel between the facts lines and the composer belongs to the chat. */
 .lead-layout {
   display: grid;
-  grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
-  gap: 16px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
   align-items: start;
-  /* One height, both panes: the window minus the sticky header, never less
-     than 640px (below that the page scrolls a little rather than squeezing
-     the conversation) and never more than 1060px. */
+  /* One height for whichever column is showing: the window minus the sticky
+     header, never less than 640px (below that the page scrolls a little rather
+     than squeezing the conversation) and never more than 1060px. */
   --pane-h: min(1060px, max(calc(100vh - 100px), 640px));
 }
 @supports (height: 100dvh) {
@@ -2945,15 +2946,20 @@ select.input::-ms-expand,
   min-width: 0; min-height: 0;
   display: flex; flex-direction: column;
 }
-/* 68px sticky header + hairline + a little air; both panes pin there and both
-   stop at the bottom of the window. */
+/* 68px sticky header + hairline + a little air; whichever column is on screen
+   pins there and stops at the bottom of the window. */
 .lead-list-col { position: sticky; top: 84px; max-height: var(--pane-h, min(1060px, max(calc(100vh - 100px), 640px))); }
+/* The list stretches the whole container — it is a table of rows, and a row
+   reads better wide (the preview and the meta line stop being ellipsised at
+   300px). The conversation keeps a measure instead: wide enough for a real
+   chat, narrow enough that a bubble is never read across 1340px. */
+.lead-detail-col { width: 100%; max-width: min(1040px, 100%); margin-inline: auto; }
 @media (max-width: 900px) {
-  /* Stacked: the list is a short framed rail above the conversation, and the
-     page — not a pane — does the scrolling. */
-  .lead-layout { grid-template-columns: 1fr; gap: 14px; }
+  /* Stacked screens: the list is the whole page — no capped rail with a pane
+     under it — so the frame runs its full length and the page does the
+     scrolling instead of a box inside it. */
   .lead-list-col, .lead-detail-col { position: static; }
-  .lead-list-col { max-height: min(34vh, 300px); }
+  .lead-list-col { max-height: none; }
 }
 /* The list is one framed column, not a box of boxes: every inquiry is a flat
    row inside it, separated by a hairline, and the frame is what scrolls. */
@@ -3036,13 +3042,6 @@ select.input::-ms-expand,
 .lead-facts .lf-v { min-width: 0; color: var(--ink2); font-weight: 500; overflow-wrap: anywhere; }
 .lead-facts a.lf-v { color: var(--accent2); }
 .lead-facts a.lf-v:hover { color: var(--accent); text-decoration: underline; }
-/* Nothing selected yet: the pane is chat-height now, so its one line sits in
-   the middle of it instead of stranded at the top of an empty box. */
-.lead-detail-empty {
-  color: var(--muted); font-size: 13.5px;
-  align-items: center; justify-content: center; text-align: center;
-}
-.lead-detail-empty p { max-width: 46ch; }
 .lead-msg { margin: 14px 0 0; padding: 14px 16px; border: 1px solid var(--hair); border-radius: 10px; background: var(--paper); font-size: 14px; line-height: 1.7; white-space: normal; }
 .lead-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
 
@@ -3440,28 +3439,6 @@ select:not(:where(.chat-model-pick select)) {
 }
 select:not(:where(.chat-model-pick select))::-ms-expand { display: none; }
 
-/* ============ Leads inbox — an open conversation is a page of its own ============
-   Pressing an inquiry used to open the thread in the right-hand pane while the
-   list stayed pinned on the left, so the chat — the thing being read — got the
-   leftover two-thirds of the screen. It is a page now: the view renders no list
-   rail beside an open thread, and this block gives the column the whole width,
-   centred at a measure a conversation reads well at.
-
-   Nothing inside the pane changes: the header, the contact-fact lines, the
-   thread, the seam grip, the composer and the status/archive/delete line are
-   the same markup with the same window-derived height. The rule is scoped to
-   .lead-layout-thread, which is rendered only when a thread is open, so the
-   inbox list keeps exactly the geometry it has always had — and the pane's own
-   sticky top, dock and resize behaviour carry over untouched. */
-.lead-layout.lead-layout-thread { grid-template-columns: minmax(0, 1fr); gap: 0; }
-.lead-layout-thread .lead-detail-col {
-  width: 100%;
-  /* Wide enough for a real conversation, narrow enough that a bubble never has
-     to be read across the whole of a 1340px container. */
-  max-width: min(1040px, 100%);
-  margin-inline: auto;
-}
-
 /* ============ Leads inbox — the chat extends, the reply box holds, the page ends clean ============
    The inbox shell it builds on is untouched (window-derived pane height, sticky
    top, one pinned foot, the seam drag): these are the four gaps it left.
@@ -3473,8 +3450,9 @@ select:not(:where(.chat-model-pick select))::-ms-expand { display: none; }
       lengthens or shortens the conversation, and the thread gives height back
       on a short window instead of growing a second scrollbar inside the pane
       (see [data-lead-thread-grip] in views/dashboard/leads.ejs).
-   3. Nothing selected: the invitation is a compact panel, not a window-tall
-      white box beside a three-row list.
+   3. Nothing selected: no pane is rendered at all — the list is the whole
+      page, stretched across the container (the compact invitation panel that
+      used to sit beside a three-row rail went with the two-column inbox).
    4. Below the inbox: the weekly-digest band is not rendered on this route at
       all (hideNews in src/routes/dashboard.js), so scrolling past the
       conversation lands on the footer instead of a logo, and the section's
@@ -3487,9 +3465,6 @@ select:not(:where(.chat-model-pick select))::-ms-expand { display: none; }
 @media (min-width: 901px) and (max-height: 880px) {
   .lead-detail .lead-thread { min-height: 96px; }
 }
-
-/* No conversation open: the pane keeps an inviting measure, not the window. */
-.lead-detail.lead-detail-empty { height: auto; min-height: 208px; padding: 26px 18px; }
 
 /* The header's right edge: the Close link, kept out of the way. */
 .lead-pane-tools { display: inline-flex; align-items: center; gap: 10px; align-self: center; flex: 0 0 auto; }

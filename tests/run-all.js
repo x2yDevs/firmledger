@@ -82,17 +82,19 @@
    leads-reply   the reply box holds the pane floor (a ceiling on the box, a
                  giving thread floor, no pane scrollbar on real windows), one
                  button extends the chat over the whole window, nothing open
-                 is a compact panel, and the digest band no longer sits below
-                 the inbox. Includes the focus script run against a stub DOM.
-   leads-thread  an open conversation is a page of its own: no list rail
-                 beside it, the column takes the whole width and centres at a
-                 readable measure, the contact facts read one per line (the
-                 email first, what the member is looking for below it), every
-                 feature of the old pane came with it, the trail names the
-                 conversation and leads back to the filtered list, the inbox
-                 list itself is untouched, and every round trip — reply,
-                 status, refused send, archive, notification deep link —
-                 lands back on the conversation for both roles.
+                 renders no pane at all, and the digest band no longer sits
+                 below the inbox. Includes the focus script run against a
+                 stub DOM.
+   leads-thread  the inbox is one column: an open conversation is a page of
+                 its own (no list rail beside it, centred at a readable
+                 measure, every feature of the old pane intact, the trail
+                 naming it and leading back to the filtered list), and with
+                 nothing open the list is the page — stretched across the
+                 container, with no empty pane beside it. Plus the contact
+                 facts one per line (the email first, what the member is
+                 looking for below it), and every round trip — reply, status,
+                 refused send, archive, notification deep link — landing back
+                 on the conversation for both roles.
    db-upgrade   the current schema code boots against a simulated OLD
                 production database (pre-migration tables with real rows):
                 migrations apply without throwing, the inquirer index lands

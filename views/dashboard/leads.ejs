@@ -115,12 +115,13 @@
         </div>
       </div>
     <% } else { %>
-      <% /* An open conversation takes the page: the list rail is not rendered
-            beside it any more, so the chat, the composer and the housekeeping
-            line get a full, centred measure instead of a pane squeezed into
-            the right-hand two-thirds. With nothing open the inbox keeps the
-            list-and-hint layout it has always had. */ %>
-      <div class="lead-layout<%= open ? ' lead-layout-thread' : '' %>">
+      <% /* One column either way — the inbox never shows two things at once
+            now. An open conversation is the page (no list rail beside it, so
+            the chat, the composer and the housekeeping line get a full,
+            centred measure); with nothing open the list is the page, stretched
+            across the whole container instead of pinned as a rail beside an
+            empty pane. */ %>
+      <div class="lead-layout">
         <% if (!open) { %>
         <div class="lead-list-col">
           <% if (!box.rows.length) { %>
@@ -158,10 +159,8 @@
             <% } %>
           <% } %>
         </div>
-        <% } %>
-
+        <% } else { %>
         <div class="lead-detail-col">
-          <% if (open) { %>
           <div class="panel lead-detail">
             <% /* The status the owner last set is stated where it was set, so a
                   change is confirmed in the header of the conversation it was
@@ -296,12 +295,8 @@
             <% } %>
             </div>
           </div>
-          <% } else if (box.rows.length) { %>
-          <div class="panel lead-detail lead-detail-empty">
-            <p class="muted"><%= isSent ? 'Select a conversation to keep talking with the business.' : 'Select an inquiry to read it, reply and set its status.' %></p>
-          </div>
-          <% } %>
         </div>
+        <% } %>
       </div>
     <% } %>
   </div>

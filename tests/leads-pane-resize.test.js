@@ -157,10 +157,11 @@ async function call(route, who = null, form = null) {
     !ownerHtml.includes('data-lead-resize') && !ownerHtml.includes('class="lead-resize"')
     && !ownerHtml.includes('--lead-list-w'));
   const plainHtml = await (await call('/dashboard/leads', 'owner')).text();
-  check('no-open pane ships no grip and no foot',
+  check('nothing open ships no pane at all — no grip, no foot, no rail beside the list',
     !/<div[^>]*data-lead-thread-grip/.test(plainHtml)
     && !/class="lead-detail-foot"/.test(plainHtml)
-    && plainHtml.includes('lead-detail-empty'));
+    && !/<div class="lead-detail-col">/.test(plainHtml)
+    && plainHtml.includes('<div class="lead-list-col">'));
 
   const reply = await call(`/dashboard/leads/${lead.id}/reply`, 'owner',
     { _csrf: s.owner.csrf, body: 'Confirming Monday 8am — see you then.' });
