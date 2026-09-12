@@ -84,6 +84,15 @@
                  button extends the chat over the whole window, nothing open
                  is a compact panel, and the digest band no longer sits below
                  the inbox. Includes the focus script run against a stub DOM.
+   leads-thread  an open conversation is a page of its own: no list rail
+                 beside it, the column takes the whole width and centres at a
+                 readable measure, the contact facts read one per line (the
+                 email first, what the member is looking for below it), every
+                 feature of the old pane came with it, the trail names the
+                 conversation and leads back to the filtered list, the inbox
+                 list itself is untouched, and every round trip — reply,
+                 status, refused send, archive, notification deep link —
+                 lands back on the conversation for both roles.
    db-upgrade   the current schema code boots against a simulated OLD
                 production database (pre-migration tables with real rows):
                 migrations apply without throwing, the inquirer index lands
@@ -120,6 +129,7 @@ const suites = [
   ['Leads + blog fit — composer guidance, honest Sent, article rhythm', 'leads-blog-fit.test.js'],
   ['Leads pane — fixed conversation, corner resize, chat kept', 'leads-pane-resize.test.js'],
   ['Leads reply fit — pinned box, extending chat, clean tail', 'leads-reply-fit.test.js'],
+  ['Leads thread page — an open conversation is its own page', 'leads-thread-page.test.js'],
   ['Blog content — accuracy, stale refresh, 2026 guide', 'blog-content.test.js'],
   ['Focus hygiene — no rings on inputs & dropdowns', 'focus-hygiene.test.js'],
   ['Production database upgrade', 'db-upgrade.test.js'],

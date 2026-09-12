@@ -47,7 +47,10 @@
 <section class="page-head leads-head">
   <div class="container dash-head">
     <div>
-      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/dashboard">Dashboard</a><span aria-hidden="true">›</span><span>Leads</span></nav>
+      <% /* An open conversation is a page of its own, so the trail names it and
+            “Leads inbox” becomes the way back to the list it was opened from —
+            carrying the filters and the page that list was showing. */ %>
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/dashboard">Dashboard</a><span aria-hidden="true">›</span><% if (open) { %><a href="<%= leadUrl([]) %>">Leads inbox</a><span aria-hidden="true">›</span><span><%= openRole === 'inquirer' ? open.listing_name : open.name %></span><% } else { %><span>Leads</span><% } %></nav>
       <h1>Leads inbox</h1>
       <p class="muted">Talk with verified businesses you contacted — and manage inquiries on listings you own. Your FirmLedger email is used automatically; the business email stays private.</p>
     </div>
@@ -112,7 +115,13 @@
         </div>
       </div>
     <% } else { %>
-      <div class="lead-layout">
+      <% /* An open conversation takes the page: the list rail is not rendered
+            beside it any more, so the chat, the composer and the housekeeping
+            line get a full, centred measure instead of a pane squeezed into
+            the right-hand two-thirds. With nothing open the inbox keeps the
+            list-and-hint layout it has always had. */ %>
+      <div class="lead-layout<%= open ? ' lead-layout-thread' : '' %>">
+        <% if (!open) { %>
         <div class="lead-list-col">
           <% if (!box.rows.length) { %>
             <div class="empty-state">
@@ -149,13 +158,14 @@
             <% } %>
           <% } %>
         </div>
+        <% } %>
 
         <div class="lead-detail-col">
           <% if (open) { %>
           <div class="panel lead-detail">
             <% /* The status the owner last set is stated where it was set, so a
-                  change is confirmed in the pane it came from — not only in the
-                  list to the left after the chat is closed. */ %>
+                  change is confirmed in the header of the conversation it was
+                  made on — not only back in the inbox list. */ %>
             <div class="panel-h-t">
               <h3><%= openRole === 'inquirer' ? open.listing_name : open.name %><% if (openRole === 'owner') { %> <span class="pill pill-lead-<%= open.status %>" data-lead-pill-current><%= STATUS_LABELS[open.status] %></span><% } %></h3>
               <span class="lead-pane-tools">
@@ -170,10 +180,10 @@
               <% } %>
             </p>
 
-            <% /* Contact facts as one compact strip instead of a three-row
-                  table: same labels, same mailto/tel links, but the block
-                  costs the conversation a couple of lines instead of a
-                  hundred vertical pixels. */ %>
+            <% /* Contact facts on their own lines instead of one crowded
+                  strip: the address first, then what the member is looking
+                  for below it. Same labels, same mailto/tel links — and still
+                  no three-row table costing the conversation its height. */ %>
             <% if (openRole === 'owner' || open.looking_for) { %>
             <div class="lead-facts">
               <% if (openRole === 'owner') { %>

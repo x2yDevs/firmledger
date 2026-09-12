@@ -3015,13 +3015,22 @@ select.input::-ms-expand,
 .lead-detail > .muted,
 .lead-detail > .lead-facts { flex: 0 0 auto; }
 .lead-detail .panel-h-t h3 { margin-bottom: 6px; }
-/* Contact facts: one wrapping strip of label + value instead of a three-row
-   table. Same information, same links, roughly a quarter of the height — the
-   difference goes straight into the conversation above the composer. */
-.lead-facts { display: flex; flex-wrap: wrap; gap: 3px 20px; margin-top: 6px; min-width: 0; }
+/* Contact facts: label + value pairs, one fact per line — the email first (and
+   the phone under it), then what the member is looking for below that. They
+   used to share a single wrapping strip, which ran the address and the subject
+   together on one crowded line and broke wherever it liked. Same information,
+   same links, still no table: two or three short lines above the chat. */
+.lead-facts {
+  display: flex; flex-direction: column; flex-wrap: nowrap; align-items: flex-start;
+  gap: 5px; margin-top: 6px; min-width: 0;
+}
 .lead-facts .lf { display: inline-flex; align-items: baseline; gap: 7px; min-width: 0; font-size: 13px; line-height: 1.55; }
 .lead-facts .lf-k {
-  flex: 0 0 auto; color: var(--muted);
+  /* One label column: at 10px mono + .12em tracking the longest label here
+     (“LOOKING FOR”) measures ~80px, so every value starts on the same line —
+     the three rows read as one small definition list, not as three ragged
+     sentences. */
+  flex: 0 0 auto; min-width: 84px; color: var(--muted);
   font: 500 10px/1.7 var(--fm); letter-spacing: .12em; text-transform: uppercase;
 }
 .lead-facts .lf-v { min-width: 0; color: var(--ink2); font-weight: 500; overflow-wrap: anywhere; }
@@ -3430,6 +3439,28 @@ select:not(:where(.chat-model-pick select)) {
   cursor: pointer;
 }
 select:not(:where(.chat-model-pick select))::-ms-expand { display: none; }
+
+/* ============ Leads inbox — an open conversation is a page of its own ============
+   Pressing an inquiry used to open the thread in the right-hand pane while the
+   list stayed pinned on the left, so the chat — the thing being read — got the
+   leftover two-thirds of the screen. It is a page now: the view renders no list
+   rail beside an open thread, and this block gives the column the whole width,
+   centred at a measure a conversation reads well at.
+
+   Nothing inside the pane changes: the header, the contact-fact lines, the
+   thread, the seam grip, the composer and the status/archive/delete line are
+   the same markup with the same window-derived height. The rule is scoped to
+   .lead-layout-thread, which is rendered only when a thread is open, so the
+   inbox list keeps exactly the geometry it has always had — and the pane's own
+   sticky top, dock and resize behaviour carry over untouched. */
+.lead-layout.lead-layout-thread { grid-template-columns: minmax(0, 1fr); gap: 0; }
+.lead-layout-thread .lead-detail-col {
+  width: 100%;
+  /* Wide enough for a real conversation, narrow enough that a bubble never has
+     to be read across the whole of a 1340px container. */
+  max-width: min(1040px, 100%);
+  margin-inline: auto;
+}
 
 /* ============ Leads inbox — the chat extends, the reply box holds, the page ends clean ============
    The inbox shell it builds on is untouched (window-derived pane height, sticky

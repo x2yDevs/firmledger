@@ -488,20 +488,22 @@ async function call(route, who = null, form = null) {
         check(`${label} Send is on screen at the foot of the page`, sendBottom <= height + 1,
           `${Math.round(sendBottom)} > ${height}`);
         /* A real pointer drag: shorten the chat 100px, survive reload, restore.
-           The list column must not move — the seam trades height only. */
+           Nothing may change width — the seam trades height only. The
+           conversation is a page of its own now (no list rail beside it), so
+           the pane's own width is the measure that has to hold still. */
         await page.evaluate(() => window.scrollTo(0, 0));
         const h0 = (await pane.boundingBox()).height;
-        const w0 = (await page.locator('.lead-list-col').first().boundingBox()).width;
+        const w0 = (await pane.boundingBox()).width;
         const gb = await grip.boundingBox();
         await page.mouse.move(gb.x + gb.width / 2, gb.y + gb.height / 2);
         await page.mouse.down();
         await page.mouse.move(gb.x + gb.width / 2, gb.y + gb.height / 2 - 100, { steps: 5 });
         await page.mouse.up();
         const h1 = (await pane.boundingBox()).height;
-        const w1 = (await page.locator('.lead-list-col').first().boundingBox()).width;
-        check(`${label} drag resizes the chat, the list stays put`,
+        const w1 = (await pane.boundingBox()).width;
+        check(`${label} drag resizes the chat, the width stays put`,
           Math.abs(h1 - (h0 - 100)) <= 12 && Math.abs(w1 - w0) <= 2,
-          `pane ${Math.round(h0)}→${Math.round(h1)}, list ${Math.round(w0)}→${Math.round(w1)}`);
+          `pane ${Math.round(h0)}→${Math.round(h1)}, width ${Math.round(w0)}→${Math.round(w1)}`);
         await page.reload();
         await page.waitForFunction(() => window.__flLeadsPane);
         const h2 = (await pane.boundingBox()).height;

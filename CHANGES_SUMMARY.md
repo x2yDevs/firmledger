@@ -1,3 +1,58 @@
+## 2026-09-12 (leads inbox) — an open inquiry is a page of its own, and its facts read one per line
+
+**Pressing an inquiry now opens the conversation as a page, not as a pane
+beside the list.** The thread used to render in the right-hand column while the
+220/300px list rail stayed pinned on the left, so the conversation — the thing
+actually being read — got the leftover two-thirds of the screen, with the
+composer and the housekeeping line squeezed into the same measure. With a
+thread open the view renders no rail at all: `.lead-layout` takes a
+`lead-layout-thread` modifier that collapses the grid to one column, and that
+column is centred at `max-width: min(1040px, 100%)` — wide enough for a real
+conversation, narrow enough that a bubble is never read across a 1340px
+container. Everything the pane held came with it unchanged: the thread and its
+day separators, the seam grip and the persisted pane height (`fl.leadsPane.v2`),
+the pinned foot, the composer with the server's own limits and its inline
+refusal, the status pill, status/archive/delete, `mailto:`/`tel:` and the Close
+link. The trail above it names the conversation (`Dashboard › Leads inbox ›
+Amina Njeri`), and “Leads inbox” there — like Close — carries the box, the
+status filter, the listing and the page the thread was opened from, so going
+back lands on the same list. With nothing open the inbox is exactly as it was:
+rail, rows, pager and the compact hint pane beside them.
+
+**The contact facts at the top are lines now, not one crowded strip.** `Email`
+first, `Phone` under it, and `Looking for` on a line of its own below those —
+`.lead-facts` is a column (`flex-direction: column; flex-wrap: nowrap`, one
+fact per row) instead of a wrapping row that ran the address and the subject
+together and broke wherever the pane happened to end. The labels share an 84px
+column, so the values start on the same line and the three rows read as one
+small definition list. Same labels, same order, same `mailto:`/`tel:` links,
+still no table; the member's Sent view still shows only the subject line, with
+the business email staying private.
+
+**No link, route or redirect moved.** Notifications, reply emails and the
+listing page's “Follow the conversation” all point at
+`/dashboard/leads?open=<id>` (and `?box=sent&open=<id>`), which is that page
+now; the `ctx_*` fields still carry the view through every POST, so a reply, a
+status change, an archive or a refused send returns to the same conversation
+with its message — and the pane's sticky top, dock and resize behaviour are the
+same script over the same markup. Preview it without signing in:
+`LEADS_INBOX_PREVIEW=1 node server.js` → `/dashboard/leads`, then press any
+inquiry.
+
+Tests: the new `npm run test:leads-thread` (38 checks) locks all of it — no
+rail on the thread page, the scoped centred measure, every feature still
+present, the stacked facts and their label column, the trail and its filtered
+way back, both roles, the unchanged list page, and the round trips (reply,
+status, refused send, archive, notification deep link).
+`tests/leads-pane-resize.test.js`'s optional browser drag now holds the pane's
+own width still instead of the list column's — there is no rail beside the
+conversation to measure. `npm test` is green at 32 suites, including
+`test:leads-pane` (62), `test:leads-reply` (35), `test:leads-fit` (42),
+`test:leads-chat` (105), `test:leads-inbox` (25), `test:leads-contact` (143),
+`test:leads-housekeeping` (33), `test:focus` and `test:user-area`.
+
+---
+
 ## 2026-09-12 (leads inbox) — the chat area extends from the seam, the corner mark and the full-width toggle are gone
 
 **The chat space is now extendable from the seam above the reply box.** The
