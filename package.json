@@ -25,6 +25,7 @@
     "test:leads-house": "node tests/leads-housekeeping.test.js",
     "test:leads-fit": "node tests/leads-blog-fit.test.js",
     "test:leads-fit:browser": "node tests/leads-blog-fit.test.js --browser",
+    "test:assets": "node tests/asset-cache-busting.test.js",
     "test:leads-pane": "node tests/leads-pane-resize.test.js",
     "test:leads-reply": "node tests/leads-reply-fit.test.js",
     "test:leads-thread": "node tests/leads-thread-page.test.js",

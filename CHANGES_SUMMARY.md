@@ -1,3 +1,47 @@
+## 2026-09-12 (leads inbox) — the fix was never reaching the browser: the cache-buster had stopped busting
+
+**Reported:** “still there is a problem, you lied, you fixed it but still no change —
+leads inbox still shows on the left and when you open an inquiry it is still on the left.”
+
+**It was not a layout bug.** The stylesheet in the repository had been correct since
+PR #77 — driven here in a real browser, the inbox is one full-width column ending at the
+fold at every size, and the conversation is its own centred page. What the browser was
+rendering was the *previous* stylesheet: 300px rail welded to the left with the inquiry
+squeezed into the same rail. Reproduced exactly by serving the current HTML with the
+cached sheet, which is what every browser was doing.
+
+**Why.** `/public` is served `max-age=604800` (7 days) and the only invalidation is the
+URL — `/css/app.css?v=<ASSET_V>`. `ASSET_V` was a constant in `server.js` that a human
+had to bump in the same commit as any CSS change. It was duly bumped 58 times… and then
+seven leads-inbox deploys changed `app.css` (or the JS) without moving it:
+
+PR #72 through #79 — every round changed `app.css`, `main.js` or both. The constant stayed
+at `58` throughout, so the URL stayed `/css/app.css?v=58` throughout.
+
+So each round shipped new markup and new CSS behind the *same* `/css/app.css?v=58`,
+every browser kept its week-old copy, and the inbox kept rendering the old shape. The
+tests read the file from disk, so they saw the new rules and passed — which is exactly
+how a correct fix can read as “nothing changed”.
+
+**The fix, in this area only.** `ASSET_V` is now derived from the bytes of the files
+themselves (`src/lib/assetversion.js`): the stylesheet and the two scripts are hashed
+and the first 8 hex characters are appended to the generation, `58-bc4bbce2`. Editing a
+file moves the URL, so a stale copy is unreachable by construction — there is no step
+left to forget. Unchanged files keep their URL and stay cached for the full 7 days.
+
+**Proof it is fixed, in a real browser.** `tests/asset-cache-busting.test.js`
+(`npm run test:assets`, 25 checks) pins the property rather than a number: one changed
+byte moves the version; the same bytes keep it; no view hardcodes a version; and over
+real HTTP the leads inbox the user opens links the version computed from the file on
+disk, which serves those bytes with the 7-day header that made the stale copy possible.
+Restored to the old hand-kept constant the suite fails loudly (`✗ the inbox stylesheet
+URL is not the stale one — 58`), so this cannot come back quietly.
+
+**Unchanged:** no markup, no layout, no behaviour and no other page. `views/` and
+`public/css/app.css` are untouched — the delivery of those files was the bug.
+`README.md`, `README2.md`, `README3.md` no longer tell anyone to bump a constant by
+hand.
+
 ## 2026-09-12 (leads inbox) — both pages take the screen they are given, and nothing is stranded on the left
 
 **Both pages are now on the wide container.** The list and the conversation were the
