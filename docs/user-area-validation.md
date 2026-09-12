@@ -42,3 +42,52 @@ For a preinstalled browser, set `CHROMIUM_EXECUTABLE_PATH` to its executable. In
 - Check OAuth and 2FA with the deployment's providers, and visually spot-check Safari/iOS and Android.
 
 These results establish local regression coverage, not a blanket guarantee that every production integration is ready. No production database or account was modified during this audit.
+
+---
+
+# Inbox + blog screen fit — 2026-09-12
+
+## What changed
+
+- **Leads inbox is now a window-sized shell.** Both panes take one height from
+  `.lead-layout` (`--pane-h` = window height − 100px, floor 640px, cap 1060px)
+  instead of the old `min(92vh, 980px)` block, which started ~380px down the
+  page and was therefore taller than the space actually on screen. The chat
+  thread is the only flexible block in the pane; the title line, the contact
+  facts, the composer and the status/archive/delete line are all fixed height,
+  so everything they do not use belongs to the conversation.
+- **The contact facts became a compact strip** (`.lead-facts`) instead of a
+  three-row `<table class="facts">`. Same labels, same `mailto:`/`tel:` links,
+  roughly a quarter of the height — the difference goes to the chat.
+- **The head above the inbox is slim** (`.leads-head`, `.leads-section`),
+  scoped to this page only; every other page keeps its own head.
+- **Stacked screens (≤900px) give the thread a long, uncapped run** of
+  `min(62vh, 520px)` (`min(64vh, 480px)` ≤640px) instead of a 400–420px box
+  with a `max-height` cap, so nothing is compressed into a second scrollbar.
+- **Blog**: one roomy card column, a smaller article measure and tighter table
+  cells ≤480px; `.blog-body .table-wrap` scrolls horizontally and seeded
+  `<th>` cells wrap, so no article can push a phone page sideways.
+
+## Verified locally
+
+- `npm test`: all 29 suites pass.
+- `npm run test:leads-fit`: 42 checks, including a height-budget audit that
+  reads the pane expression, the thread floor and every declared fixed height
+  back out of `app.css` and asserts the chat keeps at least 40% of the pane at
+  window heights of 600, 668, 720, 768, 800, 900, 1080 and 1440px (272–692px of
+  chat). Restoring the old geometry makes 5 of those 8 windows fail, so the
+  audit is not vacuous.
+- Real HTTP: the owner and inquirer panes render the facts strip with every
+  contact detail and link, and `/blog`, `/blog/:slug` render their cards and
+  prose shell.
+
+## Not verified here
+
+`npm run test:leads-fit:browser` measures the same guarantees as real geometry
+(pane clipping, chat height, Send and the housekeeping line on screen, no
+sideways page scroll) across 10 device viewports. **It did not run in this
+session**: no Chromium is installed in the sandbox and the Playwright/CDN
+download hosts are unreachable from it. Run it locally with
+`npx playwright install chromium && npm run test:leads-fit:browser`, or point
+`CHROMIUM_EXECUTABLE_PATH` at an existing browser. Visual spot-checks on
+Safari/iOS and Android are still outstanding.

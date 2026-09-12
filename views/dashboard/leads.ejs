@@ -41,7 +41,10 @@
   const rMax = Number(REPLY_MAX) || 4000;
   const nf = function (n) { return Number(n).toLocaleString('en-US'); };
 %>
-<section class="page-head">
+<% /* The inbox is a screen-filling shell: the head above it stays slim so the
+      conversation — not the title block — owns the viewport. Scoped to
+      .leads-head/.leads-section; every other page keeps its own head. */ %>
+<section class="page-head leads-head">
   <div class="container dash-head">
     <div>
       <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/dashboard">Dashboard</a><span aria-hidden="true">›</span><span>Leads</span></nav>
@@ -63,7 +66,7 @@
   </div>
 </section>
 
-<section class="section-tight">
+<section class="section-tight leads-section">
   <div class="container">
     <% if (typeof ok !== 'undefined' && ok) { %><div class="alert alert-ok"><%= ok %></div><% } %>
     <% if (typeof err !== 'undefined' && err) { %><div class="alert alert-err"><%= err %></div><% } %>
@@ -165,14 +168,18 @@
               <% } %>
             </p>
 
-            <% if (openRole === 'owner') { %>
-            <table class="facts">
-              <tr><th>Email</th><td><a href="mailto:<%= open.email %>" style="color:var(--accent2)"><%= open.email %></a></td></tr>
-              <% if (open.phone) { %><tr><th>Phone</th><td><a href="tel:<%= String(open.phone).replace(/\s/g, '') %>" style="color:var(--accent2)"><%= open.phone %></a></td></tr><% } %>
-              <% if (open.looking_for) { %><tr><th>Looking for</th><td><%= open.looking_for %></td></tr><% } %>
-            </table>
-            <% } else if (open.looking_for) { %>
-            <p style="font-size:13.5px;margin:8px 0 0"><span class="muted">Looking for:</span> <b><%= open.looking_for %></b></p>
+            <% /* Contact facts as one compact strip instead of a three-row
+                  table: same labels, same mailto/tel links, but the block
+                  costs the conversation a couple of lines instead of a
+                  hundred vertical pixels. */ %>
+            <% if (openRole === 'owner' || open.looking_for) { %>
+            <div class="lead-facts">
+              <% if (openRole === 'owner') { %>
+              <span class="lf"><span class="lf-k">Email</span><a class="lf-v" href="mailto:<%= open.email %>"><%= open.email %></a></span>
+              <% if (open.phone) { %><span class="lf"><span class="lf-k">Phone</span><a class="lf-v" href="tel:<%= String(open.phone).replace(/\s/g, '') %>"><%= open.phone %></a></span><% } %>
+              <% } %>
+              <% if (open.looking_for) { %><span class="lf"><span class="lf-k">Looking for</span><b class="lf-v"><%= open.looking_for %></b></span><% } %>
+            </div>
             <% } %>
 
             <div class="lead-thread" id="leadThread">
