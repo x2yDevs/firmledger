@@ -133,8 +133,12 @@ confirmation fields — retyping is the check, blocking the clipboard is not.
    Use `<%- %>` only for HTML you built yourself (e.g. the search `hl()` highlight helper).
 
 **Caching.** `server.js` serves `/public` with a 7-day max-age and appends
-`?v=<%= assetV %>` from `ASSET_V`. Any commit that changes `public/css/app.css` or a file in
-`public/js/` must bump `ASSET_V` — that is the entire cache-invalidation strategy.
+`?v=<%= assetV %>` from `ASSET_V`. `ASSET_V` is **derived from the bytes** of
+`public/css/app.css` and `public/js/*` (`src/lib/assetversion.js`) — an edit changes the
+hash, the hash changes the URL, so a cached copy can never outlive its file. There is
+nothing to bump by hand; add a file to `FILES` in that module and it is covered.
+`npm run test:assets` fails if the version stops following the content or if a view
+hardcodes one.
 
 **Panels and bands** (all defined, all used by the views): `.side-card`, `.form-card`,
 `.panel`, `.card`/`.card-body`, `.alert alert-ok|err|warn`, `.pill pill-approved|pending|rejected`,
@@ -730,7 +734,7 @@ No platform can guarantee a fixed indexing deadline — crawling is the search e
 | Symptom | Fix |
 |---|---|
 | Page looks shifted left, or a section stretches oddly on a big monitor | the block is missing its container class — `.container` / `.container-wide` / `.container-narrow` (or `.center-col` for a narrow card). Never fix it with a one-sided margin |
-| CSS change did not appear | `ASSET_V` in `server.js` was not bumped — static files are cached for 7 days by design |
+| CSS change did not appear | static files are cached for 7 days by design — check the `?v=` in the page's `<link>` against `require('./src/lib/assetversion').ASSET_V`. Since the version is derived from the file's bytes it moves by itself; `npm run test:assets` proves it. (It used to be a hand-bumped constant, and once sat unchanged for seven stylesheet deploys — every browser kept serving the old inbox) |
 | Directory looks empty / `429` while load-testing | the spam throttle answered — that is protection working; raise the limit in Admin → Protection or wait a minute |
 | Gate rejects the admin code | `ADMIN_SECRET` in `.env` doesn't match — check for stray quotes/spaces, restart |
 | 2FA code never accepted | Server clock drift — run `timedatectl status`, enable NTP (`sudo timedatectl set-ntp true`) |

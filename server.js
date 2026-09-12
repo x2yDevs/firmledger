@@ -46,8 +46,13 @@ process.on('uncaughtException', (err) => {
 const session = require('./src/lib/session');
 const util = require('./src/lib/util');
 
-/* Bumped on every deploy that changes public/ assets — defeats the 7-day static cache. */
-const ASSET_V = '58';
+/* Defeats the 7-day static cache — DERIVED from the bytes of the stylesheet and
+   the scripts, not bumped by hand, so an edit can never ship behind an unchanged
+   URL. This matters more than it sounds: seven leads-inbox deploys in a row
+   changed public/css/app.css while the hand-kept constant stayed at '58', and
+   every browser kept its cached copy of the old inbox. See
+   src/lib/assetversion.js for the whole story. */
+const { ASSET_V } = require('./src/lib/assetversion');
 
 const app = express();
 app.set('trust proxy', true);

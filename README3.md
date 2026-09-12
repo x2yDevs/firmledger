@@ -178,8 +178,9 @@ no second render pass on the search engine's side.
 | `*.svg` (badges, icons) | same static handler | `max-age=86400` (1 d) |
 | HTML, `/sitemap.xml`, `/feed.xml`, `/api/v1/*` | routers | no store cache — `compression` gzips them per request |
 
-So after a CSS or JS change you bump `ASSET_V` in `server.js` and restart; the old file falls out
-of use on the next page view without waiting for the 7 days. Behind Cloudflare/Nginx you may add a
+So after a CSS or JS change the URL moves on its own — `ASSET_V` is a hash of the files' bytes
+(`src/lib/assetversion.js`), not a number anyone has to remember to bump — and the old file falls
+out of use on the next page view without waiting for the 7 days. Behind Cloudflare/Nginx you may add a
 longer public cache for `/css`, `/js` and `/assets` — the versioned query string makes that safe.
 
 Logging: `console.log` to stdout (redirect to a file via systemd or `node server.js >

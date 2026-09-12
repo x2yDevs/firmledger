@@ -175,8 +175,10 @@ attributes; nothing else styles a raw `<input>`.
    server built and escaped itself (e.g. `hl()` in the search views).
 
 **Caching.** `express.static` serves `/public` with a 7-day `max-age`; the only invalidation
-mechanism is the `ASSET_V` string in `server.js`, exposed as `assetV` and appended as
-`/css/app.css?v=<%= assetV %>`. Bump it in the same commit as any `public/` change.
+mechanism is the `ASSET_V` string, exposed as `assetV` and appended as
+`/css/app.css?v=<%= assetV %>`. It is derived from the bytes of the files themselves
+(`src/lib/assetversion.js`), so it moves by itself with any `public/` change — nothing to
+bump by hand.
 
 
 ---
@@ -374,7 +376,7 @@ Plans seed in `plans` (30-day / monthly defaults exist to keep pricing real on f
 | `PAYPAL_*` | `.env` | PayPal keys + sandbox flag |
 | `SESSION_SECRET` | server state | Signs both session cookie flavors |
 | `FORCE_INDEXABLE` | `.env` | `1` opens a non-public `BASE_URL` (localhost / `.test` / private IP) to search engines; default keeps it out via `X-Robots-Tag` + `Disallow: /` |
-| `ASSET_V` | `server.js` | the single cache-buster for everything under `public/` — bump with any CSS/JS change |
+| `ASSET_V` | `src/lib/assetversion.js` | the single cache-buster for everything under `public/` — a hash of the files' bytes, so it follows any CSS/JS change automatically (`npm run test:assets`) |
 
 | Cookie | Table | Purpose |
 |---|---|---|

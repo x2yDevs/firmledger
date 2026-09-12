@@ -98,6 +98,12 @@
                 production database (pre-migration tables with real rows):
                 migrations apply without throwing, the inquirer index lands
                 after its column, and every row survives.
+   assets       the cache-buster really busts: the version in `?v=` is a
+                function of the bytes (one changed byte moves the URL), no
+                view hardcodes one, and over real HTTP the inbox the user
+                opens links the version computed from the file on disk —
+                the check that would have caught seven leads-inbox deploys
+                shipping new CSS behind an unchanged URL.
  */
 const path = require('path');
 const { spawnSync } = require('child_process');
@@ -134,6 +140,7 @@ const suites = [
   ['Blog content — accuracy, stale refresh, 2026 guide', 'blog-content.test.js'],
   ['Focus hygiene — no rings on inputs & dropdowns', 'focus-hygiene.test.js'],
   ['Production database upgrade', 'db-upgrade.test.js'],
+  ['Asset cache-busting — the ?v= URL follows the bytes', 'asset-cache-busting.test.js'],
   ['User dashboard pages and interactions', 'user-area.test.js'],
 ];
 
