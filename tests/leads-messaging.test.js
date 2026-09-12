@@ -132,7 +132,7 @@ const qs = (o) => Object.entries(o).map(([k, v]) => `${k}=${encodeURIComponent(v
   const opening = db.prepare('SELECT * FROM lead_messages WHERE lead_id=? ORDER BY id').all(lead.id);
   check('opening message is seeded on the thread', opening.length === 1 && opening[0].sender === 'inquirer' && /12-desk office/.test(opening[0].body));
   const ownerNotifs = db.prepare("SELECT * FROM notifications WHERE user_id=? AND kind='lead' ORDER BY id DESC").all(owner);
-  check('owner notified of the new inquiry', ownerNotifs.length === 1 && ownerNotifs[0].url === `/dashboard/leads?open=${lead.id}`);
+  check('owner notified of the new inquiry', ownerNotifs.length === 1 && ownerNotifs[0].url === `/dashboard/leads/${lead.id}`);
 
   /* --- the listing page now shows the sent state and the Sent shortcut --- */
   const listingHtml = await (await call(`/listing/sunrise-cleaners?lead_sent=1&lead_ok=${encodeURIComponent('Your inquiry was sent to Sunrise Cleaners.')}`, 'inquirer')).text();
@@ -143,7 +143,7 @@ const qs = (o) => Object.entries(o).map(([k, v]) => `${k}=${encodeURIComponent(v
   const inbox = await (await call('/dashboard/leads', 'owner')).text();
   check('received inbox lists the inquirer by name', inbox.includes('Jane Wanjiku') && inbox.includes('Office cleaning quote'));
   check('inbox shows the New pill', inbox.includes('pill-lead-new'));
-  const openHtml = await (await call(`/dashboard/leads?open=${lead.id}`, 'owner')).text();
+  const openHtml = await (await call(`/dashboard/leads/${lead.id}`, 'owner')).text();
   check('owner thread shows the opening message', openHtml.includes('cleaned twice a week'));
   check('owner sees the inquirer facts card', openHtml.includes('jane@chat.example') && openHtml.includes('+254 700 000 001'));
   check('owner reply box is rendered', openHtml.includes(`action="/dashboard/leads/${lead.id}/reply"`));
@@ -164,7 +164,7 @@ const qs = (o) => Object.entries(o).map(([k, v]) => `${k}=${encodeURIComponent(v
 
   console.log('Leads messaging — the conversation continues, both directions');
   /* --- inquirer keeps talking from Sent --- */
-  const sentHtml = await (await call(`/dashboard/leads?box=sent&open=${lead.id}`, 'inquirer')).text();
+  const sentHtml = await (await call(`/dashboard/leads/${lead.id}?box=sent`, 'inquirer')).text();
   check('sent thread shows both sides', sentHtml.includes('cleaned twice a week') && sentHtml.includes('28,000'));
   check('sent thread labels the business reply with the listing name', sentHtml.includes('lead-bubble-who">Sunrise Cleaners'));
   const r2 = await call(`/dashboard/leads/${lead.id}/reply`, 'inquirer', { _csrf: s.inquirer.csrf, body: 'That works — could you start on Monday and include window cleaning?' });
@@ -182,7 +182,7 @@ const qs = (o) => Object.entries(o).map(([k, v]) => `${k}=${encodeURIComponent(v
 
   /* --- both rendered inboxes show the same timeline, each with the right own-side --- */
   for (const [who, box, otherName] of [['owner', '', 'Jane Wanjiku'], ['inquirer', 'box=sent&', 'Sunrise Cleaners']]) {
-    const html = await (await call(`/dashboard/leads?${box}open=${lead.id}`, who)).text();
+    const html = await (await call(`/dashboard/leads/${lead.id}${box ? '?' + box : ''}`, who)).text();
     const whoLine = html.match(/lead-bubble-who">([^<]*)</g) || [];
     const mine = html.match(/lead-bubble mine/g) || [];
     check(`${who} sees all 5 messages`, whoLine.length === 5, `saw ${whoLine.length}`);
@@ -203,9 +203,9 @@ const qs = (o) => Object.entries(o).map(([k, v]) => `${k}=${encodeURIComponent(v
   const strangerReply = await call(`/dashboard/leads/${lead.id}/reply`, 'stranger', { _csrf: s.stranger.csrf, body: 'Let me inject myself into this conversation.' });
   check('stranger reply redirected as not found', strangerReply.status === 302 && decodeURIComponent(strangerReply.headers.get('location')).includes('Conversation not found'));
   check('stranger reply created no message', db.prepare('SELECT COUNT(*) c FROM lead_messages WHERE lead_id=?').get(lead.id).c === 5);
-  const strangerOpen = await (await call(`/dashboard/leads?open=${lead.id}`, 'stranger')).text();
+  const strangerOpen = await (await call(`/dashboard/leads/${lead.id}`, 'stranger')).text();
   check('stranger sees no thread at all', !strangerOpen.includes('cleaned twice a week'));
-  const strangerSent = await (await call(`/dashboard/leads?box=sent&open=${lead.id}`, 'stranger')).text();
+  const strangerSent = await (await call(`/dashboard/leads/${lead.id}?box=sent`, 'stranger')).text();
   check('stranger sent box shows nothing of the thread', !strangerSent.includes('28,000'));
 
   /* --- every refused reply states the reason, in the composer, and sends nothing --- */
@@ -235,8 +235,8 @@ const qs = (o) => Object.entries(o).map(([k, v]) => `${k}=${encodeURIComponent(v
   check('replying to a missing lead says not found', ghost.status === 302 && loc(ghost).includes('Conversation not found'));
 
   /* --- the private-notes block is gone: the thread is the whole pane --- */
-  const ownerAgain = await (await call(`/dashboard/leads?open=${lead.id}`, 'owner')).text();
-  const janeAgain = await (await call(`/dashboard/leads?box=sent&open=${lead.id}`, 'inquirer')).text();
+  const ownerAgain = await (await call(`/dashboard/leads/${lead.id}`, 'owner')).text();
+  const janeAgain = await (await call(`/dashboard/leads/${lead.id}?box=sent`, 'inquirer')).text();
   check('owner sees no notes block', !ownerAgain.includes('Private notes') && !ownerAgain.includes('lead-note-form') && !ownerAgain.includes('lead-notes-block'));
   check('inquirer sees no notes block', !janeAgain.includes('Private notes') && !janeAgain.includes('lead-note-form'));
   check('nothing invites the owner to add notes', !ownerAgain.includes('add notes') && !ownerAgain.includes('Add note'));
@@ -262,10 +262,11 @@ const qs = (o) => Object.entries(o).map(([k, v]) => `${k}=${encodeURIComponent(v
   const inNew = await call(`/dashboard/leads/${lead.id}/status`, 'owner', {
     _csrf: s.owner.csrf, status: 'won', ctx_status: 'new', ctx_box: 'received', ctx_page: '1',
   });
-  check('status change returns to the same filtered view, still open', /\?status=new&open=\d+&ok=/.test(inNew.headers.get('location') || ''), loc(inNew));
+  check('status change returns to the same filtered view, still open',
+    (inNew.headers.get('location') || '').startsWith(`/dashboard/leads/${lead.id}?status=new&ok=`), loc(inNew));
   check('the message explains it leaves that filter', /leaves your .New. list now/.test(loc(inNew)), loc(inNew));
   check('the Won tab count and the row pill now agree with the status', (await (await call('/dashboard/leads?status=won', 'owner')).text()).includes('pill-lead-won'));
-  check('status is confirmed where it was set, in the chat header', (await (await call(`/dashboard/leads?open=${lead.id}`, 'owner')).text()).includes('data-lead-pill-current>Won<'));
+  check('status is confirmed where it was set, in the chat header', (await (await call(`/dashboard/leads/${lead.id}`, 'owner')).text()).includes('data-lead-pill-current>Won<'));
   await call(`/dashboard/leads/${lead.id}/status`, 'owner', { _csrf: s.owner.csrf, status: 'won' });
   check('a bogus status is refused by name', /is not a lead status/.test(loc(await call(`/dashboard/leads/${lead.id}/status`, 'owner', { _csrf: s.owner.csrf, status: 'shipped' }))));
   const arch = await call(`/dashboard/leads/${lead.id}/archive`, 'owner', { _csrf: s.owner.csrf, archived: '1' });
@@ -289,7 +290,13 @@ const qs = (o) => Object.entries(o).map(([k, v]) => `${k}=${encodeURIComponent(v
   db.prepare("UPDATE users SET plan='', plan_expires_at='' WHERE id=?").run(owner);
   const blockedReply = await call(`/dashboard/leads/${lead.id}/reply`, 'owner', { _csrf: s.owner.csrf, body: 'Trying to reply while on Free.' });
   check('free owner reply is gated with the upgrade notice', blockedReply.status === 302 && loc(blockedReply).includes('Pro feature'));
-  check('the gate is stated in the composer, with an upgrade path', (await (await call(loc(blockedReply).startsWith('/dashboard/leads') ? loc(blockedReply) : '/dashboard/leads', 'owner')).text()).includes('Upgrade to Pro'));
+  /* A Free owner cannot open the conversation at all, so the page answers with
+     the inbox — where the gate is stated, with its upgrade path. */
+  const gateRes = await call(loc(blockedReply), 'owner');
+  const gateHtml = gateRes.status === 302
+    ? await (await call(loc(gateRes), 'owner')).text()
+    : await gateRes.text();
+  check('the gate is stated with an upgrade path', gateHtml.includes('Upgrade to Pro'));
   check('gated reply created no message', db.prepare('SELECT COUNT(*) c FROM lead_messages WHERE lead_id=?').get(lead.id).c === 5);
   const freeInq = await call(`/dashboard/leads/${lead.id}/reply`, 'inquirer', { _csrf: s.inquirer.csrf, body: 'Free-plan owners should still receive my follow-up here.' });
   check('inquirer (free) can still send messages', freeInq.status === 302 && decodeURIComponent(freeInq.headers.get('location')).includes('Message sent'));
@@ -316,7 +323,8 @@ const qs = (o) => Object.entries(o).map(([k, v]) => `${k}=${encodeURIComponent(v
     /* The composer script is the first line of defence: it must refuse the same
        text the server refuses, in the same words, and hand the member back what
        they typed. Run against a stub DOM so it is checked with no browser. */
-    const view = fs.readFileSync(path.join(__dirname, '..', 'views', 'dashboard', 'leads.ejs'), 'utf8');
+    /* An open conversation is a page of its own now — the composer script ships with it. */
+    const view = fs.readFileSync(path.join(__dirname, '..', 'views', 'dashboard', 'lead-thread.ejs'), 'utf8');
     const script = (view.match(/<script>([\s\S]*?)<\/script>/) || [])[1] || '';
     check('the inbox ships a composer script', script.includes('.lead-reply-form') && script.includes('setCustomValidity'));
 

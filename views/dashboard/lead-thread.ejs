@@ -1,0 +1,595 @@
+<%- include('../partials/top') %>
+
+<%
+  /* ── One conversation, the whole page ────────────────────────────────────
+     The inbox is the list of inquiries; picking one opens this page. Nothing
+     is stacked beside the conversation and nothing is hidden behind a tab: the
+     thread fills the screen, the composer is pinned under it, and everything
+     that belongs to the conversation — status, archive, delete, email, call,
+     and the way back to the list it was opened from — is on the page with it.
+     Acting here (a reply, a status change, an archive) comes back to this same
+     page, so the member is never dropped on a list mid-conversation. */
+  const isOwner = openRole === 'owner';
+  const rMin = Number(REPLY_MIN) || 2;
+  const rMax = Number(REPLY_MAX) || 4000;
+  const nf = function (n) { return Number(n).toLocaleString('en-US'); };
+  const _attr = function (v) {
+    return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  };
+  /* Read back by the POST routes so a redirect lands on this exact page — the
+     conversation, with the view of the inbox it was opened from. */
+  const ctxFields = function () {
+    return '<input type="hidden" name="ctx_box" value="' + _attr(filters.box) + '">'
+      + '<input type="hidden" name="ctx_status" value="' + _attr(STATUSES.indexOf(filters.status) > -1 ? filters.status : '') + '">'
+      + '<input type="hidden" name="ctx_listing" value="' + _attr(filters.listingId || '') + '">'
+      + '<input type="hidden" name="ctx_page" value="' + _attr(Number(filters.page) || 1) + '">';
+  };
+%>
+
+<section class="page-head leads-head">
+  <div class="container dash-head">
+    <div>
+      <% /* The trail names the conversation and “Leads inbox” is the way back —
+            to the same box, filter and page it was opened from. */ %>
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/dashboard">Dashboard</a><span aria-hidden="true">›</span><a href="<%= backUrl %>">Leads inbox</a><span aria-hidden="true">›</span><span><%= isOwner ? open.name : open.listing_name %></span></nav>
+      <h1><%= isOwner ? open.name : open.listing_name %></h1>
+      <p class="muted"><%= isOwner
+        ? 'An inquiry on ' + open.listing_name + ' — reply here, and set its status as it moves.'
+        : 'Your conversation with ' + open.listing_name + ' — keep talking here; both of you see the same thread.' %></p>
+    </div>
+    <a class="btn btn-ghost btn-sm lead-back-btn" href="<%= backUrl %>">← Back to inbox</a>
+  </div>
+</section>
+
+<section class="section-tight leads-section leads-thread-page">
+  <div class="container">
+    <% if (typeof ok !== 'undefined' && ok) { %><div class="alert alert-ok"><%= ok %></div><% } %>
+    <% if (typeof err !== 'undefined' && err) { %><div class="alert alert-err"><%= err %></div><% } %>
+
+    <div class="lead-layout">
+      <div class="lead-detail-col">
+        <div class="panel lead-detail">
+          <% /* The status the owner last set is stated where it was set, so a
+                change is confirmed in the header of the conversation it was
+                made on — not only back in the inbox list. */ %>
+          <div class="panel-h-t">
+            <h3><%= isOwner ? open.name : open.listing_name %><% if (isOwner) { %> <span class="pill pill-lead-<%= open.status %>" data-lead-pill-current><%= STATUS_LABELS[open.status] %></span><% } %></h3>
+            <span class="lead-pane-tools">
+              <a class="muted" style="font-size:.8rem" href="<%= backUrl %>">Close ✕</a>
+            </span>
+          </div>
+          <p class="muted" style="font-size:13px;margin-top:-4px">
+            <% if (!isOwner) { %>
+              Conversation with <a href="/listing/<%= open.listing_slug %>"><%= open.listing_name %></a> · started <%= fmtDate(open.created_at) %>
+            <% } else { %>
+              For <a href="/listing/<%= open.listing_slug %>"><%= open.listing_name %></a> · <%= fmtDate(open.created_at) %><% if (open.city || open.country) { %> · <%= [open.city, open.country].filter(Boolean).join(', ') %><% } %>
+            <% } %>
+          </p>
+
+          <% /* Contact facts as one compact strip instead of a three-row
+                table: same labels, same mailto/tel links, but the block
+                costs the conversation a couple of lines instead of a
+                hundred vertical pixels. Two lines, and always in this
+                order: how to reach them (email, then the phone when there
+                is one) on the first, and what they are looking for on the
+                line below it — never one run-on line where the ask reads
+                as the tail of the email address. */ %>
+          <% if (isOwner || open.looking_for) { %>
+          <div class="lead-facts">
+            <% if (isOwner) { %>
+            <span class="lf"><span class="lf-k">Email</span><a class="lf-v" href="mailto:<%= open.email %>"><%= open.email %></a></span>
+            <% if (open.phone) { %><span class="lf"><span class="lf-k">Phone</span><a class="lf-v" href="tel:<%= String(open.phone).replace(/\s/g, '') %>"><%= open.phone %></a></span><% } %>
+            <% } %>
+            <% if (open.looking_for) { %><span class="lf lf-look"><span class="lf-k">Looking for</span><b class="lf-v"><%= open.looking_for %></b></span><% } %>
+          </div>
+          <% } %>
+
+          <div class="lead-thread" id="leadThread">
+            <% if (openMessages && openMessages.length) { %>
+              <% let lastDay = ''; %>
+              <% openMessages.forEach(function (m) { %>
+                <% const day = String(m.created_at || '').slice(0, 10); %>
+                <% if (day && day !== lastDay) { lastDay = day; %>
+                  <div class="lead-day"><%= fmtDate(day) %></div>
+                <% } %>
+                <% const mine = (isOwner && m.sender === 'owner') || (!isOwner && m.sender === 'inquirer'); %>
+                <div class="lead-bubble<%= mine ? ' mine' : ' theirs' %>">
+                  <div class="lead-bubble-who"><%= mine ? 'You' : (m.sender === 'owner' ? open.listing_name : open.name) %></div>
+                  <div class="lead-bubble-text"><%- String(m.body || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\n/g, '<br>') %></div>
+                  <div class="lead-bubble-meta"><%= String(m.created_at || '').slice(11, 16) || fmtDate(m.created_at) %></div>
+                </div>
+              <% }) %>
+            <% } else { %>
+              <p class="muted" style="font-size:13px;text-align:center;padding:18px 0">No messages yet — say hello below.</p>
+            <% } %>
+          </div>
+
+          <% /* Composer + housekeeping share one pinned foot: on desktop it sticks
+                to the pane bottom like the site header sticks to the page top,
+                so Send is always reachable. Same forms, same margins — the
+                wrapper itself adds no height. */ %>
+          <div class="lead-detail-foot">
+          <% /* Chat-area grip: sits just above the reply box — the same seam
+                the box extends from. Drag it down to lengthen the
+                conversation, up to shorten it; the thread is the pane's only
+                flexible child, so every pixel goes to the chat. Arrows
+                fine-tune, double-click restores. */ %>
+          <div class="lead-thread-grip" data-lead-thread-grip role="separator" aria-orientation="horizontal" tabindex="0"
+               aria-label="Resize the chat area — drag up or down, double-click restores">
+            <span class="ltg-bar" aria-hidden="true"></span>
+          </div>
+          <% /* The composer carries its own explanation: a refused reply is
+                stated beside the Send button, in the box the member is
+                looking at, with the exact reason and the numbers. */ %>
+          <form class="lead-reply-form<%= cerr ? ' has-error' : '' %>" method="post" action="/dashboard/leads/<%= open.id %>/reply"
+                data-draft-key="lead-<%= open.id %>-<%= openRole %>"
+                data-reply-state="<%= cerr ? 'error' : (typeof replySent !== 'undefined' && replySent ? 'sent' : 'idle') %>"
+                data-reason="<%= _attr(cerr) %>">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <%- ctxFields() %>
+            <label class="sr-only" for="lead-reply-<%= open.id %>">Your message</label>
+            <textarea class="input" id="lead-reply-<%= open.id %>" name="body" rows="2" required
+                      data-min="<%= rMin %>" data-max="<%= rMax %>"
+                      data-count="lead-reply-count-<%= open.id %>" data-error="lead-reply-error-<%= open.id %>"
+                      aria-describedby="lead-reply-help-<%= open.id %><%= cerr ? ' lead-reply-error-' + open.id : '' %>"
+                      placeholder="<%= isOwner ? 'Reply to ' + open.name + '…' : 'Write a follow-up to ' + open.listing_name + '…' %>"></textarea>
+            <div class="lead-reply-actions">
+              <button class="btn btn-primary btn-sm" type="submit">Send message</button>
+              <span class="lead-reply-count" id="lead-reply-count-<%= open.id %>">0/<%= nf(rMax) %></span>
+              <% if (isOwner) { %>
+              <a class="btn btn-ghost btn-sm" href="mailto:<%= open.email %>?subject=<%= encodeURIComponent('Re: your inquiry to ' + open.listing_name + (open.looking_for ? ' — ' + open.looking_for : '')) %>">Email instead</a>
+              <% if (open.phone) { %><a class="btn btn-ghost btn-sm" href="tel:<%= String(open.phone).replace(/\s/g, '') %>">Call</a><% } %>
+              <% } %>
+            </div>
+            <p class="lead-reply-help muted" id="lead-reply-help-<%= open.id %>">
+              Between <%= nf(rMin) %> and <%= nf(rMax) %> characters — the counter turns amber near the limit and red past it, and nothing you type is cleared if a send is refused. The first message goes by email; every reply after that arrives as a FirmLedger notification.
+            </p>
+            <p class="lead-reply-error" id="lead-reply-error-<%= open.id %>" role="alert"<%= cerr ? '' : ' hidden' %>><% if (cerr) { %><span class="lre-text"><%= cerr %></span><% if (cerr.indexOf('Pro feature') > -1) { %> <a class="btn btn-accent btn-sm" href="/dashboard/upgrade">Upgrade to Pro</a><% } %><% } %></p>
+          </form>
+
+          <% /* Everything else about the conversation — status, archive, delete
+                — is one strip under the composer, so the chat above keeps as
+                much of the screen as it can. */ %>
+          <div class="lead-detail-bar">
+          <% if (!isOwner) { %>
+          <form method="post" action="/dashboard/leads/<%= open.id %>/delete" onsubmit="return confirm('Delete this conversation from your Sent box? The business keeps its own record of the inquiry. This cannot be undone.');">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <%- ctxFields() %>
+            <button class="btn btn-ghost btn-sm lead-delete-btn" type="submit">Delete conversation</button>
+          </form>
+          <% } %>
+
+          <% if (isOwner) { %>
+          <form class="lead-status-form" method="post" action="/dashboard/leads/<%= open.id %>/status">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <%- ctxFields() %>
+            <label><span>Status</span>
+              <select class="input" name="status">
+                <% STATUSES.forEach(function (s) { %><option value="<%= s %>"<%= open.status === s ? ' selected' : '' %>><%= STATUS_LABELS[s] %></option><% }) %>
+              </select>
+            </label>
+            <button class="btn btn-ghost btn-sm" type="submit">Update</button>
+          </form>
+          <form method="post" action="/dashboard/leads/<%= open.id %>/archive">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <%- ctxFields() %>
+            <input type="hidden" name="archived" value="<%= open.archived ? '0' : '1' %>">
+            <button class="btn btn-ghost btn-sm" type="submit"><%= open.archived ? 'Restore to inbox' : 'Archive' %></button>
+          </form>
+          <form method="post" action="/dashboard/leads/<%= open.id %>/delete" onsubmit="return confirm('Permanently delete this conversation and its whole thread for both sides? This cannot be undone.');">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <%- ctxFields() %>
+            <button class="btn btn-ghost btn-sm lead-delete-btn" type="submit">Delete permanently</button>
+          </form>
+          <% } %>
+          </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+(function () {
+  var t = document.getElementById('leadThread');
+  if (t) t.scrollTop = t.scrollHeight;
+
+  var store = (function () {
+    try { window.sessionStorage.setItem('__fl', '1'); window.sessionStorage.removeItem('__fl'); return window.sessionStorage; }
+    catch (e) { return null; }
+  })();
+  var nf = function (n) { return Number(n).toLocaleString('en-US'); };
+
+  Array.prototype.forEach.call(document.querySelectorAll('.lead-reply-form'), function (form) {
+    var ta = form.querySelector('textarea[name="body"]');
+    if (!ta) return;
+    var min = parseInt(ta.getAttribute('data-min'), 10) || 1;
+    var max = parseInt(ta.getAttribute('data-max'), 10) || 4000;
+    var count = document.getElementById(ta.getAttribute('data-count'));
+    var errEl = document.getElementById(ta.getAttribute('data-error'));
+    var key = 'fl.leadReply.' + (form.getAttribute('data-draft-key') || 'x');
+    var state = form.getAttribute('data-reply-state') || 'idle';
+    var serverReason = form.getAttribute('data-reason') || '';
+
+    /* A refused send must never cost a member their text: the draft lives in
+       this tab for the round trip and is dropped once the message is stored. */
+    var saved = null;
+    if (store) {
+      try { saved = store.getItem(key); } catch (e) { saved = null; }
+      if (state === 'sent') { try { store.removeItem(key); } catch (e) {} }
+      else if (saved && !ta.value.trim()) ta.value = saved;
+    }
+
+    /* A restored draft that now satisfies the rule needs no explanation left
+       on screen — the box below is the only place a refusal is ever shown. */
+    if (ta.value.trim().length >= min && ta.value.trim().length <= max) serverReason = '';
+
+    /* An empty box is not a mistake until the member tries to send from it, so
+       the warning only appears once something has actually been refused. */
+    var touched = state === 'error' || !!ta.value.trim();
+
+    /* Same trick as the support composer: the box stays small and only grows
+       with what is typed, so the thread above keeps the pane. A height the
+       member dragged by hand outranks that growth — the box holds the size
+       they chose, inside the bounds the stylesheet declares, instead of
+       snapping back on the next keystroke, and the choice survives the send
+       that follows it (the page comes back with the same thread open). */
+    var GROW_TO = 160;   /* typed text grows the box this far, then the box scrolls */
+    var FALLBACK_MIN = 80, FALLBACK_MAX = 300;   /* the stylesheet's bounds, mirrored */
+    var hKey = 'fl.leadReply.h.' + (form.getAttribute('data-draft-key') || 'x');
+    var userH = 0;       /* the height of a drag, 0 until the member makes one */
+    var wrote = '';      /* the height this script last wrote, so a drag is recognizable */
+    if (store) {
+      try { userH = parseInt(store.getItem(hKey), 10) || 0; } catch (e) { userH = 0; }
+    }
+
+    /* The stylesheet owns the bounds; read them back so the script and the CSS
+       can never disagree about how tall this box is allowed to be. */
+    function bounds() {
+      var cs = window.getComputedStyle ? window.getComputedStyle(ta) : null;
+      var lo = cs ? parseFloat(cs.minHeight) : NaN;
+      var hi = cs ? parseFloat(cs.maxHeight) : NaN;
+      if (!(lo > 0)) lo = FALLBACK_MIN;
+      if (!(hi > lo)) hi = Math.max(lo, FALLBACK_MAX);
+      return { lo: lo, hi: hi };
+    }
+
+    /* A drag on the box's own handle writes the element's inline height, so
+       anything standing there that this script did not write is the member's. */
+    function keepDrag() {
+      /* A vertical drag has no business leaving a width behind: the column owns
+         this box's width, so whatever is inline goes and the stylesheet
+         (width: 100%, border-box) governs — the card can never be wedged open. */
+      if (ta.style && ta.style.width) ta.style.width = '';
+      var now = ta.style && ta.style.height ? String(ta.style.height) : '';
+      if (!now || now === wrote) return;
+      var h = Math.round(parseFloat(now));
+      if (!(h > 0)) return;
+      userH = h;
+      if (store) { try { store.setItem(hKey, String(h)); } catch (e) { /* storage is a comfort, not a requirement */ } }
+    }
+    /* Adopt a drag the moment the member lets go instead of at the next
+       keystroke: a native handle drag fires no event of its own, so the
+       release is watched on the box and, failing that, on the window. */
+    if (ta.style) {
+      if (ta.addEventListener) {
+        ta.addEventListener('pointerup', keepDrag);
+        ta.addEventListener('pointercancel', keepDrag);
+      }
+      if (window.addEventListener) window.addEventListener('pointerup', keepDrag, { passive: true });
+    }
+
+    function autoSize() {
+      if (!ta.style) return; /* a detached node has nothing to size */
+      keepDrag();
+      var b = bounds();
+      ta.style.height = 'auto';
+      var want = userH
+        ? Math.min(Math.max(userH, b.lo), b.hi)
+        : Math.min(Math.max(ta.scrollHeight || 0, b.lo), Math.min(GROW_TO, b.hi));
+      wrote = Math.round(want) + 'px';
+      ta.style.height = wrote;
+    }
+
+    /** The exact reason the message would not send — '' means it will. */
+    function reason() {
+      var n = ta.value.trim().length;
+      if (!n) return 'Nothing to send yet — the message box is empty. Write your reply and Send will work again.';
+      if (n < min) return 'Too short to send — a reply needs at least ' + min + ' characters and yours is ' + n + '. A word or two is enough.';
+      if (n > max) return 'Too long to send — your reply is ' + nf(n) + ' characters and the limit is ' + nf(max) + '. Trim ' + nf(n - max) + ' of them and it goes through.';
+      return '';
+    }
+
+    function paint() {
+      var n = ta.value.trim().length;
+      if (count) {
+        count.textContent = nf(n) + '/' + nf(max);
+        count.classList.toggle('is-over', n > max);
+        count.classList.toggle('is-near', n <= max && n > Math.floor(max * 0.9));
+      }
+      var msg = reason();
+      /* The browser would block the send with its own generic tooltip; stating
+         the same rule here keeps the two from ever disagreeing. */
+      try { ta.setCustomValidity(msg); } catch (e) {}
+      /* The server's reason outranks the local guess: it knows what the POST
+         actually tripped over (a deleted thread, the Pro gate, the cap). */
+      var shown = serverReason || (touched ? msg : '');
+      if (errEl) {
+        errEl.innerHTML = '';
+        if (shown) {
+          var span = document.createElement('span');
+          span.className = 'lre-text';
+          span.textContent = shown;
+          errEl.appendChild(span);
+          if (/Pro feature/.test(shown)) {
+            var up = document.createElement('a');
+            up.className = 'btn btn-accent btn-sm';
+            up.href = '/dashboard/upgrade';
+            up.textContent = 'Upgrade to Pro';
+            errEl.appendChild(up);
+          }
+        }
+        errEl.hidden = !shown;
+      }
+      form.classList.toggle('has-error', !!shown);
+      ta.setAttribute('aria-invalid', shown ? 'true' : 'false');
+      autoSize();
+    }
+
+    ta.addEventListener('input', function () {
+      touched = true;
+      serverReason = '';
+      paint();
+      if (store) {
+        try {
+          if (ta.value.trim()) store.setItem(key, ta.value); else store.removeItem(key);
+        } catch (e) { /* a full or blocked storage must not stop the send */ }
+      }
+    });
+    ta.addEventListener('invalid', function (e) {
+      /* Keep the explanation inline under the box — one message, not two. */
+      e.preventDefault();
+      touched = true;
+      paint();
+      ta.focus();
+    });
+    form.addEventListener('submit', function () { touched = true; paint(); });
+    paint();
+    if (state === 'error') { ta.focus(); }
+  });
+
+  /* Status is one change, not a change plus a button press. The Update button
+     stays for keyboards, taps and scripts that never load. */
+  Array.prototype.forEach.call(document.querySelectorAll('.lead-status-form'), function (f) {
+    var sel = f.querySelector('select[name="status"]');
+    if (!sel) return;
+    sel.addEventListener('change', function () {
+      f.classList.add('is-saving');
+      var b = f.querySelector('button[type="submit"]');
+      if (b) b.textContent = 'Saving…';
+      f.submit();
+    });
+  });
+})();
+</script>
+
+<script>
+/* Leads inbox — fixed conversation + chat-area resize (desktop only).
+   Three behaviours, all additive: with no stored size and no scroll the pane
+   renders exactly as before.
+   1. Dock: while the inbox section still fills the viewport but the pane top
+      has scrolled past the header stop, the pane parks at top:84px exactly
+      over its own grid slot (inline left/width), instead of sliding under
+      the header. Scroll back up — or down to the footer — and it rejoins.
+   2. Resize: the grip above the reply box is a vertical drag — down
+      lengthens the conversation, up shortens it; the thread is the pane's
+      only flexible child, so every pixel goes to the chat. Clamped, and
+      persisted per browser.
+   3. Keyboard: arrows adjust, double-click restores. */
+(function () {
+  'use strict';
+  var pane = document.querySelector('.lead-detail-col .lead-detail');
+  var grip = document.querySelector('[data-lead-thread-grip]');
+  if (!pane || !grip) return;
+  var col = pane.closest('.lead-detail-col');
+  var section = pane.closest('.leads-section');
+  var mq = window.matchMedia ? window.matchMedia('(min-width: 901px)') : null;
+
+  var KEY = 'fl.leadsPane.v2';
+  var DOCK_TOP = 84;   /* header stop, matches the sticky pane top */
+  var MIN_H = 420;     /* thread floor + foot always fit */
+  var MAX_H = 1100;    /* past this a pane is just page */
+
+  function desktop() {
+    if (mq) return mq.matches;
+    return (window.innerWidth || 0) >= 901;
+  }
+  function load() {
+    try {
+      var o = JSON.parse(window.localStorage.getItem(KEY) || '{}');
+      return o && typeof o === 'object' ? o : {};
+    } catch (e) { return {}; }
+  }
+  function save(s) {
+    try { window.localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) {}
+  }
+  var S = load(); /* { h } — user size, empty until first resize */
+
+  /* Height: never shorter than the foot, never taller than the window
+     (minus header + margin) or the absolute cap. */
+  function clampH(h, vh) {
+    h = Math.round(Number(h) || 0);
+    var max = Math.min(MAX_H, Math.max(MIN_H, vh - 96));
+    if (h < MIN_H) h = MIN_H;
+    if (h > max) h = max;
+    return h;
+  }
+  /* Docked while the slot has passed the header stop but the section still
+     owns the viewport — never over the footer. */
+  function shouldDock(colTop, secBottom, vh) {
+    return colTop < DOCK_TOP && secBottom > vh + 40;
+  }
+
+  function applySize() {
+    var vh = window.innerHeight || 800;
+    if (S.h) pane.style.setProperty('--lead-user-h', clampH(S.h, vh) + 'px');
+    else pane.style.removeProperty('--lead-user-h');
+  }
+
+  function undock() {
+    if (!pane.classList.contains('is-docked')) return;
+    pane.classList.remove('is-docked');
+    pane.style.left = '';
+    pane.style.width = '';
+    pane.style.top = '';
+    pane.style.maxHeight = '';
+    if (col) col.style.minHeight = '';
+  }
+  function dockTick() {
+    if (!desktop() || !col || !section) { undock(); return; }
+    var vh = window.innerHeight || 800;
+    if (!shouldDock(col.getBoundingClientRect().top, section.getBoundingClientRect().bottom, vh)) {
+      undock();
+      return;
+    }
+    /* Park over the slot: the column rect is the slot even while docked. */
+    var r = col.getBoundingClientRect();
+    if (!pane.classList.contains('is-docked')) {
+      pane.classList.add('is-docked');
+      /* Hold the slot open behind the parked pane — no page jump. */
+      col.style.minHeight = pane.offsetHeight + 'px';
+    }
+    pane.style.left = r.left + 'px';
+    pane.style.width = r.width + 'px';
+    pane.style.top = DOCK_TOP + 'px';
+    /* A parked pane always fits the window, so the pinned foot is visible. */
+    pane.style.maxHeight = Math.max(MIN_H, vh - DOCK_TOP - 12) + 'px';
+  }
+
+  /* --- vertical drag on the seam: down lengthens the conversation,
+     up shortens it — the thread takes every pixel the pane gains or loses --- */
+  var drag = null;
+  grip.addEventListener('pointerdown', function (e) {
+    if (!desktop()) return;
+    e.preventDefault();
+    try { grip.setPointerCapture(e.pointerId); } catch (err) {}
+    drag = { y: e.clientY, h: S.h || pane.offsetHeight };
+    pane.classList.add('is-resizing');
+    document.body.classList.add('is-lead-resizing');
+  });
+  grip.addEventListener('pointermove', function (e) {
+    if (!drag) return;
+    S.h = clampH(drag.h + (e.clientY - drag.y), window.innerHeight || 800);
+    applySize();
+    dockTick(); /* re-park over the slot as the pane changes height */
+  });
+  function endDrag() {
+    if (!drag) return;
+    drag = null;
+    pane.classList.remove('is-resizing');
+    document.body.classList.remove('is-lead-resizing');
+    save(S);
+    dockTick();
+  }
+  grip.addEventListener('pointerup', endDrag);
+  grip.addEventListener('pointercancel', endDrag);
+
+  /* --- keyboard: arrows nudge (Shift = big step), Ctrl+Home restores --- */
+  grip.addEventListener('keydown', function (e) {
+    if (!desktop()) return;
+    var step = e.shiftKey ? 80 : 20;
+    var handled = true;
+    var h = S.h || pane.offsetHeight;
+    if (e.key === 'ArrowDown') h += step;
+    else if (e.key === 'ArrowUp') h -= step;
+    else if (e.key === 'Home' && (e.ctrlKey || e.metaKey)) S = {};
+    else handled = false;
+    if (!handled) return; /* plain Home still scrolls to top */
+    e.preventDefault();
+    if (e.key !== 'Home') {
+      S.h = clampH(h, window.innerHeight || 800);
+    }
+    save(S);
+    applySize();
+    dockTick();
+  });
+  grip.addEventListener('dblclick', function (e) {
+    e.preventDefault();
+    S = {};
+    save(S);
+    applySize();
+    dockTick();
+  });
+
+  /* --- the chat box extends from its own corner, like the reply box below ---
+     The thread keeps its flexible fill (it must take whatever the pane gives
+     it), so a native drag alone would snap straight back — the grow rule
+     reclaims every pixel on the next layout. Instead, a left-button mouse
+     press in the thread's own resize corner drives the same stored pane
+     height the seam grip drives, and the thread — the pane's only flexible
+     child — takes every pixel of it. Same clamp, same save, same dock.
+     Touch is left alone (no corner handle there, so a press stays a scroll),
+     and so are narrow screens (with the pane at its natural height the
+     native handle already sticks on its own). */
+  var thread = document.querySelector('#leadThread');
+  function inThreadCorner(e) {
+    if (!thread || e.pointerType === 'touch') return false;
+    var r = thread.getBoundingClientRect();
+    return e.clientX >= r.right - 28 && e.clientY >= r.bottom - 28;
+  }
+  if (thread) {
+    thread.addEventListener('pointerdown', function (e) {
+      if (!desktop() || e.button !== 0 || !inThreadCorner(e)) return;
+      e.preventDefault();
+      try { thread.setPointerCapture(e.pointerId); } catch (err) {}
+      drag = { y: e.clientY, h: S.h || pane.offsetHeight };
+      pane.classList.add('is-resizing');
+      document.body.classList.add('is-lead-resizing');
+    });
+    thread.addEventListener('pointermove', function (e) {
+      if (!drag) return;
+      S.h = clampH(drag.h + (e.clientY - drag.y), window.innerHeight || 800);
+      applySize();
+      dockTick();
+    });
+    thread.addEventListener('pointerup', endDrag);
+    thread.addEventListener('pointercancel', endDrag);
+  }
+
+  var ticking = false;
+  function requestDock() {
+    if (ticking) return;
+    ticking = true;
+    (window.requestAnimationFrame || function (f) { setTimeout(f, 16); })(function () {
+      ticking = false;
+      dockTick();
+    });
+  }
+  window.addEventListener('scroll', requestDock, { passive: true });
+  window.addEventListener('resize', function () { applySize(); requestDock(); });
+  if (mq) {
+    var onMQ = function () { undock(); applySize(); requestDock(); };
+    if (mq.addEventListener) mq.addEventListener('change', onMQ);
+    else if (mq.addListener) mq.addListener(onMQ);
+  }
+  window.addEventListener('beforeprint', undock);
+  window.addEventListener('afterprint', requestDock);
+
+  applySize();
+  dockTick();
+
+  /* Test seam: pure geometry + state, no DOM needed except reset. */
+  window.__flLeadsPane = {
+    clampH: clampH,
+    shouldDock: shouldDock,
+    key: KEY,
+    dockTop: DOCK_TOP,
+    state: function () { return { h: S.h || null }; },
+    reset: function () { S = {}; save(S); applySize(); dockTick(); }
+  };
+})();
+</script>
+
+<%- include('../partials/bottom') %>

@@ -90,7 +90,7 @@ async function call(route, who = null, form = null) {
   const lead = db.prepare('SELECT * FROM leads ORDER BY id DESC LIMIT 1').get();
   check('seed inquiry created', !!lead);
 
-  const openHtml = await (await call(`/dashboard/leads?open=${lead.id}`, 'owner')).text();
+  const openHtml = await (await call(`/dashboard/leads/${lead.id}`, 'owner')).text();
   check('reply box requires a message', /name="body"[^>]*required/.test(openHtml));
   check('the reply box carries the server limits, not a hard maxlength', /name="body"[^>]*data-max="4000"/.test(openHtml) && !/name="body"[^>]*maxlength/.test(openHtml));
   check('the composer explains the window it accepts', /Between 2 and 4,000 characters/.test(openHtml));
@@ -100,7 +100,7 @@ async function call(route, who = null, form = null) {
      was retired so the chat owns the pane, on both sides and in the stylesheet. */
   const inboxCss = fs.readFileSync(path.join(__dirname, '..', 'public', 'css', 'app.css'), 'utf8');
   check('no notes UI is rendered for the owner', !openHtml.includes('Private notes') && !openHtml.includes('lead-note-form'));
-  const buyerView = await (await call(`/dashboard/leads?box=sent&open=${lead.id}`, 'inquirer')).text();
+  const buyerView = await (await call(`/dashboard/leads/${lead.id}?box=sent`, 'inquirer')).text();
   check('no notes UI is rendered for the inquirer', !buyerView.includes('Private notes') && !buyerView.includes('lead-note-form'));
   check('no notes styles are left behind', !/\.lead-notes|\.lead-note-form/.test(inboxCss));
   check('the thread is the one flexible block in the pane', /\.lead-thread \{\s*flex: 1 1 auto; min-height: 200px/.test(inboxCss));
@@ -117,7 +117,7 @@ async function call(route, who = null, form = null) {
     && /\.lead-facts \.lf-look \{ flex: 0 0 100%; \}/.test(inboxCss)
     && /class="lf lf-look"/.test(buyerView));
   check('the head above the inbox is slim and scoped to it', /class="page-head leads-head"/.test(openHtml)
-    && /class="section-tight leads-section"/.test(openHtml)
+    && /class="section-tight leads-section leads-thread-page"/.test(openHtml)
     && /\.leads-head h1 \{[^}]*clamp\(1\.45rem/.test(inboxCss));
   check('refusals are styled inline under the box', /\.lead-reply-error \{[^}]*var\(--bad-soft\)/.test(inboxCss));
   check('the counter warns before the limit is hit', /\.lead-reply-count\.is-near \{ color: var\(--warn\)/.test(inboxCss));
@@ -188,7 +188,7 @@ async function call(route, who = null, form = null) {
   const sentHtml = await (await call('/dashboard/leads?box=sent', 'inquirer')).text();
   check('Sent tab badge still shows 1', />Sent <span class="lead-n">1<\/span>/.test(sentHtml));
   check('Sent list still shows the thread', sentHtml.includes('Quote please'));
-  const stillOpen = await (await call(`/dashboard/leads?box=sent&open=${lead.id}`, 'inquirer')).text();
+  const stillOpen = await (await call(`/dashboard/leads/${lead.id}?box=sent`, 'inquirer')).text();
   check('archived thread still opens for the inquirer', stillOpen.includes('twelve desks'));
   const followUp = await call(`/dashboard/leads/${lead.id}/reply`, 'inquirer', { _csrf: s.inquirer.csrf, body: 'Following up — are mornings still free?' });
   check('inquirer can still reply post-archive', followUp.status === 302 && decodeURIComponent(followUp.headers.get('location')).includes('Message sent'));
@@ -247,8 +247,8 @@ async function call(route, who = null, form = null) {
     const pages = [
       '/blog',
       '/blog/introducing-the-firmledger-api',
-      `/dashboard/leads?open=${lead.id}`,
-      `/dashboard/leads?box=sent&open=${lead.id}`,
+      `/dashboard/leads/${lead.id}`,
+      `/dashboard/leads/${lead.id}?box=sent`,
     ];
     console.log('Browser fit — measured geometry, 10 devices × 4 pages');
     for (const [label, width, height] of devices) {

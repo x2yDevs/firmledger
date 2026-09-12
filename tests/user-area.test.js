@@ -18,7 +18,7 @@ const base = `http://127.0.0.1:${port}`;
 const routes = ['', '/watchlist', '/advertise', '/settings', '/notifications', '/notifications/trash',
   '/security', '/support', '/support/new', `/support/${s.tid}`, '/listings/new',
   `/listings/${s.lid}/edit`, `/listings/${s.lid}/jobs`, '/api', '/api/playground',
-  '/upgrade', '/analytics', `/leads?open=${s.lead}`, '/delete-account'];
+  '/upgrade', '/analytics', `/leads/${s.lead}`, '/delete-account'];
 const server = spawn(process.execPath, ['server.js'], {
   cwd: path.join(__dirname, '..'),
   env: { ...process.env, PORT: String(port), BASE_URL: base },
@@ -86,7 +86,7 @@ async function request(route, who = 'owner', form) {
     await request(`/dashboard/leads/${s.lead}/reply`, who, { body: `Browser audit reply from ${who}` });
   }
   for (const who of ['owner', 'buyer']) {
-    const html = await (await request(`/dashboard/leads?open=${s.lead}&box=${who === 'buyer' ? 'sent' : 'received'}`, who)).text();
+    const html = await (await request(`/dashboard/leads/${s.lead}?box=${who === 'buyer' ? 'sent' : 'received'}`, who)).text();
     assert.match(html, /Browser audit reply from owner/);
     assert.match(html, /Browser audit reply from buyer/);
   }

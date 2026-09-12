@@ -157,8 +157,8 @@ const notifCount = (uid) => db.prepare("SELECT COUNT(*) c FROM notifications WHE
   console.log('Leads housekeeping — permanent delete');
 
   /* Both sides see a permanent delete control on the open conversation. */
-  const ownerView = await (await call(`/dashboard/leads?open=${lead.id}`, 'owner')).text();
-  const inqView = await (await call(`/dashboard/leads?box=sent&open=${lead.id}`, 'inquirer')).text();
+  const ownerView = await (await call(`/dashboard/leads/${lead.id}`, 'owner')).text();
+  const inqView = await (await call(`/dashboard/leads/${lead.id}?box=sent`, 'inquirer')).text();
   check('owner sees “Delete permanently”', ownerView.includes('Delete permanently') && ownerView.includes(`/dashboard/leads/${lead.id}/delete`));
   check('inquirer sees “Delete conversation”', inqView.includes('Delete conversation') && inqView.includes(`/dashboard/leads/${lead.id}/delete`));
 

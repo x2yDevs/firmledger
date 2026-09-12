@@ -125,7 +125,7 @@ const MEMBER_REPLY = 'Perfect, book us in for Monday at 8am. Thank you!';
   check('the typed message is preserved verbatim', lead.message === MESSAGE);
 
   /* --- 3. the claimed owner reads it in the Leads inbox --- */
-  const inbox = await (await get(`/dashboard/leads?open=${lead.id}`, ownerCookie)).text();
+  const inbox = await (await get(`/dashboard/leads/${lead.id}`, ownerCookie)).text();
   check('owner received inbox lists the member by name', inbox.includes('Jane Wanjiku'));
   check('owner sees the typed message verbatim', inbox.includes(MESSAGE));
   check('owner sees the reply box', inbox.includes('Send message'));
@@ -136,14 +136,14 @@ const MEMBER_REPLY = 'Perfect, book us in for Monday at 8am. Thank you!';
   r = await post(`/dashboard/leads/${lead.id}/reply`, { _csrf: ownerCsrf, body: OWNER_REPLY }, ownerCookie);
   check('owner reply accepted', r.status === 302 && decodeURIComponent(r.headers.get('location') || '').includes('Message sent'));
 
-  const sent = await (await get(`/dashboard/leads?box=sent&open=${lead.id}`, janeCookie)).text();
+  const sent = await (await get(`/dashboard/leads/${lead.id}?box=sent`, janeCookie)).text();
   check('member Sent box shows the owner reply verbatim', sent.includes(OWNER_REPLY));
   check('owner email never leaks to the member', !sent.includes('owner@inbox.example'));
   const janeCsrf = (sent.match(/name="_csrf" value="([^"]+)"/) || [])[1];
   r = await post(`/dashboard/leads/${lead.id}/reply`, { _csrf: janeCsrf, body: MEMBER_REPLY }, janeCookie);
   check('member reply back accepted', r.status === 302 && decodeURIComponent(r.headers.get('location') || '').includes('Message sent'));
 
-  const inbox2 = await (await get(`/dashboard/leads?open=${lead.id}`, ownerCookie)).text();
+  const inbox2 = await (await get(`/dashboard/leads/${lead.id}`, ownerCookie)).text();
   check('owner sees the member follow-up verbatim', inbox2.includes(MEMBER_REPLY));
 
   /* --- 5. the persisted thread is the one conversation, in order --- */
