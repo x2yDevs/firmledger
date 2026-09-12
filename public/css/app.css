@@ -3161,6 +3161,68 @@ select.input::-ms-expand,
 .leads-section { padding-top: 1.1rem; }
 .leads-section .lead-tabs { margin: 4px 0 12px; }
 
+/* ============ Leads inbox — fixed conversation + corner resize (desktop) ============
+   The pane geometry above (--pane-h, sticky top, thread floor, chrome budget)
+   is untouched: with no stored size and no scroll this block computes to the
+   exact same pixels. What it adds, desktop only (min-width: 901px):
+
+   1. A pinned foot: the reply composer and the status/archive/delete line
+      share one wrapper (.lead-detail-foot) that sticks to the pane bottom, so
+      Send is reachable like the sticky site header is — even on the short
+      windows where the pane itself has to scroll.
+   2. A docked state (.is-docked): while the inbox section still fills the
+      viewport but the pane top has scrolled past the header stop, script parks
+      the pane at top:84px exactly over its own grid slot (inline left/width),
+      instead of letting it slide under the header. Scroll back up — or down to
+      the footer — and it rejoins the flow with no jump.
+   3. A user size: --lead-user-h lengthens/shortens the pane, --lead-list-w
+      widens/narrows the conversation by trading width with the list column.
+      Both default to the shipped geometry, are clamped by script, and persist
+      per browser. The corner grip (.lead-resize) is the only new chrome. */
+.lead-detail-foot { display: grid; gap: 0; margin: 0; padding: 0; min-width: 0; }
+.lead-detail > .lead-detail-foot { flex: 0 0 auto; }
+@media (min-width: 901px) {
+  /* Width trade: the list column takes the stored width (default 300px, the
+     shipped measure); the conversation keeps every remaining pixel. */
+  .lead-layout { grid-template-columns: minmax(220px, var(--lead-list-w, 300px)) minmax(0, 1fr); }
+  /* Height trade: the stored height wins, the window-derived --pane-h stays
+     the default — delete the stored size and this rule computes identically. */
+  .lead-detail { height: var(--lead-user-h, var(--pane-h, min(1060px, max(calc(100vh - 100px), 640px)))); }
+  /* Short windows reclaim thread floor instead of clipping the composer: full
+     220px from ~734px windows up, easing to 140px on the shortest screens. */
+  .lead-detail .lead-thread { min-height: clamp(140px, 30vh, 220px); }
+  /* Pinned foot: Send + housekeeping hold the pane bottom while the thread
+     above scrolls. Scoped to desktop — on stacked screens the composer sits at
+     the natural end of the thread, never overlaying it. */
+  .lead-detail-foot { position: sticky; bottom: 0; z-index: 2; background: var(--surface); }
+  /* Docked: parked over its own slot while the section scrolls beneath. */
+  .lead-detail.is-docked { position: fixed; z-index: 30; margin: 0; }
+  .lead-detail.is-resizing { box-shadow: 0 0 0 2px var(--accent); }
+}
+/* Corner grip: an absolute button in the pane corner (the sticky pane is its
+   positioning context), sized to sit inside the pane padding so it never covers
+   a control. Quiet until hovered or keyboard-focused. */
+.lead-resize {
+  position: absolute; right: 3px; bottom: 3px; z-index: 3;
+  width: 22px; height: 22px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 7px; background: transparent; border: 1px solid transparent;
+  color: var(--muted); cursor: nwse-resize; touch-action: none;
+}
+.lead-resize:hover, .lead-resize:focus-visible { color: var(--accent2); background: var(--soft); border-color: var(--hair2); }
+.lead-resize svg { width: 13px; height: 13px; display: block; }
+/* Stacked screens keep the plain thread — no grip, no resize, no dock. */
+@media (max-width: 900px) {
+  .lead-resize { display: none; }
+}
+@media print {
+  .lead-resize { display: none; }
+  .lead-detail.is-docked { position: static; }
+}
+/* While a drag is in flight the whole page takes the resize cursor and gives
+   up text selection, so a fast diagonal never selects the thread instead. */
+body.is-lead-resizing, body.is-lead-resizing .lead-detail { cursor: nwse-resize; user-select: none; -webkit-user-select: none; }
+
 /* ============ Blog — fits the screen, matches FirmLedger page-head rhythm ============ */
 .blog-head h1 { font-size: clamp(1.9rem, 3.6vw, 2.6rem); margin: 10px 0 0; }
 .blog-lede { max-width: 640px; margin-top: 12px; font-size: 15.5px; line-height: 1.75; }

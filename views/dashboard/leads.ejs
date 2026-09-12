@@ -202,6 +202,11 @@
               <% } %>
             </div>
 
+            <% /* Composer + housekeeping share one pinned foot: on desktop it sticks
+                  to the pane bottom like the site header sticks to the page top,
+                  so Send is always reachable. Same forms, same margins — the
+                  wrapper itself adds no height. */ %>
+            <div class="lead-detail-foot">
             <% /* The composer carries its own explanation: a refused reply is
                   stated beside the Send button, in the box the member is
                   looking at, with the exact reason and the numbers. */ %>
@@ -268,6 +273,13 @@
             <% } %>
             </div>
             <% } %>
+            </div>
+            <% /* The corner grip: drag diagonally to lengthen the conversation /
+                  trade width with the list; arrows/HOME fine-tune, double-click
+                  restores. Hidden on stacked screens and in print. */ %>
+            <button type="button" class="lead-resize" data-lead-resize aria-label="Resize conversation pane (arrow keys adjust, double-click restores)">
+              <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M10.5 1.5 L1.5 10.5 M10.5 5.2 L5.2 10.5 M10.5 8.6 L8.6 10.5"/></svg>
+            </button>
           </div>
           <% } else if (box.rows.length) { %>
           <div class="panel lead-detail lead-detail-empty">
@@ -414,6 +426,207 @@
       f.submit();
     });
   });
+})();
+</script>
+
+<script>
+/* Leads inbox — fixed conversation + corner resize (desktop only).
+   Three behaviours, all additive: with no stored size and no scroll the pane
+   renders exactly as before.
+   1. Dock: while the inbox section still fills the viewport but the pane top
+      has scrolled past the header stop, the pane parks at top:84px exactly
+      over its own grid slot (inline left/width), instead of sliding under
+      the header. Scroll back up — or down to the footer — and it rejoins.
+   2. Resize: the corner grip trades height (pane) against width (list
+      column), clamped, and persists per browser.
+   3. Keyboard: arrows adjust, Ctrl+Home and double-click restore. */
+(function () {
+  'use strict';
+  var pane = document.querySelector('.lead-detail-col .lead-detail');
+  var grip = document.querySelector('[data-lead-resize]');
+  if (!pane || !grip) return;
+  var col = pane.closest('.lead-detail-col');
+  var layout = pane.closest('.lead-layout');
+  var section = pane.closest('.leads-section');
+  var mq = window.matchMedia ? window.matchMedia('(min-width: 901px)') : null;
+
+  var KEY = 'fl.leadsPane.v1';
+  var DOCK_TOP = 84;   /* header stop, matches the sticky pane top */
+  var MIN_H = 420;     /* thread floor + foot always fit */
+  var MAX_H = 1100;    /* past this a pane is just page */
+  var MIN_LIST = 220;  /* rows stay readable — the shipped column min */
+  var MIN_CONV = 440;  /* composer actions stay on one line */
+
+  function desktop() {
+    if (mq) return mq.matches;
+    return (window.innerWidth || 0) >= 901;
+  }
+  function load() {
+    try {
+      var o = JSON.parse(window.localStorage.getItem(KEY) || '{}');
+      return o && typeof o === 'object' ? o : {};
+    } catch (e) { return {}; }
+  }
+  function save(s) {
+    try { window.localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) {}
+  }
+  var S = load(); /* { h, w } — user size, empty until first resize */
+
+  /* Height: never shorter than the foot, never taller than the window
+     (minus header + margin) or the absolute cap. */
+  function clampH(h, vh) {
+    h = Math.round(Number(h) || 0);
+    var max = Math.min(MAX_H, Math.max(MIN_H, vh - 96));
+    if (h < MIN_H) h = MIN_H;
+    if (h > max) h = max;
+    return h;
+  }
+  /* List width: rows keep 220px, the conversation keeps 440px plus the gap. */
+  function clampW(w, layoutW) {
+    w = Math.round(Number(w) || 0);
+    var max = Math.max(MIN_LIST, layoutW - 16 - MIN_CONV);
+    if (w < MIN_LIST) w = MIN_LIST;
+    if (w > max) w = max;
+    return w;
+  }
+  /* Docked while the slot has passed the header stop but the section still
+     owns the viewport — never over the footer. */
+  function shouldDock(colTop, secBottom, vh) {
+    return colTop < DOCK_TOP && secBottom > vh + 40;
+  }
+
+  function applySize() {
+    var vh = window.innerHeight || 800;
+    var layoutW = layout ? layout.clientWidth : 1200;
+    if (S.h) pane.style.setProperty('--lead-user-h', clampH(S.h, vh) + 'px');
+    else pane.style.removeProperty('--lead-user-h');
+    if (layout) {
+      if (S.w) layout.style.setProperty('--lead-list-w', clampW(S.w, layoutW) + 'px');
+      else layout.style.removeProperty('--lead-list-w');
+    }
+  }
+
+  function undock() {
+    if (!pane.classList.contains('is-docked')) return;
+    pane.classList.remove('is-docked');
+    pane.style.left = '';
+    pane.style.width = '';
+    pane.style.top = '';
+    pane.style.maxHeight = '';
+    if (col) col.style.minHeight = '';
+  }
+  function dockTick() {
+    if (!desktop() || !col || !section) { undock(); return; }
+    var vh = window.innerHeight || 800;
+    if (!shouldDock(col.getBoundingClientRect().top, section.getBoundingClientRect().bottom, vh)) {
+      undock();
+      return;
+    }
+    /* Park over the slot: the column rect is the slot even while docked. */
+    var r = col.getBoundingClientRect();
+    if (!pane.classList.contains('is-docked')) {
+      pane.classList.add('is-docked');
+      /* Hold the slot open behind the parked pane — no page jump. */
+      col.style.minHeight = pane.offsetHeight + 'px';
+    }
+    pane.style.left = r.left + 'px';
+    pane.style.width = r.width + 'px';
+    pane.style.top = DOCK_TOP + 'px';
+    /* A parked pane always fits the window, so the pinned foot is visible. */
+    pane.style.maxHeight = Math.max(MIN_H, vh - DOCK_TOP - 12) + 'px';
+  }
+
+  /* --- corner drag: down lengthens, right widens the conversation --- */
+  var drag = null;
+  grip.addEventListener('pointerdown', function (e) {
+    if (!desktop()) return;
+    e.preventDefault();
+    try { grip.setPointerCapture(e.pointerId); } catch (err) {}
+    drag = { x: e.clientX, y: e.clientY, h: S.h || pane.offsetHeight, w: S.w || 300 };
+    pane.classList.add('is-resizing');
+    document.body.classList.add('is-lead-resizing');
+  });
+  grip.addEventListener('pointermove', function (e) {
+    if (!drag) return;
+    S.h = clampH(drag.h + (e.clientY - drag.y), window.innerHeight || 800);
+    S.w = clampW(drag.w - (e.clientX - drag.x), layout ? layout.clientWidth : 1200);
+    applySize();
+    dockTick(); /* re-park over the slot as the grid trades width */
+  });
+  function endDrag() {
+    if (!drag) return;
+    drag = null;
+    pane.classList.remove('is-resizing');
+    document.body.classList.remove('is-lead-resizing');
+    save(S);
+    dockTick();
+  }
+  grip.addEventListener('pointerup', endDrag);
+  grip.addEventListener('pointercancel', endDrag);
+
+  /* --- keyboard: arrows nudge (Shift = big step), Ctrl+Home restores --- */
+  grip.addEventListener('keydown', function (e) {
+    if (!desktop()) return;
+    var step = e.shiftKey ? 80 : 20;
+    var handled = true;
+    var h = S.h || pane.offsetHeight;
+    var w = S.w || 300;
+    if (e.key === 'ArrowDown') h += step;
+    else if (e.key === 'ArrowUp') h -= step;
+    else if (e.key === 'ArrowRight') w -= step;
+    else if (e.key === 'ArrowLeft') w += step;
+    else if (e.key === 'Home' && (e.ctrlKey || e.metaKey)) S = {};
+    else handled = false;
+    if (!handled) return; /* plain Home still scrolls to top */
+    e.preventDefault();
+    if (e.key !== 'Home') {
+      S.h = clampH(h, window.innerHeight || 800);
+      S.w = clampW(w, layout ? layout.clientWidth : 1200);
+    }
+    save(S);
+    applySize();
+    dockTick();
+  });
+  grip.addEventListener('dblclick', function (e) {
+    e.preventDefault();
+    S = {};
+    save(S);
+    applySize();
+    dockTick();
+  });
+
+  var ticking = false;
+  function requestDock() {
+    if (ticking) return;
+    ticking = true;
+    (window.requestAnimationFrame || function (f) { setTimeout(f, 16); })(function () {
+      ticking = false;
+      dockTick();
+    });
+  }
+  window.addEventListener('scroll', requestDock, { passive: true });
+  window.addEventListener('resize', function () { applySize(); requestDock(); });
+  if (mq) {
+    var onMQ = function () { undock(); applySize(); requestDock(); };
+    if (mq.addEventListener) mq.addEventListener('change', onMQ);
+    else if (mq.addListener) mq.addListener(onMQ);
+  }
+  window.addEventListener('beforeprint', undock);
+  window.addEventListener('afterprint', requestDock);
+
+  applySize();
+  dockTick();
+
+  /* Test seam: pure geometry + state, no DOM needed except reset. */
+  window.__flLeadsPane = {
+    clampH: clampH,
+    clampW: clampW,
+    shouldDock: shouldDock,
+    key: KEY,
+    dockTop: DOCK_TOP,
+    state: function () { return { h: S.h || null, w: S.w || null }; },
+    reset: function () { S = {}; save(S); applySize(); dockTick(); }
+  };
 })();
 </script>
 
