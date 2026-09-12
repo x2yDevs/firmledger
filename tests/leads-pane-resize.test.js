@@ -1,5 +1,5 @@
 /**
- * Leads pane — fixed conversation + corner resize, chat area kept.
+ * Leads pane — fixed conversation + chat-area resize, chat area kept.
  * npm run test:leads-pane
  *
  * Locks in the desktop conversation behaviour, without touching anything else:
@@ -7,17 +7,17 @@
  *      mine/theirs sides, escaped bodies, kept line breaks) for both roles,
  *      and reply + status still post from inside the new pinned foot.
  *   2. Markup: composer + housekeeping share exactly one .lead-detail-foot
- *      after #leadThread; the corner grip is a labelled button in the pane.
+ *      after #leadThread; the chat-area grip is a labelled separator in the
+ *      foot, directly above the reply box.
  *   3. Stylesheet: the thread stays the flexible block, bubbles keep their
  *      sides, pane defaults resolve byte-identical to shipped (the new var
  *      fallback chains equal the original declarations), grip/dock rules are
  *      desktop-scoped with no !important.
  *   4. Viewport matrix: the SHIPPED script's own clamp/dock functions —
  *      extracted from the served page and run under vm — keep height inside
- *      420..min(1100, vh-96), the list inside 220..layout-456 with 440px+
- *      for the chat, and dock only past the header stop, never over the
- *      footer. A docked pane fits every window from 516px up, so Send needs
- *      no scroll; below that the pane scrolls instead of clipping.
+ *      420..min(1100, vh-96), and dock only past the header stop, never over
+ *      the footer. A docked pane fits every window from 516px up, so Send
+ *      needs no scroll; below that the pane scrolls instead of clipping.
  *   5. Wiring: drag/keyboard/double-click/reset/print/scroll listeners are
  *      all attached; a stubbed drag persists size, Ctrl+Home and
  *      double-click restore it, beforeprint undocks, stacked screens opt out.
@@ -140,21 +140,25 @@ async function call(route, who = null, form = null) {
     && (buyerHtml.match(/lead-bubble theirs/g) || []).length === 2);
 
   console.log('Leads pane — the foot wraps the composer without breaking it');
-  check('composer + housekeeping share exactly one pinned foot, in order',
+  check('composer + housekeeping share exactly one pinned foot, grip first',
     (ownerHtml.match(/lead-detail-foot/g) || []).length === 1
     && ownerHtml.indexOf('panel lead-detail') < ownerHtml.indexOf('lead-detail-foot')
     && ownerHtml.indexOf('id="leadThread"') < ownerHtml.indexOf('lead-detail-foot')
-    && ownerHtml.indexOf('lead-detail-foot') < ownerHtml.indexOf('lead-reply-form')
-    && ownerHtml.indexOf('lead-reply-form') < ownerHtml.indexOf('lead-detail-bar')
-    && ownerHtml.indexOf('lead-detail-bar') < ownerHtml.indexOf('data-lead-resize'));
-  check('corner grip is a labelled button that cannot submit a form',
-    /<button type="button" class="lead-resize" data-lead-resize aria-label="[^"]*Resize[^"]*">/.test(ownerHtml)
-    && /data-lead-resize aria-label="[^"]*">\s*<svg[^>]*aria-hidden="true"/.test(ownerHtml));
+    && ownerHtml.indexOf('lead-detail-foot') < ownerHtml.indexOf('lead-thread-grip')
+    && ownerHtml.indexOf('lead-thread-grip') < ownerHtml.indexOf('lead-reply-form')
+    && ownerHtml.indexOf('lead-reply-form') < ownerHtml.indexOf('lead-detail-bar'));
+  check('chat-area grip is a labelled separator that cannot submit a form',
+    /<div class="lead-thread-grip" data-lead-thread-grip role="separator" aria-orientation="horizontal" tabindex="0"\s+aria-label="[^"]*Resize[^"]*">/.test(ownerHtml)
+    && ownerHtml.indexOf('data-lead-thread-grip') < ownerHtml.indexOf('name="body"')
+    && !/data-lead-thread-grip[^>]*(type="submit"|name=)/.test(ownerHtml));
   check('pane script ships its test seam',
-    ownerHtml.includes('__flLeadsPane') && ownerHtml.includes('fl.leadsPane.v1'));
+    ownerHtml.includes('__flLeadsPane') && ownerHtml.includes('fl.leadsPane.v2'));
+  check('the old corner grip and the width trade are gone',
+    !ownerHtml.includes('data-lead-resize') && !ownerHtml.includes('class="lead-resize"')
+    && !ownerHtml.includes('--lead-list-w'));
   const plainHtml = await (await call('/dashboard/leads', 'owner')).text();
   check('no-open pane ships no grip and no foot',
-    !/<button[^>]*data-lead-resize/.test(plainHtml)
+    !/<div[^>]*data-lead-thread-grip/.test(plainHtml)
     && !/class="lead-detail-foot"/.test(plainHtml)
     && plainHtml.includes('lead-detail-empty'));
 
@@ -185,14 +189,12 @@ async function call(route, who = null, form = null) {
     /\.lead-day \{[^}]*position: sticky; top: 0;/.test(css));
   /* Default-identity proofs: with no stored size the new declarations must
      resolve to the shipped ones — shown by reducing the var() fallbacks. */
-  const gridOrig = /\.lead-layout \{\s*display: grid;\s*grid-template-columns: ([^;]+);/.exec(css)[1];
-  const gridNew = /grid-template-columns: (minmax\(220px, var\(--lead-list-w, 300px\)\) minmax\(0, 1fr\));/.exec(css)[1];
-  check('list default is the shipped 220/300px measure',
-    gridNew.replace('var(--lead-list-w, 300px)', '300px') === gridOrig, `${gridNew} vs ${gridOrig}`);
   const heightOrig = /\.lead-detail \{[^}]*?height: ([^;]+);/.exec(css)[1];
   check('pane height default is the shipped --pane-h chain, still sticky',
     css.includes(`height: var(--lead-user-h, ${heightOrig});`)
     && /\.lead-detail \{\s*position: sticky; top: 84px;/.test(css));
+  check('the width trade left with the corner grip',
+    !css.includes('--lead-list-w') && !/\.lead-resize\b/.test(css));
   const floorOrig = Number(/\.lead-detail \.lead-thread \{ min-height: (\d+)px/.exec(css)[1]);
   const floorNew = /\.lead-detail \.lead-thread \{ min-height: clamp\((\d+)px, ([\d.]+)vh, (\d+)px\);/.exec(css)
     .slice(1).map(Number);
@@ -203,39 +205,33 @@ async function call(route, who = null, form = null) {
     && css.includes('.lead-detail > .lead-detail-foot { flex: 0 0 auto; }'));
   /* The new block lives between its header comment and the blog header — every
      scoping assertion below runs against that slice, not the whole file. */
-  const slice = css.slice(css.indexOf('fixed conversation + corner resize'), css.indexOf('============ Blog'));
+  const slice = css.slice(css.indexOf('fixed conversation + chat-area resize'), css.indexOf('============ Blog'));
   check('new block found', slice.length > 500 && !slice.includes('============ Blog'));
   const deskOnly = slice.slice(slice.indexOf('@media (min-width: 901px)'), slice.indexOf('@media (max-width: 900px)'));
-  check('grid, height, floor, foot, dock and resizing cursor are desktop-only',
-    (slice.match(/@media \(min-width: 901px\)/g) || []).length === 1
-    && deskOnly.includes('--lead-list-w') && deskOnly.includes('--lead-user-h')
+  check('height, floor, foot, dock and resizing cursor are desktop-only',
+    (slice.match(/@media \(min-width: 901px\)/g) || []).length === 2
+    && deskOnly.includes('--lead-user-h') && !deskOnly.includes('--lead-list-w')
     && deskOnly.includes('.lead-detail .lead-thread { min-height: clamp(')
     && deskOnly.includes('.lead-detail-foot { position: sticky; bottom: 0; z-index: 2; background: var(--surface); }')
     && deskOnly.includes('.lead-detail.is-docked { position: fixed; z-index: 30; margin: 0; }')
     && deskOnly.includes('.lead-detail.is-resizing { box-shadow: 0 0 0 2px var(--accent); }'));
   check('grip hides on stacked screens and in print, dock releases for print',
-    slice.includes('@media (max-width: 900px) {\n  .lead-resize { display: none; }\n}')
-    && /\.lead-resize \{[^}]*display: none;/.test(slice.slice(slice.indexOf('@media print')))
+    slice.includes('@media (max-width: 900px) {\n  .lead-thread-grip { display: none; }\n}')
+    && /\.lead-thread-grip \{[^}]*display: none;/.test(slice.slice(slice.indexOf('@media print')))
     && slice.includes('.lead-detail.is-docked { position: static; }'));
   check('no !important anywhere in the new block', !slice.includes('!important'));
-  /* The grip may overlay the padded corner, but the sliver it can cover is
-     smaller than the smallest control — nothing clickable hides under it. */
-  const [, padTop, padRight, padBottom] =
-    /\.lead-detail \{[^}]*?padding: (\d+)px (\d+)px (\d+)px/.exec(css).map(Number);
-  const gripRule = /\.lead-resize \{[^}]*\}/.exec(slice)[0];
-  const gripRight = Number(/right: (\d+)px/.exec(gripRule)[1]);
-  const gripBottom = Number(/bottom: (\d+)px/.exec(gripRule)[1]);
-  const gripSize = Number(/width: (\d+)px/.exec(gripRule)[1]);
-  const btnH = Number(/\.btn-sm \{ height: (\d+)px/.exec(css)[1]);
-  const sliverW = padRight - gripRight;
-  const sliverH = padBottom - gripBottom;
-  check('grip parks in the padded corner, covering no control',
-    /position: absolute/.test(gripRule) && gripSize === 22
-    && sliverW > 0 && sliverW < btnH && sliverH > 0 && sliverH < btnH,
-    `sliver ${sliverW}x${sliverH}px vs ${btnH}px controls (pad ${padTop}/${padRight}/${padBottom})`);
+  /* The grip is a full-width seam inside the foot (a normal child, not a
+     corner overlay), so it can never cover a control — its whole layout cost
+     is its own line, which short windows give straight back. */
+  const gripRule = /\.lead-thread-grip \{[^}]*\}/.exec(slice)[0];
+  check('grip is a vertical drag seam with a quiet bar',
+    /cursor: ns-resize/.test(gripRule) && /touch-action: none/.test(gripRule)
+    && /z-index: 3/.test(gripRule)
+    && /\.lead-thread-grip \{ height: 0; margin-top: 0; \}/.test(slice)
+    && /\.ltg-bar \{ position: absolute;/.test(slice));
   const zDay = Number(/\.lead-day \{[^}]*z-index: (\d+)/.exec(css)[1]);
   const zFoot = Number(/\.lead-detail-foot \{ position: sticky;[^}]*z-index: (\d+)/.exec(slice)[1]);
-  const zGrip = Number(/\.lead-resize \{[^}]*z-index: (\d+)/.exec(slice)[1]);
+  const zGrip = Number(/\.lead-thread-grip \{[^}]*z-index: (\d+)/.exec(slice)[1]);
   check('z-order: day marker under foot under grip, docked pane at 30',
     zDay === 1 && zFoot === 2 && zGrip === 3
     && deskOnly.includes('.lead-detail.is-docked { position: fixed; z-index: 30; margin: 0; }'));
@@ -246,7 +242,7 @@ async function call(route, who = null, form = null) {
   const paneJs = ownerHtml.slice(scriptStart + '<script>'.length, ownerHtml.indexOf('</script>', scriptStart));
   check('pane script extracted from the served page',
     ownerHtml.slice(scriptStart, scriptStart + 8) === '<script>'
-    && paneJs.includes('fl.leadsPane.v1') && paneJs.includes('shouldDock'));
+    && paneJs.includes('fl.leadsPane.v2') && paneJs.includes('shouldDock'));
 
   /* Stub DOM: fake elements record listeners, classes and inline styles so the
      real handlers (drag, keys, dock, print) can run without a browser. */
@@ -276,10 +272,9 @@ async function call(route, who = null, form = null) {
   const paneEl = fakeEl();
   const gripEl = fakeEl();
   const colEl = fakeEl();
-  const layoutEl = fakeEl();
   const sectionEl = fakeEl();
   paneEl.closest = (sel) => ({
-    '.lead-detail-col': colEl, '.lead-layout': layoutEl, '.leads-section': sectionEl,
+    '.lead-detail-col': colEl, '.leads-section': sectionEl,
   }[sel] || null);
   const store = {};
   const winListeners = {};
@@ -299,7 +294,7 @@ async function call(route, who = null, form = null) {
     },
     document: {
       querySelector: (sel) => ({
-        '.lead-detail-col .lead-detail': paneEl, '[data-lead-resize]': gripEl,
+        '.lead-detail-col .lead-detail': paneEl, '[data-lead-thread-grip]': gripEl,
       }[sel] || null),
       body: fakeEl(),
     },
@@ -310,9 +305,9 @@ async function call(route, who = null, form = null) {
   vm.runInContext(paneJs, sandbox);
   const P = sandbox.window.__flLeadsPane;
   check('test seam exposes the pure geometry', P
-    && typeof P.clampH === 'function' && typeof P.clampW === 'function'
-    && typeof P.shouldDock === 'function' && typeof P.reset === 'function');
-  check('storage key and header stop are the contract', P.key === 'fl.leadsPane.v1' && P.dockTop === 84);
+    && typeof P.clampH === 'function' && typeof P.shouldDock === 'function'
+    && typeof P.state === 'function' && typeof P.reset === 'function');
+  check('storage key and header stop are the contract', P.key === 'fl.leadsPane.v2' && P.dockTop === 84);
   check('desktop means min-width 901px', mqQueries.includes('(min-width: 901px)'));
   const gripKeys = Object.keys(gripEl.listeners).sort().join(',');
   check('grip wires drag, keys and double-click',
@@ -342,22 +337,6 @@ async function call(route, who = null, form = null) {
   }
   check('in-range heights pass through untouched', !hIdent, hIdent);
 
-  /* Width contract: list 220..layout-456, the chat keeps 440px+. */
-  const layouts = [860, 900, 1024, 1200, 1366, 1440];
-  const storedW = [0, 100, 219, 220, 300, 450, 700, 1200];
-  let wBad = '';
-  let chatBad = '';
-  for (const lw of layouts) {
-    const max = Math.max(220, lw - 16 - 440);
-    for (const w of storedW) {
-      const got = P.clampW(w, lw);
-      if ((got < 220 || got > max) && !wBad) wBad = `w=${w} layout=${lw}: got ${got}, want 220..${max}`;
-      if (lw - 16 - got < 440 && !chatBad) chatBad = `w=${w} layout=${lw}: chat keeps ${lw - 16 - got}px`;
-    }
-  }
-  check('every stored list width lands in 220..layout-456', !wBad, wBad);
-  check('the chat keeps 440px or more at every width', !chatBad, chatBad);
-
   /* Dock contract: past the header stop, never over the footer. */
   const dockCases = [
     ['at rest the pane never docks', 200, 2000, 900, false],
@@ -384,45 +363,39 @@ async function call(route, who = null, form = null) {
     84 + Math.max(420, 480 - 96) === 504
     && /@media \(min-width: 901px\) \{\s*\.lead-detail \{ overflow-y: auto; \}/.test(css));
 
-  /* A real drag through the stubbed handlers: +60 wide, +90 tall. */
+  /* A real drag through the stubbed handlers: 90px longer. */
   const fire = (el, type, ev = {}) => el.listeners[type].forEach((f) => f({ preventDefault() {}, ...ev }));
-  fire(gripEl, 'pointerdown', { clientX: 200, clientY: 200, pointerId: 1 });
+  fire(gripEl, 'pointerdown', { clientX: 500, clientY: 200, pointerId: 1 });
   check('dragging marks the pane and the page', paneEl.classList.contains('is-resizing')
     && sandbox.document.body.classList.contains('is-lead-resizing'));
-  fire(gripEl, 'pointermove', { clientX: 260, clientY: 290 });
-  check('a diagonal drag lengthens and widens the chat',
-    JSON.stringify(P.state()) === JSON.stringify({ h: 790, w: 240 }), JSON.stringify(P.state()));
+  fire(gripEl, 'pointermove', { clientX: 500, clientY: 290 });
+  check('a downward drag lengthens the conversation',
+    JSON.stringify(P.state()) === JSON.stringify({ h: 790 }), JSON.stringify(P.state()));
   check('the drag applies live, persisting only on release',
     paneEl.style._vars['--lead-user-h'] === '790px'
-    && layoutEl.style._vars['--lead-list-w'] === '240px'
     && !(P.key in store));
   fire(gripEl, 'pointerup', {});
   check('releasing persists the size and clears the marks',
-    JSON.stringify(JSON.parse(store[P.key])) === JSON.stringify({ h: 790, w: 240 })
+    JSON.stringify(JSON.parse(store[P.key])) === JSON.stringify({ h: 790 })
     && paneEl.style._vars['--lead-user-h'] === '790px'
-    && layoutEl.style._vars['--lead-list-w'] === '240px'
     && !paneEl.classList.contains('is-resizing')
     && !sandbox.document.body.classList.contains('is-lead-resizing'));
 
-  /* Keyboard from {h:790, w:240} on a 900px window (max 804). */
+  /* Keyboard from {h:790} on a 900px window (max 804). */
   fire(gripEl, 'keydown', { key: 'ArrowDown' });
   check('ArrowDown lengthens to the clamp', P.state().h === 804, JSON.stringify(P.state()));
-  fire(gripEl, 'keydown', { key: 'ArrowRight' });
-  check('ArrowRight narrows the list to its 220px min', P.state().w === 220, JSON.stringify(P.state()));
   fire(gripEl, 'keydown', { key: 'Home' });
-  check('plain Home is left alone for scrolling', P.state().h === 804 && P.state().w === 220);
+  check('plain Home is left alone for scrolling', P.state().h === 804);
   fire(gripEl, 'keydown', { key: 'Home', ctrlKey: true });
   check('Ctrl+Home restores the shipped size',
-    JSON.stringify(P.state()) === JSON.stringify({ h: null, w: null })
+    JSON.stringify(P.state()) === JSON.stringify({ h: null })
     && store[P.key] === '{}'
-    && !('--lead-user-h' in paneEl.style._vars)
-    && !('--lead-list-w' in layoutEl.style._vars));
+    && !('--lead-user-h' in paneEl.style._vars));
   fire(gripEl, 'keydown', { key: 'ArrowUp' });
-  check('ArrowUp shortens from the shipped size', P.state().h === 680 && P.state().w === 300,
-    JSON.stringify(P.state()));
+  check('ArrowUp shortens from the shipped size', P.state().h === 680, JSON.stringify(P.state()));
   fire(gripEl, 'dblclick', {});
   check('double-click restores the shipped size',
-    JSON.stringify(P.state()) === JSON.stringify({ h: null, w: null }));
+    JSON.stringify(P.state()) === JSON.stringify({ h: null }));
 
   /* Docking through the real handler: reset() re-evaluates the dock. */
   colEl.rect = { top: 50, left: 120, width: 740, bottom: 900 };
@@ -488,20 +461,18 @@ async function call(route, who = null, form = null) {
       check(`${label} has no sideways page scroll`,
         await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
       const pane = page.locator('.lead-detail').first();
-      const grip = page.locator('[data-lead-resize]');
+      const grip = page.locator('[data-lead-thread-grip]');
       if (width <= 900) {
         check(`${label} grip stays hidden`, await grip.isHidden());
         check(`${label} stacked thread is long, not compressed`, await page.locator('#leadThread').evaluate(
           (t) => t.getBoundingClientRect().height >= Math.min(window.innerHeight * 0.55, 460)));
       } else {
         check(`${label} grip shows`, await grip.isVisible());
-        const corner = await grip.evaluate((g) => {
-          const p = g.closest('.lead-detail').getBoundingClientRect();
-          const r = g.getBoundingClientRect();
-          return { dx: p.right - r.right, dy: p.bottom - r.bottom };
+        const gap = await grip.evaluate((g) => {
+          const form = g.closest('.lead-detail-foot').querySelector('.lead-reply-form');
+          return form.getBoundingClientRect().top - g.getBoundingClientRect().bottom;
         });
-        check(`${label} grip sits in the pane corner`, corner.dx <= 30 && corner.dy <= 30,
-          `${Math.round(corner.dx)},${Math.round(corner.dy)}px off`);
+        check(`${label} grip sits directly above the reply box`, gap >= 4 && gap <= 14, `${Math.round(gap)}px off`);
         /* The dock must engage at some scroll offset — found by scanning, so
            the check holds whatever the header and footer measure. */
         const max = await page.evaluate(() => document.documentElement.scrollHeight - innerHeight);
@@ -516,18 +487,20 @@ async function call(route, who = null, form = null) {
           (el) => el.getBoundingClientRect().bottom);
         check(`${label} Send is on screen at the foot of the page`, sendBottom <= height + 1,
           `${Math.round(sendBottom)} > ${height}`);
-        /* A real pointer drag: shrink 100px, survive reload, restore. */
+        /* A real pointer drag: shorten the chat 100px, survive reload, restore.
+           The list column must not move — the seam trades height only. */
         await page.evaluate(() => window.scrollTo(0, 0));
         const h0 = (await pane.boundingBox()).height;
         const w0 = (await page.locator('.lead-list-col').first().boundingBox()).width;
         const gb = await grip.boundingBox();
         await page.mouse.move(gb.x + gb.width / 2, gb.y + gb.height / 2);
         await page.mouse.down();
-        await page.mouse.move(gb.x + gb.width / 2 - 60, gb.y + gb.height / 2 - 100, { steps: 5 });
+        await page.mouse.move(gb.x + gb.width / 2, gb.y + gb.height / 2 - 100, { steps: 5 });
         await page.mouse.up();
         const h1 = (await pane.boundingBox()).height;
         const w1 = (await page.locator('.lead-list-col').first().boundingBox()).width;
-        check(`${label} drag resizes the pane`, Math.abs(h1 - (h0 - 100)) <= 12 && Math.abs(w1 - (w0 + 60)) <= 12,
+        check(`${label} drag resizes the chat, the list stays put`,
+          Math.abs(h1 - (h0 - 100)) <= 12 && Math.abs(w1 - w0) <= 2,
           `pane ${Math.round(h0)}→${Math.round(h1)}, list ${Math.round(w0)}→${Math.round(w1)}`);
         await page.reload();
         await page.waitForFunction(() => window.__flLeadsPane);

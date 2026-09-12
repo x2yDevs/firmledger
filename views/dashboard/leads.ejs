@@ -158,16 +158,7 @@
                   list to the left after the chat is closed. */ %>
             <div class="panel-h-t">
               <h3><%= openRole === 'inquirer' ? open.listing_name : open.name %><% if (openRole === 'owner') { %> <span class="pill pill-lead-<%= open.status %>" data-lead-pill-current><%= STATUS_LABELS[open.status] %></span><% } %></h3>
-              <% /* Focus mode: one button hands the conversation the whole window
-                    — the list steps aside, the chat grows into the width and the
-                    reply box below keeps its place. A view choice, not a setting:
-                    the next page load comes back two-column with the list in hand. */ %>
               <span class="lead-pane-tools">
-                <button class="btn btn-ghost btn-sm lead-pane-focus" type="button" data-lead-focus
-                        aria-pressed="false" aria-controls="leadThread"
-                        title="Give this conversation the whole window">
-                  <span class="lpf-ico" aria-hidden="true">⤢</span><span class="lpf-label">Full width</span>
-                </button>
                 <a class="muted" style="font-size:.8rem" href="<%= leadUrl([]) %>">Close ✕</a>
               </span>
             </div>
@@ -218,6 +209,15 @@
                   so Send is always reachable. Same forms, same margins — the
                   wrapper itself adds no height. */ %>
             <div class="lead-detail-foot">
+            <% /* Chat-area grip: sits just above the reply box — the same seam
+                  the box extends from. Drag it down to lengthen the
+                  conversation, up to shorten it; the thread is the pane's only
+                  flexible child, so every pixel goes to the chat. Arrows
+                  fine-tune, double-click restores. */ %>
+            <div class="lead-thread-grip" data-lead-thread-grip role="separator" aria-orientation="horizontal" tabindex="0"
+                 aria-label="Resize the chat area — drag up or down, double-click restores">
+              <span class="ltg-bar" aria-hidden="true"></span>
+            </div>
             <% /* The composer carries its own explanation: a refused reply is
                   stated beside the Send button, in the box the member is
                   looking at, with the exact reason and the numbers. */ %>
@@ -285,12 +285,6 @@
             </div>
             <% } %>
             </div>
-            <% /* The corner grip: drag diagonally to lengthen the conversation /
-                  trade width with the list; arrows/HOME fine-tune, double-click
-                  restores. Hidden on stacked screens and in print. */ %>
-            <button type="button" class="lead-resize" data-lead-resize aria-label="Resize conversation pane (arrow keys adjust, double-click restores)">
-              <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M10.5 1.5 L1.5 10.5 M10.5 5.2 L5.2 10.5 M10.5 8.6 L8.6 10.5"/></svg>
-            </button>
           </div>
           <% } else if (box.rows.length) { %>
           <div class="panel lead-detail lead-detail-empty">
@@ -441,32 +435,31 @@
 </script>
 
 <script>
-/* Leads inbox — fixed conversation + corner resize (desktop only).
+/* Leads inbox — fixed conversation + chat-area resize (desktop only).
    Three behaviours, all additive: with no stored size and no scroll the pane
    renders exactly as before.
    1. Dock: while the inbox section still fills the viewport but the pane top
       has scrolled past the header stop, the pane parks at top:84px exactly
       over its own grid slot (inline left/width), instead of sliding under
       the header. Scroll back up — or down to the footer — and it rejoins.
-   2. Resize: the corner grip trades height (pane) against width (list
-      column), clamped, and persists per browser.
-   3. Keyboard: arrows adjust, Ctrl+Home and double-click restore. */
+   2. Resize: the grip above the reply box is a vertical drag — down
+      lengthens the conversation, up shortens it; the thread is the pane's
+      only flexible child, so every pixel goes to the chat. Clamped, and
+      persisted per browser.
+   3. Keyboard: arrows adjust, double-click restores. */
 (function () {
   'use strict';
   var pane = document.querySelector('.lead-detail-col .lead-detail');
-  var grip = document.querySelector('[data-lead-resize]');
+  var grip = document.querySelector('[data-lead-thread-grip]');
   if (!pane || !grip) return;
   var col = pane.closest('.lead-detail-col');
-  var layout = pane.closest('.lead-layout');
   var section = pane.closest('.leads-section');
   var mq = window.matchMedia ? window.matchMedia('(min-width: 901px)') : null;
 
-  var KEY = 'fl.leadsPane.v1';
+  var KEY = 'fl.leadsPane.v2';
   var DOCK_TOP = 84;   /* header stop, matches the sticky pane top */
   var MIN_H = 420;     /* thread floor + foot always fit */
   var MAX_H = 1100;    /* past this a pane is just page */
-  var MIN_LIST = 220;  /* rows stay readable — the shipped column min */
-  var MIN_CONV = 440;  /* composer actions stay on one line */
 
   function desktop() {
     if (mq) return mq.matches;
@@ -481,7 +474,7 @@
   function save(s) {
     try { window.localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) {}
   }
-  var S = load(); /* { h, w } — user size, empty until first resize */
+  var S = load(); /* { h } — user size, empty until first resize */
 
   /* Height: never shorter than the foot, never taller than the window
      (minus header + margin) or the absolute cap. */
@@ -492,14 +485,6 @@
     if (h > max) h = max;
     return h;
   }
-  /* List width: rows keep 220px, the conversation keeps 440px plus the gap. */
-  function clampW(w, layoutW) {
-    w = Math.round(Number(w) || 0);
-    var max = Math.max(MIN_LIST, layoutW - 16 - MIN_CONV);
-    if (w < MIN_LIST) w = MIN_LIST;
-    if (w > max) w = max;
-    return w;
-  }
   /* Docked while the slot has passed the header stop but the section still
      owns the viewport — never over the footer. */
   function shouldDock(colTop, secBottom, vh) {
@@ -508,13 +493,8 @@
 
   function applySize() {
     var vh = window.innerHeight || 800;
-    var layoutW = layout ? layout.clientWidth : 1200;
     if (S.h) pane.style.setProperty('--lead-user-h', clampH(S.h, vh) + 'px');
     else pane.style.removeProperty('--lead-user-h');
-    if (layout) {
-      if (S.w) layout.style.setProperty('--lead-list-w', clampW(S.w, layoutW) + 'px');
-      else layout.style.removeProperty('--lead-list-w');
-    }
   }
 
   function undock() {
@@ -547,22 +527,22 @@
     pane.style.maxHeight = Math.max(MIN_H, vh - DOCK_TOP - 12) + 'px';
   }
 
-  /* --- corner drag: down lengthens, right widens the conversation --- */
+  /* --- vertical drag on the seam: down lengthens the conversation,
+     up shortens it — the thread takes every pixel the pane gains or loses --- */
   var drag = null;
   grip.addEventListener('pointerdown', function (e) {
     if (!desktop()) return;
     e.preventDefault();
     try { grip.setPointerCapture(e.pointerId); } catch (err) {}
-    drag = { x: e.clientX, y: e.clientY, h: S.h || pane.offsetHeight, w: S.w || 300 };
+    drag = { y: e.clientY, h: S.h || pane.offsetHeight };
     pane.classList.add('is-resizing');
     document.body.classList.add('is-lead-resizing');
   });
   grip.addEventListener('pointermove', function (e) {
     if (!drag) return;
     S.h = clampH(drag.h + (e.clientY - drag.y), window.innerHeight || 800);
-    S.w = clampW(drag.w - (e.clientX - drag.x), layout ? layout.clientWidth : 1200);
     applySize();
-    dockTick(); /* re-park over the slot as the grid trades width */
+    dockTick(); /* re-park over the slot as the pane changes height */
   });
   function endDrag() {
     if (!drag) return;
@@ -581,18 +561,14 @@
     var step = e.shiftKey ? 80 : 20;
     var handled = true;
     var h = S.h || pane.offsetHeight;
-    var w = S.w || 300;
     if (e.key === 'ArrowDown') h += step;
     else if (e.key === 'ArrowUp') h -= step;
-    else if (e.key === 'ArrowRight') w -= step;
-    else if (e.key === 'ArrowLeft') w += step;
     else if (e.key === 'Home' && (e.ctrlKey || e.metaKey)) S = {};
     else handled = false;
     if (!handled) return; /* plain Home still scrolls to top */
     e.preventDefault();
     if (e.key !== 'Home') {
       S.h = clampH(h, window.innerHeight || 800);
-      S.w = clampW(w, layout ? layout.clientWidth : 1200);
     }
     save(S);
     applySize();
@@ -631,105 +607,11 @@
   /* Test seam: pure geometry + state, no DOM needed except reset. */
   window.__flLeadsPane = {
     clampH: clampH,
-    clampW: clampW,
     shouldDock: shouldDock,
     key: KEY,
     dockTop: DOCK_TOP,
-    state: function () { return { h: S.h || null, w: S.w || null }; },
+    state: function () { return { h: S.h || null }; },
     reset: function () { S = {}; save(S); applySize(); dockTick(); }
-  };
-})();
-</script>
-
-<script>
-/* Leads inbox — focus mode: the reply box stays where it is, the conversation
-   above it takes the whole window. One button, three behaviours, nothing else
-   touched:
-
-   1. The list column steps aside and the pane grows to the viewport, so the
-      chat area extends into every pixel between the facts strip and the
-      pinned composer. The composer, its counter, the status line and the
-      stored corner-drag size all keep working exactly as in the two-column
-      view — this is the same pane, wider and taller.
-   2. Esc, or the same button, hands the width back to the list.
-   3. Stacked screens have no side column to widen into, so the control is not
-      offered there and a stale flag cannot strand the list.
-
-   The state lives in this page view only: picking another inquiry returns you
-   to the two-column inbox with the list in hand, never to a hidden one. */
-(function () {
-  'use strict';
-  var layout = document.querySelector('.lead-layout');
-  var btn = document.querySelector('[data-lead-focus]');
-  var pane = layout ? layout.querySelector('.lead-detail') : null;
-  if (!layout || !btn || !pane) return;
-  var mq = window.matchMedia ? window.matchMedia('(min-width: 901px)') : null;
-  var TOP = 84; /* the header stop the pane sticks at — matches the dock */
-  var LABEL_ON = 'Back to list';
-  var LABEL_OFF = 'Full width';
-
-  function wide() { return mq ? mq.matches : (window.innerWidth || 0) >= 901; }
-  function on() { return layout.classList.contains('is-max'); }
-
-  function paint() {
-    btn.setAttribute('aria-pressed', on() ? 'true' : 'false');
-    btn.title = on()
-      ? 'Give the list column its width back (Esc)'
-      : 'Give this conversation the whole window';
-    var label = btn.querySelector('.lpf-label');
-    if (label) label.textContent = on() ? LABEL_ON : LABEL_OFF;
-  }
-
-  function set(want) {
-    if (want === on()) { paint(); return; }
-    if (want && !wide()) return;
-    layout.classList.toggle('is-max', want);
-    pane.classList.toggle('is-max', want);
-    paint();
-    resync();
-    if (want) park();
-  }
-
-  /* The dock parks the pane with inline left/width measured over its own grid
-     slot, and this button changes that slot. Both numbers are dropped and the
-     scroll tick the pane script already listens for re-measures them — one
-     frame of the pane's own geometry, no arithmetic duplicated here. */
-  function resync() {
-    if (pane.style) { pane.style.left = ''; pane.style.width = ''; }
-    if (window.dispatchEvent && typeof window.Event === 'function') {
-      try { window.dispatchEvent(new window.Event('scroll')); } catch (e) {
-        /* An engine without Event still self-corrects on the next scroll. */
-      }
-    }
-  }
-
-  /* Bring the pane to the header stop so the whole conversation, reply box
-     included, is on screen at once. Only ever a short nudge, and never while
-     the pane is already parked there. */
-  function park() {
-    if (!window.scrollTo || !pane.getBoundingClientRect) return;
-    var top = pane.getBoundingClientRect().top;
-    if (Math.abs(top - TOP) < 8) return;
-    window.scrollTo(0, Math.max(0, (window.scrollY || 0) + top - TOP));
-  }
-
-  btn.addEventListener('click', function () { set(!on()); btn.focus(); });
-  document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape' && on()) { set(false); btn.focus(); }
-  });
-  if (mq) {
-    var off = function () { if (!wide() && on()) set(false); };
-    if (mq.addEventListener) mq.addEventListener('change', off);
-    else if (mq.addListener) mq.addListener(off);
-  }
-  paint();
-
-  /* Test seam: the whole mode in three pure calls. */
-  window.__flLeadsFocus = {
-    isOn: on,
-    enter: function () { set(true); return on(); },
-    leave: function () { set(false); return on(); },
-    top: TOP
   };
 })();
 </script>
